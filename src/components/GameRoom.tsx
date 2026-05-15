@@ -20,9 +20,11 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [vvOffset, setVvOffset] = useState(0);
 
   const openChat = () => {
     setLockedHeight(window.innerHeight);
+    setVvOffset(window.visualViewport?.offsetTop || 0);
     setIsChatOpen(true);
   };
 
@@ -54,8 +56,10 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     const handleResize = () => {
       if (!window.visualViewport) return;
       
+      setVvOffset(window.visualViewport.offsetTop);
+      
       const currentHeight = window.visualViewport.height;
-      if (document.activeElement?.tagName === 'INPUT') {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
         if (currentHeight < originalHeight - 150) {
           keyboardWasOpen = true;
         }
@@ -70,8 +74,17 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       }
     };
 
+    const handleScroll = () => {
+      if (!window.visualViewport) return;
+      setVvOffset(window.visualViewport.offsetTop);
+    };
+
     window.visualViewport?.addEventListener('resize', handleResize);
-    return () => window.visualViewport?.removeEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('scroll', handleScroll);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('scroll', handleScroll);
+    };
   }, [nickname]);
 
   const handleGuessSubmit = (e: React.FormEvent) => {
@@ -136,7 +149,10 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     <>
       <div 
         className={`flex flex-col w-full bg-[#1A103C] font-sans overflow-hidden ${isChatOpen ? 'fixed top-0 left-0 right-0 z-0' : 'relative'}`}
-        style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
+        style={{ 
+          height: lockedHeight ? `${lockedHeight}px` : '100dvh',
+          transform: isChatOpen ? `translateY(${vvOffset}px)` : 'none'
+        }}
       >
         
         {/* Hidden Drawing Mode View for Persistence */}
