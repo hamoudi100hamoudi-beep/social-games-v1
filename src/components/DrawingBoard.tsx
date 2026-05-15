@@ -121,10 +121,6 @@ const LOGICAL_HEIGHT = 900;
 export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean }) {
   const instanceId = useId();
   const { socket } = useSocket();
-  const emitDraw = (type: string, data: any) => {
-    if (socket) socket.emit(type, data);
-    window.dispatchEvent(new CustomEvent('local_draw', { detail: { type, data } }));
-  };
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tempCanvasRef = useRef<HTMLCanvasElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -174,7 +170,7 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
         
         let targetScale;
         if (readOnly) {
-          targetScale = Math.max(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
+          targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
         } else {
           targetScale = height / LOGICAL_HEIGHT;
         }
@@ -485,32 +481,14 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
       redo(false);
     });
 
-    const handleLocalDraw = (e: any) => {
-      const { type, data } = e.detail;
-      if (data?.instanceId === instanceId) return;
-
-      if (type === 'draw_start') onDrawStart(data);
-      else if (type === 'draw_move') onDrawMove(data);
-      else if (type === 'draw_end') onDrawEnd(data);
-      else if (type === 'draw_cancel') onDrawCancel(data);
-      else if (type === 'draw_clear') onDrawClear(data);
-      else if (type === 'draw_action') onDrawAction(data);
-      else if (type === 'draw_undo') undo(false);
-      else if (type === 'draw_redo') redo(false);
-    };
-
-    window.addEventListener('local_draw', handleLocalDraw);
-
     return () => {
       socket.off('draw_start', onDrawStart);
       socket.off('draw_move', onDrawMove);
       socket.off('draw_end', onDrawEnd);
-      socket.off('draw_cancel', onDrawCancel);
       socket.off('draw_clear', onDrawClear);
       socket.off('draw_action', onDrawAction);
       socket.off('draw_undo');
       socket.off('draw_redo');
-      window.removeEventListener('local_draw', handleLocalDraw);
     };
   }, [socket]);
 
@@ -605,8 +583,8 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
       const data = history.current[historyIndex.current];
       ctxRef.current?.putImageData(data, 0, 0);
       setHistoryState({ index: historyIndex.current, length: history.current.length });
-      if (emit) {
-        emitDraw('draw_undo', { instanceId });
+      if (emit && socket) {
+        socket.emit('draw_undo', { instanceId });
       }
     }
   };
@@ -620,8 +598,8 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
       const data = history.current[historyIndex.current];
       ctxRef.current?.putImageData(data, 0, 0);
       setHistoryState({ index: historyIndex.current, length: history.current.length });
-      if (emit) {
-        emitDraw('draw_redo', { instanceId });
+      if (emit && socket) {
+        socket.emit('draw_redo', { instanceId });
       }
     }
   };
@@ -634,8 +612,8 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
     ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
     saveHistory();
 
-    if (emit) {
-      emitDraw('draw_clear', { instanceId });
+    if (emit && socket) {
+      socket.emit('draw_clear', { instanceId });
     }
   };
 
@@ -715,8 +693,8 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
               }
             }
           }
-          if (true) {
-            emitDraw('draw_cancel', { instanceId });
+          if (socket) {
+            socket.emit('draw_cancel', { instanceId });
           }
         }
         const t1 = e.touches[0], t2 = e.touches[1];
@@ -782,8 +760,8 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
     activeCtx.lineJoin = 'round';
     activeCtx.lineWidth = currentWidth;
     
-    if (tool === 'pencil' || tool === 'eraser' || tool === 'line' || tool === 'strokeRect' || tool === 'fillRect' || tool === 'strokeCircle' || tool === 'fillCircle') {
-       emitDraw('draw_start', {
+    if (socket && (tool === 'pencil' || tool === 'eraser' || tool === 'line' || tool === 'strokeRect' || tool === 'fillRect' || tool === 'strokeCircle' || tool === 'fillCircle')) {
+       socket.emit('draw_start', {
           instanceId, tool, color, width: currentWidth, opacity: currentOpacity,
           x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
        });
@@ -864,8 +842,8 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
                 }
               }
             }
-            if (true) {
-              emitDraw('draw_cancel', { instanceId });
+            if (socket) {
+              socket.emit('draw_cancel', { instanceId });
             }
         }
         return;
@@ -940,8 +918,8 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
       }
     }
     
-    if (true) {
-      emitDraw('draw_move', {
+    if (socket) {
+      socket.emit('draw_move', {
         instanceId, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
       });
     }
@@ -957,8 +935,8 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
           if (tool === 'bucket') {
             floodFill(ctx, x, y, color, currentOpacity);
             saveHistory();
-            if (true) {
-               emitDraw('draw_action', {
+            if (socket) {
+               socket.emit('draw_action', {
                  instanceId, tool: 'bucket', color, opacity: currentOpacity, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
                });
             }
@@ -994,14 +972,14 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
 
       saveHistory();
 
-      if (true) {
+      if (socket) {
         const lastCoords = currentPath.current && currentPath.current.length > 0
           ? currentPath.current[currentPath.current.length - 1]
           : null;
         const startCoords = currentPath.current && currentPath.current.length > 0
           ? currentPath.current[0]
           : {x: 0, y: 0};
-        emitDraw('draw_end', { 
+        socket.emit('draw_end', { 
           instanceId,
           tool, color, width: currentWidth, opacity: currentOpacity,
           startX: startCoords.x / LOGICAL_WIDTH, startY: startCoords.y / LOGICAL_HEIGHT,
