@@ -6,6 +6,10 @@
   }
 }
 
+html, body {
+  overscroll-behavior-y: none;
+}
+
 /* Hide scrollbar for color palette horizontally */
 .no-scrollbar::-webkit-scrollbar {
   display: none;

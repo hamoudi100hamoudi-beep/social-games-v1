@@ -133,12 +133,13 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   });
 
   return (
-    <div 
-      className="flex flex-col w-full bg-[#1A103C] font-sans overflow-hidden"
-      style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
-    >
-      
-      {/* Hidden Drawing Mode View for Persistence */}
+    <>
+      <div 
+        className={`flex flex-col w-full bg-[#1A103C] font-sans overflow-hidden ${isChatOpen ? 'fixed top-0 left-0 right-0 z-0' : 'relative'}`}
+        style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
+      >
+        
+        {/* Hidden Drawing Mode View for Persistence */}
       <div 
         className="fixed inset-0 z-[100] bg-white transition-opacity duration-300"
         style={{
@@ -298,6 +299,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
            </div>
         </div>
       </div>
+      </div>
 
       {/* Chat Overlay */}
       {isChatOpen && (
@@ -402,6 +404,6 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
          </div>
       )}
 
-    </div>
+    </>
   );
 }
