@@ -35,25 +35,46 @@ const getSenderColor = (name: string) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
-const ChatMessageItem = ({ msg }: { msg: Message }) => {
-  const [showCopy, setShowCopy] = useState(false);
+const ChatMessageItem = ({ 
+  msg, 
+  activeCopyId, 
+  onSetActiveCopy 
+}: { 
+  msg: Message, 
+  activeCopyId: string | null, 
+  onSetActiveCopy: (id: string | null) => void 
+}) => {
   const pressTimer = React.useRef<NodeJS.Timeout | null>(null);
   const startY = React.useRef<number>(0);
   const startX = React.useRef<number>(0);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startY.current = e.touches[0].clientY;
-    startX.current = e.touches[0].clientX;
-    setShowCopy(false);
+  const showCopy = activeCopyId === msg.id;
+
+  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    if ('touches' in e) {
+      startY.current = e.touches[0].clientY;
+      startX.current = e.touches[0].clientX;
+    } else {
+      startY.current = e.clientY;
+      startX.current = e.clientX;
+    }
     pressTimer.current = setTimeout(() => {
-      setShowCopy(true);
+      onSetActiveCopy(msg.id);
     }, 500);
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
     if (pressTimer.current) {
-      const deltaY = Math.abs(e.touches[0].clientY - startY.current);
-      const deltaX = Math.abs(e.touches[0].clientX - startX.current);
+      let clientY, clientX;
+      if ('touches' in e) {
+        clientY = e.touches[0].clientY;
+        clientX = e.touches[0].clientX;
+      } else {
+        clientY = e.clientY;
+        clientX = e.clientX;
+      }
+      const deltaY = Math.abs(clientY - startY.current);
+      const deltaX = Math.abs(clientX - startX.current);
       if (deltaY > 10 || deltaX > 10) {
         clearTimeout(pressTimer.current);
         pressTimer.current = null;
@@ -68,9 +89,11 @@ const ChatMessageItem = ({ msg }: { msg: Message }) => {
     }
   };
 
-  const copyToClipboard = () => {
+  const copyToClipboard = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     navigator.clipboard.writeText(msg.text);
-    setShowCopy(false);
+    onSetActiveCopy(null);
   };
 
   if (msg.type === 'system') {
@@ -91,6 +114,10 @@ const ChatMessageItem = ({ msg }: { msg: Message }) => {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd}
+        onMouseDown={handleTouchStart}
+        onMouseMove={handleTouchMove}
+        onMouseUp={handleTouchEnd}
+        onMouseLeave={handleTouchEnd}
       >
         <div className="flex flex-col items-end max-w-[80%] relative">
           <span className="text-[11px] text-[#00D9FF] font-bold mb-1 mr-1">{msg.sender}</span>
@@ -99,8 +126,10 @@ const ChatMessageItem = ({ msg }: { msg: Message }) => {
           </div>
           {showCopy && (
             <button 
-              onClick={copyToClipboard} 
-              className="absolute -top-8 bg-black/80 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-10 animate-in fade-in"
+              onClick={copyToClipboard}
+              onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              className="absolute -top-8 left-0 bg-black/80 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-10 animate-in fade-in"
             >
               <Copy size={12} />
               Copy
@@ -121,6 +150,10 @@ const ChatMessageItem = ({ msg }: { msg: Message }) => {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
+      onMouseDown={handleTouchStart}
+      onMouseMove={handleTouchMove}
+      onMouseUp={handleTouchEnd}
+      onMouseLeave={handleTouchEnd}
     >
       <div className="w-8 h-8 rounded-full bg-[#24174D] border-2 border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
         <span className="text-white font-bold text-xs">{msg.avatar || '?'}</span>
@@ -132,8 +165,10 @@ const ChatMessageItem = ({ msg }: { msg: Message }) => {
         </div>
         {showCopy && (
           <button 
-            onClick={copyToClipboard} 
-            className="absolute -top-8 bg-black/80 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-10 animate-in fade-in"
+            onClick={copyToClipboard}
+            onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
+            className="absolute -top-8 right-0 bg-black/80 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-10 animate-in fade-in"
           >
             <Copy size={12} /> 
             Copy
@@ -149,15 +184,19 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
 
   const openChat = () => {
     setLockedHeight(window.innerHeight);
     setIsChatOpen(true);
+    setUnreadCount(0);
   };
 
   const closeChat = () => {
     setIsChatOpen(false);
     setLockedHeight(null);
+    setActiveCopyId(null);
   };
   const [guessInput, setGuessInput] = useState('');
   const [chatInput, setChatInput] = useState('');
@@ -196,6 +235,13 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
         }];
         return updated.slice(-40);
       });
+      
+      setIsChatOpen((currentOpenState) => {
+        if (!currentOpenState) {
+          setUnreadCount((prevCount) => prevCount + 1);
+        }
+        return currentOpenState;
+      });
     };
 
     socket.on('room_state_update', onRoomStateUpdate);
@@ -209,16 +255,6 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   }, [socket, nickname, room]);
 
   useEffect(() => {
-    const sysMsg: Message = {
-      id: 'join',
-      sender: 'System',
-      text: `You joined the room.`,
-      isSelf: false,
-      type: 'system'
-    };
-    setGuesses([sysMsg]);
-    setChatMessages([sysMsg]);
-
     let originalHeight = window.visualViewport?.height || window.innerHeight;
     let keyboardWasOpen = false;
 
@@ -396,6 +432,11 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                  </button>
                  <button onClick={openChat} className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-[#1A103C] font-bold transition-all shadow-md relative">
                    <MessageSquare size={20} />
+                   {unreadCount > 0 && (
+                     <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full shadow-md border-2 border-slate-200">
+                       {unreadCount > 9 ? '+9' : unreadCount}
+                     </div>
+                   )}
                  </button>
                </div>
              </div>
@@ -464,19 +505,26 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                 />
 
                 {/* Actual Chat Container */}
-                <div className="w-full flex-1 bg-transparent flex flex-col min-h-0">
+                <div className="w-full flex-1 bg-transparent flex flex-col min-h-0" onClick={() => setActiveCopyId(null)}>
                   
                   {/* Messages Area */}
                   <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0">
                     <div className="flex flex-col-reverse gap-4 max-w-2xl mx-auto w-full">
                      {[...chatMessages].reverse().map(msg => (
-                       <ChatMessageItem key={msg.id} msg={msg} />
+                       <ChatMessageItem 
+                         key={msg.id} 
+                         msg={msg} 
+                         activeCopyId={activeCopyId}
+                         onSetActiveCopy={setActiveCopyId}
+                       />
                      ))}
                     </div>
                   </div>
 
                   {/* Input Area */}
-                  <div className="p-3 bg-[#24174D]/90 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full">
+                  <div 
+                    className="p-3 bg-[#24174D]/90 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full"
+                  >
                     <form onSubmit={handleChatSubmit} className="relative max-w-2xl mx-auto flex gap-2 items-end">
                       <button 
                         type="button"

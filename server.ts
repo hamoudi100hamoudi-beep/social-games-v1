@@ -39,15 +39,29 @@ async function startServer() {
         roomId: room.id,
         players: room.players
       });
+
+      // System Message
+      io.to(roomId).emit('receive_message', {
+        id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        text: `${nickname} انضم للغرفة`,
+        type: 'system'
+      });
     });
 
     socket.on('leave_room', ({ roomId }) => {
       socket.leave(roomId);
+      const player = roomManager.getPlayer(socket.id);
+      const playerName = player ? player.name : 'لاعب';
       const room = roomManager.removePlayerFromRoom(roomId, socket.id);
       if (room) {
         io.to(roomId).emit('room_state_update', {
           roomId: room.id,
           players: room.players
+        });
+        io.to(roomId).emit('receive_message', {
+          id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+          text: `${playerName} غادر الغرفة`,
+          type: 'system'
         });
       }
     });
@@ -120,11 +134,17 @@ async function startServer() {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {
         const roomId = player.roomId;
+        const playerName = player.name;
         const room = roomManager.removePlayerFromRoom(roomId, socket.id);
         if (room) {
           io.to(roomId).emit('room_state_update', {
             roomId: room.id,
             players: room.players
+          });
+          io.to(roomId).emit('receive_message', {
+            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            text: `${playerName} غادر الغرفة`,
+            type: 'system'
           });
         }
       }
