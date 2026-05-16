@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
+import { roomManager } from './src/server/rooms.js';
 
 async function startServer() {
   const app = express();
@@ -23,41 +24,97 @@ async function startServer() {
   io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
     
+    // Room logic
+    socket.on('join_room', ({ roomId, nickname, avatar }) => {
+      socket.join(roomId);
+      const room = roomManager.addPlayerToRoom(roomId, {
+        id: socket.id,
+        name: nickname,
+        avatar: avatar || nickname.charAt(0).toUpperCase(),
+        roomId: roomId
+      });
+      
+      // Broadcast updated room state
+      io.to(roomId).emit('room_state_update', {
+        roomId: room.id,
+        players: room.players
+      });
+    });
+
+    socket.on('leave_room', ({ roomId }) => {
+      socket.leave(roomId);
+      const room = roomManager.removePlayerFromRoom(roomId, socket.id);
+      if (room) {
+        io.to(roomId).emit('room_state_update', {
+          roomId: room.id,
+          players: room.players
+        });
+      }
+    });
+
     // Relay drawing events to other clients in the same room (if we had rooms), for now broadcast to all
     socket.on('draw_start', (data) => {
-      io.emit('draw_start', data);
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_start', data);
+      else socket.broadcast.emit('draw_start', data);
     });
     
     socket.on('draw_move', (data) => {
-      io.emit('draw_move', data);
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_move', data);
+      else socket.broadcast.emit('draw_move', data);
     });
     
     socket.on('draw_end', (data) => {
-      io.emit('draw_end', data);
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_end', data);
+      else socket.broadcast.emit('draw_end', data);
     });
 
     socket.on('draw_action', (data) => {
-      io.emit('draw_action', data);
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_action', data);
+      else socket.broadcast.emit('draw_action', data);
     });
 
     socket.on('draw_clear', (data) => {
-      io.emit('draw_clear', data);
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_clear', data);
+      else socket.broadcast.emit('draw_clear', data);
     });
 
     socket.on('draw_cancel', (data) => {
-      io.emit('draw_cancel', data);
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_cancel', data);
+      else socket.broadcast.emit('draw_cancel', data);
     });
 
     socket.on('draw_undo', (data) => {
-      io.emit('draw_undo', data);
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_undo', data);
+      else socket.broadcast.emit('draw_undo', data);
     });
 
     socket.on('draw_redo', (data) => {
-      io.emit('draw_redo', data);
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_redo', data);
+      else socket.broadcast.emit('draw_redo', data);
     });
     
     socket.on('disconnect', () => {
       console.log(`[Socket] Client disconnected: ${socket.id}`);
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        const roomId = player.roomId;
+        const room = roomManager.removePlayerFromRoom(roomId, socket.id);
+        if (room) {
+          io.to(roomId).emit('room_state_update', {
+            roomId: room.id,
+            players: room.players
+          });
+        }
+      }
+      roomManager.removePlayer(socket.id);
     });
   });
 

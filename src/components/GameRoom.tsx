@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DrawingBoard from './DrawingBoard';
 import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon, Pencil } from 'lucide-react';
+import { useSocket } from '../providers/SocketProvider';
 
 interface GameRoomProps {
   nickname: string;
@@ -16,7 +17,10 @@ interface Message {
   avatar?: string;
 }
 
+type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string };
+
 export default function GameRoom({ nickname, room }: GameRoomProps) {
+  const { socket } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -36,12 +40,42 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const [guesses, setGuesses] = useState<Message[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    socket.emit('join_room', {
+      roomId: room,
+      nickname,
+      avatar: nickname.charAt(0).toUpperCase()
+    });
+
+    const onRoomStateUpdate = (state: { roomId: string, players: any[] }) => {
+      const players = state.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        points: 0,
+        isCurrent: p.id === socket.id,
+        avatar: p.avatar,
+        isEmpty: false
+      }));
+      setCurrentPlayers(players);
+    };
+
+    socket.on('room_state_update', onRoomStateUpdate);
+
+    return () => {
+      socket.emit('leave_room', { roomId: room });
+      socket.off('room_state_update', onRoomStateUpdate);
+    };
+  }, [socket, nickname, room]);
 
   useEffect(() => {
     const sysMsg: Message = {
       id: 'join',
       sender: 'System',
-      text: `${nickname} joined the room.`,
+      text: `You joined the room.`,
       isSelf: false,
       type: 'system'
     };
@@ -72,7 +106,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
 
     window.visualViewport?.addEventListener('resize', handleResize);
     return () => window.visualViewport?.removeEventListener('resize', handleResize);
-  }, [nickname]);
+  }, []);
 
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -121,12 +155,6 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     }
   };
 
-  const currentPlayers = [
-    { id: '1', name: nickname, points: 0, isCurrent: true, avatar: nickname.charAt(0).toUpperCase(), isEmpty: false }
-  ];
-
-  type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string };
-
   const slots: PlayerSlot[] = Array.from({ length: 5 }).map((_, index) => {
     if (index < currentPlayers.length) return currentPlayers[index];
     return { id: `empty-${index}`, name: 'Empty', points: null, isCurrent: false, isEmpty: true };
@@ -139,22 +167,20 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
         style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
       >
         
-        {/* Hidden Drawing Mode View for Persistence */}
-      <div 
-        className="fixed inset-0 z-[100] bg-white transition-opacity duration-300"
-        style={{
-          display: isDrawingMode ? 'flex' : 'none',
-          opacity: isDrawingMode ? 1 : 0,
-        }}
-      >
-        <button 
-          onClick={() => setIsDrawingMode(false)}
-          className="absolute top-4 left-4 z-[110] bg-[#7C4DFF] hover:bg-[#6A3DE8] active:scale-95 text-white px-4 py-2 rounded-xl font-bold shadow-lg transition-all"
+        {/* Drawing Mode View */}
+      {isDrawingMode && (
+        <div 
+          className="fixed inset-0 z-[100] bg-white flex transition-opacity duration-300 opacity-100"
         >
-          Exit Drawing
-        </button>
-        <DrawingBoard />
-      </div>
+          <button 
+            onClick={() => setIsDrawingMode(false)}
+            className="absolute top-4 left-4 z-[110] bg-[#7C4DFF] hover:bg-[#6A3DE8] active:scale-95 text-white px-4 py-2 rounded-xl font-bold shadow-lg transition-all"
+          >
+            Exit Drawing
+          </button>
+          <DrawingBoard />
+        </div>
+      )}
 
       {/* Top Area (Drawing / Waiting) */}
       <div className="relative w-full h-[45dvh] sm:h-[55dvh] bg-slate-200 shrink-0 flex flex-col items-center justify-center transition-all duration-300 overflow-hidden">
