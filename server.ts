@@ -25,44 +25,71 @@ async function startServer() {
     console.log(`[Socket] Client connected: ${socket.id}`);
     
     // Room logic
-    socket.on('join_room', ({ roomId, nickname, avatar }) => {
-      socket.join(roomId);
-      const room = roomManager.addPlayerToRoom(roomId, {
-        id: socket.id,
-        name: nickname,
-        avatar: avatar || nickname.charAt(0).toUpperCase(),
-        roomId: roomId
-      });
-      
-      // Broadcast updated room state
-      io.to(roomId).emit('room_state_update', {
-        roomId: room.id,
-        players: room.players
-      });
-
-      // System Message
-      io.to(roomId).emit('receive_message', {
-        id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-        text: `${nickname} انضم للغرفة`,
-        type: 'system'
-      });
+    socket.on('get_room_info', (roomId, callback) => {
+      try {
+        const room = roomManager.getRoom(roomId);
+        if (callback) callback({ count: room ? room.players.length : 0, max: 5 });
+      } catch (e) {
+        console.error(e);
+        if (callback) callback({ count: 0, max: 5 });
+      }
     });
 
-    socket.on('leave_room', ({ roomId }) => {
-      socket.leave(roomId);
-      const player = roomManager.getPlayer(socket.id);
-      const playerName = player ? player.name : 'لاعب';
-      const room = roomManager.removePlayerFromRoom(roomId, socket.id);
-      if (room) {
+    socket.on('join_room', ({ roomId, nickname, avatar }, callback) => {
+      try {
+        const existingRoom = roomManager.getRoom(roomId);
+        if (existingRoom && existingRoom.players.length >= 5) {
+          if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
+          return;
+        }
+
+        socket.join(roomId);
+        const room = roomManager.addPlayerToRoom(roomId, {
+          id: socket.id,
+          name: nickname,
+          avatar: avatar || nickname.charAt(0).toUpperCase(),
+          roomId: roomId
+        });
+        
+        if (callback) callback({ success: true });
+
+        // Broadcast updated room state
         io.to(roomId).emit('room_state_update', {
           roomId: room.id,
           players: room.players
         });
+
+        // System Message
         io.to(roomId).emit('receive_message', {
           id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-          text: `${playerName} غادر الغرفة`,
+          text: `${nickname} انضم للغرفة`,
           type: 'system'
         });
+      } catch (e) {
+        console.error(e);
+        if (callback) callback({ error: 'حدث خطأ أثناء الانضمام للغرفة' });
+      }
+    });
+
+    socket.on('leave_room', ({ roomId }) => {
+      try {
+        socket.leave(roomId);
+        const player = roomManager.getPlayer(socket.id);
+        const playerName = player ? player.name : 'لاعب';
+        const room = roomManager.removePlayerFromRoom(roomId, socket.id);
+        if (room) {
+          io.to(roomId).emit('room_state_update', {
+            roomId: room.id,
+            players: room.players
+          });
+          io.to(roomId).emit('receive_message', {
+            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            text: `${playerName} غادر الغرفة`,
+            type: 'system'
+          });
+        }
+      } catch (e) {
+        console.error(e);
       }
     });
 
@@ -131,24 +158,28 @@ async function startServer() {
     
     socket.on('disconnect', () => {
       console.log(`[Socket] Client disconnected: ${socket.id}`);
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-        const roomId = player.roomId;
-        const playerName = player.name;
-        const room = roomManager.removePlayerFromRoom(roomId, socket.id);
-        if (room) {
-          io.to(roomId).emit('room_state_update', {
-            roomId: room.id,
-            players: room.players
-          });
-          io.to(roomId).emit('receive_message', {
-            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-            text: `${playerName} غادر الغرفة`,
-            type: 'system'
-          });
+      try {
+        const player = roomManager.getPlayer(socket.id);
+        if (player && player.roomId) {
+          const roomId = player.roomId;
+          const playerName = player.name;
+          const room = roomManager.removePlayerFromRoom(roomId, socket.id);
+          if (room) {
+            io.to(roomId).emit('room_state_update', {
+              roomId: room.id,
+              players: room.players
+            });
+            io.to(roomId).emit('receive_message', {
+              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+              text: `${playerName} غادر الغرفة`,
+              type: 'system'
+            });
+          }
         }
+        roomManager.removePlayer(socket.id);
+      } catch (e) {
+        console.error("Error during disconnect", e);
       }
-      roomManager.removePlayer(socket.id);
     });
   });
 

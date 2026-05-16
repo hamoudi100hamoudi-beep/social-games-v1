@@ -46,22 +46,27 @@ class RoomManager {
   }
 
   removePlayerFromRoom(roomId: string, socketId: string): Room | undefined {
-    const room = this.rooms.get(roomId);
-    if (room) {
-      room.players = room.players.filter(p => p.id !== socketId);
-      
-      const player = this.players.get(socketId);
-      if (player) {
-        player.roomId = null;
+    try {
+      const room = this.rooms.get(roomId);
+      if (room) {
+        room.players = room.players.filter(p => p.id !== socketId);
+        
+        const player = this.players.get(socketId);
+        if (player) {
+          player.roomId = null;
+        }
+        
+        // We can choose to keep empty rooms for a while, or delete them
+        if (room.players.length === 0) {
+          this.rooms.delete(roomId);
+          return undefined; // Room deleted
+        }
       }
-      
-      // We can choose to keep empty rooms for a while, or delete them
-      if (room.players.length === 0) {
-        this.rooms.delete(roomId);
-        return undefined; // Room deleted
-      }
+      return room;
+    } catch (e) {
+      console.error("Error removing player from room:", e);
+      return undefined;
     }
-    return room;
   }
 
   getPlayer(socketId: string): Player | undefined {
@@ -69,11 +74,15 @@ class RoomManager {
   }
 
   removePlayer(socketId: string) {
-    const player = this.players.get(socketId);
-    if (player && player.roomId) {
-      this.removePlayerFromRoom(player.roomId, socketId);
+    try {
+      const player = this.players.get(socketId);
+      if (player && player.roomId) {
+        this.removePlayerFromRoom(player.roomId, socketId);
+      }
+      this.players.delete(socketId);
+    } catch (e) {
+      console.error("Error removing player:", e);
     }
-    this.players.delete(socketId);
   }
 }
 

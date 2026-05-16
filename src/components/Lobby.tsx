@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, Settings, Plus, Play, ChevronLeft, Search, X } from 'lucide-react';
+import { useSocket } from '../providers/SocketProvider';
 
 interface LobbyProps {
   onPlay: (nickname: string, room: string) => void;
@@ -8,13 +9,28 @@ interface LobbyProps {
 type Screen = 'home' | 'rooms';
 
 export default function Lobby({ onPlay }: LobbyProps) {
+  const { socket } = useSocket();
   const [screen, setScreen] = useState<Screen>('home');
   const [nickname, setNickname] = useState('');
   const [nicknameError, setNicknameError] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+  
+  const [roomCount, setRoomCount] = useState<number>(0);
+  const [joinError, setJoinError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedRoom && socket) {
+      socket.emit('get_room_info', selectedRoom, (data: any) => {
+        if (data && typeof data.count === 'number') {
+          setRoomCount(data.count);
+        }
+      });
+    }
+  }, [selectedRoom, socket]);
 
   const handleRoomClick = (roomId: string) => {
     setSelectedRoom(roomId);
+    setJoinError(null);
   };
 
   const handlePlay = () => {
@@ -23,7 +39,24 @@ export default function Lobby({ onPlay }: LobbyProps) {
       return;
     }
     const finalName = nickname.trim();
-    onPlay(finalName, selectedRoom || 'general');
+    const finalRoom = selectedRoom || 'general';
+    
+    if (socket) {
+      // Check again right before playing
+      socket.emit('get_room_info', finalRoom, (data: any) => {
+        if (data && data.count >= 5) {
+          setJoinError('عذراً، هذه الغرفة ممتلئة بالكامل!');
+          if (!selectedRoom) {
+            // Also show it on home screen if they just clicked PLAY from there
+             setNicknameError(false); // Can reuse or create specific error state, but joinError is fine
+          }
+        } else {
+          onPlay(finalName, finalRoom);
+        }
+      });
+    } else {
+      onPlay(finalName, finalRoom);
+    }
   };
 
   const handleGoToRooms = () => {
@@ -32,6 +65,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
       return;
     }
     setNicknameError(false);
+    setJoinError(null);
     setScreen('rooms');
   };
 
@@ -53,11 +87,16 @@ export default function Lobby({ onPlay }: LobbyProps) {
                 <input 
                   type="text" 
                   value={nickname}
-                  onChange={(e) => { setNickname(e.target.value); setNicknameError(false); }}
+                  onChange={(e) => { setNickname(e.target.value); setNicknameError(false); setJoinError(null); }}
                   placeholder="Enter your name..."
                   className={`w-full h-14 bg-white/10 backdrop-blur-md text-white placeholder-white/50 border-2 rounded-2xl px-6 font-bold text-lg outline-none transition-all focus:bg-white/20 ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-white/20 focus:border-[#00D9FF]'}`}
                 />
               </div>
+              {joinError && (
+                <div className="text-center text-red-300 font-bold bg-red-900/40 p-2 rounded-xl border border-red-500/50">
+                  {joinError}
+                </div>
+              )}
             </div>
 
             <button 
@@ -153,13 +192,19 @@ export default function Lobby({ onPlay }: LobbyProps) {
               <div className="grid grid-cols-2 gap-4 w-full mb-8">
                 <div className="text-center bg-slate-50 p-4 rounded-2xl">
                   <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Players</div>
-                  <div className="text-[#00D9FF] font-black text-xl">5/10</div>
+                  <div className="text-[#00D9FF] font-black text-xl">{roomCount}/5</div>
                 </div>
                 <div className="text-center bg-slate-50 p-4 rounded-2xl">
                   <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Theme</div>
                   <div className="text-slate-700 font-bold text-lg">General</div>
                 </div>
               </div>
+
+              {joinError && (
+                <div className="w-full text-center text-red-500 font-bold bg-red-50 p-3 rounded-xl border border-red-200 mb-4">
+                  {joinError}
+                </div>
+              )}
 
               <button 
                 onClick={handlePlay}
