@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DrawingBoard from './DrawingBoard';
-import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon, Pencil } from 'lucide-react';
+import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon, Pencil, Copy } from 'lucide-react';
 import { useSocket } from '../providers/SocketProvider';
 
 interface GameRoomProps {
@@ -11,6 +11,7 @@ interface GameRoomProps {
 interface Message {
   id: string;
   sender: string;
+  senderId?: string;
   text: string;
   isSelf: boolean;
   type: 'message' | 'system';
@@ -18,6 +19,130 @@ interface Message {
 }
 
 type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string };
+
+const getSenderColor = (name: string) => {
+  const colors = [
+    'text-red-400', 
+    'text-green-400', 
+    'text-yellow-400', 
+    'text-pink-400', 
+    'text-indigo-400',
+    'text-orange-400',
+    'text-lime-400'
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+};
+
+const ChatMessageItem = ({ msg }: { msg: Message }) => {
+  const [showCopy, setShowCopy] = useState(false);
+  const pressTimer = React.useRef<NodeJS.Timeout | null>(null);
+  const startY = React.useRef<number>(0);
+  const startX = React.useRef<number>(0);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    startY.current = e.touches[0].clientY;
+    startX.current = e.touches[0].clientX;
+    setShowCopy(false);
+    pressTimer.current = setTimeout(() => {
+      setShowCopy(true);
+    }, 500);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (pressTimer.current) {
+      const deltaY = Math.abs(e.touches[0].clientY - startY.current);
+      const deltaX = Math.abs(e.touches[0].clientX - startX.current);
+      if (deltaY > 10 || deltaX > 10) {
+        clearTimeout(pressTimer.current);
+        pressTimer.current = null;
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(msg.text);
+    setShowCopy(false);
+  };
+
+  if (msg.type === 'system') {
+    return (
+      <div className="flex justify-center mb-2">
+        <div className="bg-[#00D9FF]/20 text-[#00D9FF] px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-md">
+          {msg.text}
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.isSelf) {
+    return (
+      <div 
+        className="flex justify-end items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+      >
+        <div className="flex flex-col items-end max-w-[80%] relative">
+          <span className="text-[11px] text-[#00D9FF] font-bold mb-1 mr-1">{msg.sender}</span>
+          <div className="bg-[#7C4DFF] px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-[#6A3DE8]">
+            {msg.text}
+          </div>
+          {showCopy && (
+            <button 
+              onClick={copyToClipboard} 
+              className="absolute -top-8 bg-black/80 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-10 animate-in fade-in"
+            >
+              <Copy size={12} />
+              Copy
+            </button>
+          )}
+        </div>
+        <div className="w-8 h-8 rounded-full bg-[#1A103C] border-2 border-[#00D9FF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
+          <span className="text-[#00D9FF] font-bold text-xs">{msg.avatar}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div 
+      className="flex justify-start items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+    >
+      <div className="w-8 h-8 rounded-full bg-[#24174D] border-2 border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
+        <span className="text-white font-bold text-xs">{msg.avatar || '?'}</span>
+      </div>
+      <div className="flex flex-col items-start max-w-[80%] relative">
+        <span className={`text-[11px] font-bold mb-1 ml-1 ${getSenderColor(msg.sender)}`}>{msg.sender}</span>
+        <div className="bg-[#24174D] px-4 py-2.5 rounded-2xl rounded-tl-sm text-white text-[15px] font-medium shadow-md break-words border border-white/10">
+          {msg.text}
+        </div>
+        {showCopy && (
+          <button 
+            onClick={copyToClipboard} 
+            className="absolute -top-8 bg-black/80 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-10 animate-in fade-in"
+          >
+            <Copy size={12} /> 
+            Copy
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export default function GameRoom({ nickname, room }: GameRoomProps) {
   const { socket } = useSocket();
@@ -63,11 +188,23 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       setCurrentPlayers(players);
     };
 
+    const onReceiveMessage = (msg: any) => {
+      setChatMessages((prev) => {
+        const updated = [...prev, {
+          ...msg,
+          isSelf: msg.senderId === socket.id
+        }];
+        return updated.slice(-40);
+      });
+    };
+
     socket.on('room_state_update', onRoomStateUpdate);
+    socket.on('receive_message', onReceiveMessage);
 
     return () => {
       socket.emit('leave_room', { roomId: room });
       socket.off('room_state_update', onRoomStateUpdate);
+      socket.off('receive_message', onReceiveMessage);
     };
   }, [socket, nickname, room]);
 
@@ -131,21 +268,9 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
 
   const handleChatSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!chatInput.trim() || !socket) return;
     
-    const newMsg: Message = { 
-      id: Date.now().toString(), 
-      sender: nickname, 
-      text: chatInput.trim(), 
-      isSelf: true,
-      type: 'message',
-      avatar: nickname.charAt(0).toUpperCase()
-    };
-
-    setChatMessages(prev => {
-      const updated = [...prev, newMsg];
-      return updated.slice(-40); 
-    });
+    socket.emit('send_message', { text: chatInput.trim() });
     
     setChatInput('');
     const textarea = document.getElementById('chat-textarea') as HTMLTextAreaElement;
@@ -344,49 +469,9 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                   {/* Messages Area */}
                   <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0">
                     <div className="flex flex-col-reverse gap-4 max-w-2xl mx-auto w-full">
-                     {[...chatMessages].reverse().map(msg => {
-                       
-                       if (msg.type === 'system') {
-                         return (
-                           <div key={msg.id} className="flex justify-center mb-2">
-                             <div className="bg-[#00D9FF]/20 text-[#00D9FF] px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-md">
-                               {msg.text}
-                             </div>
-                           </div>
-                         );
-                       }
-
-                       if (msg.isSelf) {
-                         return (
-                           <div key={msg.id} className="flex justify-end items-end gap-2 w-full animate-in slide-in-from-bottom-2">
-                             <div className="flex flex-col items-end max-w-[80%]">
-                               <span className="text-[11px] text-[#00D9FF] font-bold mb-1 mr-1">{msg.sender}</span>
-                               <div className="bg-[#7C4DFF] px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-[#6A3DE8]">
-                                 {msg.text}
-                               </div>
-                             </div>
-                             <div className="w-8 h-8 rounded-full bg-[#1A103C] border-2 border-[#00D9FF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
-                               <span className="text-[#00D9FF] font-bold text-xs">{msg.avatar}</span>
-                             </div>
-                           </div>
-                         );
-                       }
-                       
-                       return (
-                         <div key={msg.id} className="flex justify-start items-end gap-2 w-full animate-in slide-in-from-bottom-2">
-                           <div className="w-8 h-8 rounded-full bg-[#24174D] border-2 border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
-                             <span className="text-white font-bold text-xs">{msg.avatar || '?'}</span>
-                           </div>
-                           <div className="flex flex-col items-start max-w-[80%]">
-                             <span className="text-[11px] text-white/70 font-bold mb-1 ml-1">{msg.sender}</span>
-                             <div className="bg-[#24174D] px-4 py-2.5 rounded-2xl rounded-tl-sm text-white text-[15px] font-medium shadow-md break-words border border-white/10">
-                               {msg.text}
-                             </div>
-                           </div>
-                         </div>
-                       );
-
-                     })}
+                     {[...chatMessages].reverse().map(msg => (
+                       <ChatMessageItem key={msg.id} msg={msg} />
+                     ))}
                     </div>
                   </div>
 

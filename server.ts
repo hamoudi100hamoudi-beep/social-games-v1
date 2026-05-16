@@ -101,6 +101,20 @@ async function startServer() {
       else socket.broadcast.emit('draw_redo', data);
     });
     
+    socket.on('send_message', (data) => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        io.to(player.roomId).emit('receive_message', {
+          id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+          text: data.text,
+          sender: player.name,
+          senderId: socket.id,
+          avatar: player.avatar,
+          type: 'message'
+        });
+      }
+    });
+    
     socket.on('disconnect', () => {
       console.log(`[Socket] Client disconnected: ${socket.id}`);
       const player = roomManager.getPlayer(socket.id);
