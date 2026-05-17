@@ -282,16 +282,8 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       window.visualViewport.addEventListener('resize', handleResize);
     }
 
-    const preventScroll = () => {
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
-        window.scrollTo(0, 0);
-      }
-    };
-    window.addEventListener('scroll', preventScroll);
-
     return () => {
       window.visualViewport?.removeEventListener('resize', handleResize);
-      window.removeEventListener('scroll', preventScroll);
     };
   }, []);
 
