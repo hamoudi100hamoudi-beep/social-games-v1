@@ -58,8 +58,13 @@ const ChatMessageItem: React.FC<{
       startY.current = e.clientY;
       startX.current = e.clientX;
     }
+    const hadFocus = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA';
     pressTimer.current = setTimeout(() => {
       onSetActiveCopy(msg.id);
+      if (hadFocus) {
+        const textarea = document.getElementById('chat-textarea') as HTMLTextAreaElement;
+        if (textarea) textarea.focus();
+      }
     }, 500);
   };
 
@@ -82,10 +87,17 @@ const ChatMessageItem: React.FC<{
     }
   };
 
-  const handleTouchEnd = () => {
+  const handleTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
     if (pressTimer.current) {
       clearTimeout(pressTimer.current);
       pressTimer.current = null;
+    } else {
+      // If pressTimer is null, it means it either fired (long press) or was cancelled (scroll).
+      // If we are showing the copy icon for THIS message, it means a long press just completed.
+      // We prevent default on touchend/mouseup to stop the browser from dismissing the keyboard.
+      if (showCopy && e.cancelable) {
+        e.preventDefault();
+      }
     }
   };
 
@@ -129,9 +141,9 @@ const ChatMessageItem: React.FC<{
               onClick={copyToClipboard}
               onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
               onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              className="absolute -top-8 left-0 bg-black/80 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-10 animate-in fade-in"
+              className="absolute -top-5 left-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
             >
-              <Copy size={12} />
+              <Copy size={10} />
               Copy
             </button>
           )}
@@ -168,9 +180,9 @@ const ChatMessageItem: React.FC<{
             onClick={copyToClipboard}
             onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            className="absolute -top-8 right-0 bg-black/80 text-white text-xs px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-10 animate-in fade-in"
+            className="absolute -top-5 right-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
           >
-            <Copy size={12} /> 
+            <Copy size={10} /> 
             Copy
           </button>
         )}
@@ -274,6 +286,9 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
+      // Force no scroll
+      window.scrollTo(0, 0);
+
       if (isKeyboardShowing && document.activeElement?.tagName === 'INPUT') {
         const input = document.activeElement as HTMLInputElement;
         // The user wants chat popup not to trigger morph, but we haven't isolated the chat popup input yet.
@@ -283,12 +298,21 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       }
     };
 
+    const handleScroll = () => {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+        window.scrollTo(0, 0);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+
     if (window.visualViewport) {
       setLockedHeight(window.visualViewport.height);
       window.visualViewport.addEventListener('resize', handleResize);
     }
 
     return () => {
+      window.removeEventListener('scroll', handleScroll);
       window.visualViewport?.removeEventListener('resize', handleResize);
     };
   }, []);
@@ -323,7 +347,8 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     setChatInput('');
     const textarea = document.getElementById('chat-textarea') as HTMLTextAreaElement;
     if (textarea) {
-      textarea.style.height = '48px';
+      textarea.style.height = '40px';
+      // keep focus to avoid keyboard dismiss
       textarea.focus();
     }
   };
@@ -571,7 +596,6 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                       />
                       <button 
                         type="submit" 
-                        onPointerDown={(e) => e.preventDefault()}
                         disabled={!chatInput.trim()} 
                         className="w-10 h-10 shrink-0 flex items-center justify-center text-white disabled:bg-[#7C4DFF]/50 bg-[#7C4DFF] rounded-xl hover:bg-[#6A3DE8] transition-colors shadow-md active:scale-95"
                       >
