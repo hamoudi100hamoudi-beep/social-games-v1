@@ -183,6 +183,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const { socket } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+  const [maxViewportHeight, setMaxViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
@@ -255,7 +256,8 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
   useEffect(() => {
-    let maxHeight = window.visualViewport?.height || window.innerHeight;
+    let currentMax = window.visualViewport?.height || window.innerHeight;
+    setMaxViewportHeight(currentMax);
 
     const handleResize = () => {
       if (!window.visualViewport) return;
@@ -263,12 +265,13 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       const currentHeight = window.visualViewport.height;
       setLockedHeight(currentHeight);
 
-      if (currentHeight > maxHeight) {
-        maxHeight = currentHeight;
+      if (currentHeight > currentMax) {
+        currentMax = currentHeight;
+        setMaxViewportHeight(currentMax);
       }
       
       // True if height shrunk significantly
-      const isKeyboardShowing = currentHeight < maxHeight - 150;
+      const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
       if (isKeyboardShowing && document.activeElement?.tagName === 'INPUT') {
@@ -335,9 +338,9 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   return (
     <>
       <div 
-        className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden transition-[grid-template-columns,grid-template-rows] duration-300 ease-in-out"
+        className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden transition-all duration-300 ease-in-out"
         style={{ 
-          height: lockedHeight ? `${lockedHeight}px` : '100dvh',
+          height: isChatOpen ? (maxViewportHeight ? `${maxViewportHeight}px` : '100dvh') : (lockedHeight ? `${lockedHeight}px` : '100dvh'),
           gridTemplateColumns: morphMode ? 'minmax(0, 35%) minmax(0, 65%)' : 'minmax(0, 30%) minmax(0, 70%)',
           gridTemplateRows: 'auto minmax(0, 1fr)'
         }}
@@ -483,10 +486,10 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
            </div>
 
            {/* Guess Input Area */}
-           <div className="p-2 shrink-0 mt-auto bg-[#1A103C] border-t border-white/5">
+           <div className="p-1.5 shrink-0 mt-auto bg-[#1A103C] border-t border-white/5">
              <form onSubmit={handleGuessSubmit} className="relative">
                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/50">
-                 <Pencil size={18} />
+                 <Pencil size={14} />
                </div>
                <input 
                  type="text"
@@ -495,14 +498,14 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                  onFocus={() => setIsInputFocused(true)}
                  onBlur={() => setIsInputFocused(false)}
                  placeholder="Answer here..."
-                 className="w-full h-12 bg-black/20 border border-white/10 rounded-2xl pl-10 pr-12 text-white font-bold outline-none focus:border-[#00D9FF] transition-colors"
+                 className="w-full h-9 bg-black/20 border border-white/10 rounded-xl pl-8 pr-10 text-white font-bold text-sm outline-none focus:border-[#00D9FF] transition-colors"
                />
                <button 
                  type="submit" 
                  disabled={!guessInput.trim()}
-                 className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-[#1A103C] disabled:opacity-0 bg-[#00D9FF] rounded-xl hover:bg-white transition-opacity"
+                 className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center text-[#1A103C] disabled:opacity-0 bg-[#00D9FF] rounded-lg hover:bg-white transition-opacity"
                >
-                 <Send size={16} className="-ml-0.5" />
+                 <Send size={14} className="-ml-0.5" />
                </button>
              </form>
            </div>
@@ -511,7 +514,10 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
 
       {/* Chat Overlay */}
       {isChatOpen && (
-         <div className="fixed inset-0 z-50 bg-black/60 flex flex-col justify-end">
+         <div 
+           className="fixed top-0 left-0 right-0 z-50 bg-black/60 flex flex-col justify-end"
+           style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
+         >
             
             <div className="w-full h-full flex flex-col">
                 {/* Header (Invisible but usable to close if clicking top area) */}
@@ -545,31 +551,31 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                       <button 
                         type="button"
                         onClick={closeChat}
-                        className="w-12 h-12 shrink-0 flex items-center justify-center border-2 border-white/10 bg-black/20 text-white rounded-xl hover:bg-white/10 transition-colors"
+                        className="w-10 h-10 shrink-0 flex items-center justify-center border-2 border-white/10 bg-black/20 text-white rounded-xl hover:bg-white/10 transition-colors"
                       >
-                        <X size={20} />
+                        <X size={18} />
                       </button>
                       <textarea
                         id="chat-textarea"
                         value={chatInput}
                         onChange={(e) => {
                           setChatInput(e.target.value);
-                          e.target.style.height = '48px'; 
+                          e.target.style.height = '40px'; 
                           e.target.style.height = `${e.target.scrollHeight}px`; 
                         }}
                         dir="auto"
                         rows={1}
                         placeholder="Type your message here..."
-                        className="flex-1 w-full min-w-0 min-h-[48px] max-h-[114px] rounded-xl border-2 border-white/10 bg-black/40 px-4 py-3 text-white font-bold placeholder-white/30 focus:border-[#7C4DFF] outline-none transition-all shadow-inner resize-none overflow-y-auto leading-tight"
-                        style={{ height: '48px' }}
+                        className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-[#7C4DFF] outline-none transition-all shadow-inner resize-none overflow-y-auto leading-tight"
+                        style={{ height: '40px' }}
                       />
                       <button 
                         type="submit" 
                         onPointerDown={(e) => e.preventDefault()}
                         disabled={!chatInput.trim()} 
-                        className="w-12 h-12 shrink-0 flex items-center justify-center text-white disabled:bg-[#7C4DFF]/50 bg-[#7C4DFF] rounded-xl hover:bg-[#6A3DE8] transition-colors shadow-md active:scale-95"
+                        className="w-10 h-10 shrink-0 flex items-center justify-center text-white disabled:bg-[#7C4DFF]/50 bg-[#7C4DFF] rounded-xl hover:bg-[#6A3DE8] transition-colors shadow-md active:scale-95"
                       >
-                        <Send size={18} />
+                        <Send size={16} />
                       </button>
                     </form>
                   </div>
