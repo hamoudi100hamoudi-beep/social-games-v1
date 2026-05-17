@@ -350,7 +350,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       )}
 
       {/* Top Area (Drawing / Waiting) */}
-      <div className="relative w-full h-[45%] sm:h-[55%] bg-white shrink-0 flex flex-col items-center justify-center transition-all duration-300 overflow-hidden">
+      <div className="relative w-full aspect-[4/3] sm:h-[55dvh] sm:aspect-auto bg-white shrink-0 flex flex-col items-center justify-center transition-all duration-300 overflow-hidden">
         
         <DrawingBoard readOnly={true} />
 
