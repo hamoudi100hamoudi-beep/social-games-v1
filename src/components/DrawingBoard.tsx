@@ -1007,7 +1007,7 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
       )}
 
       {/* Canvas Area */}
-      <div ref={containerRef} dir="ltr" className="flex-1 relative bg-slate-200 overflow-hidden w-full h-full cursor-crosshair">
+      <div ref={containerRef} dir="ltr" className="flex-1 relative bg-white overflow-hidden w-full h-full cursor-crosshair">
         
         {/* Transform Wrapper for Pinch-to-Zoom and Base Scale */}
         <div 

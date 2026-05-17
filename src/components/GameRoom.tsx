@@ -330,7 +330,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   return (
     <>
       <div 
-        className="fixed inset-0 flex flex-col w-full bg-[#1A103C] font-sans overflow-hidden"
+        className="fixed top-0 left-0 right-0 flex flex-col w-full bg-[#1A103C] font-sans overflow-hidden"
         style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
       >
         
@@ -350,7 +350,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       )}
 
       {/* Top Area (Drawing / Waiting) */}
-      <div className="relative w-full h-[45dvh] sm:h-[55dvh] bg-slate-200 shrink-0 flex flex-col items-center justify-center transition-all duration-300 overflow-hidden">
+      <div className="relative w-full h-[45%] sm:h-[55%] bg-white shrink-0 flex flex-col items-center justify-center transition-all duration-300 overflow-hidden">
         
         <DrawingBoard readOnly={true} />
 
