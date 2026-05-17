@@ -188,14 +188,12 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
 
   const openChat = () => {
-    setLockedHeight(window.innerHeight);
     setIsChatOpen(true);
     setUnreadCount(0);
   };
 
   const closeChat = () => {
     setIsChatOpen(false);
-    setLockedHeight(null);
     setActiveCopyId(null);
   };
   const [guessInput, setGuessInput] = useState('');
@@ -262,6 +260,8 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       if (!window.visualViewport) return;
       
       const currentHeight = window.visualViewport.height;
+      setLockedHeight(currentHeight);
+
       if (document.activeElement?.tagName === 'INPUT') {
         if (currentHeight < originalHeight - 150) {
           keyboardWasOpen = true;
@@ -277,8 +277,22 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       }
     };
 
-    window.visualViewport?.addEventListener('resize', handleResize);
-    return () => window.visualViewport?.removeEventListener('resize', handleResize);
+    if (window.visualViewport) {
+      setLockedHeight(window.visualViewport.height);
+      window.visualViewport.addEventListener('resize', handleResize);
+    }
+
+    const preventScroll = () => {
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+        window.scrollTo(0, 0);
+      }
+    };
+    window.addEventListener('scroll', preventScroll);
+
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', preventScroll);
+    };
   }, []);
 
   const handleGuessSubmit = (e: React.FormEvent) => {
@@ -324,7 +338,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   return (
     <>
       <div 
-        className={`flex flex-col w-full bg-[#1A103C] font-sans overflow-hidden ${isChatOpen ? 'fixed top-0 left-0 right-0 z-0' : 'relative'}`}
+        className="fixed inset-0 flex flex-col w-full bg-[#1A103C] font-sans overflow-hidden"
         style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
       >
         

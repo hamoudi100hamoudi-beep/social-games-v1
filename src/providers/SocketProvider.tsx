@@ -21,7 +21,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     // Automatically connects to the current host
     const socketInstance = io('https://social-games-v1.onrender.com', {
       autoConnect: true,
-      transports: ['websocket', 'polling'],
+      transports: ['websocket'],
       withCredentials: true,
     });
 

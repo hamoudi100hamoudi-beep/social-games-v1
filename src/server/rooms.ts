@@ -1,15 +1,4 @@
-export interface Player {
-  id: string; // Socket ID
-  name: string;
-  avatar: string;
-  roomId: string | null;
-}
-
-export interface Room {
-  id: string;
-  players: Player[];
-  // Future: gameState, roomSettings, etc.
-}
+import { Player, Room, GameState } from '../types/game.js';
 
 class RoomManager {
   private rooms: Map<string, Room> = new Map();
@@ -17,7 +6,15 @@ class RoomManager {
 
   createRoom(roomId: string): Room {
     if (!this.rooms.has(roomId)) {
-      this.rooms.set(roomId, { id: roomId, players: [] });
+      this.rooms.set(roomId, { 
+        id: roomId, 
+        players: [],
+        gameState: {
+          status: 'waiting',
+          currentDrawerId: null,
+          currentWord: null
+        }
+      });
     }
     return this.rooms.get(roomId)!;
   }

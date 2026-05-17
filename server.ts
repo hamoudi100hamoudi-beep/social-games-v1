@@ -12,7 +12,8 @@ async function startServer() {
   const httpServer = createServer(app);
   // Setup Socket.io
   const io = new Server(httpServer, {
-    cors: { origin: '*' }
+    cors: { origin: '*' },
+    transports: ['websocket']
   });
 
   // API Routes
@@ -56,7 +57,8 @@ async function startServer() {
         // Broadcast updated room state
         io.to(roomId).emit('room_state_update', {
           roomId: room.id,
-          players: room.players
+          players: room.players,
+          gameState: room.gameState
         });
 
         // System Message
@@ -80,7 +82,8 @@ async function startServer() {
         if (room) {
           io.to(roomId).emit('room_state_update', {
             roomId: room.id,
-            players: room.players
+            players: room.players,
+            gameState: room.gameState
           });
           io.to(roomId).emit('receive_message', {
             id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
@@ -167,7 +170,8 @@ async function startServer() {
           if (room) {
             io.to(roomId).emit('room_state_update', {
               roomId: room.id,
-              players: room.players
+              players: room.players,
+              gameState: room.gameState
             });
             io.to(roomId).emit('receive_message', {
               id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
