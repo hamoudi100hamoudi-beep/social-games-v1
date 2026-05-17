@@ -58,12 +58,12 @@ const ChatMessageItem: React.FC<{
       startY.current = e.clientY;
       startX.current = e.clientX;
     }
-    const hadFocus = document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA';
+    const actElem = document.activeElement;
+    const focusedNode = (actElem?.tagName === 'INPUT' || actElem?.tagName === 'TEXTAREA') ? actElem : null;
     pressTimer.current = setTimeout(() => {
       onSetActiveCopy(msg.id);
-      if (hadFocus) {
-        const textarea = document.getElementById('chat-textarea') as HTMLTextAreaElement;
-        if (textarea) textarea.focus();
+      if (focusedNode) {
+        (focusedNode as HTMLElement).focus();
       }
     }, 500);
   };
@@ -141,7 +141,7 @@ const ChatMessageItem: React.FC<{
               onClick={copyToClipboard}
               onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
               onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              className="absolute -top-5 left-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
+              className="absolute -top-3 left-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
             >
               <Copy size={10} />
               Copy
@@ -180,7 +180,7 @@ const ChatMessageItem: React.FC<{
             onClick={copyToClipboard}
             onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
             onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            className="absolute -top-5 right-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
+            className="absolute -top-3 right-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
           >
             <Copy size={10} /> 
             Copy
@@ -363,9 +363,12 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   return (
     <>
       <div 
-        className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden transition-all duration-300 ease-in-out"
+        className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden"
         style={{ 
           height: isChatOpen ? (maxViewportHeight ? `${maxViewportHeight}px` : '100dvh') : (lockedHeight ? `${lockedHeight}px` : '100dvh'),
+          transitionProperty: 'grid-template-columns, grid-template-rows',
+          transitionDuration: '300ms',
+          transitionTimingFunction: 'ease-in-out',
           gridTemplateColumns: morphMode ? 'minmax(0, 35%) minmax(0, 65%)' : 'minmax(0, 30%) minmax(0, 70%)',
           gridTemplateRows: 'auto minmax(0, 1fr)'
         }}
@@ -514,7 +517,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
            <div className="p-1.5 shrink-0 mt-auto bg-[#1A103C] border-t border-white/5">
              <form onSubmit={handleGuessSubmit} className="relative">
                <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/50">
-                 <Pencil size={14} />
+                 <Pencil size={12} />
                </div>
                <input 
                  type="text"
@@ -523,14 +526,15 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                  onFocus={() => setIsInputFocused(true)}
                  onBlur={() => setIsInputFocused(false)}
                  placeholder="Answer here..."
-                 className="w-full h-9 bg-black/20 border border-white/10 rounded-xl pl-8 pr-10 text-white font-bold text-sm outline-none focus:border-[#00D9FF] transition-colors"
+                 className="w-full h-8 bg-black/20 border border-white/10 rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none focus:border-[#00D9FF] transition-colors"
                />
                <button 
-                 type="submit" 
+                 type="submit"
+                 onPointerDown={(e) => e.preventDefault()}
                  disabled={!guessInput.trim()}
-                 className="absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center text-[#1A103C] disabled:opacity-0 bg-[#00D9FF] rounded-lg hover:bg-white transition-opacity"
+                 className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-[#1A103C] disabled:opacity-0 bg-[#00D9FF] rounded-md hover:bg-white transition-opacity"
                >
-                 <Send size={14} className="-ml-0.5" />
+                 <Send size={12} className="-ml-0.5" />
                </button>
              </form>
            </div>
@@ -585,8 +589,8 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                         value={chatInput}
                         onChange={(e) => {
                           setChatInput(e.target.value);
-                          e.target.style.height = '40px'; 
-                          e.target.style.height = `${e.target.scrollHeight}px`; 
+                          e.target.style.height = 'auto'; 
+                          e.target.style.height = `${Math.max(40, e.target.scrollHeight)}px`; 
                         }}
                         dir="auto"
                         rows={1}
@@ -595,7 +599,8 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                         style={{ height: '40px' }}
                       />
                       <button 
-                        type="submit" 
+                        type="submit"
+                        onPointerDown={(e) => e.preventDefault()}
                         disabled={!chatInput.trim()} 
                         className="w-10 h-10 shrink-0 flex items-center justify-center text-white disabled:bg-[#7C4DFF]/50 bg-[#7C4DFF] rounded-xl hover:bg-[#6A3DE8] transition-colors shadow-md active:scale-95"
                       >
