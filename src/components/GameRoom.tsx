@@ -351,13 +351,13 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   return (
     <>
       <div 
-        className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden"
+        className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden overscroll-none touch-none"
         style={{ 
           height: isChatOpen ? (maxViewportHeight ? `${maxViewportHeight}px` : '100dvh') : (lockedHeight ? `${lockedHeight}px` : '100dvh'),
           transitionProperty: 'grid-template-columns, grid-template-rows',
           transitionDuration: '300ms',
           transitionTimingFunction: 'ease-in-out',
-          gridTemplateColumns: morphMode ? 'minmax(0, 35%) minmax(0, 65%)' : 'minmax(0, 30%) minmax(0, 70%)',
+          gridTemplateColumns: 'minmax(0, 35%) minmax(0, 65%)',
           gridTemplateRows: 'auto minmax(0, 1fr)'
         }}
       >
@@ -409,7 +409,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       </div>
 
       {/* Left: Players Sidebar */}
-      <div className={`flex flex-col border-r border-[#00D9FF]/20 bg-[#24174D] overflow-y-auto transition-all duration-300
+      <div className={`flex flex-col border-r border-[#00D9FF]/20 bg-[#24174D] overflow-y-auto overscroll-contain touch-pan-y transition-all duration-300
                       ${morphMode ? 'col-start-1 col-end-2 row-start-1 row-end-3' : 'col-start-1 col-end-2 row-start-2 row-end-3'}
                      `}>
           {slots.map((slot) => (
@@ -420,27 +420,27 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
             >
               {/* Avatar */}
               <div className="relative shrink-0 mr-2 sm:mr-3">
-                 <div className={`w-8 h-8 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-2 
+                 <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-2 
                    ${slot.isEmpty ? 'bg-black/20 border-white/10' : 'bg-[#1A103C] border-[#00D9FF]'}`}>
                    {slot.isEmpty ? (
-                     <UserIcon size={16} className="text-white/30" />
+                     <UserIcon size={20} className="text-white/30" />
                    ) : (
-                     <span className="font-bold text-sm sm:text-lg text-white">{slot.avatar}</span>
+                     <span className="font-bold text-base sm:text-lg text-white">{slot.avatar}</span>
                    )}
                  </div>
                  {slot.isCurrent && (
-                   <div className="absolute top-0 right-0 w-2 h-2 sm:w-3 sm:h-3 bg-yellow-400 rounded-full border border-[#1A103C]" />
+                   <div className="absolute top-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-yellow-400 rounded-full border border-[#1A103C]" />
                  )}
               </div>
               
               {/* Info */}
               <div className="flex flex-col justify-center overflow-hidden">
-                 <span className={`font-bold text-[10px] sm:text-[15px] truncate max-w-full
+                 <span className={`font-bold text-[12px] sm:text-[15px] truncate max-w-full
                    ${slot.isEmpty ? 'text-white/40' : 'text-white'}`}>
                    {slot.name}
                  </span>
                  {!slot.isEmpty && (
-                   <span className="text-[9px] sm:text-[13px] font-bold text-[#7C4DFF]">{slot.points} pts</span>
+                   <span className="text-[11px] sm:text-[13px] font-bold text-[#7C4DFF]">{slot.points} pts</span>
                  )}
               </div>
             </div>
@@ -479,7 +479,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
            </div>
 
            {/* Quick Feedback Area (interactive feed) */}
-           <div className="flex-1 overflow-y-auto p-2 flex flex-col-reverse font-sans min-h-0">
+           <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-2 flex flex-col-reverse font-sans min-h-0">
              <div className="flex flex-col-reverse gap-1.5">
                 {[...guesses].reverse().map((msg) => (
                   <div key={msg.id} className="text-[12px] sm:text-[14px]">
@@ -532,7 +532,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       {/* Chat Overlay */}
       {isChatOpen && (
          <div 
-           className="fixed top-0 left-0 right-0 z-50 bg-black/60 flex flex-col justify-end"
+           className="fixed top-0 left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none"
            style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
          >
             
@@ -568,7 +568,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                 >
                   
                   {/* Messages Area */}
-                  <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0">
+                  <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-4 flex flex-col-reverse min-h-0">
                     <div className="flex flex-col-reverse gap-4 max-w-2xl mx-auto w-full">
                      {[...chatMessages].reverse().map(msg => (
                        <ChatMessageItem 
@@ -608,7 +608,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                         dir="auto"
                         rows={1}
                         placeholder="Type your message here..."
-                        className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-[#7C4DFF] outline-none transition-all shadow-inner resize-none overflow-y-auto leading-tight"
+                        className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-[#7C4DFF] outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight"
                         style={{ height: '40px' }}
                       />
                       <button 
