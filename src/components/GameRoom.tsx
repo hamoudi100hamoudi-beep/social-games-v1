@@ -103,7 +103,11 @@ const ChatMessageItem: React.FC<{
   if (msg.type === 'system') {
     return (
       <div className="flex justify-center mb-2">
-        <div className="bg-[#00D9FF]/20 text-[#00D9FF] px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-md">
+        <div 
+          className="bg-[#00D9FF]/20 text-[#00D9FF] px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-md"
+          dir="auto"
+          style={{ unicodeBidi: 'plaintext' }}
+        >
           {msg.text}
         </div>
       </div>
@@ -124,7 +128,11 @@ const ChatMessageItem: React.FC<{
           style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
         >
           <span className="text-[11px] text-[#00D9FF] font-bold mb-1 mr-1">{msg.sender}</span>
-          <div className="bg-[#7C4DFF] px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-[#6A3DE8]">
+          <div 
+            className="bg-[#7C4DFF] px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-[#6A3DE8]"
+            dir="auto"
+            style={{ unicodeBidi: 'plaintext', textAlign: 'start' }}
+          >
             {msg.text}
           </div>
           {showCopy && (
@@ -162,7 +170,11 @@ const ChatMessageItem: React.FC<{
         style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
       >
         <span className={`text-[11px] font-bold mb-1 ml-1 ${getSenderColor(msg.sender)}`}>{msg.sender}</span>
-        <div className="bg-[#24174D] px-4 py-2.5 rounded-2xl rounded-tl-sm text-white text-[15px] font-medium shadow-md break-words border border-white/10">
+        <div 
+          className="bg-[#24174D] px-4 py-2.5 rounded-2xl rounded-tl-sm text-white text-[15px] font-medium shadow-md break-words border border-white/10"
+          dir="auto"
+          style={{ unicodeBidi: 'plaintext', textAlign: 'start' }}
+        >
           {msg.text}
         </div>
         {showCopy && (
@@ -484,12 +496,12 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                 {[...guesses].reverse().map((msg) => (
                   <div key={msg.id} className="text-[12px] sm:text-[14px]">
                     {msg.type === 'system' ? (
-                      <span className="text-[#00D9FF] font-bold">{msg.text}</span>
+                      <div className="text-[#00D9FF] font-bold" dir="auto" style={{ unicodeBidi: 'plaintext' }}>{msg.text}</div>
                     ) : (
                       <div className="flex items-start gap-1">
                         <Pencil size={10} className="text-[#00D9FF] shrink-0 mt-1" />
                         <span className="font-bold text-white/70">{msg.sender}:</span>
-                        <span className={`${msg.isSelf ? 'text-white' : 'text-slate-300'} break-words`}>{msg.text}</span>
+                        <span className={`${msg.isSelf ? 'text-white' : 'text-slate-300'} break-words`} dir="auto" style={{ unicodeBidi: 'plaintext' }}>{msg.text}</span>
                       </div>
                     )}
                   </div>
@@ -587,7 +599,9 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                     onTouchStart={(e) => e.stopPropagation()}
                     onMouseDown={(e) => e.stopPropagation()}
                     onPointerDown={(e) => e.stopPropagation()}
-                    className="p-3 bg-[#24174D]/90 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full"
+                    onContextMenu={(e) => e.stopPropagation()}
+                    className="p-3 bg-[#24174D]/90 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full select-auto"
+                    style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'auto', userSelect: 'auto' }}
                   >
                     <form onSubmit={handleChatSubmit} className="relative max-w-2xl mx-auto flex gap-2 items-end">
                       <button 
@@ -608,8 +622,8 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                         dir="auto"
                         rows={1}
                         placeholder="Type your message here..."
-                        className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-[#7C4DFF] outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight"
-                        style={{ height: '40px' }}
+                        className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-[#7C4DFF] outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text"
+                        style={{ height: '40px', WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                       />
                       <button 
                         type="submit"
