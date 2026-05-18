@@ -44,73 +44,65 @@ const ChatMessageItem: React.FC<{
   activeCopyId, 
   onSetActiveCopy 
 }) => {
-  const pressTimer = React.useRef<NodeJS.Timeout | null>(null);
-  const startY = React.useRef<number>(0);
-  const startX = React.useRef<number>(0);
-
   const showCopy = activeCopyId === msg.id;
 
-  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
-    if ('touches' in e) {
-      startY.current = e.touches[0].clientY;
-      startX.current = e.touches[0].clientX;
-    } else {
-      startY.current = e.clientY;
-      startX.current = e.clientX;
-    }
-    const actElem = document.activeElement;
-    const focusedNode = (actElem?.tagName === 'INPUT' || actElem?.tagName === 'TEXTAREA') ? actElem : null;
-    pressTimer.current = setTimeout(() => {
-      onSetActiveCopy(msg.id);
-      if (focusedNode) {
-        (focusedNode as HTMLElement).focus();
-      }
-    }, 500);
+  const startY = React.useRef<number>(0);
+  const startX = React.useRef<number>(0);
+  const hasScrolled = React.useRef<boolean>(false);
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    // Unconditionally prevent default on pointerdown to stop focus loss (keep keyboard open)
+    // This does NOT break touch scrolling on modern mobile browsers.
+    e.preventDefault();
   };
 
-  const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
-    if (pressTimer.current) {
-      let clientY, clientX;
-      if ('touches' in e) {
-        clientY = e.touches[0].clientY;
-        clientX = e.touches[0].clientX;
-      } else {
-        clientY = e.clientY;
-        clientX = e.clientX;
-      }
-      const deltaY = Math.abs(clientY - startY.current);
-      const deltaX = Math.abs(clientX - startX.current);
-      if (deltaY > 10 || deltaX > 10) {
-        clearTimeout(pressTimer.current);
-        pressTimer.current = null;
-      }
+  const handleTouchStart = (e: React.TouchEvent) => {
+    hasScrolled.current = false;
+    startY.current = e.touches[0].clientY;
+    startX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const deltaY = Math.abs(e.touches[0].clientY - startY.current);
+    const deltaX = Math.abs(e.touches[0].clientX - startX.current);
+    if (deltaY > 10 || deltaX > 10) {
+      hasScrolled.current = true;
     }
   };
 
-  const handleTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
-    if (pressTimer.current) {
-      clearTimeout(pressTimer.current);
-      pressTimer.current = null;
-    } else {
-      // If pressTimer is null, it means it either fired (long press) or was cancelled (scroll).
-      // If we are showing the copy icon for THIS message, it means a long press just completed.
-      // We prevent default on touchend/mouseup to stop the browser from dismissing the keyboard.
-      if (showCopy && e.cancelable) {
-        e.preventDefault();
-      }
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!hasScrolled.current) {
+      if (e.cancelable) e.preventDefault();
+      toggleCopy();
     }
   };
 
-  const copyToClipboard = (e: React.MouseEvent | React.TouchEvent) => {
+  const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    navigator.clipboard.writeText(msg.text);
+    toggleCopy();
+  };
+
+  const toggleCopy = () => {
+    if (showCopy) {
+      onSetActiveCopy(null);
+    } else {
+      onSetActiveCopy(msg.id);
+    }
+  };
+
+  const copyToClipboard = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent) => {
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    try {
+      navigator.clipboard.writeText(msg.text);
+    } catch (err) {}
     onSetActiveCopy(null);
   };
 
   if (msg.type === 'system') {
     return (
-      <div className="flex justify-center mb-2">
+      <div className="flex justify-center mb-2 animate-in fade-in slide-in-from-bottom-2 duration-300 ease-out">
         <div className="bg-[#00D9FF]/20 text-[#00D9FF] px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-md">
           {msg.text}
         </div>
@@ -120,28 +112,27 @@ const ChatMessageItem: React.FC<{
 
   if (msg.isSelf) {
     return (
-      <div 
-        className="flex justify-end items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
-        onMouseDown={handleTouchStart}
-        onMouseMove={handleTouchMove}
-        onMouseUp={handleTouchEnd}
-        onMouseLeave={handleTouchEnd}
-      >
-        <div className="flex flex-col items-end max-w-[80%] relative">
+      <div className="flex justify-end items-end gap-2 w-full animate-in fade-in zoom-in-[0.98] slide-in-from-bottom-3 duration-300 ease-out select-none">
+        <div 
+          className="flex flex-col items-end max-w-[80%] relative"
+          onPointerDown={handlePointerDown}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onClick={handleClick}
+          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+          style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+        >
           <span className="text-[11px] text-[#00D9FF] font-bold mb-1 mr-1">{msg.sender}</span>
-          <div className="bg-[#7C4DFF] px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-[#6A3DE8]">
+          <div className="bg-[#7C4DFF] px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-[#6A3DE8] transform origin-bottom-right transition-transform">
             {msg.text}
           </div>
           {showCopy && (
             <button 
-              onClick={copyToClipboard}
-              onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-              className="absolute -top-3 left-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
+              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
+              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
+              className="absolute -top-3 left-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in zoom-in-95 duration-200 border border-white/20"
             >
               <Copy size={10} />
               Copy
@@ -156,31 +147,30 @@ const ChatMessageItem: React.FC<{
   }
 
   return (
-    <div 
-      className="flex justify-start items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={handleTouchEnd}
-      onMouseDown={handleTouchStart}
-      onMouseMove={handleTouchMove}
-      onMouseUp={handleTouchEnd}
-      onMouseLeave={handleTouchEnd}
-    >
+    <div className="flex justify-start items-end gap-2 w-full animate-in fade-in zoom-in-[0.98] slide-in-from-bottom-3 duration-300 ease-out select-none">
       <div className="w-8 h-8 rounded-full bg-[#24174D] border-2 border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
         <span className="text-white font-bold text-xs">{msg.avatar || '?'}</span>
       </div>
-      <div className="flex flex-col items-start max-w-[80%] relative">
+      <div 
+        className="flex flex-col items-start max-w-[80%] relative"
+        onPointerDown={handlePointerDown}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+      >
         <span className={`text-[11px] font-bold mb-1 ml-1 ${getSenderColor(msg.sender)}`}>{msg.sender}</span>
-        <div className="bg-[#24174D] px-4 py-2.5 rounded-2xl rounded-tl-sm text-white text-[15px] font-medium shadow-md break-words border border-white/10">
+        <div className="bg-[#24174D] px-4 py-2.5 rounded-2xl rounded-tl-sm text-white text-[15px] font-medium shadow-md break-words border border-white/10 transform origin-bottom-left transition-transform">
           {msg.text}
         </div>
         {showCopy && (
           <button 
-            onClick={copyToClipboard}
-            onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); }}
-            className="absolute -top-3 right-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
+            onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
+            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
+            className="absolute -top-3 right-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in zoom-in-95 duration-200 border border-white/20"
           >
             <Copy size={10} /> 
             Copy
@@ -194,6 +184,7 @@ const ChatMessageItem: React.FC<{
 export default function GameRoom({ nickname, room }: GameRoomProps) {
   const { socket } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const bgTouchStartTime = React.useRef<number>(0);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -289,11 +280,10 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       // Force no scroll
       window.scrollTo(0, 0);
 
-      if (isKeyboardShowing && document.activeElement?.tagName === 'INPUT') {
-        const input = document.activeElement as HTMLInputElement;
+      if (isKeyboardShowing && (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA')) {
         // The user wants chat popup not to trigger morph, but we haven't isolated the chat popup input yet.
         // For now, any keyboard presence will trigger the layout mode. We'll handle isolation later.
-      } else if (!isKeyboardShowing && document.activeElement?.tagName === 'INPUT') {
+      } else if (!isKeyboardShowing && (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA')) {
           (document.activeElement as HTMLElement).blur();
       }
     };
@@ -348,8 +338,6 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     const textarea = document.getElementById('chat-textarea') as HTMLTextAreaElement;
     if (textarea) {
       textarea.style.height = '40px';
-      // keep focus to avoid keyboard dismiss
-      textarea.focus();
     }
   };
 
@@ -366,9 +354,9 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
         className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden"
         style={{ 
           height: isChatOpen ? (maxViewportHeight ? `${maxViewportHeight}px` : '100dvh') : (lockedHeight ? `${lockedHeight}px` : '100dvh'),
-          transitionProperty: 'grid-template-columns, grid-template-rows',
+          transitionProperty: 'grid-template-columns, grid-template-rows, height',
           transitionDuration: '300ms',
-          transitionTimingFunction: 'ease-in-out',
+          transitionTimingFunction: 'cubic-bezier(0.2, 0.9, 0.3, 1)',
           gridTemplateColumns: morphMode ? 'minmax(0, 35%) minmax(0, 65%)' : 'minmax(0, 30%) minmax(0, 70%)',
           gridTemplateRows: 'auto minmax(0, 1fr)'
         }}
@@ -544,7 +532,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       {/* Chat Overlay */}
       {isChatOpen && (
          <div 
-           className="fixed top-0 left-0 right-0 z-50 bg-black/60 flex flex-col justify-end"
+           className="fixed top-0 left-0 right-0 z-50 bg-black/60 flex flex-col justify-end transition-[height] duration-300 ease-[cubic-bezier(0.2,0.9,0.3,1)]"
            style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
          >
             
@@ -556,7 +544,28 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                 />
 
                 {/* Actual Chat Container */}
-                <div className="w-full flex-1 bg-transparent flex flex-col min-h-0" onClick={() => setActiveCopyId(null)}>
+                <div 
+                  className="w-full flex-1 bg-transparent flex flex-col min-h-0 select-none" 
+                  style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onTouchStart={() => { bgTouchStartTime.current = Date.now(); }}
+                  onMouseDown={() => { bgTouchStartTime.current = Date.now(); }}
+                  onClick={() => {
+                    setActiveCopyId(null);
+                    
+                    const duration = Date.now() - bgTouchStartTime.current;
+                    if (bgTouchStartTime.current > 0 && duration > 300) {
+                      bgTouchStartTime.current = 0;
+                      return; // It was a long press, do nothing!
+                    }
+                    bgTouchStartTime.current = 0;
+
+                    const act = document.activeElement;
+                    if (act?.tagName === 'INPUT' || act?.tagName === 'TEXTAREA') {
+                      (act as HTMLElement).blur();
+                    }
+                  }}
+                >
                   
                   {/* Messages Area */}
                   <div className="flex-1 overflow-y-auto p-4 flex flex-col-reverse min-h-0">
@@ -574,6 +583,10 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
 
                   {/* Input Area */}
                   <div 
+                    onClick={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onPointerDown={(e) => e.stopPropagation()}
                     className="p-3 bg-[#24174D]/90 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full"
                   >
                     <form onSubmit={handleChatSubmit} className="relative max-w-2xl mx-auto flex gap-2 items-end">
