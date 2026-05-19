@@ -118,7 +118,17 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
 const LOGICAL_WIDTH = 1200;
 const LOGICAL_HEIGHT = 900;
 
-export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean }) {
+export default function DrawingBoard({ 
+  readOnly = false,
+  onSkipTurn,
+  onRequestHint,
+  hintsRemaining = 0
+}: { 
+  readOnly?: boolean;
+  onSkipTurn?: () => void;
+  onRequestHint?: () => void;
+  hintsRemaining?: number;
+}) {
   const instanceId = useId();
   const { socket } = useSocket();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1189,8 +1199,25 @@ export default function DrawingBoard({ readOnly = false }: { readOnly?: boolean 
             onClick={() => setActiveMenu(m => m === 'tools' ? null : 'tools')} 
             className="!bg-white !text-blue-600 !border-white" /* To make it prominent as main tool */
           />
-          <ActionBtn icon={<Lightbulb strokeWidth={2.5} size={22} />} onClick={() => {}} className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent flex" />
-          <ActionBtn icon={<UserMinus strokeWidth={2.5} size={22} />} onClick={() => {}} className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent" />
+          {hintsRemaining > 0 && onRequestHint && (
+            <div className="relative">
+              <ActionBtn 
+                icon={<Lightbulb strokeWidth={2.5} size={22} />} 
+                onClick={onRequestHint} 
+                className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent flex" 
+              />
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                {hintsRemaining}
+              </span>
+            </div>
+          )}
+          {onSkipTurn && (
+            <ActionBtn 
+              icon={<UserMinus strokeWidth={2.5} size={22} />} 
+              onClick={onSkipTurn} 
+              className="!bg-red-500 !text-white hover:!bg-red-600 !border-transparent" 
+            />
+          )}
         </div>
         
         {/* Color Palette (Scrollable horizontally) */}

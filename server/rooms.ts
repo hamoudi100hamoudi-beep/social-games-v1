@@ -314,20 +314,13 @@ class RoomManager {
       const hintsUsed = room.gameState.hintsUsed || 0;
       const revealedIndices = room.gameState.revealedIndices || [];
       
-      let maskedWord = '';
-      if (word && hintsUsed > 0) {
-        for (let i = 0; i < word.length; i++) {
-          if (word[i] === ' ') {
-            maskedWord += '  '; // Double space for visual separation
-          } else if (hintsUsed === 2 && revealedIndices.includes(i)) {
-            maskedWord += word[i] + ' ';
-          } else if (hintsUsed === 1 && maxHints === 1 && revealedIndices.includes(i)) {
-             maskedWord += word[i] + ' ';
-          } else {
-             maskedWord += '_ ';
-          }
-        }
-      }
+      const maskedWordArray = word.split('').map((char, index) => {
+         if (char === ' ') return { isSpace: true, char: ' ' };
+         let reveal = false;
+         if (hintsUsed === 2 && revealedIndices.includes(index)) reveal = true;
+         if (hintsUsed === 1 && maxHints === 1 && revealedIndices.includes(index)) reveal = true;
+         return { isSpace: false, char: reveal ? char : null, index };
+      });
 
       // To make it secure, iterate over room.players and emit individually
       room.players.forEach(p => {
@@ -340,7 +333,7 @@ class RoomManager {
                ...room.gameState,
                currentWord: isDrawer ? room.gameState.currentWord : null,
                wordOptions: isDrawer ? room.gameState.wordOptions : [],
-               maskedWord: maskedWord.trim()
+               maskedWordArray: maskedWordArray
             }
           });
         }

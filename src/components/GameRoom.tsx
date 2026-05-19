@@ -403,6 +403,68 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     setIsDrawingMode(true);
   };
 
+  useEffect(() => {
+    if (gameState.status !== 'DRAWING' || gameState.currentDrawerId !== socket?.id) {
+       setIsDrawingMode(false);
+    }
+  }, [gameState.status, gameState.currentDrawerId, socket?.id]);
+
+  const renderWordOverlay = () => {
+     if (gameState.status !== 'DRAWING') return null;
+     return (
+        <div className="absolute top-4 left-0 right-0 flex items-center justify-center z-[150] pointer-events-none drop-shadow-md">
+           {(() => {
+               const isDrawer = gameState.currentDrawerId === socket?.id;
+               const hintsUsed = gameState.hintsUsed || 0;
+               const maskedArray = gameState.maskedWordArray || [];
+
+               if (isDrawer && gameState.currentWord) {
+                  const charCount = gameState.currentWord.replace(/\s/g, '').length;
+                  const maxHints = charCount < 3 ? 1 : 2;
+                  const isRTL = /[\u0600-\u06FF]/.test(gameState.currentWord);
+
+                  return (
+                     <div className="flex gap-1.5 sm:gap-2 items-end" style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
+                        {gameState.currentWord.split('').map((char: string, i: number) => {
+                           if (char === ' ') return <span key={`space-${i}`} className="w-4" />;
+                           const isRevealed = (hintsUsed === 2 || (hintsUsed === 1 && maxHints === 1)) && (gameState.revealedIndices || []).includes(i);
+                           return (
+                              <div key={`char-${i}`} className="relative flex flex-col items-center justify-end h-8 sm:h-10">
+                                 <span className={`text-xl sm:text-3xl leading-none font-black absolute bottom-2 ${isRevealed ? 'text-[#FBBF24] drop-shadow-md' : 'text-slate-400/40'}`}>
+                                    {char}
+                                 </span>
+                                 <div className={`w-4 sm:w-6 h-[4px] rounded-full mt-auto ${hintsUsed >= 1 ? 'bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]' : 'bg-slate-300/80 shadow-sm'}`} />
+                              </div>
+                           );
+                        })}
+                     </div>
+                  );
+               } else {
+                  if (!maskedArray || maskedArray.length === 0) return null;
+                  const fullWordStr = maskedArray.map((m: any) => m.char || '').join('');
+                  const isRTL = /[\u0600-\u06FF]/.test(fullWordStr || gameState.currentWord || '');
+                  
+                  return (
+                     <div className="flex gap-1.5 sm:gap-2 items-end" style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
+                        {maskedArray.map((item: any, i: number) => {
+                           if (item.isSpace) return <span key={`space-${i}`} className="w-4" />;
+                           return (
+                              <div key={`char-${i}`} className="relative flex flex-col items-center justify-end h-8 sm:h-10">
+                                 <span className="text-xl sm:text-3xl leading-none font-black absolute bottom-2 text-[#FBBF24] drop-shadow-md">
+                                    {item.char || ''}
+                                 </span>
+                                 <div className={`w-4 sm:w-6 h-[4px] rounded-full mt-auto ${hintsUsed >= 1 ? 'bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]' : 'bg-slate-300/80 shadow-sm'}`} />
+                              </div>
+                           );
+                        })}
+                     </div>
+                  );
+               }
+           })()}
+        </div>
+     );
+  };
+
   const slots: PlayerSlot[] = Array.from({ length: 5 }).map((_, index) => {
     if (index < currentPlayers.length) return currentPlayers[index];
     return { id: `empty-${index}`, name: 'Empty', points: null, isCurrent: false, isEmpty: true };
@@ -438,37 +500,40 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
         }}
       >
         
-        {/* Drawing Mode View */}
+      {/* Drawing Mode View (Full Screen for Drawer) */}
       {isDrawingMode && (
         <div 
-          className="fixed inset-0 z-[100] bg-white flex transition-opacity duration-300 opacity-100"
+          className="fixed inset-0 z-[100] bg-white flex flex-col transition-opacity duration-300 opacity-100"
         >
-          <button 
-            onClick={() => setIsDrawingMode(false)}
-            className="absolute top-4 left-4 z-[110] bg-[#7C4DFF] hover:bg-[#6A3DE8] active:scale-95 text-white px-4 py-2 rounded-xl font-bold shadow-lg transition-all"
-          >
-            Exit Drawing
-          </button>
-          <DrawingBoard />
+          {renderWordOverlay()}
+          <DrawingBoard 
+            readOnly={false}
+            onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
+            onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
+            hintsRemaining={
+              (() => {
+                const word = gameState.currentWord || '';
+                const charCount = word.replace(/\s/g, '').length;
+                const maxHints = charCount < 3 ? 1 : 2;
+                return Math.max(0, maxHints - (gameState.hintsUsed || 0));
+              })()
+            }
+          />
         </div>
       )}
 
       {/* Top Area (Drawing / Waiting) */}
-      <div className={`relative flex flex-col shrink-0 bg-[#1A103C] overflow-hidden transition-all duration-300
+      <div className={`relative flex flex-col shrink-0 overflow-hidden transition-all duration-300 bg-[#1A103C]
                       ${morphMode ? 'col-start-2 col-end-3 row-start-1 row-end-2' : 'col-start-1 col-end-3 row-start-1 row-end-2'}
                      `}>
         <div className="w-full aspect-[4/3] bg-white shrink-0 flex flex-col items-center justify-center transition-all duration-300 overflow-hidden relative">
           
           {/* Hint/Word Overlay Overlay */}
-          {gameState.status === 'DRAWING' && (
-            <div className="absolute top-0 left-0 right-0 h-10 md:h-12 flex items-center justify-center z-[45] pointer-events-none bg-white/70 backdrop-blur-sm border-b border-black/10">
-               <span className="font-mono text-xl md:text-2xl font-black text-[#1A103C] tracking-widest px-4">
-                 {gameState.currentDrawerId === socket?.id ? gameState.currentWord : (gameState.maskedWord || '')}
-               </span>
-            </div>
-          )}
+          {renderWordOverlay()}
 
-          <DrawingBoard readOnly={gameState.currentDrawerId !== socket?.id} />
+          <DrawingBoard 
+            readOnly={gameState.currentDrawerId !== socket?.id}
+          />
           
           {/* Overlays for CHOOSING state (non-drawer) */}
           {gameState.status === 'CHOOSING' && gameState.currentDrawerId !== socket?.id && (
@@ -534,26 +599,6 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
           })()}
 
 
-        </div>
-        
-        {/* Top-Right Buttons */}
-        <div className="absolute top-14 right-4 z-[60] flex gap-2">
-          {gameState.currentDrawerId === socket?.id && gameState.status === 'DRAWING' && (
-             <>
-               <button 
-                 onClick={() => socket?.emit('request_hint')}
-                 className="bg-[#00D9FF] hover:bg-[#00B4D8] text-[#1A103C] active:scale-95 px-2 py-1 text-xs sm:px-4 sm:py-2 rounded-xl font-bold shadow-lg transition-all"
-               >
-                 Hint
-               </button>
-               <button 
-                 onClick={() => setShowSkipConfirm(true)}
-                 className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-2 py-1 text-xs sm:px-4 sm:py-2 rounded-xl font-bold shadow-lg transition-all"
-               >
-                 Skip
-               </button>
-             </>
-          )}
         </div>
 
         {/* Timer Bar */}
