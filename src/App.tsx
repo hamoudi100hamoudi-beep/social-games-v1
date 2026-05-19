@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useSocket } from './providers/SocketProvider';
+import { useSocket } from './components/SocketProvider';
 import GameRoom from './components/GameRoom';
 import Lobby from './components/Lobby';
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import DrawingBoard from './DrawingBoard';
 import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon, Pencil, Copy } from 'lucide-react';
-import { useSocket } from '../providers/SocketProvider';
+import { useSocket } from './SocketProvider';
 
 interface GameRoomProps {
   nickname: string;
@@ -400,6 +400,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
 
   const handleWordSelect = (word: string) => {
     socket?.emit('select_word', { word });
+    setIsDrawingMode(true);
   };
 
   const slots: PlayerSlot[] = Array.from({ length: 5 }).map((_, index) => {
@@ -469,6 +470,19 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
 
           <DrawingBoard readOnly={gameState.currentDrawerId !== socket?.id} />
           
+          {/* Overlays for CHOOSING state (non-drawer) */}
+          {gameState.status === 'CHOOSING' && gameState.currentDrawerId !== socket?.id && (
+             <div className="absolute inset-0 z-[40] flex items-center justify-center bg-[#1A103C]/95 backdrop-blur-sm pointer-events-none">
+                 <div className="text-center animate-in fade-in zoom-in-95 duration-300">
+                     <p className="text-white/80 text-lg sm:text-xl mb-4 font-bold">It's the turn of</p>
+                     <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-[#24174D] border-[5px] border-[#FBBF24] rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.4)] mb-4">
+                        <span className="text-4xl sm:text-5xl">{currentPlayers.find(p => p.id === gameState.currentDrawerId)?.avatar}</span>
+                     </div>
+                     <h2 className="text-white font-black text-2xl sm:text-3xl tracking-wide">{getCurrentDrawerName()}</h2>
+                 </div>
+             </div>
+          )}
+
           {/* Overlays for PODIUM state */}
           {gameState.status === 'PODIUM' && (() => {
              const sorted = [...currentPlayers].sort((a, b) => (b.points || 0) - (a.points || 0)).filter(p => !p.isEmpty);
@@ -519,31 +533,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
              );
           })()}
 
-          {/* Overlays for CHOOSING state */}
-          {gameState.status === 'CHOOSING' && (
-            <div className="absolute inset-0 z-[40] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-               {gameState.currentDrawerId === socket?.id ? (
-                 <div className="bg-[#24174D] p-6 rounded-3xl shadow-2xl flex flex-col items-center border-4 border-[#7C4DFF] animate-in zoom-in-95 pointer-events-auto w-[85%] max-w-sm text-center">
-                    <h3 className="text-white font-bold text-lg mb-6">Choose a word</h3>
-                    <div className="flex gap-4 w-full justify-center">
-                      {gameState.wordOptions.map((word: string, i: number) => (
-                        <button 
-                          key={i} 
-                          onClick={() => handleWordSelect(word)}
-                          className="flex-1 bg-white hover:bg-slate-100 text-[#1A103C] font-bold py-3 px-2 rounded-xl text-lg shadow-lg active:scale-95 transition-all text-center break-words"
-                        >
-                          {word}
-                        </button>
-                      ))}
-                    </div>
-                 </div>
-               ) : (
-                 <div className="bg-[#24174D]/90 py-3 px-6 rounded-full shadow-2xl border-2 border-[#00D9FF]/30 backdrop-blur-md animate-in fade-in zoom-in-95 pointer-events-none">
-                    <span className="text-white font-bold text-sm sm:text-base">{getCurrentDrawerName()} is choosing a word...</span>
-                 </div>
-               )}
-            </div>
-          )}
+
         </div>
         
         {/* Top-Right Buttons */}
@@ -822,6 +812,42 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
           </div>
         </div>
       </div>
+    )}
+
+    {/* Global Overlays for CHOOSING state */}
+    {gameState.status === 'CHOOSING' && gameState.currentDrawerId === socket?.id && (
+       <div className="fixed inset-0 z-[150] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 touch-none">
+             <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
+                <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 drop-shadow-md tracking-wide">IT'S YOUR TURN!</h2>
+                <p className="text-white/80 text-lg sm:text-xl mb-12">Choose a word to draw</p>
+
+                {gameState.wordOptions && gameState.wordOptions.length >= 2 && (
+                   <div className="space-y-6">
+                      <div className="flex flex-col items-center">
+                         <span className="text-white text-3xl font-bold mb-4 drop-shadow-lg" dir="auto">{gameState.wordOptions[0]}</span>
+                         <button onClick={() => handleWordSelect(gameState.wordOptions[0])} className="w-[85%] max-w-xs bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1A103C] font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl">
+                            <Pencil fill="currentColor" size={24} />
+                            DRAW
+                         </button>
+                      </div>
+
+                      <div className="flex items-center w-full relative py-2">
+                         <div className="flex-1 border-t border-white/20 h-px"></div>
+                         <span className="px-4 text-white/50 font-bold bg-transparent text-lg">OR</span>
+                         <div className="flex-1 border-t border-white/20 h-px"></div>
+                      </div>
+
+                      <div className="flex flex-col items-center">
+                         <span className="text-white text-3xl font-bold mb-4 drop-shadow-lg" dir="auto">{gameState.wordOptions[1]}</span>
+                         <button onClick={() => handleWordSelect(gameState.wordOptions[1])} className="w-[85%] max-w-xs bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1A103C] font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl">
+                            <Pencil fill="currentColor" size={24} />
+                            DRAW
+                         </button>
+                      </div>
+                   </div>
+                )}
+             </div>
+       </div>
     )}
 
     </>

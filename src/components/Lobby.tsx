@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Settings, Plus, Play, ChevronLeft, Search, X } from 'lucide-react';
-import { useSocket } from '../providers/SocketProvider';
+import { useSocket } from './SocketProvider';
 
 interface LobbyProps {
   onPlay: (nickname: string, room: string) => void;

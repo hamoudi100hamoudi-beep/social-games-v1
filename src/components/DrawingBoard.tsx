@@ -3,7 +3,7 @@
  * This component is finalized. Do NOT modify without consulting the user.
  */
 import React, { useEffect, useRef, useState, useId, useMemo } from 'react';
-import { useSocket } from '../providers/SocketProvider';
+import { useSocket } from './SocketProvider';
 import { 
   Pencil, Eraser, Undo2, Redo2, FileX, RefreshCcw, 
   Lightbulb, UserMinus, X, Circle, Square, PaintBucket, Minus, Pipette, Camera 
