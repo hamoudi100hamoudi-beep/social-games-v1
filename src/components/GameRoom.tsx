@@ -16,9 +16,10 @@ interface Message {
   isSelf: boolean;
   type: 'message' | 'system';
   avatar?: string;
+  color?: string;
 }
 
-type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string };
+type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string; wins?: number };
 
 const getSenderColor = (name: string) => {
   const colors = [
@@ -38,11 +39,13 @@ const getSenderColor = (name: string) => {
 const ChatMessageItem: React.FC<{ 
   msg: Message, 
   activeCopyId: string | null, 
-  onSetActiveCopy: (id: string | null) => void 
+  onSetActiveCopy: (id: string | null) => void,
+  mySocketId?: string
 }> = ({ 
   msg, 
   activeCopyId, 
-  onSetActiveCopy 
+  onSetActiveCopy,
+  mySocketId
 }) => {
   const showCopy = activeCopyId === msg.id;
 
@@ -101,6 +104,14 @@ const ChatMessageItem: React.FC<{
   };
 
   if (msg.type === 'system') {
+    const isTargetingSelf = msg.senderId === mySocketId;
+    let text = msg.text;
+    if (isTargetingSelf && msg.text.includes('lost the turn')) {
+        text = "You've lost your turn";
+    } else if (isTargetingSelf && msg.text.includes('skipped the turn')) {
+        text = "You've skipped the turn";
+    }
+
     return (
       <div className="flex justify-center mb-2">
         <div 
@@ -108,7 +119,7 @@ const ChatMessageItem: React.FC<{
           dir="auto"
           style={{ unicodeBidi: 'plaintext' }}
         >
-          {msg.text}
+          {text}
         </div>
       </div>
     );
@@ -202,6 +213,15 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
+  
+  const [gameState, setGameState] = useState<any>({
+    status: 'WAITING',
+    currentDrawerId: null,
+    currentWord: null,
+    timeLeft: 0,
+    wordOptions: []
+  });
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
   const openChat = () => {
     setIsChatOpen(true);
@@ -211,6 +231,10 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const closeChat = () => {
     setIsChatOpen(false);
     setActiveCopyId(null);
+    const textarea = document.getElementById('chat-textarea');
+    if (textarea) {
+      textarea.blur();
+    }
   };
   const [guessInput, setGuessInput] = useState('');
   const [chatInput, setChatInput] = useState('');
@@ -229,16 +253,28 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       avatar: nickname.charAt(0).toUpperCase()
     });
 
-    const onRoomStateUpdate = (state: { roomId: string, players: any[] }) => {
+    const onRoomStateUpdate = (state: { roomId: string, players: any[], gameState: any }) => {
       const players = state.players.map(p => ({
         id: p.id,
         name: p.name,
-        points: 0,
-        isCurrent: p.id === socket.id,
+        points: p.score || 0,
+        wins: p.wins || 0,
+        isCurrent: state.gameState?.currentDrawerId === p.id,
         avatar: p.avatar,
         isEmpty: false
       }));
       setCurrentPlayers(players);
+      if (state.gameState) {
+        setGameState(state.gameState);
+      }
+    };
+
+    const onTimerTick = (data: { timeLeft: number, status: string }) => {
+      setGameState(prev => ({
+        ...prev,
+        timeLeft: data.timeLeft,
+        status: data.status
+      }));
     };
 
     const onReceiveMessage = (msg: any) => {
@@ -258,13 +294,27 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       });
     };
 
+    const onReceiveGuess = (msg: any) => {
+      setGuesses((prev) => {
+        const updated = [...prev, {
+          ...msg,
+          isSelf: msg.senderId === socket.id
+        }];
+        return updated.slice(-40);
+      });
+    };
+
     socket.on('room_state_update', onRoomStateUpdate);
     socket.on('receive_message', onReceiveMessage);
+    socket.on('receive_guess', onReceiveGuess);
+    socket.on('timer_tick', onTimerTick);
 
     return () => {
       socket.emit('leave_room', { roomId: room });
       socket.off('room_state_update', onRoomStateUpdate);
       socket.off('receive_message', onReceiveMessage);
+      socket.off('receive_guess', onReceiveGuess);
+      socket.off('timer_tick', onTimerTick);
     };
   }, [socket, nickname, room]);
 
@@ -321,22 +371,9 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
 
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guessInput.trim()) return;
+    if (!guessInput.trim() || gameState.correctGuessers?.includes(socket?.id) || gameState.currentDrawerId === socket?.id) return;
     
-    const newMsg: Message = { 
-      id: Date.now().toString(), 
-      sender: nickname, 
-      text: guessInput.trim(), 
-      isSelf: true,
-      type: 'message',
-      avatar: nickname.charAt(0).toUpperCase()
-    };
-
-    setGuesses(prev => {
-      const updated = [...prev, newMsg];
-      return updated.slice(-40); // Keep only the last 40 messages
-    });
-    
+    socket?.emit('submit_guess', { guess: guessInput.trim() });
     setGuessInput('');
   };
 
@@ -353,12 +390,38 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     }
   };
 
+  const handleSkipTurn = () => {
+    if (document.activeElement instanceof HTMLElement) {
+       document.activeElement.blur();
+    }
+    socket?.emit('skip_turn');
+    setShowSkipConfirm(false);
+  };
+
+  const handleWordSelect = (word: string) => {
+    socket?.emit('select_word', { word });
+  };
+
   const slots: PlayerSlot[] = Array.from({ length: 5 }).map((_, index) => {
     if (index < currentPlayers.length) return currentPlayers[index];
     return { id: `empty-${index}`, name: 'Empty', points: null, isCurrent: false, isEmpty: true };
   });
 
-  const morphMode = isKeyboardOpen && !isChatOpen;
+  const morphMode = isInputFocused;
+
+  const getMaxTime = () => {
+    switch (gameState.status) {
+      case 'DRAWING': return 100;
+      case 'ROUND_END': return 8;
+      default: return 9;
+    }
+  };
+  const timerPercentage = Math.max(0, Math.min(100, (gameState.timeLeft / getMaxTime()) * 100));
+
+  const getCurrentDrawerName = () => {
+    const player = currentPlayers.find(p => p.id === gameState.currentDrawerId);
+    return player ? player.name : '';
+  };
 
   return (
     <>
@@ -393,30 +456,122 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
       <div className={`relative flex flex-col shrink-0 bg-[#1A103C] overflow-hidden transition-all duration-300
                       ${morphMode ? 'col-start-2 col-end-3 row-start-1 row-end-2' : 'col-start-1 col-end-3 row-start-1 row-end-2'}
                      `}>
-        <div className="w-full aspect-[4/3] bg-white shrink-0 flex flex-col items-center justify-center transition-all duration-300 overflow-hidden">
-          <DrawingBoard readOnly={true} />
+        <div className="w-full aspect-[4/3] bg-white shrink-0 flex flex-col items-center justify-center transition-all duration-300 overflow-hidden relative">
+          
+          {/* Hint/Word Overlay Overlay */}
+          {gameState.status === 'DRAWING' && (
+            <div className="absolute top-0 left-0 right-0 h-10 md:h-12 flex items-center justify-center z-[45] pointer-events-none bg-white/70 backdrop-blur-sm border-b border-black/10">
+               <span className="font-mono text-xl md:text-2xl font-black text-[#1A103C] tracking-widest px-4">
+                 {gameState.currentDrawerId === socket?.id ? gameState.currentWord : (gameState.maskedWord || '')}
+               </span>
+            </div>
+          )}
+
+          <DrawingBoard readOnly={gameState.currentDrawerId !== socket?.id} />
+          
+          {/* Overlays for PODIUM state */}
+          {gameState.status === 'PODIUM' && (() => {
+             const sorted = [...currentPlayers].sort((a, b) => (b.points || 0) - (a.points || 0)).filter(p => !p.isEmpty);
+             const first = sorted[0];
+             const second = sorted[1];
+             const third = sorted[2];
+             
+             return (
+               <div className="absolute inset-0 z-[50] flex items-end justify-center bg-black/60 backdrop-blur-md pb-6 sm:pb-10 font-sans">
+                 <div className="flex items-end gap-2 sm:gap-6 text-center">
+                    {/* Second Place */}
+                    {second && (
+                      <div className="flex flex-col items-center animate-in slide-in-from-bottom-8 duration-700 delay-300 fill-mode-both relative z-10 w-20 sm:w-28 opacity-90">
+                         <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#1A103C] border-4 border-slate-300 flex items-center justify-center text-white font-bold text-xl sm:text-2xl mb-2 shadow-[0_0_15px_rgba(203,213,225,0.4)]">
+                             {second.avatar}
+                         </div>
+                         <div className="text-white font-bold truncate w-full text-xs sm:text-sm bg-black/50 px-2 py-1 rounded-md">{second.name}</div>
+                         <div className="text-slate-300 font-black mt-1 text-sm">{second.points} pts</div>
+                         <div className="w-16 sm:w-24 h-16 sm:h-24 bg-gradient-to-t from-slate-500 rounded-t-lg flex items-start justify-center pt-2 text-2xl mt-2 border-t-2 border-slate-300">🥈</div>
+                      </div>
+                    )}
+                    
+                    {/* First Place */}
+                    {first && (
+                      <div className="flex flex-col items-center animate-in slide-in-from-bottom-12 duration-1000 fill-mode-both relative z-20 w-24 sm:w-32">
+                         <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-[#1A103C] border-4 border-yellow-400 flex items-center justify-center text-white font-bold text-3xl sm:text-4xl mb-2 shadow-[0_0_20px_rgba(250,204,21,0.6)]">
+                             {first.avatar}
+                         </div>
+                         <div className="text-white font-bold truncate w-full text-sm sm:text-base bg-black/50 px-2 py-1 rounded-md text-yellow-400 border border-yellow-400/30">{first.name}</div>
+                         <div className="text-yellow-400 font-black mt-1 text-base">{first.points} pts</div>
+                         <div className="w-20 sm:w-28 h-24 sm:h-36 bg-gradient-to-t from-yellow-600 rounded-t-lg flex items-start justify-center pt-2 text-3xl mt-2 shadow-[0_-5px_15px_rgba(250,204,21,0.3)] border-t-2 border-yellow-400">🏆</div>
+                      </div>
+                    )}
+                    
+                    {/* Third Place */}
+                    {third && (
+                      <div className="flex flex-col items-center animate-in slide-in-from-bottom-4 duration-500 delay-500 fill-mode-both relative z-10 w-20 sm:w-28 opacity-80">
+                         <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-[#1A103C] border-4 border-amber-600 flex items-center justify-center text-white font-bold text-lg sm:text-xl mb-2 shadow-[0_0_15px_rgba(217,119,6,0.3)]">
+                             {third.avatar}
+                         </div>
+                         <div className="text-white font-bold truncate w-full text-xs sm:text-sm bg-black/50 px-2 py-1 rounded-md">{third.name}</div>
+                         <div className="text-amber-500 font-black mt-1 text-sm">{third.points} pts</div>
+                         <div className="w-16 sm:w-24 h-12 sm:h-16 bg-gradient-to-t from-amber-700/80 rounded-t-lg flex items-start justify-center pt-2 text-xl mt-2 border-t-2 border-amber-600">🥉</div>
+                      </div>
+                    )}
+                 </div>
+               </div>
+             );
+          })()}
+
+          {/* Overlays for CHOOSING state */}
+          {gameState.status === 'CHOOSING' && (
+            <div className="absolute inset-0 z-[40] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+               {gameState.currentDrawerId === socket?.id ? (
+                 <div className="bg-[#24174D] p-6 rounded-3xl shadow-2xl flex flex-col items-center border-4 border-[#7C4DFF] animate-in zoom-in-95 pointer-events-auto w-[85%] max-w-sm text-center">
+                    <h3 className="text-white font-bold text-lg mb-6">Choose a word</h3>
+                    <div className="flex gap-4 w-full justify-center">
+                      {gameState.wordOptions.map((word: string, i: number) => (
+                        <button 
+                          key={i} 
+                          onClick={() => handleWordSelect(word)}
+                          className="flex-1 bg-white hover:bg-slate-100 text-[#1A103C] font-bold py-3 px-2 rounded-xl text-lg shadow-lg active:scale-95 transition-all text-center break-words"
+                        >
+                          {word}
+                        </button>
+                      ))}
+                    </div>
+                 </div>
+               ) : (
+                 <div className="bg-[#24174D]/90 py-3 px-6 rounded-full shadow-2xl border-2 border-[#00D9FF]/30 backdrop-blur-md animate-in fade-in zoom-in-95 pointer-events-none">
+                    <span className="text-white font-bold text-sm sm:text-base">{getCurrentDrawerName()} is choosing a word...</span>
+                 </div>
+               )}
+            </div>
+          )}
         </div>
-        <button 
-          onClick={() => setIsDrawingMode(true)}
-          className="absolute top-4 right-4 z-[60] bg-[#7C4DFF] hover:bg-[#6A3DE8] active:scale-95 text-white px-2 py-1 text-xs sm:px-4 sm:py-2 rounded-xl font-bold shadow-lg transition-all"
-        >
-          Draw (Host)
-        </button>
+        
+        {/* Top-Right Buttons */}
+        <div className="absolute top-14 right-4 z-[60] flex gap-2">
+          {gameState.currentDrawerId === socket?.id && gameState.status === 'DRAWING' && (
+             <>
+               <button 
+                 onClick={() => socket?.emit('request_hint')}
+                 className="bg-[#00D9FF] hover:bg-[#00B4D8] text-[#1A103C] active:scale-95 px-2 py-1 text-xs sm:px-4 sm:py-2 rounded-xl font-bold shadow-lg transition-all"
+               >
+                 Hint
+               </button>
+               <button 
+                 onClick={() => setShowSkipConfirm(true)}
+                 className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-2 py-1 text-xs sm:px-4 sm:py-2 rounded-xl font-bold shadow-lg transition-all"
+               >
+                 Skip
+               </button>
+             </>
+          )}
+        </div>
+
         {/* Timer Bar */}
         <div className="w-full h-1.5 sm:h-2 bg-[#24174D] shrink-0">
             <div 
-              className="h-full bg-orange-500 origin-left"
-              style={{
-                width: '100%',
-                animation: 'timer-shrink 60s linear forwards'
-              }}
+              className="h-full bg-orange-500 origin-left transition-all duration-1000 ease-linear"
+              style={{ width: `${timerPercentage}%` }}
             />
-            <style>{`
-              @keyframes timer-shrink {
-                from { width: 100%; }
-                to { width: 0%; }
-              }
-            `}</style>
         </div>
       </div>
 
@@ -447,9 +602,12 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
               
               {/* Info */}
               <div className="flex flex-col justify-center overflow-hidden">
-                 <span className={`font-bold text-[12px] sm:text-[15px] truncate max-w-full
+                 <span className={`font-bold flex items-center gap-1 text-[12px] sm:text-[15px] truncate max-w-full
                    ${slot.isEmpty ? 'text-white/40' : 'text-white'}`}>
-                   {slot.name}
+                   <span className="truncate">{slot.name}</span>
+                   {(slot.wins ?? 0) > 0 && (
+                     <span className="text-yellow-500 scale-110 shrink-0" title={`${slot.wins} Wins`}>🏆 {slot.wins}</span>
+                   )}
                  </span>
                  {!slot.isEmpty && (
                    <span className="text-[11px] sm:text-[13px] font-bold text-[#7C4DFF]">{slot.points} pts</span>
@@ -496,7 +654,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                 {[...guesses].reverse().map((msg) => (
                   <div key={msg.id} className="text-[12px] sm:text-[14px]">
                     {msg.type === 'system' ? (
-                      <div className="text-[#00D9FF] font-bold" dir="auto" style={{ unicodeBidi: 'plaintext' }}>{msg.text}</div>
+                      <div className="font-bold" style={{ color: (msg as any).color || '#00D9FF', unicodeBidi: 'plaintext' }} dir="auto">{msg.text}</div>
                     ) : (
                       <div className="flex items-start gap-1">
                         <Pencil size={10} className="text-[#00D9FF] shrink-0 mt-1" />
@@ -588,6 +746,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                          msg={msg} 
                          activeCopyId={activeCopyId}
                          onSetActiveCopy={setActiveCopyId}
+                         mySocketId={socket?.id}
                        />
                      ))}
                     </div>
@@ -640,6 +799,30 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
             </div>
          </div>
       )}
+
+    {/* Skip Confirm Modal */}
+    {showSkipConfirm && (
+      <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-[#24174D] p-6 rounded-3xl shadow-2xl flex flex-col items-center border border-white/10 animate-in zoom-in-95 w-full max-w-sm text-center">
+          <h3 className="text-white font-bold text-lg mb-2">Skip Turn?</h3>
+          <p className="text-white/70 text-sm mb-6">Are you sure you want to skip your turn?</p>
+          <div className="flex gap-4 w-full">
+            <button 
+              onClick={() => setShowSkipConfirm(false)}
+              className="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-4 rounded-xl transition-all"
+            >
+              No
+            </button>
+            <button 
+              onClick={handleSkipTurn}
+              className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all"
+            >
+              Yes
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     </>
   );

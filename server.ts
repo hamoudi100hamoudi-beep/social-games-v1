@@ -16,6 +16,8 @@ async function startServer() {
     transports: ['websocket']
   });
 
+  roomManager.setIo(io);
+
   // API Routes
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', time: Date.now() });
@@ -49,7 +51,9 @@ async function startServer() {
           id: socket.id,
           name: nickname,
           avatar: avatar || nickname.charAt(0).toUpperCase(),
-          roomId: roomId
+          roomId: roomId,
+          score: 0,
+          wins: 0
         });
         
         if (callback) callback({ success: true });
@@ -145,6 +149,34 @@ async function startServer() {
       else socket.broadcast.emit('draw_redo', data);
     });
     
+    socket.on('skip_turn', () => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        roomManager.handleSkipTurn(player.roomId, socket.id);
+      }
+    });
+
+    socket.on('select_word', (data) => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        roomManager.startGameRound(player.roomId, data.word, socket.id);
+      }
+    });
+
+    socket.on('submit_guess', (data) => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        roomManager.submitGuess(player.roomId, socket.id, data.guess);
+      }
+    });
+
+    socket.on('request_hint', () => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        roomManager.requestHint(player.roomId, socket.id);
+      }
+    });
+
     socket.on('send_message', (data) => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {
