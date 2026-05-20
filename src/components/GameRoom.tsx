@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DrawingBoard from './DrawingBoard';
-import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon, Pencil, Copy } from 'lucide-react';
+import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon, Pencil, Copy, Check, Clock } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 
 interface GameRoomProps {
@@ -503,8 +503,9 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     switch (gameState.status) {
       case 'DRAWING': 
       case 'CHOOSING': return 100;
-      case 'ROUND_END': return 8;
-      default: return 9;
+      case 'ROUND_END':
+      case 'PODIUM': return 15;
+      default: return 15;
     }
   };
   const timerPercentage = Math.max(0, Math.min(100, (gameState.timeLeft / getMaxTime()) * 100));
@@ -646,43 +647,114 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
              const third = sorted[2];
              
              return (
-               <div className="absolute inset-0 z-[50] flex items-end justify-center bg-black/60 backdrop-blur-md pb-6 sm:pb-10 font-sans">
-                 <div className="flex items-end gap-2 sm:gap-6 text-center">
-                    {/* Second Place */}
-                    {second && (
-                      <div className="flex flex-col items-center animate-in slide-in-from-bottom-8 duration-700 delay-300 fill-mode-both relative z-10 w-20 sm:w-28 opacity-90">
-                         <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#1A103C] border-4 border-slate-300 flex items-center justify-center text-white font-bold text-xl sm:text-2xl mb-2 shadow-[0_0_15px_rgba(203,213,225,0.4)]">
-                             {second.avatar}
+               <div className="absolute inset-0 z-[50] flex flex-col bg-white p-4 sm:p-6 font-sans relative select-none">
+                 {/* Close button X */}
+                 <button 
+                   onClick={() => socket?.emit('leave_room', { roomId: room })}
+                   className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition-colors z-[60]"
+                 >
+                    <X size={24} className="stroke-[3.5]" />
+                 </button>
+
+                 {/* Title: GAME OVER */}
+                 <div className="w-full flex justify-center mt-2 mb-4">
+                    <h1 className="text-2xl sm:text-4xl font-black text-[#0B2E5C] tracking-wide uppercase drop-shadow-[0_2px_0_rgba(251,191,36,1)]">
+                      GAME OVER
+                    </h1>
+                 </div>
+
+                 {/* Winners Podium alignments */}
+                 <div className="flex-1 flex items-center justify-center">
+                    <div className="flex items-end justify-center gap-4 sm:gap-14 w-full max-w-lg mt-2 pb-4">
+                       
+                       {/* Second Place */}
+                       {second ? (
+                         <div className="flex flex-col items-center animate-in slide-in-from-bottom-8 duration-700 relative w-16 sm:w-28">
+                            <div className="relative">
+                               <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-yellow-400/10 border-[5px] border-[#0A2540] flex items-center justify-center text-white font-bold text-2xl sm:text-4xl shadow-md">
+                                   <span className="text-3xl sm:text-5xl">{second.avatar}</span>
+                               </div>
+                               {/* Silver Medal Badge */}
+                               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-slate-100 to-slate-400 border-[3.5px] border-[#0A2540] flex items-center justify-center shadow-md">
+                                  <span className="text-[#0A2540] font-black text-xs sm:text-sm">2</span>
+                               </div>
+                            </div>
+                            <span className="text-[#0A2540] font-black text-[13px] sm:text-[16px] mt-4 truncate w-full text-center tracking-wide block">
+                               {second.name}
+                            </span>
                          </div>
-                         <div className="text-white font-bold truncate w-full text-xs sm:text-sm bg-black/50 px-2 py-1 rounded-md">{second.name}</div>
-                         <div className="text-slate-300 font-black mt-1 text-sm">{second.points} pts</div>
-                         <div className="w-16 sm:w-24 h-16 sm:h-24 bg-gradient-to-t from-slate-500 rounded-t-lg flex items-start justify-center pt-2 text-2xl mt-2 border-t-2 border-slate-300">🥈</div>
-                      </div>
-                    )}
-                    
-                    {/* First Place */}
-                    {first && (
-                      <div className="flex flex-col items-center animate-in slide-in-from-bottom-12 duration-1000 fill-mode-both relative z-20 w-24 sm:w-32">
-                         <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-[#1A103C] border-4 border-yellow-400 flex items-center justify-center text-white font-bold text-3xl sm:text-4xl mb-2 shadow-[0_0_20px_rgba(250,204,21,0.6)]">
-                             {first.avatar}
+                       ) : (
+                         <div className="w-16 sm:w-28" />
+                       )}
+
+                       {/* First Place */}
+                       {first && (
+                         <div className="flex flex-col items-center animate-in slide-in-from-bottom-12 duration-1000 relative w-20 sm:w-32 z-10">
+                            <div className="relative overflow-visible">
+                               {/* Laurel decorative SVG around the first place avatar */}
+                               <svg className="absolute -inset-5 w-[calc(100%+40px)] h-[calc(100%+40px)] text-green-500 pointer-events-none fill-none overflow-visible" viewBox="0 0 120 120">
+                                 {/* Left green wreath branch */}
+                                 <path 
+                                    d="M 32 94 C 18 78 18 48 36 30" 
+                                    stroke="#10B981" 
+                                    strokeWidth="3.5" 
+                                    strokeLinecap="round" 
+                                 />
+                                 <circle cx="28" cy="85" r="3.5" fill="#10B981" />
+                                 <circle cx="21" cy="72" r="3.5" fill="#10B981" />
+                                 <circle cx="20" cy="58" r="3.5" fill="#10B981" />
+                                 <circle cx="25" cy="44" r="3.5" fill="#10B981" />
+                                 <circle cx="33" cy="33" r="3.5" fill="#10B981" />
+
+                                 {/* Right green wreath branch */}
+                                 <path 
+                                    d="M 88 94 C 102 78 102 48 84 30" 
+                                    stroke="#10B981" 
+                                    strokeWidth="3.5" 
+                                    strokeLinecap="round" 
+                                 />
+                                 <circle cx="92" cy="85" r="3.5" fill="#10B981" />
+                                 <circle cx="99" cy="72" r="3.5" fill="#10B981" />
+                                 <circle cx="100" cy="58" r="3.5" fill="#10B981" />
+                                 <circle cx="95" cy="44" r="3.5" fill="#10B981" />
+                                 <circle cx="87" cy="33" r="3.5" fill="#10B981" />
+                               </svg>
+
+                               <div className="w-20 h-20 sm:w-32 sm:h-32 rounded-full bg-yellow-400 border-[6px] border-[#0A2540] flex items-center justify-center text-white font-bold text-3xl sm:text-5xl shadow-lg relative">
+                                   <span className="text-4xl sm:text-6xl">{first.avatar}</span>
+                               </div>
+                               {/* Gold Medal Badge */}
+                               <div className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-8 h-8 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-[#FFF099] to-[#FBBF24] border-[4px] border-[#0A2540] flex items-center justify-center shadow-md">
+                                  <span className="text-[#0A2540] font-black text-sm sm:text-lg">1</span>
+                               </div>
+                            </div>
+                            <span className="text-[#0A2540] font-black text-[15px] sm:text-[18px] mt-5 truncate w-full text-center tracking-wide block">
+                               {first.name}
+                            </span>
                          </div>
-                         <div className="text-white font-bold truncate w-full text-sm sm:text-base bg-black/50 px-2 py-1 rounded-md text-yellow-400 border border-yellow-400/30">{first.name}</div>
-                         <div className="text-yellow-400 font-black mt-1 text-base">{first.points} pts</div>
-                         <div className="w-20 sm:w-28 h-24 sm:h-36 bg-gradient-to-t from-yellow-600 rounded-t-lg flex items-start justify-center pt-2 text-3xl mt-2 shadow-[0_-5px_15px_rgba(250,204,21,0.3)] border-t-2 border-yellow-400">🏆</div>
-                      </div>
-                    )}
-                    
-                    {/* Third Place */}
-                    {third && (
-                      <div className="flex flex-col items-center animate-in slide-in-from-bottom-4 duration-500 delay-500 fill-mode-both relative z-10 w-20 sm:w-28 opacity-80">
-                         <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-full bg-[#1A103C] border-4 border-amber-600 flex items-center justify-center text-white font-bold text-lg sm:text-xl mb-2 shadow-[0_0_15px_rgba(217,119,6,0.3)]">
-                             {third.avatar}
+                       )}
+
+                       {/* Third Place */}
+                       {third ? (
+                         <div className="flex flex-col items-center animate-in slide-in-from-bottom-6 duration-500 relative w-16 sm:w-28">
+                            <div className="relative">
+                               <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-yellow-400/10 border-[5px] border-[#0A2540] flex items-center justify-center text-white font-bold text-2xl sm:text-4xl shadow-md">
+                                   <span className="text-3xl sm:text-5xl">{third.avatar}</span>
+                               </div>
+                               {/* Bronze Medal Badge */}
+                               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-amber-200 to-amber-700 border-[3.5px] border-[#0A2540] flex items-center justify-center shadow-md">
+                                  <span className="text-[#0A2540] font-black text-xs sm:text-sm">3</span>
+                               </div>
+                            </div>
+                            <span className="text-[#0A2540] font-black text-[13px] sm:text-[16px] mt-4 truncate w-full text-center tracking-wide block">
+                               {third.name}
+                            </span>
                          </div>
-                         <div className="text-white font-bold truncate w-full text-xs sm:text-sm bg-black/50 px-2 py-1 rounded-md">{third.name}</div>
-                         <div className="text-amber-500 font-black mt-1 text-sm">{third.points} pts</div>
-                         <div className="w-16 sm:w-24 h-12 sm:h-16 bg-gradient-to-t from-amber-700/80 rounded-t-lg flex items-start justify-center pt-2 text-xl mt-2 border-t-2 border-amber-600">🥉</div>
-                      </div>
-                    )}
+                       ) : (
+                         <div className="w-16 sm:w-28" />
+                       )}
+
+                    </div>
                  </div>
                </div>
              );
@@ -768,23 +840,108 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
              </div>
            </div>
 
-           {/* Quick Feedback Area (interactive feed) */}
-           <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-2 flex flex-col-reverse font-sans min-h-0">
-             <div className="flex flex-col-reverse gap-1.5">
-                {[...guesses].reverse().map((msg) => (
-                  <div key={msg.id} className="text-[12px] sm:text-[14px]">
-                    {msg.type === 'system' ? (
-                      <div className="font-bold" style={{ color: (msg as any).color || '#00D9FF', unicodeBidi: 'plaintext' }} dir="auto">{msg.text}</div>
-                    ) : (
-                      <div className="flex items-start gap-1">
-                        <Pencil size={10} className="text-[#00D9FF] shrink-0 mt-1" />
-                        <span className="font-bold text-white/70">{msg.sender}:</span>
-                        <span className={`${msg.isSelf ? 'text-white' : 'text-slate-300'} break-words`} dir="auto" style={{ unicodeBidi: 'plaintext' }}>{msg.text}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <div className="flex items-center gap-1.5 text-[#00D9FF] font-medium text-[11px] sm:text-[13px]">
+          {/* Quick Feedback Area (interactive feed) */}
+          <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-2 flex flex-col-reverse font-sans min-h-0">
+            <div className="flex flex-col-reverse gap-1.5">
+               {[...guesses].reverse().map((msg) => {
+                 const isSystem = msg.type === 'system';
+                 if (isSystem) {
+                   const subType = (msg as any).subType || '';
+                   const text = msg.text;
+
+                   // Hit / guessed correctly
+                   if (subType === 'hit') {
+                     const isSelfGuesser = msg.senderId === socket?.id;
+                     const displayWord = (msg as any).word || '';
+                     const displayText = isSelfGuesser 
+                       ? `You've found the answer: ${displayWord}` 
+                       : `${msg.sender || text.replace(' guessed the word!', '')} hit!`;
+
+                     return (
+                       <div key={msg.id} className="flex items-center gap-2 text-[#10B981] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200">
+                         <Check size={14} className="stroke-[3.5] text-[#10B981] shrink-0" />
+                         <span dir="auto">{displayText}</span>
+                       </div>
+                     );
+                   }
+
+                   // Round End break / Interval
+                   if (subType === 'interval') {
+                     return (
+                       <div key={msg.id} className="flex items-center gap-2 text-[#60A5FA] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200">
+                         <Clock size={14} className="text-[#60A5FA] shrink-0" />
+                         <span>Interval...</span>
+                       </div>
+                     );
+                   }
+
+                   // Turn change
+                   if (subType === 'turn') {
+                     return (
+                       <div key={msg.id} className="flex items-center gap-2 text-[#60A5FA] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200">
+                         <Pencil size={12} className="text-[#60A5FA] shrink-0" />
+                         <span dir="auto">{text}</span>
+                       </div>
+                     );
+                   }
+
+                   // Game over
+                   if (subType === 'game_over') {
+                     return (
+                       <div key={msg.id} className="flex items-start gap-2 text-[#60A5FA] font-bold text-xs sm:text-sm py-1 animate-in fade-in slide-in-from-left-2 duration-200">
+                         <Info size={14} className="text-[#60A5FA] shrink-0 mt-0.5" />
+                         <span dir="auto">{text}</span>
+                       </div>
+                     );
+                   }
+
+                   // Everybody hit
+                   if (subType === 'all_guessed') {
+                     return (
+                       <div key={msg.id} className="flex items-center gap-2 text-[#10B981] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200">
+                         <Check size={14} className="stroke-[3.5] text-[#10B981] shrink-0" />
+                         <span>Everybody hit the answer!</span>
+                       </div>
+                     );
+                   }
+
+                   // Other reveals
+                   let iconNode = <Info size={14} className="shrink-0 text-[#60A5FA]" />;
+                   let textColor = '#60A5FA';
+
+                   if (text.toLowerCase().includes('hit') || text.toLowerCase().includes('guessed') || text.toLowerCase().includes('guessed the word')) {
+                     iconNode = <Check size={14} className="stroke-[3.5] text-[#10B981] shrink-0" />;
+                     textColor = '#10B981';
+                   } else if (text.toLowerCase().includes('turn')) {
+                     iconNode = <Pencil size={12} className="shrink-0 text-[#60A5FA]" />;
+                     textColor = '#60A5FA';
+                   } else if (text.toLowerCase().includes('interval')) {
+                     iconNode = <Clock size={14} className="shrink-0 text-[#60A5FA]" />;
+                     textColor = '#60A5FA';
+                   } else if (text.toLowerCase().includes('timeout') || text.toLowerCase().includes('time\'s up') || text.toLowerCase().includes('answer was')) {
+                     iconNode = <Pencil size={12} className="shrink-0 text-[#60A5FA]" />;
+                     textColor = '#60A5FA';
+                   }
+
+                   return (
+                     <div key={msg.id} className="flex items-center gap-2 font-bold text-xs sm:text-sm py-0.5" style={{ color: textColor }}>
+                       {iconNode}
+                       <span dir="auto">{text}</span>
+                     </div>
+                   );
+                 }
+
+                 return (
+                   <div key={msg.id} className="text-[12px] sm:text-[14px]">
+                     <div className="flex items-start gap-1">
+                       <Pencil size={10} className="text-[#00D9FF]/40 shrink-0 mt-1" />
+                       <span className="font-bold text-white/50">{msg.sender}:</span>
+                       <span className={`${msg.isSelf ? 'text-white' : 'text-slate-300'} break-words`} dir="auto" style={{ unicodeBidi: 'plaintext' }}>{msg.text}</span>
+                     </div>
+                   </div>
+                 );
+               })}
+               <div className="flex items-center gap-1.5 text-[#00D9FF] font-medium text-[11px] sm:text-[13px]">
                   <Info size={12} />
                   Waiting for players
                 </div>

@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { Player, Room, GameState } from '../types/game.js';
+import { Player, Room, GameState } from '../src/types/game.js';
 
 class RoomManager {
   private rooms: Map<string, Room> = new Map();
@@ -120,6 +120,16 @@ class RoomManager {
     
     if (this.io) {
        this.io.to(room.id).emit('draw_clear', { instanceId: 'system' });
+       
+       const drawer = room.players.find(p => p.id === nextDrawerId);
+       const name = drawer ? drawer.name : 'Unknown';
+       this.io.to(room.id).emit('receive_guess', {
+         id: 'sys-' + Date.now() + '-turn',
+         text: `Turn of ${name}`,
+         type: 'system',
+         subType: 'turn',
+         color: '#38BDF8'
+       });
     }
     
     this.broadcastState(room);
@@ -128,12 +138,24 @@ class RoomManager {
   private transitionToPodium(room: Room) {
     console.log(`[Room ${room.id}] Transitioning to PODIUM`);
     room.gameState.status = 'PODIUM';
-    room.gameState.timeLeft = 9;
+    room.gameState.timeLeft = 15;
+
+    const winner = [...room.players].reduce((max, p) => (p.score > max.score ? p : max), room.players[0] || { name: 'Unknown', score: 0 });
+    if (this.io) {
+       this.io.to(room.id).emit('receive_guess', {
+          id: 'sys-' + Date.now() + '-podium-winner',
+          text: `Game over. The winner is ${winner.name} with ${winner.score} points`,
+          type: 'system',
+          subType: 'game_over',
+          color: '#38BDF8'
+       });
+    }
+
     this.broadcastState(room);
   }
 
   private transitionToRoundEnd(room: Room, reason: 'timeout' | 'all_guessed' | 'drawer_left' | 'turn_lost' | 'skipped' = 'timeout') {
-    const winner = room.players.find(p => p.score >= 120);
+    const winner = room.players.find(p => p.score >= 30);
     if (winner) {
       return this.transitionToPodium(room);
     }
@@ -142,7 +164,80 @@ class RoomManager {
     room.gameState.status = 'ROUND_END';
     room.gameState.roundEndReason = reason;
     room.gameState.roundEndWord = room.gameState.currentWord || undefined;
-    room.gameState.timeLeft = 8;
+    room.gameState.timeLeft = 15;
+
+    const word = room.gameState.currentWord || '';
+
+    if (this.io) {
+       if (reason === 'all_guessed') {
+          this.io.to(room.id).emit('receive_guess', {
+             id: 'sys-' + Date.now() + '-all-guessed',
+             text: `Everybody hit the answer!`,
+             type: 'system',
+             subType: 'all_guessed',
+             color: '#10B981'
+          });
+       } else if (reason === 'timeout' || reason === 'drawer_left') {
+          const hasSucceeded = (room.gameState.correctGuessers || []).length > 0;
+          this.io.to(room.id).emit('receive_guess', {
+             id: 'sys-' + Date.now() + '-timeover',
+             text: hasSucceeded ? `Time's Up!` : `Nobody hit the answer`,
+             type: 'system',
+             subType: 'answer_reveal',
+             color: '#38BDF8'
+          });
+          if (word) {
+             this.io.to(room.id).emit('receive_guess', {
+                id: 'sys-' + Date.now() + '-answer-word',
+                text: `The answer was: ${word}`,
+                type: 'system',
+                subType: 'answer_reveal',
+                word: word,
+                color: '#38BDF8'
+             });
+          }
+       } else if (reason === 'skipped') {
+          const drawer = room.players.find(p => p.id === room.gameState.currentDrawerId);
+          const name = drawer ? drawer.name : 'الرسام';
+          this.io.to(room.id).emit('receive_guess', {
+             id: 'sys-' + Date.now() + '-skip',
+             text: `${name} skipped the turn`,
+             type: 'system',
+             subType: 'skipped',
+             color: '#EF4444'
+          });
+          if (word) {
+             this.io.to(room.id).emit('receive_guess', {
+                id: 'sys-' + Date.now() + '-answer-word',
+                text: `The answer was: ${word}`,
+                type: 'system',
+                subType: 'answer_reveal',
+                word: word,
+                color: '#38BDF8'
+             });
+          }
+       } else if (reason === 'turn_lost') {
+          const drawer = room.players.find(p => p.id === room.gameState.currentDrawerId);
+          const name = drawer ? drawer.name : 'الرسام';
+          this.io.to(room.id).emit('receive_guess', {
+             id: 'sys-' + Date.now() + '-lost',
+             text: `${name} has lost the turn`,
+             type: 'system',
+             subType: 'lost_turn',
+             color: '#EF4444'
+          });
+       }
+
+       // Emit Interval message in logs
+       this.io.to(room.id).emit('receive_guess', {
+          id: 'sys-' + Date.now() + '-interval',
+          text: `Interval...`,
+          type: 'system',
+          subType: 'interval',
+          color: '#38BDF8'
+       });
+    }
+
     this.broadcastState(room);
   }
 
@@ -204,12 +299,16 @@ class RoomManager {
           id: 'sys-' + Date.now(),
           text: `${player.name} guessed the word!`,
           type: 'system',
+          subType: 'hit',
+          senderId: socketId,
+          word: room.gameState.currentWord,
+          sender: player.name,
           color: '#10B981' // emerald-500
         });
       }
 
-      // Check if someone reached 120
-      const winner = room.players.find(p => p.score >= 120);
+      // Check if someone reached 30
+      const winner = room.players.find(p => p.score >= 30);
       if (winner) {
          return this.transitionToPodium(room);
       }
@@ -329,7 +428,9 @@ class RoomManager {
           currentWord: null,
           timeLeft: 0,
           correctGuessers: [],
-          turnQueue: []
+          turnQueue: [],
+          hintsUsed: 0,
+          revealedIndices: []
         }
       });
     }
