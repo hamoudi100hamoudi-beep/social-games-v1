@@ -463,20 +463,28 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
      );
   };
 
-  const renderTimerBar = () => {
+  const renderTimerBar = (isFullScreen: boolean = false) => {
     let timerColorClass = 'bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]';
-    if (timerPercentage <= 20) {
-      timerColorClass = 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]';
-    } else if (timerPercentage <= 50) {
-      timerColorClass = 'bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]';
+    
+    if (gameState.status !== 'DRAWING') {
+      timerColorClass = 'bg-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.5)]';
+    } else {
+      if (timerPercentage <= 20) {
+        timerColorClass = 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+      } else if (timerPercentage <= 50) {
+        timerColorClass = 'bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]';
+      }
     }
 
     return (
-      <div className="w-full px-0 sm:px-1 min-h-[6px] sm:min-h-[8px] bg-transparent shrink-0 flex items-center justify-center">
+      <div className={`w-full px-2 sm:px-3 py-1 shrink-0 flex items-center justify-center ${isFullScreen ? 'bg-transparent' : 'bg-[#1A103C]'}`}>
         <div className="w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner">
             <div 
-              className={`h-full origin-left transition-all duration-1000 ease-linear rounded-full ${timerColorClass}`}
-              style={{ width: `${timerPercentage}%` }}
+              className={`h-full ml-auto rounded-full ${timerColorClass}`}
+              style={{ 
+                 width: `${timerPercentage}%`,
+                 transition: timerPercentage > 95 ? 'none' : 'width 1s linear, background-color 0.3s ease'
+              }}
             />
         </div>
       </div>
@@ -529,6 +537,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
             onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
             onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
             timerPercentage={timerPercentage}
+            timerBarNode={renderTimerBar(true)}
             hintsRemaining={
               (() => {
                 const word = gameState.currentWord || '';

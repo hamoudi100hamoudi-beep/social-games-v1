@@ -124,12 +124,14 @@ export default function DrawingBoard({
   onRequestHint,
   hintsRemaining = 0,
   timerPercentage = 0,
+  timerBarNode
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
   onRequestHint?: () => void;
   hintsRemaining?: number;
   timerPercentage?: number;
+  timerBarNode?: React.ReactNode;
 }) {
   const instanceId = useId();
   const { socket } = useSocket();
@@ -1169,21 +1171,8 @@ export default function DrawingBoard({
 
       </div>
       
-      {/* Timer Bar */}
-      {!readOnly && (
-        <div className="w-full h-1 sm:h-1.5 bg-[#143d9e] shrink-0">
-          <div 
-            className={`h-full origin-left transition-all duration-1000 ease-linear ${
-              timerPercentage <= 20 
-                ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]' 
-                : timerPercentage <= 50 
-                  ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]' 
-                  : 'bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]'
-            }`}
-            style={{ width: `${timerPercentage}%` /* width is handled correctly regardless of RTL theoretically, but we might need right origin? Standard CSS width starts left */ }}
-          />
-        </div>
-      )}
+      {/* External Timer Bar from GameRoom */}
+      {!readOnly && timerBarNode}
 
       {/* Bottom Toolbar */}
       {!readOnly && (
