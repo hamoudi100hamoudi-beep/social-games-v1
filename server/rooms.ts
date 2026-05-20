@@ -30,7 +30,8 @@ class RoomManager {
       }
     } else if (gameState.status === 'CHOOSING') {
       gameState.timeLeft--;
-      if (gameState.timeLeft <= 0) {
+      // The player has 9 seconds to choose out of the 100 total seconds
+      if (gameState.timeLeft <= 91) {
         // Player missed their turn
         if (this.io) {
           const sysId = 'sys-' + Date.now();
@@ -126,7 +127,7 @@ class RoomManager {
     room.gameState.correctGuessers = [];
     room.gameState.hintsUsed = 0;
     room.gameState.revealedIndices = [];
-    room.gameState.timeLeft = 9;
+    room.gameState.timeLeft = 100;
     
     if (this.io) {
        this.io.to(room.id).emit('draw_clear', { instanceId: 'system' });
@@ -160,7 +161,6 @@ class RoomManager {
 
     room.gameState.currentWord = word;
     room.gameState.status = 'DRAWING';
-    room.gameState.timeLeft = 100;
     room.gameState.wordOptions = [];
     console.log(`[Room ${room.id}] Transitioning to DRAWING. Word: ${word}`);
     this.broadcastState(room);
@@ -269,7 +269,10 @@ class RoomManager {
 
     const word = room.gameState.currentWord || '';
     const charCount = word.replace(/\s/g, '').length;
-    const maxHints = charCount < 3 ? 1 : 2;
+    let maxHints = charCount < 3 ? 1 : 2;
+    if (charCount >= 5) {
+       maxHints = 3;
+    }
 
     room.gameState.hintsUsed = room.gameState.hintsUsed || 0;
     room.gameState.revealedIndices = room.gameState.revealedIndices || [];
@@ -278,18 +281,7 @@ class RoomManager {
 
     room.gameState.hintsUsed++;
 
-    // Only reveal a character if it's the second hint, or if maxHints is 1
-    // Actually the prompt says:
-    // First hint: shows number of letters as blanks _ _ _
-    // Second hint: reveals a random character in its position
-    // Since showing blanks is automatic implicitly for 0 hints? Wait.
-    // "التلميح الأول: يعرض عدد حروف الكلمة كفراغات أعلى الشاشة"
-    // So hint 1 just enables blanks.
-    // "التلميح الثاني: يكشف حرفاً عشوائياً"
-    // So if hintsUsed == 2, or if word length < 3 and hintsUsed == 1 (meaning the only hint reveals a letter? Or maybe just blanks?)
-    // Let's say if hintsUsed == 2, pick a random unrevealed index.
-    
-    if (room.gameState.hintsUsed === 2 || (maxHints === 1 && room.gameState.hintsUsed === 1)) {
+    if (room.gameState.hintsUsed >= 2 || (maxHints === 1 && room.gameState.hintsUsed === 1)) {
        const unrevealed = [];
        for (let i = 0; i < word.length; i++) {
          if (word[i] !== ' ' && !room.gameState.revealedIndices.includes(i)) {
@@ -310,17 +302,22 @@ class RoomManager {
       // Create a masked version of the word for everyone
       const word = room.gameState.currentWord || '';
       const charCount = word.replace(/\s/g, '').length;
-      const maxHints = charCount < 3 ? 1 : 2;
+      let maxHints = charCount < 3 ? 1 : 2;
+      if (charCount >= 5) {
+         maxHints = 3;
+      }
       const hintsUsed = room.gameState.hintsUsed || 0;
       const revealedIndices = room.gameState.revealedIndices || [];
       
-      const maskedWordArray = word.split('').map((char, index) => {
-         if (char === ' ') return { isSpace: true, char: ' ' };
-         let reveal = false;
-         if (hintsUsed === 2 && revealedIndices.includes(index)) reveal = true;
-         if (hintsUsed === 1 && maxHints === 1 && revealedIndices.includes(index)) reveal = true;
-         return { isSpace: false, char: reveal ? char : null, index };
-      });
+      let maskedWordArray = [] as any[];
+      if (hintsUsed >= 1) {
+        maskedWordArray = word.split('').map((char, index) => {
+           if (char === ' ') return { isSpace: true, char: ' ' };
+           let reveal = false;
+           if (revealedIndices.includes(index)) reveal = true;
+           return { isSpace: false, char: reveal ? char : null, index };
+        });
+      }
 
       // To make it secure, iterate over room.players and emit individually
       room.players.forEach(p => {

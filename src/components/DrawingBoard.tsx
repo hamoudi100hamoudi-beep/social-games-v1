@@ -122,12 +122,14 @@ export default function DrawingBoard({
   readOnly = false,
   onSkipTurn,
   onRequestHint,
-  hintsRemaining = 0
+  hintsRemaining = 0,
+  timerPercentage = 0,
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
   onRequestHint?: () => void;
   hintsRemaining?: number;
+  timerPercentage?: number;
 }) {
   const instanceId = useId();
   const { socket } = useSocket();
@@ -1167,6 +1169,22 @@ export default function DrawingBoard({
 
       </div>
       
+      {/* Timer Bar */}
+      {!readOnly && (
+        <div className="w-full h-1 sm:h-1.5 bg-[#143d9e] shrink-0">
+          <div 
+            className={`h-full origin-left transition-all duration-1000 ease-linear ${
+              timerPercentage <= 20 
+                ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]' 
+                : timerPercentage <= 50 
+                  ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.5)]' 
+                  : 'bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]'
+            }`}
+            style={{ width: `${timerPercentage}%` /* width is handled correctly regardless of RTL theoretically, but we might need right origin? Standard CSS width starts left */ }}
+          />
+        </div>
+      )}
+
       {/* Bottom Toolbar */}
       {!readOnly && (
         <div className="bg-[#1a56db] p-3 sm:p-4 flex items-center justify-between gap-3 shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30">

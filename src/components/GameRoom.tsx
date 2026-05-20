@@ -412,28 +412,26 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const renderWordOverlay = () => {
      if (gameState.status !== 'DRAWING') return null;
      return (
-        <div className="absolute top-4 left-0 right-0 flex items-center justify-center z-[150] pointer-events-none drop-shadow-md">
+        <div className="absolute top-1 sm:top-2 left-0 right-0 flex items-center justify-center z-[150] pointer-events-none drop-shadow-md">
            {(() => {
                const isDrawer = gameState.currentDrawerId === socket?.id;
                const hintsUsed = gameState.hintsUsed || 0;
                const maskedArray = gameState.maskedWordArray || [];
 
                if (isDrawer && gameState.currentWord) {
-                  const charCount = gameState.currentWord.replace(/\s/g, '').length;
-                  const maxHints = charCount < 3 ? 1 : 2;
                   const isRTL = /[\u0600-\u06FF]/.test(gameState.currentWord);
 
                   return (
-                     <div className="flex gap-1.5 sm:gap-2 items-end" style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
+                     <div className="flex gap-1 sm:gap-1.5 items-end mt-1 sm:mt-2" style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
                         {gameState.currentWord.split('').map((char: string, i: number) => {
-                           if (char === ' ') return <span key={`space-${i}`} className="w-4" />;
-                           const isRevealed = (hintsUsed === 2 || (hintsUsed === 1 && maxHints === 1)) && (gameState.revealedIndices || []).includes(i);
+                           if (char === ' ') return <span key={`space-${i}`} className="w-3" />;
+                           const isRevealed = (gameState.revealedIndices || []).includes(i);
                            return (
-                              <div key={`char-${i}`} className="relative flex flex-col items-center justify-end h-8 sm:h-10">
-                                 <span className={`text-xl sm:text-3xl leading-none font-black absolute bottom-2 ${isRevealed ? 'text-[#FBBF24] drop-shadow-md' : 'text-slate-400/40'}`}>
+                              <div key={`char-${i}`} className="relative flex flex-col items-center justify-end h-6 sm:h-8">
+                                 <span className={`text-lg sm:text-2xl leading-none font-black absolute bottom-1.5 ${isRevealed ? 'text-[#FBBF24] drop-shadow-md' : 'text-slate-400/40'}`}>
                                     {char}
                                  </span>
-                                 <div className={`w-4 sm:w-6 h-[4px] rounded-full mt-auto ${hintsUsed >= 1 ? 'bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]' : 'bg-slate-300/80 shadow-sm'}`} />
+                                 <div className={`w-3 sm:w-5 h-[3px] rounded-full mt-auto ${hintsUsed >= 1 ? 'bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]' : 'bg-slate-300/80 shadow-sm'}`} />
                               </div>
                            );
                         })}
@@ -445,15 +443,15 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                   const isRTL = /[\u0600-\u06FF]/.test(fullWordStr || gameState.currentWord || '');
                   
                   return (
-                     <div className="flex gap-1.5 sm:gap-2 items-end" style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
+                     <div className="flex gap-1 sm:gap-1.5 items-end mt-1 sm:mt-2" style={{ flexDirection: isRTL ? 'row-reverse' : 'row' }}>
                         {maskedArray.map((item: any, i: number) => {
-                           if (item.isSpace) return <span key={`space-${i}`} className="w-4" />;
+                           if (item.isSpace) return <span key={`space-${i}`} className="w-3" />;
                            return (
-                              <div key={`char-${i}`} className="relative flex flex-col items-center justify-end h-8 sm:h-10">
-                                 <span className="text-xl sm:text-3xl leading-none font-black absolute bottom-2 text-[#FBBF24] drop-shadow-md">
+                              <div key={`char-${i}`} className="relative flex flex-col items-center justify-end h-6 sm:h-8">
+                                 <span className="text-lg sm:text-2xl leading-none font-black absolute bottom-1.5 text-[#FBBF24] drop-shadow-md">
                                     {item.char || ''}
                                  </span>
-                                 <div className={`w-4 sm:w-6 h-[4px] rounded-full mt-auto ${hintsUsed >= 1 ? 'bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]' : 'bg-slate-300/80 shadow-sm'}`} />
+                                 <div className={`w-3 sm:w-5 h-[3px] rounded-full mt-auto ${hintsUsed >= 1 ? 'bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]' : 'bg-slate-300/80 shadow-sm'}`} />
                               </div>
                            );
                         })}
@@ -463,6 +461,26 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
            })()}
         </div>
      );
+  };
+
+  const renderTimerBar = () => {
+    let timerColorClass = 'bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]';
+    if (timerPercentage <= 20) {
+      timerColorClass = 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+    } else if (timerPercentage <= 50) {
+      timerColorClass = 'bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]';
+    }
+
+    return (
+      <div className="w-full px-0 sm:px-1 min-h-[6px] sm:min-h-[8px] bg-transparent shrink-0 flex items-center justify-center">
+        <div className="w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner">
+            <div 
+              className={`h-full origin-left transition-all duration-1000 ease-linear rounded-full ${timerColorClass}`}
+              style={{ width: `${timerPercentage}%` }}
+            />
+        </div>
+      </div>
+    );
   };
 
   const slots: PlayerSlot[] = Array.from({ length: 5 }).map((_, index) => {
@@ -510,11 +528,13 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
             readOnly={false}
             onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
             onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
+            timerPercentage={timerPercentage}
             hintsRemaining={
               (() => {
                 const word = gameState.currentWord || '';
                 const charCount = word.replace(/\s/g, '').length;
-                const maxHints = charCount < 3 ? 1 : 2;
+                let maxHints = charCount < 3 ? 1 : 2;
+                if (charCount >= 5) maxHints = 3;
                 return Math.max(0, maxHints - (gameState.hintsUsed || 0));
               })()
             }
@@ -533,6 +553,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
 
           <DrawingBoard 
             readOnly={gameState.currentDrawerId !== socket?.id}
+            timerPercentage={timerPercentage}
           />
           
           {/* Overlays for CHOOSING state (non-drawer) */}
@@ -602,12 +623,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
         </div>
 
         {/* Timer Bar */}
-        <div className="w-full h-1.5 sm:h-2 bg-[#24174D] shrink-0">
-            <div 
-              className="h-full bg-orange-500 origin-left transition-all duration-1000 ease-linear"
-              style={{ width: `${timerPercentage}%` }}
-            />
-        </div>
+        {renderTimerBar()}
       </div>
 
       {/* Left: Players Sidebar */}
