@@ -466,7 +466,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const renderTimerBar = (isFullScreen: boolean = false) => {
     let timerColorClass = 'bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]';
     
-    if (gameState.status !== 'DRAWING') {
+    if (gameState.status !== 'DRAWING' && gameState.status !== 'CHOOSING') {
       timerColorClass = 'bg-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.5)]';
     } else {
       if (timerPercentage <= 20) {
@@ -477,13 +477,14 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     }
 
     return (
-      <div className={`w-full px-2 sm:px-3 py-1 shrink-0 flex items-center justify-center ${isFullScreen ? 'bg-transparent' : 'bg-[#1A103C]'}`}>
-        <div className="w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner">
+      <div className={`w-full px-2 sm:px-3 py-1 shrink-0 flex items-center justify-center ${isFullScreen ? 'bg-transparent' : 'bg-[#1A103C]'}`} dir="ltr">
+        <div className="w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner flex justify-start">
             <div 
-              className={`h-full ml-auto rounded-full ${timerColorClass}`}
+              key={gameState.status + (gameState.currentWord || '')}
+              className={`h-full rounded-full ${timerColorClass}`}
               style={{ 
                  width: `${timerPercentage}%`,
-                 transition: timerPercentage > 95 ? 'none' : 'width 1s linear, background-color 0.3s ease'
+                 transition: 'width 1s linear, background-color 0.3s ease'
               }}
             />
         </div>
@@ -500,7 +501,8 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
 
   const getMaxTime = () => {
     switch (gameState.status) {
-      case 'DRAWING': return 100;
+      case 'DRAWING': 
+      case 'CHOOSING': return 100;
       case 'ROUND_END': return 8;
       default: return 9;
     }
@@ -568,7 +570,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
           {/* Overlays for CHOOSING state (non-drawer) */}
           {gameState.status === 'CHOOSING' && gameState.currentDrawerId !== socket?.id && (
              <div className="absolute inset-0 z-[40] flex items-center justify-center bg-[#1A103C]/95 backdrop-blur-sm pointer-events-none">
-                 <div className="text-center animate-in fade-in zoom-in-95 duration-300">
+                 <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm px-6">
                      <p className="text-white/80 text-lg sm:text-xl mb-4 font-bold">It's the turn of</p>
                      <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-[#24174D] border-[5px] border-[#FBBF24] rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.4)] mb-4">
                         <span className="text-4xl sm:text-5xl">{currentPlayers.find(p => p.id === gameState.currentDrawerId)?.avatar}</span>
@@ -577,6 +579,64 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                  </div>
              </div>
           )}
+
+          {/* Overlays for ROUND_END state */}
+          {gameState.status === 'ROUND_END' && (() => {
+             const reason = gameState.roundEndReason;
+             const word = gameState.roundEndWord || '???';
+             const isDrawer = gameState.currentDrawerId === socket?.id;
+             let mainTitle = '';
+             let subTitle = word !== '???' ? `The answer was ${word}` : '';
+             let theme = 'bg-[#1A103C]/95';
+             let showAvatar = false;
+             
+             if (reason === 'all_guessed') {
+                mainTitle = "Everyone guessed correctly!";
+             } else if (reason === 'timeout' || reason === 'drawer_left') {
+                if ((gameState.correctGuessers || []).length > 0) {
+                   mainTitle = "Time's Up!";
+                } else {
+                   if (reason === 'drawer_left' && word === '???') {
+                      mainTitle = `${getCurrentDrawerName()} skipped the turn`;
+                      subTitle = "Drawer left the game";
+                      theme = 'bg-[#1A103C]/95';
+                      showAvatar = true;
+                   } else {
+                      mainTitle = "Nobody hit the answer";
+                   }
+                }
+             } else if (reason === 'skipped') {
+                mainTitle = isDrawer ? "You've skipped the turn" : `${getCurrentDrawerName()} skipped the turn`;
+                if (word !== '???') {
+                   subTitle = `The answer was ${word}`;
+                } else {
+                   subTitle = "Skipped before drawing";
+                }
+                showAvatar = true;
+             } else if (reason === 'turn_lost') {
+                mainTitle = isDrawer ? "You've lost your turn" : `${getCurrentDrawerName()} has lost the turn`;
+                subTitle = "Out of time";
+                showAvatar = true;
+             } else {
+                mainTitle = "Round Ended";
+             }
+
+             return (
+               <div className={`absolute inset-0 z-[40] flex items-center justify-center ${theme} backdrop-blur-sm pointer-events-none`}>
+                   <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm px-6">
+                       {showAvatar && (
+                          <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-[#24174D] border-[5px] border-[#FBBF24] rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.4)] mb-4">
+                             <span className="text-4xl sm:text-5xl">{currentPlayers.find(p => p.id === gameState.currentDrawerId)?.avatar}</span>
+                          </div>
+                       )}
+                       <h2 className="text-white font-black text-2xl sm:text-3xl tracking-wide mb-3 drop-shadow-md" dir="auto">{mainTitle}</h2>
+                       {subTitle && (
+                           <p className="text-white/90 text-lg sm:text-xl font-bold bg-black/30 border border-white/10 px-4 py-2 rounded-full inline-block backdrop-blur-md" dir="auto">{subTitle}</p>
+                       )}
+                   </div>
+               </div>
+             );
+          })()}
 
           {/* Overlays for PODIUM state */}
           {gameState.status === 'PODIUM' && (() => {
@@ -916,6 +976,11 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                       </div>
                    </div>
                 )}
+             </div>
+             
+             {/* Timer Bar for Drawer Choosing Screen */}
+             <div className="absolute bottom-10 left-0 right-0 w-full px-6 max-w-md mx-auto">
+                {renderTimerBar(true)}
              </div>
        </div>
     )}

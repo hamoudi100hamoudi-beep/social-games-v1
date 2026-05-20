@@ -33,27 +33,16 @@ class RoomManager {
       // The player has 9 seconds to choose out of the 100 total seconds
       if (gameState.timeLeft <= 91) {
         // Player missed their turn
-        if (this.io) {
-          const sysId = 'sys-' + Date.now();
-          const player = this.players.get(gameState.currentDrawerId as string);
-          const name = player ? player.name : 'Unknown';
-          this.io.to(room.id).emit('receive_message', {
-            id: sysId,
-            senderId: gameState.currentDrawerId,
-            text: `${name} has lost the turn`,
-            type: 'system'
-          });
-        }
-        this.transitionToChoosing(room); // Next player
+        this.transitionToRoundEnd(room, 'turn_lost'); // Show round end overlay instead of skipping immediately
       }
     } else if (gameState.status === 'DRAWING') {
       gameState.timeLeft--;
       if (gameState.timeLeft <= 0) {
         // Time is up
-        this.transitionToRoundEnd(room);
+        this.transitionToRoundEnd(room, 'timeout');
       } else if (gameState.correctGuessers.length > 0 && gameState.correctGuessers.length === room.players.length - 1) {
         // Everyone guessed correctly
-        this.transitionToRoundEnd(room);
+        this.transitionToRoundEnd(room, 'all_guessed');
       }
     } else if (gameState.status === 'ROUND_END') {
       gameState.timeLeft--;
@@ -143,14 +132,16 @@ class RoomManager {
     this.broadcastState(room);
   }
 
-  private transitionToRoundEnd(room: Room) {
+  private transitionToRoundEnd(room: Room, reason: 'timeout' | 'all_guessed' | 'drawer_left' | 'turn_lost' | 'skipped' = 'timeout') {
     const winner = room.players.find(p => p.score >= 120);
     if (winner) {
       return this.transitionToPodium(room);
     }
     
-    console.log(`[Room ${room.id}] Transitioning to ROUND_END`);
+    console.log(`[Room ${room.id}] Transitioning to ROUND_END reason: ${reason}`);
     room.gameState.status = 'ROUND_END';
+    room.gameState.roundEndReason = reason;
+    room.gameState.roundEndWord = room.gameState.currentWord || undefined;
     room.gameState.timeLeft = 8;
     this.broadcastState(room);
   }
@@ -172,18 +163,7 @@ class RoomManager {
     if (!room || room.gameState.currentDrawerId !== socketId) return;
     if (room.gameState.status !== 'CHOOSING' && room.gameState.status !== 'DRAWING') return;
 
-    if (this.io) {
-      const player = this.players.get(socketId);
-      const name = player ? player.name : 'اللاعب';
-      this.io.to(room.id).emit('receive_message', {
-        id: 'sys-' + Date.now(),
-        senderId: socketId,
-        text: `${name} skipped the turn`,
-        type: 'system'
-      });
-    }
-
-    this.transitionToRoundEnd(room);
+    this.transitionToRoundEnd(room, 'skipped');
   }
 
   public submitGuess(roomId: string, socketId: string, guess: string) {
@@ -242,7 +222,7 @@ class RoomManager {
       }
 
       if (room.gameState.correctGuessers.length === remainingPlayers) {
-        this.transitionToRoundEnd(room);
+        this.transitionToRoundEnd(room, 'all_guessed');
       } else {
         this.broadcastState(room);
       }
@@ -402,14 +382,7 @@ class RoomManager {
         // Handle if current drawer leaves
         if (room.gameState.currentDrawerId === socketId) {
            if (room.gameState.correctGuessers.length === 0) {
-              if (this.io) {
-                this.io.to(room.id).emit('receive_message', {
-                  id: 'sys-' + Date.now(),
-                  text: 'الرسام غادر الغرفة ولم يجب أحد',
-                  type: 'system'
-                });
-              }
-              this.transitionToRoundEnd(room);
+              this.transitionToRoundEnd(room, 'drawer_left');
            }
         } else if (room.players.length < 2) {
            this.transitionToWaiting(room);
