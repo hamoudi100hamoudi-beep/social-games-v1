@@ -164,7 +164,7 @@ class RoomManager {
     room.gameState.status = 'ROUND_END';
     room.gameState.roundEndReason = reason;
     room.gameState.roundEndWord = room.gameState.currentWord || undefined;
-    room.gameState.timeLeft = 15;
+    room.gameState.timeLeft = 8;
 
     const word = room.gameState.currentWord || '';
 
