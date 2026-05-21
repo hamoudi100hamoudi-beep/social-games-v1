@@ -1,6 +1,26 @@
 import { Server } from 'socket.io';
 import { Player, Room, GameState } from '../src/types/game.js';
 
+const ALL_WORDS = [
+  'تفاحة', 'سيارة', 'كتاب', 'طائرة', 'منزل', 'فيل', 'بطيخ', 'كمبيوتر', 'بحر', 'قمر', 'شجرة', 'شمس', 'قرد', 'جمل', 'سفينة',
+  'قطة', 'كلب', 'أسد', 'نمر', 'حمار وحشي', 'زرافة', 'حصان', 'عصفور', 'صندوق', 'باب', 'شباك', 'سرير', 'كرسي', 'طاولة', 
+  'مكتب', 'مصباح', 'تلفاز', 'سجادة', 'ساعة', 'حقيبة', 'محفظة', 'قلم', 'دفتر', 'نظارات', 'سيف', 'درع', 'فأس', 'قوس', 
+  'بندقية', 'رصاصة', 'قنبلة', 'سماء', 'نجمة', 'غيوم', 'مطر', 'ثلج', 'برق', 'جبل', 'نهر', 'غابة', 'صحراء', 'جزيرة', 
+  'شاطئ', 'رمل', 'صدفة', 'حجر', 'نار', 'دخان', 'رماد', 'فحم', 'حطب', 'شمعة', 'عود ثقاب', 'مقص', 'سكين', 'ملعقة', 
+  'شوكة', 'صحن', 'كأس', 'إبريق', 'مقلاة', 'ثلاجة', 'فرن', 'غسالة', 'مكنسة', 'مكواة', 'مروحة', 'مكيف', 'مدفأة', 
+  'بطانية', 'وسادة', 'منشفة', 'حمام', 'فرشاة أسنان', 'معجون أسنان', 'صابون', 'شامبو', 'عطر', 'مشط', 'مرآة', 'ميزان', 
+  'سلة', 'حبل', 'عجلة', 'خريطة', 'بوصلة', 'منظار', 'كاميرا', 'راديو', 'ميكروفون', 'سماعات', 'بوق', 'طبلة', 'جيتار', 
+  'بيانو', 'مزمار', 'كمان', 'كرة', 'مضرب', 'شبكة', 'حذاء', 'جوارب', 'بنطال', 'قميص', 'فستان', 'تنورة', 'قبعة', 'قفازات', 
+  'وشاح', 'معطف', 'حزام', 'ربطة عنق', 'نظارة شمسية', 'مفتاح', 'قفل', 'مطرقة', 'مسمار', 'مفك', 'منشار', 'فرشاة', 'دلو', 
+  'مجرفة', 'خرطوم', 'سُلَّم', 'خيمة', 'حقيبة ظهر', 'نار مخيم', 'سنارة صيد', 'سمكة', 'قرش', 'حوت', 'دلفين', 'أخطبوط', 
+  'سلطعون', 'قنديل البحر', 'نجم البحر', 'لؤلؤة', 'مرجان', 'سعادة', 'حزن', 'غضب', 'خوف', 'حب', 'دهشة', 'ضحك', 'بكاء', 
+  'نوم', 'حلم', 'أفكار', 'ذكريات', 'دراجة', 'قطار', 'سفينة فضاء', 'رجل آلي', 'نظارة', 'عصا سحرية', 'تاج', 'قلادة',
+  'خاتم', 'سوار', 'دبوس', 'زر', 'إبرة', 'خيط', 'مغناطيس', 'بطارية', 'مصباح يدوي', 'شاحن', 'سلك', 'مسمار', 'صامولة',
+  'برغي', 'مفصلة', 'مقبض', 'نافذة', 'جدار', 'سقف', 'أرضية', 'شرفة', 'حديقة', 'بوابة', 'سور', 'طريق', 'جسر', 'نفق',
+  'برج', 'قلعة', 'قصر', 'خيمة', 'كهف', 'بئر', 'نافورة', 'شلال', 'ينبوع', 'نهر', 'بحيرة', 'محيط', 'بركة', 'مستنقع',
+  'ثعبان', 'سلحفاة', 'تمساح', 'سحلية', 'حرباء', 'ضفدع', 'فأر', 'سنجاب', 'أرنب', 'خروف', 'ماعز', 'بقرة', 'عجل', 'ثور'
+];
+
 class RoomManager {
   private rooms: Map<string, Room> = new Map();
   private players: Map<string, Player> = new Map();
@@ -105,14 +125,21 @@ class RoomManager {
        return this.transitionToWaiting(room);
     }
 
-    const SAMPLE_WORDS = ['تفاحة', 'سيارة', 'كتاب', 'طائرة', 'منزل', 'فيل', 'بطيخ', 'كمبيوتر', 'بحر', 'قمر', 'شجرة', 'شمس', 'قرد', 'جمل', 'سفينة'];
-    const shuffled = [...SAMPLE_WORDS].sort(() => 0.5 - Math.random());
+    // Use unused words
+    let availableWords = ALL_WORDS.filter(w => !room.usedWords.includes(w));
+    if (availableWords.length < 2) {
+       room.usedWords = [];
+       availableWords = [...ALL_WORDS];
+    }
+    const shuffled = [...availableWords].sort(() => 0.5 - Math.random());
+    const selectedWords = shuffled.slice(0, 2);
+    room.usedWords.push(...selectedWords);
 
     console.log(`[Room ${room.id}] Transitioning to CHOOSING. Drawer: ${nextDrawerId}`);
     room.gameState.status = 'CHOOSING';
     room.gameState.currentDrawerId = nextDrawerId;
     room.gameState.currentWord = null;
-    room.gameState.wordOptions = shuffled.slice(0, 2);
+    room.gameState.wordOptions = selectedWords;
     room.gameState.correctGuessers = [];
     room.gameState.hintsUsed = 0;
     room.gameState.revealedIndices = [];
@@ -155,7 +182,7 @@ class RoomManager {
   }
 
   private transitionToRoundEnd(room: Room, reason: 'timeout' | 'all_guessed' | 'drawer_left' | 'turn_lost' | 'skipped' = 'timeout') {
-    const winner = room.players.find(p => p.score >= 30);
+    const winner = room.players.find(p => p.score >= 100);
     if (winner) {
       return this.transitionToPodium(room);
     }
@@ -425,7 +452,8 @@ class RoomManager {
           turnQueue: [],
           hintsUsed: 0,
           revealedIndices: []
-        }
+        },
+        usedWords: []
       });
     }
     return this.rooms.get(roomId)!;
