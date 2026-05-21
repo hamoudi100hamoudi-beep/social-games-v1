@@ -208,6 +208,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
   const { socket } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const bgTouchStartTime = React.useRef<number>(0);
+  const guessInputRef = React.useRef<HTMLInputElement>(null);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -369,6 +370,23 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     };
   }, []);
 
+  const isInputDisabled = 
+    gameState.status === 'WAITING' || 
+    gameState.status === 'ROUND_END' || 
+    gameState.status === 'PODIUM' || 
+    gameState.status === 'CHOOSING' || 
+    gameState.currentDrawerId === socket?.id || 
+    gameState.correctGuessers?.includes(socket?.id || '');
+
+  useEffect(() => {
+    if (isInputDisabled) {
+      setIsInputFocused(false);
+      if (guessInputRef.current) {
+        guessInputRef.current.blur();
+      }
+    }
+  }, [isInputDisabled]);
+
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!guessInput.trim() || gameState.correctGuessers?.includes(socket?.id) || gameState.currentDrawerId === socket?.id) return;
@@ -409,8 +427,9 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
     }
   }, [gameState.status, gameState.currentDrawerId, socket?.id]);
 
-  const renderWordOverlay = () => {
+  const renderWordOverlay = (isFullScreenMode: boolean = false) => {
      if (gameState.status !== 'DRAWING') return null;
+     if (gameState.currentDrawerId === socket?.id && !isFullScreenMode) return null;
      return (
         <div className="absolute top-1 sm:top-2 left-0 right-0 flex items-center justify-center z-[150] pointer-events-none drop-shadow-md">
            {(() => {
@@ -534,7 +553,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
         <div 
           className="fixed inset-0 z-[100] bg-white flex flex-col transition-opacity duration-300 opacity-100"
         >
-          {renderWordOverlay()}
+          {renderWordOverlay(true)}
           <DrawingBoard 
             readOnly={false}
             onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
@@ -971,6 +990,18 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                      );
                    }
 
+                   // Lost turn / Inactive
+                   if (subType === 'lost_turn' || text.toLowerCase().includes('lost the turn') || text.toLowerCase().includes('lost your turn')) {
+                     const isDrawerSelf = gameState.currentDrawerId === socket?.id;
+                     const displayText = isDrawerSelf ? "You've lost your turn" : text;
+                     return (
+                       <div key={msg.id} className="flex items-center gap-2 text-[#EF4444] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200">
+                         <AlertTriangle size={14} className="text-[#EF4444] shrink-0" />
+                         <span dir="auto">{displayText}</span>
+                       </div>
+                     );
+                   }
+
                    // Other reveals
                    let iconNode = <Info size={14} className="shrink-0 text-[#60A5FA]" />;
                    let textColor = '#60A5FA';
@@ -1021,6 +1052,7 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
                  <Pencil size={12} />
                </div>
                <input 
+                 ref={guessInputRef}
                  type="text"
                  disabled={gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')} value={(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "" : guessInput}
                  onChange={(e) => setGuessInput(e.target.value)}
