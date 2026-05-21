@@ -527,7 +527,7 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
     switch (gameState.status) {
       case 'DRAWING': 
       case 'CHOOSING': return 100;
-      case 'ROUND_END':
+      case 'ROUND_END': return 8;
       case 'PODIUM': return 15;
       default: return 15;
     }
@@ -814,7 +814,7 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
              const third = sorted[2];
              
              return (
-               <div id="podium-overlay" className="absolute inset-0 z-[50] flex flex-col bg-white p-4 sm:p-6 font-sans relative select-none animate-in fade-in duration-300 overflow-hidden">
+               <div id="podium-overlay" className="absolute inset-0 z-[50] flex flex-col bg-white p-4 sm:p-6 font-sans select-none animate-in fade-in duration-300 overflow-hidden">
                  <style>{`
                    @keyframes medal-shine {
                      0% { transform: translateX(-150%) rotate(25deg); opacity: 0; }

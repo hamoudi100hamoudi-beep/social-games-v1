@@ -307,12 +307,6 @@ class RoomManager {
         });
       }
 
-      // Check if someone reached 30
-      const winner = room.players.find(p => p.score >= 30);
-      if (winner) {
-         return this.transitionToPodium(room);
-      }
-
       // Deduct time dynamically
       const remainingPlayers = room.players.length - 1; // Excluding drawer
       if (remainingPlayers > 0) {
