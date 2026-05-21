@@ -814,32 +814,43 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
              const third = sorted[2];
              
              return (
-               <div id="podium-overlay" className="absolute inset-0 z-[50] flex flex-col bg-white p-4 sm:p-6 font-sans relative select-none animate-in fade-in duration-300">
-
+               <div id="podium-overlay" className="absolute inset-0 z-[50] flex flex-col bg-white p-4 sm:p-6 font-sans relative select-none animate-in fade-in duration-300 overflow-hidden">
+                 <style>{`
+                   @keyframes medal-shine {
+                     0% { transform: translateX(-150%) rotate(25deg); opacity: 0; }
+                     5% { opacity: 1; }
+                     15% { transform: translateX(150%) rotate(25deg); opacity: 0; }
+                     100% { transform: translateX(150%) rotate(25deg); opacity: 0; }
+                   }
+                   .animate-medal-shine {
+                     animation: medal-shine 5s ease-in-out infinite;
+                   }
+                 `}</style>
                  {/* Title: GAME OVER */}
-                 <div className="w-full flex justify-center mt-2 mb-4">
+                 <div className="w-full flex justify-center mt-0 mb-2">
                     <h1 className="text-2xl sm:text-4xl font-black text-[#0B2E5C] tracking-wide uppercase drop-shadow-[0_2px_0_rgba(251,191,36,1)]">
                       GAME OVER
                     </h1>
                  </div>
 
                  {/* Winners Podium alignments - elevated closer to top */}
-                 <div className="flex-1 flex flex-col items-center justify-start pt-6 sm:pt-12">
-                    <div className="flex items-end justify-center gap-4 sm:gap-14 w-full max-w-lg pb-4">
+                 <div className="flex-1 flex flex-col items-center justify-start pt-2 sm:pt-6">
+                    <div className="flex items-end justify-center gap-6 sm:gap-16 w-full max-w-lg pb-4">
                        
                        {/* Second Place */}
                        {second ? (
-                         <div id="podium-second" className="flex flex-col items-center animate-in slide-in-from-bottom-8 duration-700 relative w-16 sm:w-28 mt-4">
+                         <div id="podium-second" className="flex flex-col items-center animate-in slide-in-from-bottom-8 duration-700 relative w-14 sm:w-20 mt-4">
                             <div className="relative">
-                               <div className="relative p-1 bg-gradient-to-r from-slate-400 via-slate-100 to-slate-400 rounded-full shadow-[0_8px_20px_rgba(148,163,184,0.4)] border border-slate-500">
-                                  <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-slate-50 to-slate-200 flex items-center justify-center text-slate-700 font-extrabold text-2xl sm:text-4xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
+                               <div className="relative p-1 bg-gradient-to-r from-slate-400 via-slate-100 to-slate-400 rounded-full shadow-[0_8px_20px_rgba(148,163,184,0.4)] border border-slate-500 overflow-hidden">
+                                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-slate-50 to-slate-200 flex items-center justify-center text-slate-700 font-extrabold text-xl sm:text-3xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
                                     <span className="drop-shadow-sm">{second.avatar}</span>
-                                    <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent rotate-12 -translate-x-full" />
                                   </div>
+                                  <div className="absolute inset-0 bg-white/40 w-[200%] h-full animate-medal-shine z-10" />
                                </div>
                                {/* Silver Medal Badge (3D look) */}
-                               <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 border-[3px] border-slate-700 flex items-center justify-center shadow-[0_4px_8px_rgba(100,116,139,0.35)] text-white font-black text-sm">
-                                  2
+                               <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 border-[3px] border-slate-700 flex items-center justify-center shadow-[0_4px_8px_rgba(100,116,139,0.35)] text-white font-black text-sm z-20 overflow-hidden">
+                                  3
+                                  <div className="absolute inset-0 bg-white/40 animate-medal-shine z-10" />
                                </div>
                             </div>
                             <span className="text-[#0A2540] font-black text-[13px] sm:text-[16px] mt-4 truncate w-full text-center tracking-wide block">
@@ -847,51 +858,23 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
                             </span>
                          </div>
                        ) : (
-                         <div className="w-16 sm:w-28" />
+                         <div className="w-14 sm:w-20" />
                        )}
 
                        {/* First Place */}
                        {first && (
-                         <div id="podium-first" className="flex flex-col items-center animate-in slide-in-from-bottom-12 duration-1000 relative w-20 sm:w-32 z-10">
+                         <div id="podium-first" className="flex flex-col items-center animate-in slide-in-from-bottom-12 duration-1000 relative w-16 sm:w-24 z-10">
                             <div className="relative overflow-visible">
-                               {/* Laurel decorative Wreath */}
-                               <svg className="absolute -inset-6 w-[calc(100%+48px)] h-[calc(100%+48px)] text-[#10B981] pointer-events-none fill-none overflow-visible" viewBox="0 0 120 120">
-                                 {/* Left green wreath branch */}
-                                 <path 
-                                    d="M 28 98 C 12 80 12 44 32 24" 
-                                    stroke="#10B981" 
-                                    strokeWidth="4" 
-                                    strokeLinecap="round" 
-                                 />
-                                 <circle cx="24" cy="88" r="4.5" fill="#34D399" />
-                                 <circle cx="16" cy="74" r="4.5" fill="#34D399" />
-                                 <circle cx="15" cy="58" r="4.5" fill="#34D399" />
-                                 <circle cx="21" cy="42" r="4.5" fill="#34D399" />
-                                 <circle cx="30" cy="28" r="4.5" fill="#34D399" />
-
-                                 {/* Right green wreath branch */}
-                                 <path 
-                                    d="M 92 98 C 108 80 108 44 88 24" 
-                                    stroke="#10B981" 
-                                    strokeWidth="4" 
-                                    strokeLinecap="round" 
-                                 />
-                                 <circle cx="96" cy="88" r="4.5" fill="#34D399" />
-                                 <circle cx="104" cy="74" r="4.5" fill="#34D399" />
-                                 <circle cx="105" cy="58" r="4.5" fill="#34D399" />
-                                 <circle cx="99" cy="42" r="4.5" fill="#34D399" />
-                                 <circle cx="90" cy="28" r="4.5" fill="#34D399" />
-                               </svg>
-
-                               <div className="relative p-1 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 rounded-full shadow-[0_12px_28px_rgba(245,158,11,0.5)] border border-amber-600">
-                                  <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-gradient-to-br from-yellow-50 to-amber-100 flex items-center justify-center text-amber-900 font-extrabold text-3xl sm:text-5xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
+                               <div className="relative p-1 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 rounded-full shadow-[0_12px_28px_rgba(245,158,11,0.5)] border border-amber-600 overflow-hidden">
+                                  <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-yellow-50 to-amber-100 flex items-center justify-center text-amber-900 font-extrabold text-2xl sm:text-4xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
                                     <span className="drop-shadow-sm">{first.avatar}</span>
-                                    <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent rotate-12 -translate-x-full" />
                                   </div>
+                                  <div className="absolute inset-0 bg-white/50 w-[200%] h-full animate-medal-shine z-10" />
                                </div>
                                {/* Gold Medal Badge (3D look) */}
-                               <div className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 border-[3.5px] border-amber-850 flex items-center justify-center shadow-[0_5px_12px_rgba(217,119,6,0.45)] text-white font-black text-sm sm:text-lg">
+                               <div className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 border-[3.5px] border-amber-800 flex items-center justify-center shadow-[0_5px_12px_rgba(217,119,6,0.45)] text-white font-black text-sm sm:text-lg z-20 overflow-hidden">
                                   1
+                                  <div className="absolute inset-0 bg-white/50 animate-medal-shine z-10" />
                                </div>
                             </div>
                             <span className="text-[#0B2E5C] font-black text-[15px] sm:text-[18px] mt-5 truncate w-full text-center tracking-wide block">
@@ -902,17 +885,18 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
 
                        {/* Third Place */}
                        {third ? (
-                         <div id="podium-third" className="flex flex-col items-center animate-in slide-in-from-bottom-6 duration-500 relative w-16 sm:w-28 mt-4">
+                         <div id="podium-third" className="flex flex-col items-center animate-in slide-in-from-bottom-6 duration-500 relative w-14 sm:w-20 mt-4">
                             <div className="relative">
-                               <div className="relative p-1 bg-gradient-to-r from-amber-700 via-amber-500 to-amber-800 rounded-full shadow-[0_8px_20px_rgba(180,83,9,0.35)] border border-amber-900">
-                                  <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center text-amber-950 font-extrabold text-2xl sm:text-4xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
+                               <div className="relative p-1 bg-gradient-to-r from-orange-700 via-orange-500 to-orange-800 rounded-full shadow-[0_8px_20px_rgba(194,65,12,0.35)] border border-orange-900 overflow-hidden">
+                                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center text-orange-950 font-extrabold text-xl sm:text-3xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
                                      <span className="drop-shadow-sm">{third.avatar}</span>
-                                     <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent rotate-12 -translate-x-full" />
                                   </div>
+                                  <div className="absolute inset-0 bg-white/30 w-[200%] h-full animate-medal-shine z-10" />
                                </div>
                                {/* Bronze Medal Badge (3D look) */}
-                               <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-gradient-to-b from-amber-300 via-amber-550 to-amber-750 border-[3px] border-amber-850 flex items-center justify-center shadow-[0_4px_8px_rgba(146,64,14,0.35)] text-white font-black text-sm">
+                               <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-orange-300 via-orange-600 to-orange-800 border-[3px] border-orange-950 flex items-center justify-center shadow-[0_4px_8px_rgba(154,52,18,0.35)] text-white font-black text-sm z-20 overflow-hidden">
                                   3
+                                  <div className="absolute inset-0 bg-white/30 animate-medal-shine z-10" />
                                </div>
                             </div>
                             <span className="text-[#0A2540] font-black text-[13px] sm:text-[16px] mt-4 truncate w-full text-center tracking-wide block">
@@ -920,7 +904,7 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
                             </span>
                          </div>
                        ) : (
-                         <div className="w-16 sm:w-28" />
+                         <div className="w-14 sm:w-20" />
                        )}
 
                     </div>
