@@ -568,74 +568,140 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
             timerPercentage={timerPercentage}
           />
           
+          {/* Overlays for WAITING state */}
+          {gameState.status === 'WAITING' && (
+             <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
+                <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
+                   <div className="mb-4">
+                      <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                        WAITING
+                      </span>
+                   </div>
+                   <div className="relative w-24 h-24 sm:w-28 sm:h-28 mb-5 mx-auto bg-sky-100 rounded-full flex items-center justify-center border-4 border-[#0B2E5C]/10 shadow-inner">
+                     <span className="text-5xl sm:text-6xl animate-pulse">⏳</span>
+                     <span className="absolute -top-1 -right-1 text-2.5xl animate-bounce">⏰</span>
+                   </div>
+                   <p className="text-[#728299] text-base sm:text-lg font-extrabold tracking-wide">Waiting for players</p>
+                </div>
+             </div>
+          )}
+
           {/* Overlays for CHOOSING state (non-drawer) */}
           {gameState.status === 'CHOOSING' && gameState.currentDrawerId !== socket?.id && (
-             <div className="absolute inset-0 z-[40] flex items-center justify-center bg-[#1A103C]/95 backdrop-blur-sm pointer-events-none">
-                 <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm px-6">
-                     <p className="text-white/80 text-lg sm:text-xl mb-4 font-bold">It's the turn of</p>
-                     <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-[#24174D] border-[5px] border-[#FBBF24] rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.4)] mb-4">
-                        <span className="text-4xl sm:text-5xl">{currentPlayers.find(p => p.id === gameState.currentDrawerId)?.avatar}</span>
-                     </div>
-                     <h2 className="text-white font-black text-2xl sm:text-3xl tracking-wide">{getCurrentDrawerName()}</h2>
-                 </div>
+             <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
+                <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
+                   <div className="mb-4">
+                      <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                        NEW TURN!
+                      </span>
+                   </div>
+                   
+                   {/* Avatar element */}
+                   <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-[#F8FAFC] border-[5px] border-[#0A2540] rounded-full flex items-center justify-center shadow-lg mb-4 relative overflow-visible">
+                      <span className="text-4xl sm:text-5xl">{currentPlayers.find(p => p.id === gameState.currentDrawerId)?.avatar}</span>
+                      <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#FBBF24] rounded-full flex items-center justify-center shadow border-2 border-[#0A2540]">
+                        <span className="text-xs">✏️</span>
+                      </div>
+                   </div>
+
+                   <p className="text-[#728299] text-sm sm:text-base font-extrabold mb-0.5">It's the turn of</p>
+                   <h3 className="text-[#0B2E5C] font-black text-xl sm:text-2xl tracking-wide">{getCurrentDrawerName()}</h3>
+                </div>
              </div>
           )}
 
           {/* Overlays for ROUND_END state */}
           {gameState.status === 'ROUND_END' && (() => {
              const reason = gameState.roundEndReason;
-             const word = gameState.roundEndWord || '???';
+             const word = gameState.roundEndWord || '';
              const isDrawer = gameState.currentDrawerId === socket?.id;
-             let mainTitle = '';
-             let subTitle = word !== '???' ? `The answer was ${word}` : '';
-             let theme = 'bg-[#1A103C]/95';
-             let showAvatar = false;
-             
+             const drawerName = getCurrentDrawerName() || 'الرسام';
+             const hasSucceeded = (gameState.correctGuessers || []).length > 0;
+
+             // 1. SKIPPED STATE
+             if (reason === 'skipped') {
+                return (
+                   <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
+                      <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
+                         <div className="mb-4">
+                            <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                              SKIPPED!
+                            </span>
+                         </div>
+                         
+                         <div className="relative w-24 h-24 sm:w-28 sm:h-28 mb-5 mx-auto bg-green-50 rounded-full flex items-center justify-center border-4 border-green-100 shadow-sm">
+                           <span className="text-5xl sm:text-6xl animate-bounce">✏️</span>
+                           <span className="absolute -bottom-1 -right-1 text-2xl animate-spin">💫</span>
+                         </div>
+                         
+                         <h3 className="text-[#0A2540] font-black text-lg sm:text-xl tracking-wide mb-1" dir="auto">
+                           {isDrawer ? "You've skipped the turn" : `${drawerName} skipped the turn`}
+                         </h3>
+                      </div>
+                   </div>
+                );
+             }
+
+             // 2. TURN LOST / INACTIVE STATE
+             if (reason === 'turn_lost') {
+                return (
+                   <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
+                      <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
+                         <div className="mb-4">
+                            <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                              INACTIVE
+                            </span>
+                         </div>
+                         
+                         <div className="relative w-24 h-24 sm:w-28 sm:h-28 mb-5 mx-auto bg-amber-50 rounded-full flex items-center justify-center border-4 border-amber-100 shadow-sm">
+                           <span className="text-5xl sm:text-6xl animate-pulse">💤</span>
+                           <span className="absolute -bottom-1 -right-1 text-2.5xl">⏰</span>
+                         </div>
+                         
+                         <h3 className="text-[#0A2540] font-black text-lg sm:text-xl tracking-wide mb-1" dir="auto">
+                           {isDrawer ? "You've lost your turn :(" : `${drawerName} has lost the turn`}
+                         </h3>
+                      </div>
+                   </div>
+                );
+             }
+
+             // 3. INTERVAL / STANDARD ROUND END (timeout, all_guessed, drawer_left)
+             let topHeader = "INTERVAL";
+             let statusMessage = "Take a while to relax";
+
              if (reason === 'all_guessed') {
-                mainTitle = "Everyone guessed correctly!";
+                statusMessage = "Everybody hit the answer!";
              } else if (reason === 'timeout' || reason === 'drawer_left') {
-                if ((gameState.correctGuessers || []).length > 0) {
-                   mainTitle = "Time's Up!";
-                } else {
-                   if (reason === 'drawer_left' && word === '???') {
-                      mainTitle = `${getCurrentDrawerName()} skipped the turn`;
-                      subTitle = "Drawer left the game";
-                      theme = 'bg-[#1A103C]/95';
-                      showAvatar = true;
-                   } else {
-                      mainTitle = "Nobody hit the answer";
-                   }
-                }
-             } else if (reason === 'skipped') {
-                mainTitle = isDrawer ? "You've skipped the turn" : `${getCurrentDrawerName()} skipped the turn`;
-                if (word !== '???') {
-                   subTitle = `The answer was ${word}`;
-                } else {
-                   subTitle = "Skipped before drawing";
-                }
-                showAvatar = true;
-             } else if (reason === 'turn_lost') {
-                mainTitle = isDrawer ? "You've lost your turn" : `${getCurrentDrawerName()} has lost the turn`;
-                subTitle = "Out of time";
-                showAvatar = true;
-             } else {
-                mainTitle = "Round Ended";
+                statusMessage = hasSucceeded ? "Take a while to relax" : "Nobody hit the answer :(";
              }
 
              return (
-               <div className={`absolute inset-0 z-[40] flex items-center justify-center ${theme} backdrop-blur-sm pointer-events-none`}>
-                   <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm px-6">
-                       {showAvatar && (
-                          <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-[#24174D] border-[5px] border-[#FBBF24] rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(251,191,36,0.4)] mb-4">
-                             <span className="text-4xl sm:text-5xl">{currentPlayers.find(p => p.id === gameState.currentDrawerId)?.avatar}</span>
-                          </div>
-                       )}
-                       <h2 className="text-white font-black text-2xl sm:text-3xl tracking-wide mb-3 drop-shadow-md" dir="auto">{mainTitle}</h2>
-                       {subTitle && (
-                           <p className="text-white/90 text-lg sm:text-xl font-bold bg-black/30 border border-white/10 px-4 py-2 rounded-full inline-block backdrop-blur-md" dir="auto">{subTitle}</p>
-                       )}
+                <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
+                   <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
+                      <div className="mb-3">
+                         <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                           {topHeader}
+                         </span>
+                      </div>
+                      
+                      <p className="text-[#728299] text-sm sm:text-base font-extrabold mb-4" dir="auto">{statusMessage}</p>
+
+                      <div className="relative w-24 h-24 sm:w-28 sm:h-28 mb-4 mx-auto bg-sky-50 rounded-full flex items-center justify-center border-4 border-sky-150 shadow-sm">
+                        <span className="text-5xl sm:text-6xl animate-bounce">🎨</span>
+                        <span className="absolute -top-1 -right-1 text-2.5xl">✨</span>
+                      </div>
+                      
+                      {word && (
+                         <div className="mt-2 text-center">
+                            <span className="text-[#728299] text-xs sm:text-sm font-bold block mb-1">The answer was:</span>
+                            <span className="text-[#0B2E5C] text-xl sm:text-2xl font-black tracking-wide inline-block bg-[#F1F5F9] border-2 border-slate-200/60 px-5 py-1 rounded-full shadow-inner" dir="auto">
+                               {word}
+                            </span>
+                         </div>
+                      )}
                    </div>
-               </div>
+                </div>
              );
           })()}
 
@@ -951,22 +1017,30 @@ export default function GameRoom({ nickname, room }: GameRoomProps) {
            {/* Guess Input Area */}
            <div className="p-1.5 shrink-0 mt-auto bg-[#1A103C] border-t border-white/5">
              <form onSubmit={handleGuessSubmit} className="relative">
-               <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/50">
+               <div className={`absolute left-2.5 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "text-white/15" : "text-white/50"}`}>
                  <Pencil size={12} />
                </div>
                <input 
                  type="text"
-                 value={guessInput}
+                 disabled={gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')} value={(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "" : guessInput}
                  onChange={(e) => setGuessInput(e.target.value)}
                  onFocus={() => setIsInputFocused(true)}
                  onBlur={() => setIsInputFocused(false)}
-                 placeholder="Answer here..."
-                 className="w-full h-8 bg-black/20 border border-white/10 rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none focus:border-[#00D9FF] transition-colors"
+                 placeholder={
+                    gameState.status === 'WAITING' ? "Waiting..." :
+                    gameState.status === 'ROUND_END' ? (gameState.roundEndReason === 'skipped' ? "Skipped" : gameState.roundEndReason === 'turn_lost' ? "Inactive" : "Interval") :
+                    gameState.status === 'PODIUM' ? "Game Over" :
+                    gameState.status === 'CHOOSING' ? "Waiting for the drawing" :
+                    gameState.currentDrawerId === socket?.id ? "You are drawing!" :
+                    gameState.correctGuessers?.includes(socket?.id || '') ? "You've found the answer!" :
+                    "Answer here..."
+                  }
+                 className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-[#00D9FF] placeholder:text-white/45"}`}
                />
                <button 
                  type="submit"
                  onPointerDown={(e) => e.preventDefault()}
-                 disabled={!guessInput.trim()}
+                 disabled={!guessInput.trim() || gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')}
                  className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-[#1A103C] disabled:opacity-0 bg-[#00D9FF] rounded-md hover:bg-white transition-opacity"
                >
                  <Send size={12} className="-ml-0.5" />
