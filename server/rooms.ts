@@ -480,13 +480,17 @@ class RoomManager {
           return undefined; // Room deleted
         }
 
+        if (room.players.length < 2) {
+           room.players.forEach(p => p.score = 0);
+        }
+
         // Handle if current drawer leaves
         if (room.gameState.currentDrawerId === socketId) {
-           if (room.gameState.correctGuessers.length === 0) {
+           if (room.gameState.correctGuessers.length === 0 && room.players.length > 0) {
               this.transitionToRoundEnd(room, 'drawer_left');
+           } else {
+              this.broadcastState(room);
            }
-        } else if (room.players.length < 2) {
-           this.transitionToWaiting(room);
         } else {
            this.broadcastState(room);
         }

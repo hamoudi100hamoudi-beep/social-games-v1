@@ -16,6 +16,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   
   const [roomCount, setRoomCount] = useState<number>(0);
+  const [testRoomCount, setTestRoomCount] = useState<number>(0);
   const [joinError, setJoinError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -27,6 +28,22 @@ export default function Lobby({ onPlay }: LobbyProps) {
       });
     }
   }, [selectedRoom, socket]);
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    const fetchCount = () => {
+      socket.emit('get_room_info', 'General #Test', (data: any) => {
+        if (data && typeof data.count === 'number') {
+          setTestRoomCount(data.count);
+        }
+      });
+    };
+    
+    fetchCount();
+    const interval = setInterval(fetchCount, 4000);
+    return () => clearInterval(interval);
+  }, [socket]);
 
   const handleRoomClick = (roomId: string) => {
     setSelectedRoom(roomId);
@@ -152,7 +169,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                 </div>
                 <div className="flex items-center gap-2 text-[#00D9FF] font-black text-lg bg-[#00D9FF]/10 px-4 py-2 rounded-2xl">
                   <Users size={20} strokeWidth={3} />
-                  <span>5/10</span>
+                  <span>{testRoomCount}/5</span>
                 </div>
               </button>
               
@@ -189,14 +206,18 @@ export default function Lobby({ onPlay }: LobbyProps) {
               
               <h2 className="text-2xl font-black mb-8 text-center">{selectedRoom}</h2>
 
-              <div className="grid grid-cols-2 gap-4 w-full mb-8">
-                <div className="text-center bg-slate-50 p-4 rounded-2xl">
-                  <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Players</div>
-                  <div className="text-[#00D9FF] font-black text-xl">{roomCount}/5</div>
+              <div className="grid grid-cols-3 gap-2.5 w-full mb-8">
+                <div className="text-center bg-slate-50 p-2.5 rounded-2xl flex flex-col justify-center">
+                  <div className="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">Players</div>
+                  <div className="text-[#00D9FF] font-black text-base">{roomCount}/5</div>
                 </div>
-                <div className="text-center bg-slate-50 p-4 rounded-2xl">
-                  <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Theme</div>
-                  <div className="text-slate-700 font-bold text-lg">General</div>
+                <div className="text-center bg-slate-50 p-2.5 rounded-2xl flex flex-col justify-center">
+                  <div className="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">Theme</div>
+                  <div className="text-slate-700 font-bold text-[13px] leading-relaxed truncate">General</div>
+                </div>
+                <div className="text-center bg-slate-50 p-2.5 rounded-2xl flex flex-col justify-center border border-amber-100/40">
+                  <div className="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">To Win</div>
+                  <div className="text-amber-500 font-extrabold text-[13px] leading-relaxed">30 pts</div>
                 </div>
               </div>
 

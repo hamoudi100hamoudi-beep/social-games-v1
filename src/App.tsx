@@ -18,7 +18,7 @@ export default function App() {
       {gameState === 'lobby' ? (
         <Lobby onPlay={handlePlay} />
       ) : (
-        <GameRoom nickname={playerInfo.nickname} room={playerInfo.room} />
+        <GameRoom nickname={playerInfo.nickname} room={playerInfo.room} onLeave={() => setGameState('lobby')} />
       )}
     </>
   );

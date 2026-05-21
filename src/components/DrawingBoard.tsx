@@ -1059,13 +1059,13 @@ export default function DrawingBoard({
         )}
 
         {/* Screenshot Button */}
-        <div className="absolute top-4 left-4 z-20">
+        <div className="absolute top-2.5 left-2.5 z-20">
           <button 
             onClick={downloadScreenshot} 
-            className="w-12 h-12 bg-black/60 text-white rounded-2xl flex items-center justify-center shadow-md hover:bg-black/70 active:scale-95 transition-all"
+            className="w-8 h-8 bg-black/40 text-white rounded-xl flex items-center justify-center shadow-sm hover:bg-black/55 active:scale-95 transition-all"
             title="التقاط صورة للرسمة"
           >
-            <Camera size={24} strokeWidth={2.5} />
+            <Camera size={16} strokeWidth={2.5} />
           </button>
         </div>
 
