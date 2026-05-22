@@ -387,12 +387,12 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
          const hitId = Date.now().toString() + Math.random().toString();
          setHitNotifications(prev => {
             const next = [...prev, { id: hitId, name: msg.sender }];
-            return next.slice(-4); // Max 4 notifications at once
+            return next.slice(-20); // allow up to 20 notifications at once for larger rooms
          });
          
          setTimeout(() => {
              setHitNotifications(prev => prev.filter(n => n.id !== hitId));
-         }, 3500);
+         }, 4500);
       }
     };
 
@@ -712,6 +712,29 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
               })()
             }
           />
+          
+          {/* Hit Notifications Overlay */}
+          <div className="absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full">
+             <AnimatePresence>
+                {hitNotifications.map((hit) => (
+                   <motion.div
+                      layout
+                      key={hit.id}
+                      initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.6, y: -10, transition: { duration: 0.3 } }}
+                      transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
+                      style={{ textShadow: '1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(255,255,255,0.8)' }}
+                      className="flex items-center justify-center gap-1.5 text-[#10B981] font-bold text-[15px] whitespace-nowrap bg-transparent"
+                      dir="ltr"
+                   >
+                      <Check size={16} strokeWidth={4} />
+                      <span className="truncate max-w-[150px] sm:max-w-[200px] text-center" dir="ltr">{hit.name}</span>
+                      <span>hit!</span>
+                   </motion.div>
+                ))}
+             </AnimatePresence>
+          </div>
         </div>
       )}
 
@@ -729,28 +752,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
             timerPercentage={timerPercentage}
           />
           
-          {/* Hit Notifications Overlay */}
-          <div className="absolute bottom-[72px] sm:bottom-20 left-1/2 -translate-x-1/2 z-[55] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-32 w-full max-w-full">
-             <AnimatePresence>
-                {hitNotifications.map((hit) => (
-                   <motion.div
-                      layout
-                      key={hit.id}
-                      initial={{ opacity: 0, scale: 0.6, y: 20 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.8, y: -20, transition: { duration: 0.2 } }}
-                      transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
-                      style={{ textShadow: '0 2px 4px rgba(255,255,255,0.8), 0 0 2px rgba(255,255,255,1)' }}
-                      className="flex items-center justify-center gap-1.5 text-[#10B981] font-bold text-base sm:text-lg whitespace-nowrap bg-transparent"
-                   >
-                      <Check size={18} strokeWidth={4} />
-                      <span className="truncate max-w-[150px] sm:max-w-[200px] text-center" dir="ltr">{hit.name}</span>
-                      <span>hit!</span>
-                   </motion.div>
-                ))}
-             </AnimatePresence>
-          </div>
-
           {/* Correct Guess Animation */}
           {showCorrectAnimation && (
             <div className="absolute inset-0 pointer-events-none z-[60] flex items-center justify-center">

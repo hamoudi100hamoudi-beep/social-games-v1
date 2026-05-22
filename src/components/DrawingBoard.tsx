@@ -29,8 +29,8 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const imageData = ctx.getImageData(0, 0, cw, ch);
   const data = imageData.data;
   
-  const sx = Math.floor(startX * 2);
-  const sy = Math.floor(startY * 2);
+  const sx = Math.floor(startX * DPR);
+  const sy = Math.floor(startY * DPR);
   
   if (sx < 0 || sx >= cw || sy < 0 || sy >= ch) return;
   
@@ -118,6 +118,21 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
 const LOGICAL_WIDTH = 1200;
 const LOGICAL_HEIGHT = 900;
 
+let _cachedDPR = 0;
+const getAdaptiveDPR = () => {
+  if (typeof window === 'undefined') return 2;
+  if (_cachedDPR > 0) return _cachedDPR;
+  let dpr = Math.min(2, window.devicePixelRatio || 1);
+  const nav: any = navigator;
+  const cpuCount = nav.hardwareConcurrency || 4;
+  const memory = nav.deviceMemory || 4;
+  if (cpuCount <= 4 || memory <= 4) dpr = Math.min(dpr, 1.2);
+  if (cpuCount <= 2 || memory <= 2) dpr = Math.min(dpr, 1.0);
+  _cachedDPR = dpr;
+  return dpr;
+};
+const DPR = typeof window !== 'undefined' ? getAdaptiveDPR() : 2;
+
 export default function DrawingBoard({ 
   readOnly = false,
   onSkipTurn,
@@ -161,6 +176,8 @@ export default function DrawingBoard({
   const containerRef = useRef<HTMLDivElement>(null);
   const [baseScale, setBaseScale] = useState(1);
   const hasInitializedTransform = useRef(false);
+  const moveBatchRef = useRef<{x: number, y: number}[]>([]);
+  const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const applyTransform = (overrideBaseScale?: number) => {
     if (transformWrapperRef.current) {
@@ -304,68 +321,78 @@ export default function DrawingBoard({
       if (!ctx || !tempCtx || !prevRemote.current) return;
       const { color, width, tool, opacity } = remoteProps.current;
       
-      const x = data.x * LOGICAL_WIDTH;
-      const y = data.y * LOGICAL_HEIGHT;
+      const processPoint = (ptX: number, ptY: number) => {
+        const x = ptX * LOGICAL_WIDTH;
+        const y = ptY * LOGICAL_HEIGHT;
 
-      if (tool === 'pencil' || tool === 'eraser') {
-        let activeCtx = tempCtx;
-        activeCtx.beginPath();
-        activeCtx.lineCap = 'round';
-        activeCtx.lineJoin = 'round';
-        activeCtx.lineWidth = width;
-        activeCtx.globalAlpha = 1;
-        activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
-        activeCtx.moveTo(prevRemote.current.x, prevRemote.current.y);
-        activeCtx.lineTo(x, y);
-        
-        if (tool === 'pencil') {
-          activeCtx.shadowBlur = 1;
-          activeCtx.shadowColor = color;
-        } else {
+        if (tool === 'pencil' || tool === 'eraser') {
+          let activeCtx = tempCtx;
+          activeCtx.beginPath();
+          activeCtx.lineCap = 'round';
+          activeCtx.lineJoin = 'round';
+          activeCtx.lineWidth = width;
+          activeCtx.globalAlpha = 1;
+          activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+          activeCtx.moveTo(prevRemote.current!.x, prevRemote.current!.y);
+          activeCtx.lineTo(x, y);
+          
+          if (tool === 'pencil') {
+            activeCtx.shadowBlur = 1;
+            activeCtx.shadowColor = color;
+          } else {
+            activeCtx.shadowBlur = 0;
+            activeCtx.shadowColor = 'transparent';
+          }
+          
+          activeCtx.stroke();
           activeCtx.shadowBlur = 0;
-          activeCtx.shadowColor = 'transparent';
+          prevRemote.current = {x, y};
+        } else {
+          const canvas = canvasRef.current;
+          const lastData = history.current[historyIndex.current];
+          if (lastData) {
+            ctx.putImageData(lastData, 0, 0);
+          } else if (canvas) {
+            ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+          }
+          
+          ctx.beginPath();
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.lineWidth = width;
+          ctx.globalAlpha = opacity;
+
+          const startX = prevRemote.current!.x;
+          const startY = prevRemote.current!.y;
+
+          if (tool === 'line') {
+            ctx.moveTo(startX, startY);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+          } else if (tool === 'strokeRect') {
+            ctx.lineJoin = 'miter';
+            ctx.strokeRect(startX, startY, x - startX, y - startY);
+          } else if (tool === 'fillRect') {
+            ctx.fillRect(startX, startY, x - startX, y - startY);
+          } else if (tool === 'strokeCircle') {
+            const radius = Math.hypot(x - startX, y - startY);
+            ctx.arc(startX, startY, radius, 0, Math.PI * 2);
+            ctx.stroke();
+          } else if (tool === 'fillCircle') {
+            const radius = Math.hypot(x - startX, y - startY);
+            ctx.arc(startX, startY, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
         }
-        
-        activeCtx.stroke();
-        activeCtx.shadowBlur = 0;
-        prevRemote.current = {x, y};
+      };
+
+      if (data.moves && Array.isArray(data.moves)) {
+        for (const pt of data.moves) {
+           processPoint(pt.x, pt.y);
+        }
       } else {
-        const canvas = canvasRef.current;
-        const lastData = history.current[historyIndex.current];
-        if (lastData) {
-          ctx.putImageData(lastData, 0, 0);
-        } else if (canvas) {
-          ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-        }
-        
-        ctx.beginPath();
-        ctx.strokeStyle = color;
-        ctx.fillStyle = color;
-        ctx.lineWidth = width;
-        ctx.globalAlpha = opacity;
-
-        const startX = prevRemote.current.x;
-        const startY = prevRemote.current.y;
-
-        if (tool === 'line') {
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-        } else if (tool === 'strokeRect') {
-          ctx.lineJoin = 'miter';
-          ctx.strokeRect(startX, startY, x - startX, y - startY);
-        } else if (tool === 'fillRect') {
-          ctx.fillRect(startX, startY, x - startX, y - startY);
-        } else if (tool === 'strokeCircle') {
-          const radius = Math.hypot(x - startX, y - startY);
-          ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-          ctx.stroke();
-        } else if (tool === 'fillCircle') {
-          const radius = Math.hypot(x - startX, y - startY);
-          ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
+        processPoint(data.x, data.y);
       }
     };
 
@@ -385,7 +412,7 @@ export default function DrawingBoard({
           ctx.globalAlpha = opacity;
           ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
           ctx.drawImage(tempCanvas, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-          tempCtx.clearRect(0, 0, LOGICAL_WIDTH * 2, LOGICAL_HEIGHT * 2);
+          tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
           ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = 1;
         }
@@ -460,7 +487,7 @@ export default function DrawingBoard({
       const { tool } = remoteProps.current;
       if (tool === 'pencil' || tool === 'eraser') {
         const tempCtx = tempCtxRef.current;
-        tempCtx?.clearRect(0, 0, LOGICAL_WIDTH * 2, LOGICAL_HEIGHT * 2);
+        tempCtx?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       } else {
         const ctx = ctxRef.current;
         if (ctx) {
@@ -532,21 +559,21 @@ export default function DrawingBoard({
     const tempCanvas = tempCanvasRef.current;
     if (!canvas || !tempCanvas) return;
     
-    // For crisp display on Retina, multiply by 2
-    canvas.width = LOGICAL_WIDTH * 2;
-    canvas.height = LOGICAL_HEIGHT * 2;
-    tempCanvas.width = LOGICAL_WIDTH * 2;
-    tempCanvas.height = LOGICAL_HEIGHT * 2;
+    // For crisp display on Retina, multiply by DPR
+    canvas.width = LOGICAL_WIDTH * DPR;
+    canvas.height = LOGICAL_HEIGHT * DPR;
+    tempCanvas.width = LOGICAL_WIDTH * DPR;
+    tempCanvas.height = LOGICAL_HEIGHT * DPR;
     
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const tempCtx = tempCanvas.getContext('2d');
     if (ctx && tempCtx) {
-      ctx.scale(2, 2);
+      ctx.scale(DPR, DPR);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctxRef.current = ctx;
       
-      tempCtx.scale(2, 2);
+      tempCtx.scale(DPR, DPR);
       tempCtx.lineCap = 'round';
       tempCtx.lineJoin = 'round';
       tempCtxRef.current = tempCtx;
@@ -693,7 +720,7 @@ export default function DrawingBoard({
           setIsDrawing(false);
           ctxRef.current?.closePath();
           tempCtxRef.current?.closePath();
-          tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * 2, LOGICAL_HEIGHT * 2);
+          tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
           // Erase the accidental start of the stroke
           const lastData = history.current[historyIndex.current];
           if (lastData) {
@@ -842,7 +869,7 @@ export default function DrawingBoard({
             setIsDrawing(false);
             ctxRef.current?.closePath();
             tempCtxRef.current?.closePath();
-            tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * 2, LOGICAL_HEIGHT * 2);
+            tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
             // Erase the accidental start of the stroke
             const lastData = history.current[historyIndex.current];
             if (lastData) {
@@ -933,9 +960,25 @@ export default function DrawingBoard({
     }
     
     if (socket) {
-      socket.emit('draw_move', {
-        instanceId, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
-      });
+      if (tool === 'pencil' || tool === 'eraser') {
+        moveBatchRef.current.push({ x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT });
+        if (!throttleTimeoutRef.current) {
+          throttleTimeoutRef.current = setTimeout(() => {
+            if (socket && moveBatchRef.current.length > 0) {
+               socket.emit('draw_move', {
+                 instanceId, 
+                 moves: moveBatchRef.current
+               });
+               moveBatchRef.current = [];
+            }
+            throttleTimeoutRef.current = null;
+          }, 16); // Batch ~60 times a second
+        }
+      } else {
+        socket.emit('draw_move', {
+          instanceId, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
+        });
+      }
     }
   };
 
@@ -955,8 +998,8 @@ export default function DrawingBoard({
                });
             }
           } else if (tool === 'pipette') {
-            const rx = Math.floor(x * 2);
-            const ry = Math.floor(y * 2);
+            const rx = Math.floor(x * DPR);
+            const ry = Math.floor(y * DPR);
             const pData = ctx.getImageData(rx, ry, 1, 1).data;
             const hex = "#" + ("000000" + ((pData[0] << 16) | (pData[1] << 8) | pData[2]).toString(16)).slice(-6);
             setColor(hex);
@@ -968,6 +1011,18 @@ export default function DrawingBoard({
     }
 
     if (isDrawing) {
+      if (throttleTimeoutRef.current) {
+         clearTimeout(throttleTimeoutRef.current);
+         throttleTimeoutRef.current = null;
+      }
+      if (socket && moveBatchRef.current.length > 0) {
+         socket.emit('draw_move', {
+           instanceId, 
+           moves: moveBatchRef.current
+         });
+         moveBatchRef.current = [];
+      }
+      
       ctxRef.current?.closePath();
       tempCtxRef.current?.closePath();
       setIsDrawing(false);
@@ -980,7 +1035,7 @@ export default function DrawingBoard({
           ctx.globalAlpha = currentOpacity;
           ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
           ctx.drawImage(tempCanvas, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-          tempCtx.clearRect(0, 0, LOGICAL_WIDTH * 2, LOGICAL_HEIGHT * 2);
+          tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         }
       }
 
