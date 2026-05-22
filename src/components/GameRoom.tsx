@@ -24,6 +24,11 @@ interface Message {
 
 type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string; wins?: number };
 
+interface HitNotification {
+  id: string;
+  name: string;
+}
+
 const getSenderColor = (name: string) => {
   const colors = [
     'text-red-400', 
@@ -287,21 +292,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   });
 
   const [showCorrectAnimation, setShowCorrectAnimation] = useState(false);
-  const previousCorrectGuessers = React.useRef<string[]>([]);
-
-  useEffect(() => {
-    if (gameState.status === 'DRAWING' && socket?.id) {
-       const hasGuessed = gameState.correctGuessers?.includes(socket.id);
-       const previouslyGuessed = previousCorrectGuessers.current.includes(socket.id);
-       if (hasGuessed && !previouslyGuessed) {
-          setShowCorrectAnimation(true);
-          setTimeout(() => setShowCorrectAnimation(false), 1200); 
-       }
-       previousCorrectGuessers.current = gameState.correctGuessers || [];
-    } else {
-       previousCorrectGuessers.current = [];
-    }
-  }, [gameState?.correctGuessers, gameState?.status, socket?.id]);
+  const [hitNotifications, setHitNotifications] = useState<HitNotification[]>([]);
 
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
@@ -386,6 +377,23 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
         }];
         return updated.slice(-40);
       });
+      
+      if (msg.subType === 'hit') {
+         if (msg.senderId === socket.id) {
+             setShowCorrectAnimation(true);
+             setTimeout(() => setShowCorrectAnimation(false), 1200);
+         }
+         
+         const hitId = Date.now().toString() + Math.random().toString();
+         setHitNotifications(prev => {
+            const next = [...prev, { id: hitId, name: msg.sender }];
+            return next.slice(-4); // Max 4 notifications at once
+         });
+         
+         setTimeout(() => {
+             setHitNotifications(prev => prev.filter(n => n.id !== hitId));
+         }, 3500);
+      }
     };
 
     socket.on('room_state_update', onRoomStateUpdate);
@@ -721,6 +729,28 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
             timerPercentage={timerPercentage}
           />
           
+          {/* Hit Notifications Overlay */}
+          <div className="absolute bottom-[72px] sm:bottom-20 left-1/2 -translate-x-1/2 z-[55] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-32 w-full max-w-full">
+             <AnimatePresence>
+                {hitNotifications.map((hit) => (
+                   <motion.div
+                      layout
+                      key={hit.id}
+                      initial={{ opacity: 0, scale: 0.6, y: 20 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.8, y: -20, transition: { duration: 0.2 } }}
+                      transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
+                      style={{ textShadow: '0 2px 4px rgba(255,255,255,0.8), 0 0 2px rgba(255,255,255,1)' }}
+                      className="flex items-center justify-center gap-1.5 text-[#10B981] font-bold text-base sm:text-lg whitespace-nowrap bg-transparent"
+                   >
+                      <Check size={18} strokeWidth={4} />
+                      <span className="truncate max-w-[150px] sm:max-w-[200px] text-center" dir="ltr">{hit.name}</span>
+                      <span>hit!</span>
+                   </motion.div>
+                ))}
+             </AnimatePresence>
+          </div>
+
           {/* Correct Guess Animation */}
           {showCorrectAnimation && (
             <div className="absolute inset-0 pointer-events-none z-[60] flex items-center justify-center">
