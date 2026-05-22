@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 interface GameRoomProps {
   nickname: string;
   room: string;
+  avatar: string;
   onLeave?: () => void;
 }
 
@@ -160,8 +161,8 @@ const ChatMessageItem: React.FC<{
             </button>
           )}
         </div>
-        <div className="w-8 h-8 rounded-full bg-[#1A103C] border-2 border-[#00D9FF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
-          <span className="text-[#00D9FF] font-bold text-xs">{msg.avatar}</span>
+        <div className="w-10 h-10 rounded-full bg-[#1A103C] border-[3px] border-[#00D9FF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
+          <span className="text-2xl translate-y-[1px]">{msg.avatar}</span>
         </div>
       </div>
     );
@@ -169,8 +170,8 @@ const ChatMessageItem: React.FC<{
 
   return (
     <div className="flex justify-start items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none">
-      <div className="w-8 h-8 rounded-full bg-[#24174D] border-2 border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
-        <span className="text-white font-bold text-xs">{msg.avatar || '?'}</span>
+      <div className="w-10 h-10 rounded-full bg-[#24174D] border-[3px] border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
+        <span className="text-2xl translate-y-[1px]">{msg.avatar || '?'}</span>
       </div>
       <div 
         className="flex flex-col items-start max-w-[80%] relative"
@@ -206,7 +207,67 @@ const ChatMessageItem: React.FC<{
   );
 };
 
-export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
+const SmoothTimer = ({ gameState, maxTime, isFullScreen = false }: { gameState: { status: string, timeLeft: number, currentWord?: string | null }, maxTime: number, isFullScreen?: boolean }) => {
+  const barRef = React.useRef<HTMLDivElement>(null);
+  const lastTimeLeftRef = React.useRef(gameState.timeLeft);
+  const lastUpdateRef = React.useRef(Date.now());
+  const statusRef = React.useRef(gameState.status);
+
+  React.useEffect(() => {
+    if (gameState.status !== statusRef.current) {
+      statusRef.current = gameState.status;
+      lastTimeLeftRef.current = gameState.timeLeft;
+      lastUpdateRef.current = Date.now();
+    } else if (gameState.timeLeft !== lastTimeLeftRef.current) {
+      lastTimeLeftRef.current = gameState.timeLeft;
+      lastUpdateRef.current = Date.now();
+    }
+  }, [gameState.timeLeft, gameState.status]);
+
+  React.useEffect(() => {
+    let requestId: number;
+    const updateTimer = () => {
+      const now = Date.now();
+      const elapsed = (now - lastUpdateRef.current) / 1000;
+      let visualTimeLeft = lastTimeLeftRef.current - elapsed;
+      if (visualTimeLeft < 0) visualTimeLeft = 0;
+      let pct = (visualTimeLeft / maxTime) * 100;
+      pct = Math.max(0, Math.min(100, pct));
+      
+      if (barRef.current) {
+        barRef.current.style.width = `${pct}%`;
+        let timerColorClass = 'bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]';
+        if (gameState.status !== 'DRAWING' && gameState.status !== 'CHOOSING') {
+          timerColorClass = 'bg-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.5)]';
+        } else {
+          if (pct <= 20) {
+            timerColorClass = 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]';
+          } else if (pct <= 50) {
+            timerColorClass = 'bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]';
+          }
+        }
+        barRef.current.className = `h-full rounded-full ${timerColorClass}`;
+      }
+      
+      requestId = requestAnimationFrame(updateTimer);
+    };
+    requestId = requestAnimationFrame(updateTimer);
+    return () => cancelAnimationFrame(requestId);
+  }, [maxTime, gameState.status]);
+
+  return (
+    <div className={`w-full px-2 sm:px-3 py-1 shrink-0 flex items-center justify-center ${isFullScreen ? 'bg-transparent' : 'bg-[#1A103C]'}`} dir="ltr">
+        <div className="w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner flex justify-start">
+            <div 
+              ref={barRef}
+              className="h-full rounded-full bg-[#3b82f6]"
+            />
+        </div>
+    </div>
+  );
+};
+
+export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomProps) {
   const { socket } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const bgTouchStartTime = React.useRef<number>(0);
@@ -224,6 +285,24 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
     timeLeft: 0,
     wordOptions: []
   });
+
+  const [showCorrectAnimation, setShowCorrectAnimation] = useState(false);
+  const previousCorrectGuessers = React.useRef<string[]>([]);
+
+  useEffect(() => {
+    if (gameState.status === 'DRAWING' && socket?.id) {
+       const hasGuessed = gameState.correctGuessers?.includes(socket.id);
+       const previouslyGuessed = previousCorrectGuessers.current.includes(socket.id);
+       if (hasGuessed && !previouslyGuessed) {
+          setShowCorrectAnimation(true);
+          setTimeout(() => setShowCorrectAnimation(false), 1200); 
+       }
+       previousCorrectGuessers.current = gameState.correctGuessers || [];
+    } else {
+       previousCorrectGuessers.current = [];
+    }
+  }, [gameState?.correctGuessers, gameState?.status, socket?.id]);
+
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
   const openChat = () => {
@@ -253,7 +332,7 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
     socket.emit('join_room', {
       roomId: room,
       nickname,
-      avatar: nickname.charAt(0).toUpperCase()
+      avatar: avatar || nickname.charAt(0).toUpperCase()
     });
 
     const onRoomStateUpdate = (state: { roomId: string, players: any[], gameState: any }) => {
@@ -487,34 +566,7 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
      );
   };
 
-  const renderTimerBar = (isFullScreen: boolean = false) => {
-    let timerColorClass = 'bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]';
-    
-    if (gameState.status !== 'DRAWING' && gameState.status !== 'CHOOSING') {
-      timerColorClass = 'bg-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.5)]';
-    } else {
-      if (timerPercentage <= 20) {
-        timerColorClass = 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]';
-      } else if (timerPercentage <= 50) {
-        timerColorClass = 'bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]';
-      }
-    }
-
-    return (
-      <div className={`w-full px-2 sm:px-3 py-1 shrink-0 flex items-center justify-center ${isFullScreen ? 'bg-transparent' : 'bg-[#1A103C]'}`} dir="ltr">
-        <div className="w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner flex justify-start">
-            <div 
-              key={gameState.status + (gameState.currentWord || '')}
-              className={`h-full rounded-full ${timerColorClass}`}
-              style={{ 
-                 width: `${timerPercentage}%`,
-                 transition: 'width 1s linear, background-color 0.3s ease'
-              }}
-            />
-        </div>
-      </div>
-    );
-  };
+  
 
   const slots: PlayerSlot[] = Array.from({ length: 5 }).map((_, index) => {
     if (index < currentPlayers.length) return currentPlayers[index];
@@ -641,7 +693,7 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
             onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
             onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
             timerPercentage={timerPercentage}
-            timerBarNode={renderTimerBar(true)}
+            timerBarNode={<SmoothTimer gameState={gameState} maxTime={getMaxTime()} isFullScreen={true} />}
             hintsRemaining={
               (() => {
                 const word = gameState.currentWord || '';
@@ -669,6 +721,46 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
             timerPercentage={timerPercentage}
           />
           
+          {/* Correct Guess Animation */}
+          {showCorrectAnimation && (
+            <div className="absolute inset-0 pointer-events-none z-[60] flex items-center justify-center">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: [0, 1.2, 1, 1, 1.1, 0] }}
+                transition={{ 
+                  duration: 1, 
+                  times: [0, 0.2, 0.3, 0.75, 0.85, 1],
+                  ease: ["easeOut", "easeInOut", "linear", "easeInOut", "easeIn"]
+                }}
+                className="w-32 h-32 sm:w-40 sm:h-40 bg-[#10B981] rounded-full border-[5px] border-white flex items-center justify-center shadow-[0_10px_40px_rgba(16,185,129,0.5)]"
+              >
+                <motion.svg
+                  viewBox="0 0 50 50"
+                  className="w-20 h-20 sm:w-24 sm:h-24 text-white drop-shadow-md"
+                >
+                  <motion.path
+                    d="M 14 27 L 22 35 L 38 15"
+                    fill="transparent"
+                    strokeWidth="6"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    initial={{ pathLength: 0, opacity: 0 }}
+                    animate={{
+                       pathLength: [0, 0, 1, 1, 0],
+                       opacity: [0, 0, 1, 1, 0]
+                    }}
+                    transition={{
+                       duration: 1,
+                       times: [0, 0.15, 0.3, 0.85, 1],
+                       ease: "linear"
+                    }}
+                  />
+                </motion.svg>
+              </motion.div>
+            </div>
+          )}
+
           {/* Overlays for WAITING state */}
           {gameState.status === 'WAITING' && (
              <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
@@ -917,7 +1009,7 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
         </div>
 
         {/* Timer Bar */}
-        {renderTimerBar()}
+        <SmoothTimer gameState={gameState} maxTime={getMaxTime()} isFullScreen={false} />
       </div>
 
       {/* Left: Players Sidebar */}
@@ -961,7 +1053,7 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
                      {slot.isEmpty ? (
                        <UserIcon size={20} className="text-white/30" />
                      ) : (
-                       <span className="font-bold text-base sm:text-lg text-white">{slot.avatar}</span>
+                       <span className="text-2xl sm:text-3xl translate-y-[1px]">{slot.avatar}</span>
                      )}
                    </div>
                    
@@ -1345,7 +1437,7 @@ export default function GameRoom({ nickname, room, onLeave }: GameRoomProps) {
              
              {/* Timer Bar for Drawer Choosing Screen */}
              <div className="absolute bottom-10 left-0 right-0 w-full px-6 max-w-md mx-auto">
-                {renderTimerBar(true)}
+                {<SmoothTimer gameState={gameState} maxTime={getMaxTime()} isFullScreen={true} />}
              </div>
        </div>
     )}

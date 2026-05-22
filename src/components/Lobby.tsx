@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Settings, Plus, Play, ChevronLeft, Search, X } from 'lucide-react';
+import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 
 interface LobbyProps {
-  onPlay: (nickname: string, room: string) => void;
+  onPlay: (nickname: string, room: string, avatar: string) => void;
 }
+
+const AVATARS = [
+  '😊', '😂', '😎', '🤪', '😍', '🤔', '🥶', '😡', '🤡', '🤠', '👽', '👻', '🤖', '💩', '👾', '👹', 
+  '🐱', '🐶', '🦊', '🐼', '🦁', '🐯', '🐰', '🐭', '🐹', '🐻', '🐨', '🐷', '🐸', '🐵', '🐔', '🐧', 
+  '🦆', '🦉', '🦄', '🦖', '🐙', '🦋', '🐞', '🐢', '🐍', '🐬', '🐳', '🦈', '🐊', '🐅', '🐆', '🦓'
+];
 
 type Screen = 'home' | 'rooms';
 
@@ -12,6 +18,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
   const { socket } = useSocket();
   const [screen, setScreen] = useState<Screen>('home');
   const [nickname, setNickname] = useState('');
+  const [avatarIndex, setAvatarIndex] = useState(Math.floor(Math.random() * AVATARS.length));
+  const [showAvatarGrid, setShowAvatarGrid] = useState(false);
   const [nicknameError, setNicknameError] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   
@@ -68,11 +76,11 @@ export default function Lobby({ onPlay }: LobbyProps) {
              setNicknameError(false); // Can reuse or create specific error state, but joinError is fine
           }
         } else {
-          onPlay(finalName, finalRoom);
+          onPlay(finalName, finalRoom, AVATARS[avatarIndex]);
         }
       });
     } else {
-      onPlay(finalName, finalRoom);
+      onPlay(finalName, finalRoom, AVATARS[avatarIndex]);
     }
   };
 
@@ -98,11 +106,69 @@ export default function Lobby({ onPlay }: LobbyProps) {
               DRAW<span className="text-[#00D9FF]">.</span>IO
             </div>
             
+            {/* Avatar Selector */}
+            <div className="flex flex-col items-center gap-3">
+              <label className="text-sm font-bold text-white/90">CHOOSE AVATAR</label>
+              
+              {!showAvatarGrid ? (
+                <div className="flex items-center gap-6 relative">
+                  <button 
+                    onClick={() => setAvatarIndex((prev) => (prev - 1 + AVATARS.length) % AVATARS.length)}
+                    className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-all active:scale-95 text-white/70 hover:text-white"
+                  >
+                    <ChevronLeft strokeWidth={3} />
+                  </button>
+                  
+                  <div className="relative group cursor-pointer" onClick={() => setShowAvatarGrid(true)}>
+                    <div className="w-28 h-28 rounded-full bg-white/20 border-4 border-[#00D9FF] flex items-center justify-center shadow-[0_0_20px_rgba(0,217,255,0.4)] transition-transform select-none overflow-hidden">
+                      <span className="text-[72px] translate-y-1">{AVATARS[avatarIndex]}</span>
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                         <LayoutGrid className="text-white" size={32} />
+                      </div>
+                    </div>
+                    {/* Small grid badge */}
+                    <div className="absolute -bottom-1 -right-1 bg-[#00D9FF] p-2 rounded-full border-2 border-[#1A103C] text-[#1A103C] hover:bg-white shadow-lg transition-transform hover:scale-110 active:scale-95">
+                      <LayoutGrid size={18} />
+                    </div>
+                  </div>
+                  
+                  <button 
+                    onClick={() => setAvatarIndex((prev) => (prev + 1) % AVATARS.length)}
+                    className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-all active:scale-95 text-white/70 hover:text-white"
+                  >
+                    <ChevronRight strokeWidth={3} />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-full max-w-sm bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 relative animate-in zoom-in-95 duration-200">
+                  <div className="flex justify-between items-center mb-3">
+                    <span className="text-xs font-bold text-[#00D9FF]">ALL AVATARS</span>
+                    <button onClick={() => setShowAvatarGrid(false)} className="text-white/50 hover:text-white bg-black/20 p-1 rounded-full transition-colors active:scale-95">
+                      <X size={16} />
+                    </button>
+                  </div>
+                  {/* Hide standard scrollbars cleanly */}
+                  <div className="grid grid-cols-6 sm:grid-cols-8 gap-2 overflow-y-auto max-h-[160px]" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    {AVATARS.map((emoji, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => { setAvatarIndex(idx); setShowAvatarGrid(false); }}
+                        className={`text-2xl h-10 w-10 flex items-center justify-center hover:scale-125 transition-transform ${idx === avatarIndex ? 'bg-white/20 rounded-lg scale-110' : ''}`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
             <div className="w-full space-y-4">
               <div className="space-y-1">
                 <label className="text-sm font-bold ml-2 text-white/90">NICKNAME</label>
                 <input 
                   type="text" 
+                  maxLength={10}
                   value={nickname}
                   onChange={(e) => { setNickname(e.target.value); setNicknameError(false); setJoinError(null); }}
                   placeholder="Enter your name..."

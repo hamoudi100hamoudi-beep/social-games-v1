@@ -589,8 +589,8 @@ export default function DrawingBoard({
   const lastRedoTime = useRef(0);
 
   const undo = (emit = true) => {
-    if (Date.now() - lastUndoTime.current < 200) return;
-    lastUndoTime.current = Date.now();
+    if (emit && Date.now() - lastUndoTime.current < 200) return;
+    if (emit) lastUndoTime.current = Date.now();
     
     if (historyIndex.current > 0) {
       historyIndex.current--;
@@ -604,8 +604,8 @@ export default function DrawingBoard({
   };
 
   const redo = (emit = true) => {
-    if (Date.now() - lastRedoTime.current < 200) return;
-    lastRedoTime.current = Date.now();
+    if (emit && Date.now() - lastRedoTime.current < 200) return;
+    if (emit) lastRedoTime.current = Date.now();
     
     if (historyIndex.current < history.current.length - 1) {
       historyIndex.current++;
