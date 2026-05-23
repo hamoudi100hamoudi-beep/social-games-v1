@@ -347,7 +347,7 @@ export default function DrawingBoard({
           activeCtx.stroke();
           activeCtx.shadowBlur = 0;
           prevRemote.current = {x, y};
-        } else {
+        } else if (!isReplay) {
           const canvas = canvasRef.current;
           const lastData = history.current[historyIndex.current];
           if (lastData) {
@@ -418,12 +418,14 @@ export default function DrawingBoard({
         }
       } else if (data && data.x !== undefined && data.y !== undefined && ctx) {
         // Redraw exact final shape for line and shapes
-        const canvas = canvasRef.current;
-        const lastData = history.current[historyIndex.current];
-        if (lastData) {
-          ctx.putImageData(lastData, 0, 0);
-        } else if (canvas) {
-          ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+        if (!isReplay) {
+          const canvas = canvasRef.current;
+          const lastData = history.current[historyIndex.current];
+          if (lastData) {
+            ctx.putImageData(lastData, 0, 0);
+          } else if (canvas) {
+            ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+          }
         }
         
         ctx.beginPath();
@@ -634,7 +636,6 @@ export default function DrawingBoard({
     
     if (emit && socket) {
       socket.emit('draw_undo', { instanceId });
-      // Update local state to enable redo button
       if (historyIndex.current > 0) {
         historyIndex.current--;
         setHistoryState({ index: historyIndex.current, length: history.current.length });
@@ -654,7 +655,6 @@ export default function DrawingBoard({
     
     if (emit && socket) {
       socket.emit('draw_redo', { instanceId });
-      // Update local state to enable undo button if applicable
       if (historyIndex.current < history.current.length - 1) {
         historyIndex.current++;
         setHistoryState({ index: historyIndex.current, length: history.current.length });
@@ -668,18 +668,23 @@ export default function DrawingBoard({
   };
 
   const clearCanvas = (emit = true) => {
+    const canvas = canvasRef.current;
+    const ctx = ctxRef.current;
+    if (!canvas || !ctx) return;
+
+    ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    const tempCtx = tempCtxRef.current;
+    if (tempCtx) {
+       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    }
+    
+    // Wipe local history entirely, start fresh
+    history.current = [];
+    historyIndex.current = -1;
+    saveHistory(); // Creates the first blank snapshot at index 0
+
     if (emit && socket) {
       socket.emit('draw_clear', { instanceId });
-    } else if (!emit) {
-      const canvas = canvasRef.current;
-      const ctx = ctxRef.current;
-      if (!canvas || !ctx) return;
-      ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-      
-      // Wipe local history entirely, start fresh
-      history.current = [];
-      historyIndex.current = -1;
-      saveHistory(); // Creates the first blank snapshot at index 0
     }
   };
 
