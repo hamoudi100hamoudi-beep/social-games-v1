@@ -144,6 +144,8 @@ class RoomManager {
     room.gameState.hintsUsed = 0;
     room.gameState.revealedIndices = [];
     room.gameState.drawHistory = [];
+    //@ts-ignore
+    room.gameState.redoStack = [];
     room.gameState.timeLeft = 100;
     
     if (this.io) {

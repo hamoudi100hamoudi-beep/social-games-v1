@@ -470,6 +470,7 @@ export default function DrawingBoard({
     };
 
     const onDrawClear = (data?: any, isReplay = false) => {
+      if (!isReplay && data?.instanceId === instanceId) return;
       clearCanvas(false);
     };
 
@@ -524,16 +525,36 @@ export default function DrawingBoard({
 
     socket.on('draw_history_sync', (commands: any[]) => {
       const ctx = ctxRef.current;
-      if (!ctx) return;
+      const canvas = canvasRef.current;
+      if (!ctx || !canvas) return;
       ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
       
+      // Rebuild history completely from server sequence
+      history.current = [];
+      const blankData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      history.current.push(blankData);
+
       // Replay all commands
       for (const cmd of commands) {
          if (cmd.event === 'draw_start') onDrawStart(cmd.data, true);
          else if (cmd.event === 'draw_move') onDrawMove(cmd.data, true);
-         else if (cmd.event === 'draw_end') onDrawEnd(cmd.data, true, true);
-         else if (cmd.event === 'draw_action') onDrawAction(cmd.data, true, true);
+         else if (cmd.event === 'draw_end') {
+            onDrawEnd(cmd.data, true, true);
+            history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+         }
+         else if (cmd.event === 'draw_action') {
+            onDrawAction(cmd.data, true, true);
+            history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+         }
       }
+      
+      const MAX_HISTORY = 10;
+      while (history.current.length > MAX_HISTORY + 1) {
+         history.current.shift();
+      }
+      
+      historyIndex.current = history.current.length - 1;
+      setHistoryState({ index: historyIndex.current, length: history.current.length });
     });
 
     return () => {
@@ -636,10 +657,6 @@ export default function DrawingBoard({
     
     if (emit && socket) {
       socket.emit('draw_undo', { instanceId });
-      if (historyIndex.current > 0) {
-        historyIndex.current--;
-        setHistoryState({ index: historyIndex.current, length: history.current.length });
-      }
     } else if (!emit && historyIndex.current > 0) {
       // Local fallback (not used in server-driven mostly, unless needed)
       historyIndex.current--;
@@ -655,10 +672,6 @@ export default function DrawingBoard({
     
     if (emit && socket) {
       socket.emit('draw_redo', { instanceId });
-      if (historyIndex.current < history.current.length - 1) {
-        historyIndex.current++;
-        setHistoryState({ index: historyIndex.current, length: history.current.length });
-      }
     } else if (!emit && historyIndex.current < history.current.length - 1) {
       historyIndex.current++;
       const data = history.current[historyIndex.current];
