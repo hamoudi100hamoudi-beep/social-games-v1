@@ -219,10 +219,6 @@ async function startServer() {
       }
     });
     
-    socket.on('latency_ping', (time) => {
-      socket.emit('latency_pong', time);
-    });
-
     socket.on('disconnect', () => {
       console.log(`[Socket] Client disconnected: ${socket.id}`);
       try {

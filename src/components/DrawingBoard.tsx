@@ -179,54 +179,6 @@ export default function DrawingBoard({
   const moveBatchRef = useRef<{x: number, y: number}[]>([]);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // --- Temporary Debug Overlay Refs ---
-  const fpsRef = useRef<HTMLDivElement>(null);
-  const pingRef = useRef<HTMLDivElement>(null);
-  const resRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let frameCount = 0;
-    let lastTime = performance.now();
-    let animId: number;
-    let pingInterval: NodeJS.Timeout;
-
-    const loop = () => {
-      frameCount++;
-      const now = performance.now();
-      if (now - lastTime >= 1000) {
-        if (fpsRef.current) fpsRef.current.innerText = `FPS: ${frameCount}`;
-        frameCount = 0;
-        lastTime = now;
-      }
-      animId = requestAnimationFrame(loop);
-    };
-    animId = requestAnimationFrame(loop);
-
-    if (socket) {
-      pingInterval = setInterval(() => {
-        socket.emit('latency_ping', Date.now());
-      }, 2000);
-
-      const onPong = (time: number) => {
-        if (pingRef.current) pingRef.current.innerText = `Ping: ${Date.now() - time}ms`;
-      };
-      socket.on('latency_pong', onPong);
-
-      return () => {
-        cancelAnimationFrame(animId);
-        clearInterval(pingInterval);
-        socket.off('latency_pong', onPong);
-      };
-    }
-    return () => cancelAnimationFrame(animId);
-  }, [socket]);
-
-  useEffect(() => {
-    if (resRef.current) {
-        resRef.current.innerText = `Res: ${LOGICAL_WIDTH * DPR}x${LOGICAL_HEIGHT * DPR} (DPR: ${DPR})`;
-    }
-  }, [DPR]);
-
   const applyTransform = (overrideBaseScale?: number) => {
     if (transformWrapperRef.current) {
       const { x, y, scale } = transformRef.current;
@@ -247,10 +199,16 @@ export default function DrawingBoard({
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
         
-        let targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
+        let targetScale;
+        if (readOnly) {
+          targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
+        } else {
+          targetScale = height / LOGICAL_HEIGHT;
+        }
+        
         setBaseScale(targetScale);
         
-        if (!hasInitializedTransform.current || readOnly || transformRef.current.scale === 1) {
+        if (!hasInitializedTransform.current || readOnly) {
           const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
           const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
           const initialX = (width - canvasDisplayWidth) / 2;
@@ -302,7 +260,7 @@ export default function DrawingBoard({
     if (!socket) return;
     
     const onDrawStart = (data: any, isReplay = false) => {
-      if (data.instanceId === instanceId && !isReplay) return;
+      if (!isReplay && data.instanceId === instanceId) return;
       remoteProps.current = data;
       const x = data.x * LOGICAL_WIDTH;
       const y = data.y * LOGICAL_HEIGHT;
@@ -357,7 +315,7 @@ export default function DrawingBoard({
     };
 
     const onDrawMove = (data: any, isReplay = false) => {
-      if (data.instanceId === instanceId && !isReplay) return;
+      if (!isReplay && data.instanceId === instanceId) return;
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
       if (!ctx || !tempCtx || !prevRemote.current) return;
@@ -439,7 +397,7 @@ export default function DrawingBoard({
     };
 
     const onDrawEnd = (data?: any, skipSave = false, isReplay = false) => {
-      if (data?.instanceId === instanceId && !isReplay) return;
+      if (!isReplay && data?.instanceId === instanceId) return;
       
       const tool = data?.tool || remoteProps.current.tool;
       const opacity = data?.opacity || remoteProps.current.opacity;
@@ -509,13 +467,12 @@ export default function DrawingBoard({
       if (!skipSave) saveHistory();
     };
 
-    const onDrawClear = (data?: any) => {
-      // Execute for sender as well to guarantee sync
+    const onDrawClear = (data?: any, isReplay = false) => {
       clearCanvas(false);
     };
 
     const onDrawAction = (data: any, skipSave = false, isReplay = false) => {
-      if (data.instanceId === instanceId && !isReplay) return;
+      if (!isReplay && data.instanceId === instanceId) return;
       const ctx = ctxRef.current;
       if (!ctx) return;
       if (data.tool === 'bucket') {
@@ -575,8 +532,6 @@ export default function DrawingBoard({
          else if (cmd.event === 'draw_end') onDrawEnd(cmd.data, true, true);
          else if (cmd.event === 'draw_action') onDrawAction(cmd.data, true, true);
       }
-      
-      saveHistory(); // Save the newly accumulated ImageData for local tools to reference properly
     });
 
     return () => {
@@ -679,6 +634,11 @@ export default function DrawingBoard({
     
     if (emit && socket) {
       socket.emit('draw_undo', { instanceId });
+      // Update local state to enable redo button
+      if (historyIndex.current > 0) {
+        historyIndex.current--;
+        setHistoryState({ index: historyIndex.current, length: history.current.length });
+      }
     } else if (!emit && historyIndex.current > 0) {
       // Local fallback (not used in server-driven mostly, unless needed)
       historyIndex.current--;
@@ -694,6 +654,11 @@ export default function DrawingBoard({
     
     if (emit && socket) {
       socket.emit('draw_redo', { instanceId });
+      // Update local state to enable undo button if applicable
+      if (historyIndex.current < history.current.length - 1) {
+        historyIndex.current++;
+        setHistoryState({ index: historyIndex.current, length: history.current.length });
+      }
     } else if (!emit && historyIndex.current < history.current.length - 1) {
       historyIndex.current++;
       const data = history.current[historyIndex.current];
@@ -710,7 +675,11 @@ export default function DrawingBoard({
       const ctx = ctxRef.current;
       if (!canvas || !ctx) return;
       ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-      saveHistory();
+      
+      // Wipe local history entirely, start fresh
+      history.current = [];
+      historyIndex.current = -1;
+      saveHistory(); // Creates the first blank snapshot at index 0
     }
   };
 
@@ -1152,13 +1121,6 @@ export default function DrawingBoard({
       {/* Canvas Area */}
       <div ref={containerRef} dir="ltr" className="flex-1 relative bg-white overflow-hidden w-full h-full cursor-crosshair">
         
-        {/* Temporary Debug Overlay */}
-        <div className="absolute top-4 left-4 bg-black/80 text-green-400 font-mono text-xs p-2 rounded z-[100] pointer-events-none select-none flex flex-col gap-1">
-           <div ref={fpsRef}>FPS: ...</div>
-           <div ref={pingRef}>Ping: ...</div>
-           <div ref={resRef}>Res: ...</div>
-        </div>
-
         {/* Transform Wrapper for Pinch-to-Zoom and Base Scale */}
         <div 
           ref={transformWrapperRef}
