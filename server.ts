@@ -162,8 +162,8 @@ async function startServer() {
     socket.on('draw_undo', (data) => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {
-         const history = roomManager.undoLastDrawing(player.roomId);
-         io.to(player.roomId).emit('draw_history_sync', history); // Broadcasts to everyone including sender!
+         roomManager.undoLastDrawing(player.roomId);
+         io.to(player.roomId).emit('draw_undo_local', data);
       }
       else io.emit('draw_undo', data);
     });
@@ -171,8 +171,8 @@ async function startServer() {
     socket.on('draw_redo', (data) => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {
-         const history = roomManager.redoDrawing(player.roomId);
-         io.to(player.roomId).emit('draw_history_sync', history); // Broadcasts to everyone including sender!
+         roomManager.redoDrawing(player.roomId);
+         io.to(player.roomId).emit('draw_redo_local', data);
       }
       else io.emit('draw_redo', data);
     });

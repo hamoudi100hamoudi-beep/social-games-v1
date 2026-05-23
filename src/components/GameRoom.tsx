@@ -697,6 +697,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
         >
           {renderWordOverlay(true)}
           <DrawingBoard 
+            key={`full-${gameState.currentDrawerId || 'lobby'}`}
             readOnly={false}
             onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
             onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
@@ -748,6 +749,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
           {renderWordOverlay()}
 
           <DrawingBoard 
+            key={gameState.currentDrawerId || 'lobby'}
             readOnly={gameState.currentDrawerId !== socket?.id}
             timerPercentage={timerPercentage}
           />

@@ -147,6 +147,7 @@ export default function DrawingBoard({
   hintsRemaining?: number;
   timerPercentage?: number;
   timerBarNode?: React.ReactNode;
+  key?: any;
 }) {
   const instanceId = useId();
   const { socket } = useSocket();
@@ -515,10 +516,21 @@ export default function DrawingBoard({
     socket.on('draw_action', onDrawAction);
 
     socket.on('draw_undo', (data?: any) => {
-      undo(false); // Called by server for everybody to fallback, but history is synced
+      if (data?.instanceId === instanceId) return;
+      undo(false);
+    });
+    
+    socket.on('draw_undo_local', (data?: any) => {
+      if (data?.instanceId === instanceId) return;
+      undo(false);
     });
     
     socket.on('draw_redo', (data?: any) => {
+      if (data?.instanceId === instanceId) return;
+      redo(false);
+    });
+
+    socket.on('draw_redo_local', (data?: any) => {
       if (data?.instanceId === instanceId) return;
       redo(false);
     });
@@ -548,7 +560,7 @@ export default function DrawingBoard({
          }
       }
       
-      const MAX_HISTORY = 10;
+      const MAX_HISTORY = 5;
       while (history.current.length > MAX_HISTORY + 1) {
          history.current.shift();
       }
@@ -564,7 +576,9 @@ export default function DrawingBoard({
       socket.off('draw_clear', onDrawClear);
       socket.off('draw_action', onDrawAction);
       socket.off('draw_undo');
+      socket.off('draw_undo_local');
       socket.off('draw_redo');
+      socket.off('draw_redo_local');
       socket.off('draw_history_sync');
     };
   }, [socket]);
@@ -640,7 +654,7 @@ export default function DrawingBoard({
     history.current = history.current.slice(0, historyIndex.current + 1);
     history.current.push(data);
     
-    const MAX_HISTORY = 10;
+    const MAX_HISTORY = 5;
     while (history.current.length > MAX_HISTORY + 1) {
       history.current.shift();
     }
@@ -655,14 +669,15 @@ export default function DrawingBoard({
     if (emit && Date.now() - lastUndoTime.current < 200) return;
     if (emit) lastUndoTime.current = Date.now();
     
-    if (emit && socket) {
-      socket.emit('draw_undo', { instanceId });
-    } else if (!emit && historyIndex.current > 0) {
-      // Local fallback (not used in server-driven mostly, unless needed)
+    if (historyIndex.current > 0) {
       historyIndex.current--;
       const data = history.current[historyIndex.current];
       ctxRef.current?.putImageData(data, 0, 0);
       setHistoryState({ index: historyIndex.current, length: history.current.length });
+      
+      if (emit && socket) {
+        socket.emit('draw_undo', { instanceId });
+      }
     }
   };
 
@@ -670,13 +685,15 @@ export default function DrawingBoard({
     if (emit && Date.now() - lastRedoTime.current < 200) return;
     if (emit) lastRedoTime.current = Date.now();
     
-    if (emit && socket) {
-      socket.emit('draw_redo', { instanceId });
-    } else if (!emit && historyIndex.current < history.current.length - 1) {
+    if (historyIndex.current < history.current.length - 1) {
       historyIndex.current++;
       const data = history.current[historyIndex.current];
       ctxRef.current?.putImageData(data, 0, 0);
       setHistoryState({ index: historyIndex.current, length: history.current.length });
+      
+      if (emit && socket) {
+        socket.emit('draw_redo', { instanceId });
+      }
     }
   };
 
