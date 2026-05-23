@@ -179,6 +179,54 @@ export default function DrawingBoard({
   const moveBatchRef = useRef<{x: number, y: number}[]>([]);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // --- Temporary Debug Overlay Refs ---
+  const fpsRef = useRef<HTMLDivElement>(null);
+  const pingRef = useRef<HTMLDivElement>(null);
+  const resRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let frameCount = 0;
+    let lastTime = performance.now();
+    let animId: number;
+    let pingInterval: NodeJS.Timeout;
+
+    const loop = () => {
+      frameCount++;
+      const now = performance.now();
+      if (now - lastTime >= 1000) {
+        if (fpsRef.current) fpsRef.current.innerText = `FPS: ${frameCount}`;
+        frameCount = 0;
+        lastTime = now;
+      }
+      animId = requestAnimationFrame(loop);
+    };
+    animId = requestAnimationFrame(loop);
+
+    if (socket) {
+      pingInterval = setInterval(() => {
+        socket.emit('latency_ping', Date.now());
+      }, 2000);
+
+      const onPong = (time: number) => {
+        if (pingRef.current) pingRef.current.innerText = `Ping: ${Date.now() - time}ms`;
+      };
+      socket.on('latency_pong', onPong);
+
+      return () => {
+        cancelAnimationFrame(animId);
+        clearInterval(pingInterval);
+        socket.off('latency_pong', onPong);
+      };
+    }
+    return () => cancelAnimationFrame(animId);
+  }, [socket]);
+
+  useEffect(() => {
+    if (resRef.current) {
+        resRef.current.innerText = `Res: ${LOGICAL_WIDTH * DPR}x${LOGICAL_HEIGHT * DPR} (DPR: ${DPR})`;
+    }
+  }, [DPR]);
+
   const applyTransform = (overrideBaseScale?: number) => {
     if (transformWrapperRef.current) {
       const { x, y, scale } = transformRef.current;
@@ -199,16 +247,10 @@ export default function DrawingBoard({
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
         
-        let targetScale;
-        if (readOnly) {
-          targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
-        } else {
-          targetScale = height / LOGICAL_HEIGHT;
-        }
-        
+        let targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
         setBaseScale(targetScale);
         
-        if (!hasInitializedTransform.current || readOnly) {
+        if (!hasInitializedTransform.current || readOnly || transformRef.current.scale === 1) {
           const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
           const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
           const initialX = (width - canvasDisplayWidth) / 2;
@@ -259,8 +301,8 @@ export default function DrawingBoard({
   useEffect(() => {
     if (!socket) return;
     
-    const onDrawStart = (data: any) => {
-      if (data.instanceId === instanceId) return;
+    const onDrawStart = (data: any, isReplay = false) => {
+      if (data.instanceId === instanceId && !isReplay) return;
       remoteProps.current = data;
       const x = data.x * LOGICAL_WIDTH;
       const y = data.y * LOGICAL_HEIGHT;
@@ -314,8 +356,8 @@ export default function DrawingBoard({
       }
     };
 
-    const onDrawMove = (data: any) => {
-      if (data.instanceId === instanceId) return;
+    const onDrawMove = (data: any, isReplay = false) => {
+      if (data.instanceId === instanceId && !isReplay) return;
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
       if (!ctx || !tempCtx || !prevRemote.current) return;
@@ -396,8 +438,8 @@ export default function DrawingBoard({
       }
     };
 
-    const onDrawEnd = (data?: any, skipSave = false) => {
-      if (data?.instanceId === instanceId) return;
+    const onDrawEnd = (data?: any, skipSave = false, isReplay = false) => {
+      if (data?.instanceId === instanceId && !isReplay) return;
       
       const tool = data?.tool || remoteProps.current.tool;
       const opacity = data?.opacity || remoteProps.current.opacity;
@@ -468,12 +510,12 @@ export default function DrawingBoard({
     };
 
     const onDrawClear = (data?: any) => {
-      if (data?.instanceId === instanceId) return;
+      // Execute for sender as well to guarantee sync
       clearCanvas(false);
     };
 
-    const onDrawAction = (data: any, skipSave = false) => {
-      if (data.instanceId === instanceId) return;
+    const onDrawAction = (data: any, skipSave = false, isReplay = false) => {
+      if (data.instanceId === instanceId && !isReplay) return;
       const ctx = ctxRef.current;
       if (!ctx) return;
       if (data.tool === 'bucket') {
@@ -528,10 +570,10 @@ export default function DrawingBoard({
       
       // Replay all commands
       for (const cmd of commands) {
-         if (cmd.event === 'draw_start') onDrawStart(cmd.data);
-         else if (cmd.event === 'draw_move') onDrawMove(cmd.data);
-         else if (cmd.event === 'draw_end') onDrawEnd(cmd.data, true);
-         else if (cmd.event === 'draw_action') onDrawAction(cmd.data, true);
+         if (cmd.event === 'draw_start') onDrawStart(cmd.data, true);
+         else if (cmd.event === 'draw_move') onDrawMove(cmd.data, true);
+         else if (cmd.event === 'draw_end') onDrawEnd(cmd.data, true, true);
+         else if (cmd.event === 'draw_action') onDrawAction(cmd.data, true, true);
       }
       
       saveHistory(); // Save the newly accumulated ImageData for local tools to reference properly
@@ -1110,6 +1152,13 @@ export default function DrawingBoard({
       {/* Canvas Area */}
       <div ref={containerRef} dir="ltr" className="flex-1 relative bg-white overflow-hidden w-full h-full cursor-crosshair">
         
+        {/* Temporary Debug Overlay */}
+        <div className="absolute top-4 left-4 bg-black/80 text-green-400 font-mono text-xs p-2 rounded z-[100] pointer-events-none select-none flex flex-col gap-1">
+           <div ref={fpsRef}>FPS: ...</div>
+           <div ref={pingRef}>Ping: ...</div>
+           <div ref={resRef}>Res: ...</div>
+        </div>
+
         {/* Transform Wrapper for Pinch-to-Zoom and Base Scale */}
         <div 
           ref={transformWrapperRef}
