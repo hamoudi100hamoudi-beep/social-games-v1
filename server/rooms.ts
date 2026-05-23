@@ -143,6 +143,7 @@ class RoomManager {
     room.gameState.correctGuessers = [];
     room.gameState.hintsUsed = 0;
     room.gameState.revealedIndices = [];
+    room.gameState.drawHistory = [];
     room.gameState.timeLeft = 100;
     
     if (this.io) {
@@ -423,11 +424,12 @@ class RoomManager {
       room.players.forEach(p => {
         if (this.io) {
           const isDrawer = p.id === room.gameState.currentDrawerId;
+          const { drawHistory, ...publicGameState } = room.gameState;
           this.io.to(p.id).emit('room_state_update', {
             roomId: room.id,
             players: room.players,
             gameState: {
-               ...room.gameState,
+               ...publicGameState,
                currentWord: isDrawer ? room.gameState.currentWord : null,
                wordOptions: isDrawer ? room.gameState.wordOptions : [],
                maskedWordArray: maskedWordArray
@@ -451,7 +453,8 @@ class RoomManager {
           correctGuessers: [],
           turnQueue: [],
           hintsUsed: 0,
-          revealedIndices: []
+          revealedIndices: [],
+          drawHistory: []
         },
         usedWords: []
       });
@@ -461,6 +464,82 @@ class RoomManager {
 
   getRoom(roomId: string): Room | undefined {
     return this.rooms.get(roomId);
+  }
+
+  recordDrawCommand(roomId: string, event: string, data: any) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
+    //@ts-ignore
+    if (!room.gameState.redoStack) room.gameState.redoStack = [];
+    room.gameState.drawHistory.push({ event, data });
+    
+    // Any new drawing action clears the redo stack
+    //@ts-ignore
+    room.gameState.redoStack = [];
+  }
+
+  undoLastDrawing(roomId: string): {event: string, data: any}[] {
+    const room = this.rooms.get(roomId);
+    if (!room) return [];
+    if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
+    //@ts-ignore
+    if (!room.gameState.redoStack) room.gameState.redoStack = [];
+    
+    const history = room.gameState.drawHistory;
+    //@ts-ignore
+    const redoStack = room.gameState.redoStack;
+    
+    let endIndex = history.length - 1;
+    while (endIndex >= 0 && history[endIndex].event !== 'draw_end' && history[endIndex].event !== 'draw_action') {
+       endIndex--;
+    }
+    
+    if (endIndex >= 0) {
+      if (history[endIndex].event === 'draw_action') {
+        const removed = history.splice(endIndex, history.length - endIndex);
+        redoStack.push(removed);
+      } else {
+        let startIndex = endIndex;
+        while (startIndex >= 0 && history[startIndex].event !== 'draw_start') {
+           startIndex--;
+        }
+        if (startIndex >= 0) {
+           const removed = history.splice(startIndex, history.length - startIndex);
+           redoStack.push(removed);
+        }
+      }
+    }
+    return history;
+  }
+
+  redoDrawing(roomId: string): {event: string, data: any}[] {
+    const room = this.rooms.get(roomId);
+    if (!room) return [];
+    if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
+    //@ts-ignore
+    if (!room.gameState.redoStack) room.gameState.redoStack = [];
+    
+    const history = room.gameState.drawHistory;
+    //@ts-ignore
+    const redoStack = room.gameState.redoStack;
+    
+    if (redoStack.length > 0) {
+      const commandsToRestore = redoStack.pop();
+      if (commandsToRestore) {
+         history.push(...commandsToRestore);
+      }
+    }
+    return history;
+  }
+
+  clearDrawHistory(roomId: string) {
+    const room = this.rooms.get(roomId);
+    if (room && room.gameState.drawHistory) {
+      room.gameState.drawHistory = [];
+      //@ts-ignore
+      room.gameState.redoStack = [];
+    }
   }
 
   addPlayerToRoom(roomId: string, player: Player): Room {

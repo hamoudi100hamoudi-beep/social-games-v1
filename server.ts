@@ -59,11 +59,17 @@ async function startServer() {
         if (callback) callback({ success: true });
 
         // Broadcast updated room state
+        const { drawHistory, ...publicGameState } = room.gameState;
         io.to(roomId).emit('room_state_update', {
           roomId: room.id,
           players: room.players,
-          gameState: room.gameState
+          gameState: publicGameState
         });
+
+        // Send draw history strictly to the newly joined player
+        if (drawHistory && drawHistory.length > 0) {
+           socket.emit('draw_history_sync', drawHistory);
+        }
 
         // System Message
         io.to(roomId).emit('receive_message', {
@@ -84,10 +90,11 @@ async function startServer() {
         const playerName = player ? player.name : 'لاعب';
         const room = roomManager.removePlayerFromRoom(roomId, socket.id);
         if (room) {
+          const { drawHistory, ...publicGameState } = room.gameState;
           io.to(roomId).emit('room_state_update', {
             roomId: room.id,
             players: room.players,
-            gameState: room.gameState
+            gameState: publicGameState
           });
           io.to(roomId).emit('receive_message', {
             id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
@@ -103,32 +110,47 @@ async function startServer() {
     // Relay drawing events to other clients in the same room (if we had rooms), for now broadcast to all
     socket.on('draw_start', (data) => {
       const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_start', data);
+      if (player && player.roomId) {
+         roomManager.recordDrawCommand(player.roomId, 'draw_start', data);
+         socket.broadcast.to(player.roomId).emit('draw_start', data);
+      }
       else socket.broadcast.emit('draw_start', data);
     });
     
     socket.on('draw_move', (data) => {
       const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_move', data);
+      if (player && player.roomId) {
+         roomManager.recordDrawCommand(player.roomId, 'draw_move', data);
+         socket.broadcast.to(player.roomId).emit('draw_move', data);
+      }
       else socket.broadcast.emit('draw_move', data);
     });
     
     socket.on('draw_end', (data) => {
       const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_end', data);
+      if (player && player.roomId) {
+         roomManager.recordDrawCommand(player.roomId, 'draw_end', data);
+         socket.broadcast.to(player.roomId).emit('draw_end', data);
+      }
       else socket.broadcast.emit('draw_end', data);
     });
 
     socket.on('draw_action', (data) => {
       const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_action', data);
+      if (player && player.roomId) {
+         roomManager.recordDrawCommand(player.roomId, 'draw_action', data);
+         socket.broadcast.to(player.roomId).emit('draw_action', data);
+      }
       else socket.broadcast.emit('draw_action', data);
     });
 
     socket.on('draw_clear', (data) => {
       const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_clear', data);
-      else socket.broadcast.emit('draw_clear', data);
+      if (player && player.roomId) {
+         roomManager.clearDrawHistory(player.roomId);
+         io.to(player.roomId).emit('draw_clear', data); // Broadcasts to everyone including sender!
+      }
+      else io.emit('draw_clear', data);
     });
 
     socket.on('draw_cancel', (data) => {
@@ -139,14 +161,20 @@ async function startServer() {
 
     socket.on('draw_undo', (data) => {
       const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_undo', data);
-      else socket.broadcast.emit('draw_undo', data);
+      if (player && player.roomId) {
+         const history = roomManager.undoLastDrawing(player.roomId);
+         io.to(player.roomId).emit('draw_history_sync', history); // Broadcasts to everyone including sender!
+      }
+      else io.emit('draw_undo', data);
     });
 
     socket.on('draw_redo', (data) => {
       const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_redo', data);
-      else socket.broadcast.emit('draw_redo', data);
+      if (player && player.roomId) {
+         const history = roomManager.redoDrawing(player.roomId);
+         io.to(player.roomId).emit('draw_history_sync', history); // Broadcasts to everyone including sender!
+      }
+      else io.emit('draw_redo', data);
     });
     
     socket.on('skip_turn', () => {
@@ -200,10 +228,11 @@ async function startServer() {
           const playerName = player.name;
           const room = roomManager.removePlayerFromRoom(roomId, socket.id);
           if (room) {
+            const { drawHistory, ...publicGameState } = room.gameState;
             io.to(roomId).emit('room_state_update', {
               roomId: room.id,
               players: room.players,
-              gameState: room.gameState
+              gameState: publicGameState
             });
             io.to(roomId).emit('receive_message', {
               id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),

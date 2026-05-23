@@ -10,6 +10,7 @@ export interface GameState {
   revealedIndices: number[];
   roundEndReason?: 'timeout' | 'all_guessed' | 'drawer_left' | 'turn_lost' | 'skipped';
   roundEndWord?: string;
+  drawHistory?: {event: string, data: any}[];
 }
 
 export interface Player {

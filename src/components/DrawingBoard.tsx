@@ -396,7 +396,7 @@ export default function DrawingBoard({
       }
     };
 
-    const onDrawEnd = (data?: any) => {
+    const onDrawEnd = (data?: any, skipSave = false) => {
       if (data?.instanceId === instanceId) return;
       
       const tool = data?.tool || remoteProps.current.tool;
@@ -464,7 +464,7 @@ export default function DrawingBoard({
       }
 
       prevRemote.current = null;
-      saveHistory();
+      if (!skipSave) saveHistory();
     };
 
     const onDrawClear = (data?: any) => {
@@ -472,13 +472,13 @@ export default function DrawingBoard({
       clearCanvas(false);
     };
 
-    const onDrawAction = (data: any) => {
+    const onDrawAction = (data: any, skipSave = false) => {
       if (data.instanceId === instanceId) return;
       const ctx = ctxRef.current;
       if (!ctx) return;
       if (data.tool === 'bucket') {
         floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, data.color, data.opacity);
-        saveHistory();
+        if (!skipSave) saveHistory();
       }
     };
 
@@ -513,13 +513,28 @@ export default function DrawingBoard({
     socket.on('draw_action', onDrawAction);
 
     socket.on('draw_undo', (data?: any) => {
-      if (data?.instanceId === instanceId) return;
-      undo(false);
+      undo(false); // Called by server for everybody to fallback, but history is synced
     });
     
     socket.on('draw_redo', (data?: any) => {
       if (data?.instanceId === instanceId) return;
       redo(false);
+    });
+
+    socket.on('draw_history_sync', (commands: any[]) => {
+      const ctx = ctxRef.current;
+      if (!ctx) return;
+      ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+      
+      // Replay all commands
+      for (const cmd of commands) {
+         if (cmd.event === 'draw_start') onDrawStart(cmd.data);
+         else if (cmd.event === 'draw_move') onDrawMove(cmd.data);
+         else if (cmd.event === 'draw_end') onDrawEnd(cmd.data, true);
+         else if (cmd.event === 'draw_action') onDrawAction(cmd.data, true);
+      }
+      
+      saveHistory(); // Save the newly accumulated ImageData for local tools to reference properly
     });
 
     return () => {
@@ -530,6 +545,7 @@ export default function DrawingBoard({
       socket.off('draw_action', onDrawAction);
       socket.off('draw_undo');
       socket.off('draw_redo');
+      socket.off('draw_history_sync');
     };
   }, [socket]);
 
@@ -619,14 +635,14 @@ export default function DrawingBoard({
     if (emit && Date.now() - lastUndoTime.current < 200) return;
     if (emit) lastUndoTime.current = Date.now();
     
-    if (historyIndex.current > 0) {
+    if (emit && socket) {
+      socket.emit('draw_undo', { instanceId });
+    } else if (!emit && historyIndex.current > 0) {
+      // Local fallback (not used in server-driven mostly, unless needed)
       historyIndex.current--;
       const data = history.current[historyIndex.current];
       ctxRef.current?.putImageData(data, 0, 0);
       setHistoryState({ index: historyIndex.current, length: history.current.length });
-      if (emit && socket) {
-        socket.emit('draw_undo', { instanceId });
-      }
     }
   };
 
@@ -634,27 +650,25 @@ export default function DrawingBoard({
     if (emit && Date.now() - lastRedoTime.current < 200) return;
     if (emit) lastRedoTime.current = Date.now();
     
-    if (historyIndex.current < history.current.length - 1) {
+    if (emit && socket) {
+      socket.emit('draw_redo', { instanceId });
+    } else if (!emit && historyIndex.current < history.current.length - 1) {
       historyIndex.current++;
       const data = history.current[historyIndex.current];
       ctxRef.current?.putImageData(data, 0, 0);
       setHistoryState({ index: historyIndex.current, length: history.current.length });
-      if (emit && socket) {
-        socket.emit('draw_redo', { instanceId });
-      }
     }
   };
 
   const clearCanvas = (emit = true) => {
-    const canvas = canvasRef.current;
-    const ctx = ctxRef.current;
-    if (!canvas || !ctx) return;
-    
-    ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-    saveHistory();
-
     if (emit && socket) {
       socket.emit('draw_clear', { instanceId });
+    } else if (!emit) {
+      const canvas = canvasRef.current;
+      const ctx = ctxRef.current;
+      if (!canvas || !ctx) return;
+      ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+      saveHistory();
     }
   };
 
@@ -961,7 +975,25 @@ export default function DrawingBoard({
     
     if (socket) {
       if (tool === 'pencil' || tool === 'eraser') {
-        moveBatchRef.current.push({ x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT });
+        const normX = x / LOGICAL_WIDTH;
+        const normY = y / LOGICAL_HEIGHT;
+        let shouldAdd = true;
+        
+        // Adaptive Path Simplification for weak devices
+        if (DPR < 2 && moveBatchRef.current.length > 0) {
+           const lastPt = moveBatchRef.current[moveBatchRef.current.length - 1];
+           const dx = normX - lastPt.x;
+           const dy = normY - lastPt.y;
+           // If distance is less than 0.003 (approx 3 pixels), skip sending to network
+           if (dx * dx + dy * dy < 0.000009) {
+              shouldAdd = false;
+           }
+        }
+        
+        if (shouldAdd) {
+           moveBatchRef.current.push({ x: normX, y: normY });
+        }
+
         if (!throttleTimeoutRef.current) {
           throttleTimeoutRef.current = setTimeout(() => {
             if (socket && moveBatchRef.current.length > 0) {
@@ -972,7 +1004,7 @@ export default function DrawingBoard({
                moveBatchRef.current = [];
             }
             throttleTimeoutRef.current = null;
-          }, 16); // Batch ~60 times a second
+          }, DPR < 2 ? 26 : 16); // Optimize Batch Interval: 26ms for weak devices, 16ms for fast
         }
       } else {
         socket.emit('draw_move', {
