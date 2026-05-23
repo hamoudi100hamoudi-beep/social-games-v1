@@ -115,8 +115,8 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   ctx.putImageData(imageData, 0, 0);
 };
 
-const LOGICAL_WIDTH = 1200;
-const LOGICAL_HEIGHT = 900;
+const LOGICAL_WIDTH = 800;
+const LOGICAL_HEIGHT = 600;
 
 let _cachedDPR = 0;
 const getAdaptiveDPR = () => {
