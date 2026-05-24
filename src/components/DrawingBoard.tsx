@@ -330,10 +330,13 @@ export default function DrawingBoard({
 
         if (tool === 'pencil' || tool === 'eraser') {
           let activeCtx = tempCtx;
+          
+          // Use full redraw algorithm for remote curves too
+          activeCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
           activeCtx.beginPath();
+          activeCtx.lineWidth = width;
           activeCtx.lineCap = 'round';
           activeCtx.lineJoin = 'round';
-          activeCtx.lineWidth = width;
           activeCtx.globalAlpha = 1;
           activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
           
@@ -345,32 +348,33 @@ export default function DrawingBoard({
             activeCtx.shadowColor = 'transparent';
           }
           
-          const n = remotePathRef.current.length;
-          if (n >= 3) {
-            const p0 = remotePathRef.current[n - 3];
-            const p1 = remotePathRef.current[n - 2];
-            const p2 = remotePathRef.current[n - 1];
-            
-            const mid1X = (p0.x + p1.x) / 2;
-            const mid1Y = (p0.y + p1.y) / 2;
-            
-            const mid2X = (p1.x + p2.x) / 2;
-            const mid2Y = (p1.y + p2.y) / 2;
-            
-            activeCtx.moveTo(mid1X, mid1Y);
-            activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
-          } else if (n === 2) {
-            const p0 = remotePathRef.current[0];
-            const p1 = remotePathRef.current[1];
-            const midX = (p0.x + p1.x) / 2;
-            const midY = (p0.y + p1.y) / 2;
-            
-            activeCtx.moveTo(p0.x, p0.y);
-            activeCtx.lineTo(midX, midY);
-          }
+          const path = remotePathRef.current;
+          const n = path.length;
           
-          activeCtx.stroke();
-          activeCtx.shadowBlur = 0;
+          if (n === 1) {
+            activeCtx.fillStyle = activeCtx.strokeStyle;
+            activeCtx.arc(path[0].x, path[0].y, width / 2, 0, Math.PI * 2);
+            activeCtx.fill();
+          } else if (n === 2) {
+            activeCtx.moveTo(path[0].x, path[0].y);
+            activeCtx.lineTo(path[1].x, path[1].y);
+            activeCtx.stroke();
+          } else {
+            activeCtx.moveTo(path[0].x, path[0].y);
+            const mid1X = (path[0].x + path[1].x) / 2;
+            const mid1Y = (path[0].y + path[1].y) / 2;
+            activeCtx.lineTo(mid1X, mid1Y);
+            
+            for (let i = 1; i < n - 1; i++) {
+              const p1 = path[i];
+              const p2 = path[i + 1];
+              const mid2X = (p1.x + p2.x) / 2;
+              const mid2Y = (p1.y + p2.y) / 2;
+              activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
+            }
+            activeCtx.lineTo(path[n - 1].x, path[n - 1].y);
+            activeCtx.stroke();
+          }
         } else if (!isReplay) {
           const canvas = canvasRef.current;
           const lastData = history.current[historyIndex.current];
@@ -432,20 +436,6 @@ export default function DrawingBoard({
       if (tool === 'pencil' || tool === 'eraser') {
         const tempCanvas = tempCanvasRef.current;
         const tempCtx = tempCtxRef.current;
-        
-        if (tempCtx) {
-          const n = remotePathRef.current.length;
-          if (n >= 2) {
-            tempCtx.beginPath();
-            const p1 = remotePathRef.current[n - 2];
-            const p2 = remotePathRef.current[n - 1];
-            const midX = (p1.x + p2.x) / 2;
-            const midY = (p1.y + p2.y) / 2;
-            tempCtx.moveTo(midX, midY);
-            tempCtx.lineTo(p2.x, p2.y);
-            tempCtx.stroke();
-          }
-        }
         
         if (ctx && tempCanvas && tempCtx) {
           ctx.globalAlpha = opacity;
@@ -629,28 +619,30 @@ export default function DrawingBoard({
     setActiveMenu(null);
   };
 
+  const stateRefs = useRef({ tool, color, currentWidth: 5, currentOpacity: 1 });
 
   const currentWidth = tool === 'eraser' ? eraserWidth : penWidth;
   const currentOpacity = tool === 'eraser' ? eraserOpacity : (tool === 'bucket' ? bucketOpacity : penOpacity);
   
+  // Sync state refs for the rAF loop
+  stateRefs.current = { tool, color, currentWidth, currentOpacity };
+
   // History
   const history = useRef<ImageData[]>([]);
   const historyIndex = useRef(-1);
   const lastTouch = useRef({ dist: 0, x: 0, y: 0 });
   const currentPath = useRef<{x: number, y: number}[]>([]);
-  const renderPathIndexRef = useRef(1);
   const needsRenderRef = useRef(false);
   const pinchRef = useRef(false);
   const previousTool = useRef<ToolType>('pencil');
+  const flushLocalRenderRef = useRef<() => void>(() => {});
 
   // Synchronized animation frame loop for drawing
   useEffect(() => {
     let rAFId: number;
     
-    const renderLoop = () => {
-      rAFId = requestAnimationFrame(renderLoop);
-      
-      if (!isDrawing || !needsRenderRef.current) return;
+    const executeRender = (force = false) => {
+      if ((!isDrawing && !force) || !needsRenderRef.current) return;
       
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
@@ -667,38 +659,52 @@ export default function DrawingBoard({
       const x = lastPt.x;
       const y = lastPt.y;
 
+      const { tool, color, currentWidth, currentOpacity } = stateRefs.current;
+
       if (tool === 'pencil' || tool === 'eraser') {
         const activeCtx = tempCtx;
         
-        if (renderPathIndexRef.current < len) {
-          activeCtx.beginPath();
-          for (let i = renderPathIndexRef.current; i < len; i++) {
-            const p2 = path[i];
-            
-            if (i >= 2) {
-              const p0 = path[i - 2];
-              const p1 = path[i - 1];
-              
-              const mid1X = (p0.x + p1.x) / 2;
-              const mid1Y = (p0.y + p1.y) / 2;
-              
-              const mid2X = (p1.x + p2.x) / 2;
-              const mid2Y = (p1.y + p2.y) / 2;
-              
-              activeCtx.moveTo(mid1X, mid1Y);
-              activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
-            } else if (i === 1) {
-              const p0 = path[0];
-              const p1 = path[1];
-              const midX = (p0.x + p1.x) / 2;
-              const midY = (p0.y + p1.y) / 2;
-              
-              activeCtx.moveTo(p0.x, p0.y);
-              activeCtx.lineTo(midX, midY);
-            }
-          }
+        // Full redraw of the stroke avoids start-lag, end-clipping, and ensures smooth curves
+        activeCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        activeCtx.beginPath();
+        activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+        activeCtx.lineWidth = currentWidth;
+        activeCtx.lineCap = 'round';
+        activeCtx.lineJoin = 'round';
+        activeCtx.globalAlpha = 1;
+        
+        if (tool === 'pencil') {
+           activeCtx.shadowBlur = 1;
+           activeCtx.shadowColor = color;
+        } else {
+           activeCtx.shadowBlur = 0;
+           activeCtx.shadowColor = 'transparent';
+        }
+        
+        if (len === 1) {
+          // Draw an immediate dot so there's no lag
+          activeCtx.fillStyle = activeCtx.strokeStyle;
+          activeCtx.arc(path[0].x, path[0].y, currentWidth / 2, 0, Math.PI * 2);
+          activeCtx.fill();
+        } else if (len === 2) {
+          activeCtx.moveTo(path[0].x, path[0].y);
+          activeCtx.lineTo(path[1].x, path[1].y);
           activeCtx.stroke();
-          renderPathIndexRef.current = len;
+        } else {
+          activeCtx.moveTo(path[0].x, path[0].y);
+          const mid1X = (path[0].x + path[1].x) / 2;
+          const mid1Y = (path[0].y + path[1].y) / 2;
+          activeCtx.lineTo(mid1X, mid1Y);
+          
+          for (let i = 1; i < len - 1; i++) {
+             const p1 = path[i];
+             const p2 = path[i + 1];
+             const mid2X = (p1.x + p2.x) / 2;
+             const mid2Y = (p1.y + p2.y) / 2;
+             activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
+          }
+          activeCtx.lineTo(path[len - 1].x, path[len - 1].y);
+          activeCtx.stroke();
         }
       } else {
         const canvas = canvasRef.current;
@@ -737,16 +743,23 @@ export default function DrawingBoard({
           ctx.arc(startX, startY, radius, 0, Math.PI * 2);
           ctx.fill();
         }
-        
-        renderPathIndexRef.current = len;
       }
       
       needsRenderRef.current = false;
     };
     
-    rAFId = requestAnimationFrame(renderLoop);
+    flushLocalRenderRef.current = () => executeRender(true);
+
+    const runRaf = () => {
+      rAFId = requestAnimationFrame(runRaf);
+      executeRender();
+    };
+    
+    if (isDrawing) {
+      rAFId = requestAnimationFrame(runRaf);
+    }
     return () => cancelAnimationFrame(rAFId);
-  }, [isDrawing, tool, color, currentWidth, currentOpacity]);
+  }, [isDrawing]);
 
   // Init canvas
   useEffect(() => {
@@ -981,7 +994,6 @@ export default function DrawingBoard({
     }
 
     currentPath.current = [{x, y}];
-    renderPathIndexRef.current = 1;
     needsRenderRef.current = true;
     setIsDrawing(true);
     
@@ -990,6 +1002,7 @@ export default function DrawingBoard({
     
     if (tool === 'pencil' || tool === 'eraser') {
       tempCanvas.style.opacity = currentOpacity.toString();
+
       activeCtx.globalAlpha = 1; // Draw solid on temp canvas, css handles opacity
       activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
       
