@@ -446,17 +446,8 @@ export default function DrawingBoard({
           ctx.globalAlpha = 1;
         }
       } else if (data && data.x !== undefined && data.y !== undefined && ctx) {
-        // Redraw exact final shape for line and shapes
-        if (!isReplay) {
-          const canvas = canvasRef.current;
-          const lastData = history.current[historyIndex.current];
-          if (lastData) {
-            ctx.putImageData(lastData, 0, 0);
-          } else if (canvas) {
-            ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-          }
-        }
-        
+        // Draw exact final shape for line and shapes without restoring local history
+        // since we no longer dirty the canvas with shape previews.
         ctx.beginPath();
         const activeColor = data.color || color;
         ctx.strokeStyle = activeColor;
@@ -707,41 +698,36 @@ export default function DrawingBoard({
           activeCtx.stroke();
         }
       } else {
-        const canvas = canvasRef.current;
-        const baseImage = history.current[historyIndex.current];
-        if (baseImage) {
-          ctx.putImageData(baseImage, 0, 0);
-        } else if (canvas) {
-          ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-        }
+        const activeCtx = tempCtx;
+        activeCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
-        ctx.beginPath();
-        ctx.strokeStyle = color;
-        ctx.fillStyle = color;
-        ctx.lineWidth = currentWidth;
-        ctx.globalAlpha = currentOpacity;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.shadowBlur = 0;
-        ctx.shadowColor = 'transparent';
+        activeCtx.beginPath();
+        activeCtx.strokeStyle = color;
+        activeCtx.fillStyle = color;
+        activeCtx.lineWidth = currentWidth;
+        activeCtx.globalAlpha = 1; // opacity is managed by tempCanvas css
+        activeCtx.lineCap = 'round';
+        activeCtx.lineJoin = 'round';
+        activeCtx.shadowBlur = 0;
+        activeCtx.shadowColor = 'transparent';
 
         if (tool === 'line') {
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(x, y);
-          ctx.stroke();
+          activeCtx.moveTo(startX, startY);
+          activeCtx.lineTo(x, y);
+          activeCtx.stroke();
         } else if (tool === 'strokeRect') {
-          ctx.lineJoin = 'miter';
-          ctx.strokeRect(startX, startY, x - startX, y - startY);
+          activeCtx.lineJoin = 'miter';
+          activeCtx.strokeRect(startX, startY, x - startX, y - startY);
         } else if (tool === 'fillRect') {
-          ctx.fillRect(startX, startY, x - startX, y - startY);
+          activeCtx.fillRect(startX, startY, x - startX, y - startY);
         } else if (tool === 'strokeCircle') {
           const radius = Math.hypot(x - startX, y - startY);
-          ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-          ctx.stroke();
+          activeCtx.arc(startX, startY, radius, 0, Math.PI * 2);
+          activeCtx.stroke();
         } else if (tool === 'fillCircle') {
           const radius = Math.hypot(x - startX, y - startY);
-          ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-          ctx.fill();
+          activeCtx.arc(startX, startY, radius, 0, Math.PI * 2);
+          activeCtx.fill();
         }
       }
       
@@ -998,20 +984,12 @@ export default function DrawingBoard({
     setIsDrawing(true);
     
     // Choose context based on tool
-    let activeCtx = (tool === 'pencil' || tool === 'eraser') ? tempCtx : ctx;
+    let activeCtx = tempCtx;
     
-    if (tool === 'pencil' || tool === 'eraser') {
+    if (tool !== 'bucket' && tool !== 'pipette') {
       tempCanvas.style.opacity = currentOpacity.toString();
-
       activeCtx.globalAlpha = 1; // Draw solid on temp canvas, css handles opacity
       activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
-      
-      // We always draw with source-over on the tempCanvas, even for eraser. 
-      // The erasing part (destination-out) happens when we composite onto the main canvas in handlePointerUp
-      activeCtx.globalCompositeOperation = 'source-over';
-    } else {
-      activeCtx.globalAlpha = currentOpacity;
-      activeCtx.strokeStyle = color;
       activeCtx.fillStyle = color;
       activeCtx.globalCompositeOperation = 'source-over';
     }
@@ -1021,7 +999,7 @@ export default function DrawingBoard({
     activeCtx.lineJoin = 'round';
     activeCtx.lineWidth = currentWidth;
     
-    if (socket && (tool === 'pencil' || tool === 'eraser' || tool === 'line' || tool === 'strokeRect' || tool === 'fillRect' || tool === 'strokeCircle' || tool === 'fillCircle')) {
+    if (socket && (tool === 'pencil' || tool === 'eraser')) {
        socket.emit('draw_start', {
           instanceId, tool, color, width: currentWidth, opacity: currentOpacity,
           x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
@@ -1048,7 +1026,7 @@ export default function DrawingBoard({
       activeCtx.fill();
     }
     
-    ctx.shadowBlur = 0;
+    if (ctx) ctx.shadowBlur = 0;
   };
 
   const handlePointerMove = (e: React.TouchEvent | React.MouseEvent) => {
@@ -1163,10 +1141,6 @@ export default function DrawingBoard({
             throttleTimeoutRef.current = null;
           }, DPR < 2 ? 26 : 16); // Optimize Batch Interval: 26ms for weak devices, 16ms for fast
         }
-      } else {
-        socket.emit('draw_move', {
-          instanceId, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
-        });
       }
     }
   };
@@ -1217,19 +1191,22 @@ export default function DrawingBoard({
       setIsDrawing(false);
       needsRenderRef.current = false;
 
-      if (tool === 'pencil' || tool === 'eraser') {
+      if (tool !== 'bucket' && tool !== 'pipette') {
         const tempCtx = tempCtxRef.current;
-        if (tempCtx) {
-          const n = currentPath.current.length;
-          if (n >= 2) {
-            tempCtx.beginPath();
-            const p1 = currentPath.current[n - 2];
-            const p2 = currentPath.current[n - 1];
-            const midX = (p1.x + p2.x) / 2;
-            const midY = (p1.y + p2.y) / 2;
-            tempCtx.moveTo(midX, midY);
-            tempCtx.lineTo(p2.x, p2.y);
-            tempCtx.stroke();
+        
+        if (tool === 'pencil' || tool === 'eraser') {
+          if (tempCtx) {
+            const n = currentPath.current.length;
+            if (n >= 2) {
+              tempCtx.beginPath();
+              const p1 = currentPath.current[n - 2];
+              const p2 = currentPath.current[n - 1];
+              const midX = (p1.x + p2.x) / 2;
+              const midY = (p1.y + p2.y) / 2;
+              tempCtx.moveTo(midX, midY);
+              tempCtx.lineTo(p2.x, p2.y);
+              tempCtx.stroke();
+            }
           }
         }
 
