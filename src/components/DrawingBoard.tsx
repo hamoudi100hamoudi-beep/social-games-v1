@@ -26,7 +26,20 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const canvas = ctx.canvas;
   const cw = canvas.width, ch = canvas.height;
   
-  const imageData = ctx.getImageData(0, 0, cw, ch);
+  let offscreenCanvas: HTMLCanvasElement | null = document.createElement('canvas');
+  offscreenCanvas.width = cw;
+  offscreenCanvas.height = ch;
+  const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+  if (!offscreenCtx) {
+     offscreenCanvas.width = 0;
+     offscreenCanvas.height = 0;
+     offscreenCanvas = null;
+     return;
+  }
+  
+  offscreenCtx.drawImage(canvas, 0, 0);
+  
+  const imageData = offscreenCtx.getImageData(0, 0, cw, ch);
   const data = imageData.data;
   
   const sx = Math.floor(startX * DPR);
@@ -112,7 +125,18 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
       pixelIdx++;
     }
   }
-  ctx.putImageData(imageData, 0, 0);
+  
+  offscreenCtx.putImageData(imageData, 0, 0);
+  
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(offscreenCanvas, 0, 0);
+  ctx.restore();
+  
+  offscreenCanvas.width = 0;
+  offscreenCanvas.height = 0;
+  offscreenCanvas = null;
 };
 
 const LOGICAL_WIDTH = 800;
@@ -759,7 +783,7 @@ export default function DrawingBoard({
     tempCanvas.width = LOGICAL_WIDTH * DPR;
     tempCanvas.height = LOGICAL_HEIGHT * DPR;
     
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const ctx = canvas.getContext('2d');
     const tempCtx = tempCanvas.getContext('2d');
     if (ctx && tempCtx) {
       ctx.scale(DPR, DPR);
@@ -1161,12 +1185,24 @@ export default function DrawingBoard({
                });
             }
           } else if (tool === 'pipette') {
-            const rx = Math.floor(x * DPR);
-            const ry = Math.floor(y * DPR);
-            const pData = ctx.getImageData(rx, ry, 1, 1).data;
-            const hex = "#" + ("000000" + ((pData[0] << 16) | (pData[1] << 8) | pData[2]).toString(16)).slice(-6);
-            setColor(hex);
-            changeTool(previousTool.current);
+            let offscreenCanvas: HTMLCanvasElement | null = document.createElement('canvas');
+            offscreenCanvas.width = ctx.canvas.width;
+            offscreenCanvas.height = ctx.canvas.height;
+            const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+            
+            if (offscreenCtx) {
+              offscreenCtx.drawImage(ctx.canvas, 0, 0);
+              const rx = Math.floor(x * DPR);
+              const ry = Math.floor(y * DPR);
+              const pData = offscreenCtx.getImageData(rx, ry, 1, 1).data;
+              const hex = "#" + ("000000" + ((pData[0] << 16) | (pData[1] << 8) | pData[2]).toString(16)).slice(-6);
+              setColor(hex);
+              changeTool(previousTool.current);
+            }
+            
+            offscreenCanvas.width = 0;
+            offscreenCanvas.height = 0;
+            offscreenCanvas = null;
           }
         }
       }
