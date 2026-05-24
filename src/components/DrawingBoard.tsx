@@ -173,7 +173,7 @@ export default function DrawingBoard({
   timerBarNode?: React.ReactNode;
   key?: any;
 }) {
-  const instanceId = useId();
+  const instanceId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
   const { socket } = useSocket();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tempCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -651,6 +651,20 @@ export default function DrawingBoard({
   const pinchRef = useRef(false);
   const previousTool = useRef<ToolType>('pencil');
   const flushLocalRenderRef = useRef<() => void>(() => {});
+
+  // Ensure pointer up is never missed even if pointer leaves window
+  useEffect(() => {
+    if (!isDrawing) return;
+    const handleGlobalUp = (e: MouseEvent | TouchEvent) => {
+      handlePointerUp(e as any);
+    };
+    window.addEventListener('mouseup', handleGlobalUp);
+    window.addEventListener('touchend', handleGlobalUp);
+    return () => {
+      window.removeEventListener('mouseup', handleGlobalUp);
+      window.removeEventListener('touchend', handleGlobalUp);
+    };
+  }, [isDrawing]); // Note: handlePointerUp will be stale if tool changes mid-draw, but isDrawing prevents this.
 
   // Synchronized animation frame loop for drawing
   useEffect(() => {
@@ -1322,7 +1336,7 @@ export default function DrawingBoard({
             onMouseDown={handlePointerDown}
             onMouseMove={handlePointerMove}
             onMouseUp={handlePointerUp}
-            onMouseOut={handlePointerUp}
+            onMouseLeave={handlePointerUp}
             onTouchStart={handlePointerDown}
             onTouchMove={handlePointerMove}
             onTouchEnd={handlePointerUp}
