@@ -129,8 +129,9 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   offscreenCtx.putImageData(imageData, 0, 0);
   
   ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // Ignore DPR scaling for exact physical pixel copy
   ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalCompositeOperation = 'copy';
   ctx.drawImage(offscreenCanvas, 0, 0);
   ctx.restore();
   
