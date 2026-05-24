@@ -254,7 +254,7 @@ export default function DrawingBoard({
     };
   };
   
-  const prevRemote = useRef<{x: number, y: number} | null>(null);
+  const remotePathRef = useRef<{x: number, y: number}[]>([]);
   const remoteProps = useRef({ tool: 'pencil', color: '#000', width: 5, opacity: 1 });
 
   useEffect(() => {
@@ -265,7 +265,7 @@ export default function DrawingBoard({
       remoteProps.current = data;
       const x = data.x * LOGICAL_WIDTH;
       const y = data.y * LOGICAL_HEIGHT;
-      prevRemote.current = {x, y};
+      remotePathRef.current = [{x, y}];
 
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
@@ -319,12 +319,14 @@ export default function DrawingBoard({
       if (!isReplay && data.instanceId === instanceId) return;
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
-      if (!ctx || !tempCtx || !prevRemote.current) return;
+      if (!ctx || !tempCtx || !remotePathRef.current || remotePathRef.current.length === 0) return;
       const { color, width, tool, opacity } = remoteProps.current;
       
       const processPoint = (ptX: number, ptY: number) => {
         const x = ptX * LOGICAL_WIDTH;
         const y = ptY * LOGICAL_HEIGHT;
+
+        remotePathRef.current.push({x, y});
 
         if (tool === 'pencil' || tool === 'eraser') {
           let activeCtx = tempCtx;
@@ -334,8 +336,6 @@ export default function DrawingBoard({
           activeCtx.lineWidth = width;
           activeCtx.globalAlpha = 1;
           activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
-          activeCtx.moveTo(prevRemote.current!.x, prevRemote.current!.y);
-          activeCtx.lineTo(x, y);
           
           if (tool === 'pencil') {
             activeCtx.shadowBlur = 1;
@@ -345,9 +345,32 @@ export default function DrawingBoard({
             activeCtx.shadowColor = 'transparent';
           }
           
+          const n = remotePathRef.current.length;
+          if (n >= 3) {
+            const p0 = remotePathRef.current[n - 3];
+            const p1 = remotePathRef.current[n - 2];
+            const p2 = remotePathRef.current[n - 1];
+            
+            const mid1X = (p0.x + p1.x) / 2;
+            const mid1Y = (p0.y + p1.y) / 2;
+            
+            const mid2X = (p1.x + p2.x) / 2;
+            const mid2Y = (p1.y + p2.y) / 2;
+            
+            activeCtx.moveTo(mid1X, mid1Y);
+            activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
+          } else if (n === 2) {
+            const p0 = remotePathRef.current[0];
+            const p1 = remotePathRef.current[1];
+            const midX = (p0.x + p1.x) / 2;
+            const midY = (p0.y + p1.y) / 2;
+            
+            activeCtx.moveTo(p0.x, p0.y);
+            activeCtx.lineTo(midX, midY);
+          }
+          
           activeCtx.stroke();
           activeCtx.shadowBlur = 0;
-          prevRemote.current = {x, y};
         } else if (!isReplay) {
           const canvas = canvasRef.current;
           const lastData = history.current[historyIndex.current];
@@ -363,8 +386,8 @@ export default function DrawingBoard({
           ctx.lineWidth = width;
           ctx.globalAlpha = opacity;
 
-          const startX = prevRemote.current!.x;
-          const startY = prevRemote.current!.y;
+          const startX = remotePathRef.current[0].x;
+          const startY = remotePathRef.current[0].y;
 
           if (tool === 'line') {
             ctx.moveTo(startX, startY);
@@ -409,6 +432,21 @@ export default function DrawingBoard({
       if (tool === 'pencil' || tool === 'eraser') {
         const tempCanvas = tempCanvasRef.current;
         const tempCtx = tempCtxRef.current;
+        
+        if (tempCtx) {
+          const n = remotePathRef.current.length;
+          if (n >= 2) {
+            tempCtx.beginPath();
+            const p1 = remotePathRef.current[n - 2];
+            const p2 = remotePathRef.current[n - 1];
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+            tempCtx.moveTo(midX, midY);
+            tempCtx.lineTo(p2.x, p2.y);
+            tempCtx.stroke();
+          }
+        }
+        
         if (ctx && tempCanvas && tempCtx) {
           ctx.globalAlpha = opacity;
           ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
@@ -466,7 +504,7 @@ export default function DrawingBoard({
         ctx.globalAlpha = 1;
       }
 
-      prevRemote.current = null;
+      remotePathRef.current = [];
       if (!skipSave) saveHistory();
     };
 
@@ -505,7 +543,7 @@ export default function DrawingBoard({
            }
         }
       }
-      prevRemote.current = null;
+      remotePathRef.current = [];
     };
 
     socket.on('draw_start', onDrawStart);
@@ -973,11 +1011,32 @@ export default function DrawingBoard({
     const startY = currentPath.current[0].y;
 
     if (tool === 'pencil' || tool === 'eraser') {
-      // Point-to-point fast drawing
-      const activeCtx = (tool === 'pencil' || tool === 'eraser') ? tempCtx : ctx;
+      const activeCtx = tempCtx;
       activeCtx.beginPath();
-      activeCtx.moveTo(prev.x, prev.y);
-      activeCtx.lineTo(x, y);
+      
+      const n = currentPath.current.length;
+      if (n >= 3) {
+        const p0 = currentPath.current[n - 3];
+        const p1 = currentPath.current[n - 2];
+        const p2 = currentPath.current[n - 1];
+        
+        const mid1X = (p0.x + p1.x) / 2;
+        const mid1Y = (p0.y + p1.y) / 2;
+        
+        const mid2X = (p1.x + p2.x) / 2;
+        const mid2Y = (p1.y + p2.y) / 2;
+        
+        activeCtx.moveTo(mid1X, mid1Y);
+        activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
+      } else if (n === 2) {
+        const p0 = currentPath.current[0];
+        const p1 = currentPath.current[1];
+        const midX = (p0.x + p1.x) / 2;
+        const midY = (p0.y + p1.y) / 2;
+        
+        activeCtx.moveTo(p0.x, p0.y);
+        activeCtx.lineTo(midX, midY);
+      }
       activeCtx.stroke();
     } else {
       // Shape tools need preview redrawing
@@ -1106,9 +1165,23 @@ export default function DrawingBoard({
       setIsDrawing(false);
 
       if (tool === 'pencil' || tool === 'eraser') {
+        const tempCtx = tempCtxRef.current;
+        if (tempCtx) {
+          const n = currentPath.current.length;
+          if (n >= 2) {
+            tempCtx.beginPath();
+            const p1 = currentPath.current[n - 2];
+            const p2 = currentPath.current[n - 1];
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+            tempCtx.moveTo(midX, midY);
+            tempCtx.lineTo(p2.x, p2.y);
+            tempCtx.stroke();
+          }
+        }
+
         const ctx = ctxRef.current;
         const tempCanvas = tempCanvasRef.current;
-        const tempCtx = tempCtxRef.current;
         if (ctx && tempCanvas && tempCtx) {
           ctx.globalAlpha = currentOpacity;
           ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
