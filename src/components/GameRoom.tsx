@@ -330,12 +330,21 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   useEffect(() => {
     if (!socket) return;
     
-    socket.emit('join_room', {
-      roomId: room,
-      nickname,
-      avatar: avatar || nickname.charAt(0).toUpperCase(),
-      playerId: persistentPlayerId
-    });
+    const emitJoinRoom = () => {
+      console.log('[GameRoom] Joining room:', room, 'with playerId:', persistentPlayerId, 'socket:', socket.id);
+      socket.emit('join_room', {
+        roomId: room,
+        nickname,
+        avatar: avatar || nickname.charAt(0).toUpperCase(),
+        playerId: persistentPlayerId
+      });
+    };
+
+    // Emit immediately for initial mount
+    emitJoinRoom();
+
+    // Listen to connect event to automatically join on reconnection under the hood
+    socket.on('connect', emitJoinRoom);
 
     const onRoomStateUpdate = (state: { roomId: string, players: any[], gameState: any }) => {
       const isActiveRound = state.gameState?.status === 'DRAWING' || state.gameState?.status === 'CHOOSING';
@@ -414,13 +423,13 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     socket.on('timer_tick', onTimerTick);
 
     return () => {
-      socket.emit('leave_room', { roomId: room });
+      socket.off('connect', emitJoinRoom);
       socket.off('room_state_update', onRoomStateUpdate);
       socket.off('receive_message', onReceiveMessage);
       socket.off('receive_guess', onReceiveGuess);
       socket.off('timer_tick', onTimerTick);
     };
-  }, [socket, nickname, room]);
+  }, [socket, nickname, room, persistentPlayerId]);
 
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);

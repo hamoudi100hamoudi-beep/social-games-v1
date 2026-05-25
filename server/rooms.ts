@@ -101,10 +101,10 @@ class RoomManager {
         return p && !p.isOffline;
       }).length;
 
-      if (gameState.timeLeft <= 0 || activeGuessersCount === 0) {
-        // Time is up or no online guessers left
+      if (gameState.timeLeft <= 0) {
+        // Time is up
         this.transitionToRoundEnd(room, 'timeout');
-      } else if (onlineCorrectGuessersCount > 0 && onlineCorrectGuessersCount >= activeGuessersCount) {
+      } else if (activeGuessersCount > 0 && onlineCorrectGuessersCount >= activeGuessersCount) {
         // Everyone online guessed correctly
         this.transitionToRoundEnd(room, 'all_guessed');
       }
@@ -409,7 +409,7 @@ class RoomManager {
          room.gameState.timeLeft = Math.max(1, room.gameState.timeLeft - timeReduction);
       }
 
-      if (onlineCorrectGuessersCount >= activeGuessersCount) {
+      if (activeGuessersCount > 0 && onlineCorrectGuessersCount >= activeGuessersCount) {
         this.transitionToRoundEnd(room, 'all_guessed');
       } else {
         this.broadcastState(room);

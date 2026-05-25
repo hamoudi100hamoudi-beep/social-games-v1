@@ -17,8 +17,33 @@ type Screen = 'home' | 'rooms';
 export default function Lobby({ onPlay }: LobbyProps) {
   const { socket } = useSocket();
   const [screen, setScreen] = useState<Screen>('home');
-  const [nickname, setNickname] = useState('');
-  const [avatarIndex, setAvatarIndex] = useState(Math.floor(Math.random() * AVATARS.length));
+  const [nickname, setNickname] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gartic_player_nickname') || '';
+    }
+    return '';
+  });
+  const [avatarIndex, setAvatarIndex] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gartic_player_avatar_index');
+      if (saved !== null) {
+        return parseInt(saved, 10);
+      }
+    }
+    return Math.floor(Math.random() * AVATARS.length);
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('gartic_player_nickname', nickname);
+    }
+  }, [nickname]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('gartic_player_avatar_index', avatarIndex.toString());
+    }
+  }, [avatarIndex]);
   const [showAvatarGrid, setShowAvatarGrid] = useState(false);
   const [nicknameError, setNicknameError] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
