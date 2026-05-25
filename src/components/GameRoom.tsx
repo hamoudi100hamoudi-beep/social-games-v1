@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import DrawingBoard from './DrawingBoard';
-import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon, Pencil, Copy, Check, Clock } from 'lucide-react';
+import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon, Pencil, Copy, Check, Clock, WifiOff } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -22,7 +22,7 @@ interface Message {
   color?: string;
 }
 
-type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string; wins?: number; isOffline?: boolean };
+type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string; wins?: number; isOffline?: boolean; };
 
 interface HitNotification {
   id: string;
@@ -275,20 +275,9 @@ const SmoothTimer = ({ gameState, maxTime, isFullScreen = false }: { gameState: 
 export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomProps) {
   const { socket } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isReconnecting, setIsReconnecting] = useState(false);
   const bgTouchStartTime = React.useRef<number>(0);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
-  const persistentIdRef = React.useRef<string>('');
-
-  useEffect(() => {
-    let id = localStorage.getItem('gartic_player_id');
-    if (!id) {
-      id = 'usr_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
-      localStorage.setItem('gartic_player_id', id);
-    }
-    persistentIdRef.current = id;
-  }, []);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -325,35 +314,17 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   
   const [guesses, setGuesses] = useState<Message[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
-  const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
+  const isDrawingMode = gameState.status === 'DRAWING' && gameState.currentDrawerId === socket?.id;
 
   useEffect(() => {
     if (!socket) return;
     
-    const joinRoom = () => {
-      setIsReconnecting(false);
-      socket.emit('join_room', {
-        roomId: room,
-        nickname,
-        persistentId: persistentIdRef.current,
-        avatar: avatar || nickname.charAt(0).toUpperCase()
-      });
-    };
-
-    // Join initially
-    joinRoom();
-
-    const onConnect = () => {
-      joinRoom();
-    };
-
-    const onDisconnect = () => {
-      setIsReconnecting(true);
-    };
-
-    socket.on('connect', onConnect);
-    socket.on('disconnect', onDisconnect);
+    socket.emit('join_room', {
+      roomId: room,
+      nickname,
+      avatar: avatar || nickname.charAt(0).toUpperCase()
+    });
 
     const onRoomStateUpdate = (state: { roomId: string, players: any[], gameState: any }) => {
       const isActiveRound = state.gameState?.status === 'DRAWING' || state.gameState?.status === 'CHOOSING';
@@ -362,8 +333,8 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
         name: p.name,
         points: p.score || 0,
         wins: p.wins || 0,
-        isOffline: p.isOffline,
         isCurrent: isActiveRound && state.gameState?.currentDrawerId === p.id,
+        isOffline: p.isOffline || false,
         avatar: p.avatar,
         isEmpty: false
       })).sort((a, b) => b.points - a.points);
@@ -386,7 +357,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
       setChatMessages((prev) => {
         const updated = [...prev, {
           ...msg,
-          isSelf: msg.senderId === persistentIdRef.current
+          isSelf: msg.senderId === socket.id
         }];
         return updated.slice(-40);
       });
@@ -403,13 +374,13 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
       setGuesses((prev) => {
         const updated = [...prev, {
           ...msg,
-          isSelf: msg.senderId === persistentIdRef.current
+          isSelf: msg.senderId === socket.id
         }];
         return updated.slice(-40);
       });
       
       if (msg.subType === 'hit') {
-         if (msg.senderId === persistentIdRef.current) {
+         if (msg.senderId === socket.id) {
              setShowCorrectAnimation(true);
              setTimeout(() => setShowCorrectAnimation(false), 1200);
          }
@@ -433,8 +404,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
     return () => {
       socket.emit('leave_room', { roomId: room });
-      socket.off('connect', onConnect);
-      socket.off('disconnect', onDisconnect);
       socket.off('room_state_update', onRoomStateUpdate);
       socket.off('receive_message', onReceiveMessage);
       socket.off('receive_guess', onReceiveGuess);
@@ -499,8 +468,8 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     gameState.status === 'ROUND_END' || 
     gameState.status === 'PODIUM' || 
     gameState.status === 'CHOOSING' || 
-    gameState.currentDrawerId === persistentIdRef.current || 
-    gameState.correctGuessers?.includes(persistentIdRef.current || '');
+    gameState.currentDrawerId === socket?.id || 
+    gameState.correctGuessers?.includes(socket?.id || '');
 
   useEffect(() => {
     if (isInputDisabled) {
@@ -513,7 +482,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guessInput.trim() || gameState.correctGuessers?.includes(persistentIdRef.current) || gameState.currentDrawerId === persistentIdRef.current) return;
+    if (!guessInput.trim() || gameState.correctGuessers?.includes(socket?.id) || gameState.currentDrawerId === socket?.id) return;
     
     socket?.emit('submit_guess', { guess: guessInput.trim() });
     setGuessInput('');
@@ -542,22 +511,15 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
   const handleWordSelect = (word: string) => {
     socket?.emit('select_word', { word });
-    setIsDrawingMode(true);
   };
-
-  useEffect(() => {
-    if (gameState.status !== 'DRAWING' || gameState.currentDrawerId !== persistentIdRef.current) {
-       setIsDrawingMode(false);
-    }
-  }, [gameState.status, gameState.currentDrawerId, persistentIdRef.current]);
 
   const renderWordOverlay = (isFullScreenMode: boolean = false) => {
      if (gameState.status !== 'DRAWING') return null;
-     if (gameState.currentDrawerId === persistentIdRef.current && !isFullScreenMode) return null;
+     if (gameState.currentDrawerId === socket?.id && !isFullScreenMode) return null;
      return (
         <div className="absolute top-1 sm:top-2 left-0 right-0 flex items-center justify-center z-[150] pointer-events-none drop-shadow-md">
            {(() => {
-               const isDrawer = gameState.currentDrawerId === persistentIdRef.current;
+               const isDrawer = gameState.currentDrawerId === socket?.id;
                const hintsUsed = gameState.hintsUsed || 0;
                const maskedArray = gameState.maskedWordArray || [];
 
@@ -641,12 +603,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
           gridTemplateRows: 'auto minmax(0, 1fr)'
         }}
       >
-        {isReconnecting && (
-           <div className="fixed inset-0 z-[999] backdrop-blur-md bg-black/40 flex flex-col items-center justify-center text-white pointer-events-auto shadow-[inset_0_0_100px_rgba(0,0,0,0.8)]">
-              <div className="w-12 h-12 border-4 border-[#00D9FF] border-t-transparent rounded-full animate-spin mb-4" />
-              <div className="text-lg font-bold bg-[#1A103C]/80 px-6 py-2 rounded-full border border-[#00D9FF]/30">جارٍ إعادة الاتصال بالشبكة...</div>
-           </div>
-        )}
         {/* Global Exit Room Button */}
         <button 
           onClick={() => setShowExitConfirm(true)}
@@ -788,7 +744,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
           <DrawingBoard 
             key={gameState.currentDrawerId || 'lobby'}
-            readOnly={gameState.currentDrawerId !== persistentIdRef.current}
+            readOnly={gameState.currentDrawerId !== socket?.id}
             timerPercentage={timerPercentage}
           />
           
@@ -851,7 +807,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
           )}
 
           {/* Overlays for CHOOSING state (non-drawer) */}
-          {gameState.status === 'CHOOSING' && gameState.currentDrawerId !== persistentIdRef.current && (
+          {gameState.status === 'CHOOSING' && gameState.currentDrawerId !== socket?.id && (
              <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
                 <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
                    <div className="mb-4">
@@ -878,7 +834,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
           {gameState.status === 'ROUND_END' && (() => {
              const reason = gameState.roundEndReason;
              const word = gameState.roundEndWord || '';
-             const isDrawer = gameState.currentDrawerId === persistentIdRef.current;
+             const isDrawer = gameState.currentDrawerId === socket?.id;
              const drawerName = getCurrentDrawerName() || 'الرسام';
              const hasSucceeded = (gameState.correctGuessers || []).length > 0;
 
@@ -1096,7 +1052,12 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
             let nameClass = 'text-white';
             let ptsClass = 'text-[#7C4DFF]';
 
-            if (isDrawer) {
+            if (slot.isOffline) {
+               bgClass = 'bg-[#EF4444]/5 opacity-60'; 
+               borderClass = 'border-[#EF4444]/40';
+               nameClass = 'text-white/50';
+               ptsClass = 'text-white/40';
+            } else if (isDrawer) {
                bgClass = 'bg-[#00D9FF]/10'; // Cyan bg
                borderClass = 'border-[#00D9FF]'; // Cyan border
                nameClass = 'text-[#00D9FF]';
@@ -1115,7 +1076,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                 layout="position" // Only animate positional changes (reordering) to avoid height morphing delay
                 transition={{ type: "tween", duration: 0.15 }}
                 key={slot.id} 
-                className={`flex items-center p-2 sm:p-4 border-b border-[#00D9FF]/10 h-[65px] sm:h-[80px] shrink-0 transition-opacity duration-200 ${bgClass} ${slot.isOffline ? 'opacity-40 grayscale' : 'opacity-100'}`}
+                className={`flex items-center p-2 sm:p-4 border-b border-[#00D9FF]/10 h-[65px] sm:h-[80px] shrink-0 transition-colors duration-200 ${bgClass}`}
               >
                 {/* Avatar */}
                 <div className="relative shrink-0 mr-2 sm:mr-3">
@@ -1139,13 +1100,23 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                         <Pencil size={10} strokeWidth={3} className="text-[#1A103C]" />
                      </div>
                    )}
+                   {!slot.isEmpty && slot.isOffline && (
+                     <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 rounded-full border-2 border-[#1A103C] flex items-center justify-center shadow-sm z-10" title="منقطع">
+                        <WifiOff size={10} strokeWidth={2.5} className="text-white" />
+                     </div>
+                   )}
                 </div>
                 
                 {/* Info */}
-                <div className="flex flex-col justify-center overflow-hidden w-full">
+                <div className="flex flex-col justify-center overflow-hidden">
                    <span className={`font-bold flex items-center gap-1 text-[12px] sm:text-[15px] truncate max-w-full transition-colors duration-200
                      ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
-                     <span className="truncate flex-1">{slot.name} {slot.isOffline && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 py-0.5 rounded ml-1">Offline</span>}</span>
+                     <span className="truncate">{slot.name}</span>
+                     {!slot.isEmpty && slot.isOffline && (
+                       <span className="text-red-400 text-[10px] font-bold shrink-0 bg-red-950/40 px-1 py-0.5 rounded border border-red-500/20 flex items-center gap-0.5" title="اتصال منقطع">
+                         منقطع
+                       </span>
+                     )}
                      {(slot.wins ?? 0) > 0 && (
                        <span className="text-yellow-500 scale-110 shrink-0" title={`${slot.wins} Wins`}>🏆 {slot.wins}</span>
                      )}
@@ -1201,7 +1172,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
                    // Hit / guessed correctly
                    if (subType === 'hit') {
-                     const isSelfGuesser = msg.senderId === persistentIdRef.current;
+                     const isSelfGuesser = msg.senderId === socket?.id;
                      const displayWord = (msg as any).word || '';
                      const displayText = isSelfGuesser 
                        ? `You've found the answer: ${displayWord}` 
@@ -1257,7 +1228,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
                    // Lost turn / Inactive
                    if (subType === 'lost_turn' || text.toLowerCase().includes('lost the turn') || text.toLowerCase().includes('lost your turn')) {
-                     const isDrawerSelf = gameState.currentDrawerId === persistentIdRef.current;
+                     const isDrawerSelf = gameState.currentDrawerId === socket?.id;
                      const displayText = isDrawerSelf ? "You've lost your turn" : text;
                      return (
                        <div key={msg.id} className="flex items-center gap-2 text-[#EF4444] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200">
@@ -1313,13 +1284,13 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
            {/* Guess Input Area */}
            <div className="p-1.5 shrink-0 mt-auto bg-[#1A103C] border-t border-white/5">
              <form onSubmit={handleGuessSubmit} className="relative">
-               <div className={`absolute left-2.5 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === persistentIdRef.current || gameState.correctGuessers?.includes(persistentIdRef.current || '')) ? "text-white/15" : "text-white/50"}`}>
+               <div className={`absolute left-2.5 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "text-white/15" : "text-white/50"}`}>
                  <Pencil size={12} />
                </div>
                <input 
                  ref={guessInputRef}
                  type="text"
-                 disabled={gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === persistentIdRef.current || gameState.correctGuessers?.includes(persistentIdRef.current || '')} value={(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === persistentIdRef.current || gameState.correctGuessers?.includes(persistentIdRef.current || '')) ? "" : guessInput}
+                 disabled={gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')} value={(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "" : guessInput}
                  onChange={(e) => setGuessInput(e.target.value)}
                  onFocus={() => setIsInputFocused(true)}
                  onBlur={() => setIsInputFocused(false)}
@@ -1328,16 +1299,16 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                     gameState.status === 'ROUND_END' ? (gameState.roundEndReason === 'skipped' ? "Skipped" : gameState.roundEndReason === 'turn_lost' ? "Inactive" : "Interval") :
                     gameState.status === 'PODIUM' ? "Game Over" :
                     gameState.status === 'CHOOSING' ? "Waiting for the drawing" :
-                    gameState.currentDrawerId === persistentIdRef.current ? "You are drawing!" :
-                    gameState.correctGuessers?.includes(persistentIdRef.current || '') ? "You've found the answer!" :
+                    gameState.currentDrawerId === socket?.id ? "You are drawing!" :
+                    gameState.correctGuessers?.includes(socket?.id || '') ? "You've found the answer!" :
                     "Answer here..."
                   }
-                 className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === persistentIdRef.current || gameState.correctGuessers?.includes(persistentIdRef.current || '')) ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-[#00D9FF] placeholder:text-white/45"}`}
+                 className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-[#00D9FF] placeholder:text-white/45"}`}
                />
                <button 
                  type="submit"
                  onPointerDown={(e) => e.preventDefault()}
-                 disabled={!guessInput.trim() || gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === persistentIdRef.current || gameState.correctGuessers?.includes(persistentIdRef.current || '')}
+                 disabled={!guessInput.trim() || gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')}
                  className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-[#1A103C] disabled:opacity-0 bg-[#00D9FF] rounded-md hover:bg-white transition-opacity"
                >
                  <Send size={12} className="-ml-0.5" />
@@ -1394,7 +1365,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                          msg={msg} 
                          activeCopyId={activeCopyId}
                          onSetActiveCopy={setActiveCopyId}
-                         mySocketId={persistentIdRef.current}
+                         mySocketId={socket?.id}
                        />
                      ))}
                     </div>
@@ -1473,7 +1444,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     )}
 
     {/* Global Overlays for CHOOSING state */}
-    {gameState.status === 'CHOOSING' && gameState.currentDrawerId === persistentIdRef.current && (
+    {gameState.status === 'CHOOSING' && gameState.currentDrawerId === socket?.id && (
        <div className="fixed inset-0 z-[150] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 touch-none">
              <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
                 <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 drop-shadow-md tracking-wide">IT'S YOUR TURN!</h2>

@@ -36,44 +36,71 @@ class RoomManager {
   }
 
   private tick() {
-    this.rooms.forEach(room => {
-      this.processRoomTick(room);
-    });
+    try {
+      const now = Date.now();
+      const offlineTimeout = 120 * 1000;
+      
+      this.rooms.forEach(room => {
+        try {
+          // Clean up players who are offline for > 120 seconds
+          const playersToEvict: string[] = [];
+          room.players.forEach(p => {
+            if (p.isOffline && p.offlineSince && (now - p.offlineSince > offlineTimeout)) {
+              playersToEvict.push(p.id);
+            }
+          });
+
+          playersToEvict.forEach(socketId => {
+            console.log(`[Game Engine] Evicting player ${socketId} from room ${room.id} due to offline timeout`);
+            const player = this.players.get(socketId);
+            const playerName = player ? player.name : 'لاعب';
+            
+            this.removePlayerFromRoom(room.id, socketId);
+            this.players.delete(socketId);
+            
+            if (this.io) {
+              this.io.to(room.id).emit('receive_message', {
+                id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                text: `تم طرد ${playerName} بسبب الغياب الطويل`,
+                type: 'system'
+              });
+            }
+          });
+
+          this.processRoomTick(room);
+        } catch (e) {
+          console.error(`Error processing room tick for ${room.id}:`, e);
+        }
+      });
+    } catch (e) {
+      console.error('Error in global tick loop:', e);
+    }
   }
 
   private processRoomTick(room: Room) {
     const { gameState } = room;
 
-    // Check for deeply inactive offline players
-    let needsBroadcast = false;
-    for (const p of [...room.players]) {
-      if (p.isOffline && p.offlineSince && (Date.now() - p.offlineSince > 120_000)) {
-        this.removePlayer(p.id);
-        needsBroadcast = true;
-      }
-    }
-    // Note: removePlayer will already broadcast state, but if room empties it could be deleted.
-    const currentRoom = this.rooms.get(room.id);
-    if (!currentRoom) return;
-
     if (gameState.status === 'WAITING') {
-      if (room.players.length >= 2) {
+      const onlinePlayersCount = room.players.filter(p => !p.isOffline).length;
+      if (onlinePlayersCount >= 2) {
         this.transitionToChoosing(room);
       }
     } else if (gameState.status === 'CHOOSING') {
       gameState.timeLeft--;
-      // The player has 9 seconds to choose out of the 100 total seconds
-      if (gameState.timeLeft <= 91) {
+      const drawer = room.players.find(p => p.id === gameState.currentDrawerId);
+      // Immediately skip under-choosing drawer if they go offline, or missed deadline
+      if (gameState.timeLeft <= 91 || (drawer && drawer.isOffline)) {
         // Player missed their turn
         this.transitionToRoundEnd(room, 'turn_lost'); // Show round end overlay instead of skipping immediately
       }
     } else if (gameState.status === 'DRAWING') {
       gameState.timeLeft--;
-      if (gameState.timeLeft <= 0) {
-        // Time is up
+      const activeGuessersCount = room.players.filter(p => p.id !== gameState.currentDrawerId && !p.isOffline).length;
+      if (gameState.timeLeft <= 0 || activeGuessersCount === 0) {
+        // Time is up or no online guessers left
         this.transitionToRoundEnd(room, 'timeout');
-      } else if (gameState.correctGuessers.length > 0 && gameState.correctGuessers.length === room.players.length - 1) {
-        // Everyone guessed correctly
+      } else if (gameState.correctGuessers.length > 0 && gameState.correctGuessers.length >= activeGuessersCount) {
+        // Everyone online guessed correctly
         this.transitionToRoundEnd(room, 'all_guessed');
       }
     } else if (gameState.status === 'ROUND_END') {
@@ -112,7 +139,8 @@ class RoomManager {
     room.gameState.correctGuessers = [];
     room.gameState.timeLeft = 0;
     
-    if (room.players.length >= 2) {
+    const onlinePlayersCount = room.players.filter(p => !p.isOffline).length;
+    if (onlinePlayersCount >= 2) {
        return this.transitionToChoosing(room);
     }
     
@@ -123,18 +151,32 @@ class RoomManager {
     if (room.players.length < 2) {
        return this.transitionToWaiting(room);
     }
+
+    const onlinePlayersCount = room.players.filter(p => !p.isOffline).length;
+    if (onlinePlayersCount < 2) {
+       return this.transitionToWaiting(room);
+    }
     
-    // Logic for next turn
-    let nextDrawerId = room.gameState.turnQueue.shift();
-    if (nextDrawerId) {
-      // Put them at the back of the queue
-      room.gameState.turnQueue.push(nextDrawerId); 
-      // Verify player is still in room
-      const p = room.players.find(p => p.id === nextDrawerId);
-      if (!p || p.isOffline) {
-        return this.transitionToChoosing(room); // Recursive call if player left or offline
+    // Logic for next turn - cycle through queue to find first online player in the room
+    let nextDrawerId: string | null = null;
+    const queueLength = room.gameState.turnQueue.length;
+    
+    for (let i = 0; i < queueLength; i++) {
+      const candidateId = room.gameState.turnQueue.shift();
+      if (!candidateId) break;
+      
+      // Put at the back of the queue
+      room.gameState.turnQueue.push(candidateId);
+      
+      // Let's check if player exists in room AND is online
+      const p = room.players.find(player => player.id === candidateId);
+      if (p && !p.isOffline) {
+        nextDrawerId = candidateId;
+        break;
       }
-    } else {
+    }
+
+    if (!nextDrawerId) {
        return this.transitionToWaiting(room);
     }
 
@@ -350,14 +392,14 @@ class RoomManager {
         });
       }
 
-      // Deduct time dynamically
-      const remainingPlayers = room.players.length - 1; // Excluding drawer
-      if (remainingPlayers > 0) {
-         const timeReduction = Math.floor(room.gameState.timeLeft / (remainingPlayers - room.gameState.correctGuessers.length + 1));
+      // Deduct time dynamically based on active (online, non-drawer) guessers
+      const activeGuessersCount = room.players.filter(p => p.id !== room.gameState.currentDrawerId && !p.isOffline).length;
+      if (activeGuessersCount > 0) {
+         const timeReduction = Math.floor(room.gameState.timeLeft / (activeGuessersCount - room.gameState.correctGuessers.length + 1));
          room.gameState.timeLeft = Math.max(1, room.gameState.timeLeft - timeReduction);
       }
 
-      if (room.gameState.correctGuessers.length === remainingPlayers) {
+      if (room.gameState.correctGuessers.length >= activeGuessersCount) {
         this.transitionToRoundEnd(room, 'all_guessed');
       } else {
         this.broadcastState(room);
@@ -622,27 +664,33 @@ class RoomManager {
     return this.players.get(socketId);
   }
 
-  disconnectPlayer(playerId: string) {
+  public handleDisconnect(socketId: string) {
     try {
-      const player = this.players.get(playerId);
-      if (player && player.roomId) {
-        player.isOffline = true;
-        player.offlineSince = Date.now();
-        const room = this.rooms.get(player.roomId);
+      const player = this.players.get(socketId);
+      if (!player) return;
+
+      player.isOffline = true;
+      player.offlineSince = Date.now();
+
+      const roomId = player.roomId;
+      if (roomId) {
+        const room = this.rooms.get(roomId);
         if (room) {
-          if (room.gameState.currentDrawerId === playerId && (room.gameState.status === 'CHOOSING' || room.gameState.status === 'DRAWING')) {
-             if (room.gameState.correctGuessers.length === 0 && room.players.filter(p => !p.isOffline).length > 0) {
-                this.transitionToRoundEnd(room, 'drawer_left');
-             } else {
-                this.transitionToRoundEnd(room, 'turn_lost');
-             }
-          } else {
-            this.broadcastState(room);
+          // Broadcast state so clients see isOffline
+          this.broadcastState(room);
+
+          // System Message in Arabic
+          if (this.io) {
+            this.io.to(roomId).emit('receive_message', {
+              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+              text: `${player.name} فقد الاتصال، بانتظار عودته...`,
+              type: 'system'
+            });
           }
         }
       }
-    } catch(e) {
-      console.error(e);
+    } catch (e) {
+      console.error("Error in handleDisconnect:", e);
     }
   }
 
