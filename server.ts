@@ -38,10 +38,35 @@ async function startServer() {
       }
     });
 
-    socket.on('join_room', ({ roomId, nickname, avatar }, callback) => {
+    socket.on('join_room', ({ roomId, nickname, avatar, playerId }, callback) => {
       try {
+        // Try to reconnect first if playerId is provided
+        if (playerId) {
+          const reconnectedRoom = roomManager.reconnectPlayer(roomId, playerId, socket.id);
+          if (reconnectedRoom) {
+            socket.join(roomId);
+            if (callback) callback({ success: true, reconnected: true });
+
+            // Send draw history strictly to the reconnected player
+            if (reconnectedRoom.gameState.drawHistory && reconnectedRoom.gameState.drawHistory.length > 0) {
+               socket.emit('draw_history_sync', reconnectedRoom.gameState.drawHistory);
+            }
+
+            // System Message in Arabic
+            const name = reconnectedRoom.players.find(p => p.id === socket.id)?.name || nickname;
+            io.to(roomId).emit('receive_message', {
+              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+              text: `${name} عاد للقاعة واستأنف اللعب`,
+              type: 'system'
+            });
+
+            return;
+          }
+        }
+
         const existingRoom = roomManager.getRoom(roomId);
-        if (existingRoom && existingRoom.players.length >= 5) {
+        const onlinePlayersCount = existingRoom ? existingRoom.players.filter(p => !p.isOffline).length : 0;
+        if (existingRoom && onlinePlayersCount >= 5) {
           if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
           return;
         }
@@ -53,22 +78,15 @@ async function startServer() {
           avatar: avatar || nickname.charAt(0).toUpperCase(),
           roomId: roomId,
           score: 0,
-          wins: 0
+          wins: 0,
+          persistentId: playerId
         });
         
         if (callback) callback({ success: true });
 
-        // Broadcast updated room state
-        const { drawHistory, ...publicGameState } = room.gameState;
-        io.to(roomId).emit('room_state_update', {
-          roomId: room.id,
-          players: room.players,
-          gameState: publicGameState
-        });
-
         // Send draw history strictly to the newly joined player
-        if (drawHistory && drawHistory.length > 0) {
-           socket.emit('draw_history_sync', drawHistory);
+        if (room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {
+           socket.emit('draw_history_sync', room.gameState.drawHistory);
         }
 
         // System Message
@@ -90,12 +108,6 @@ async function startServer() {
         const playerName = player ? player.name : 'لاعب';
         const room = roomManager.removePlayerFromRoom(roomId, socket.id);
         if (room) {
-          const { drawHistory, ...publicGameState } = room.gameState;
-          io.to(roomId).emit('room_state_update', {
-            roomId: room.id,
-            players: room.players,
-            gameState: publicGameState
-          });
           io.to(roomId).emit('receive_message', {
             id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
             text: `${playerName} غادر الغرفة`,

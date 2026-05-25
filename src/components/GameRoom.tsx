@@ -282,6 +282,16 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
+
+  const persistentPlayerId = React.useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    let id = localStorage.getItem('gartic_player_id');
+    if (!id) {
+      id = 'usr-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString(36);
+      localStorage.setItem('gartic_player_id', id);
+    }
+    return id;
+  }, []);
   
   const [gameState, setGameState] = useState<any>({
     status: 'WAITING',
@@ -323,7 +333,8 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     socket.emit('join_room', {
       roomId: room,
       nickname,
-      avatar: avatar || nickname.charAt(0).toUpperCase()
+      avatar: avatar || nickname.charAt(0).toUpperCase(),
+      playerId: persistentPlayerId
     });
 
     const onRoomStateUpdate = (state: { roomId: string, players: any[], gameState: any }) => {

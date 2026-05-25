@@ -96,10 +96,15 @@ class RoomManager {
     } else if (gameState.status === 'DRAWING') {
       gameState.timeLeft--;
       const activeGuessersCount = room.players.filter(p => p.id !== gameState.currentDrawerId && !p.isOffline).length;
+      const onlineCorrectGuessersCount = gameState.correctGuessers.filter(id => {
+        const p = room.players.find(pl => pl.id === id);
+        return p && !p.isOffline;
+      }).length;
+
       if (gameState.timeLeft <= 0 || activeGuessersCount === 0) {
         // Time is up or no online guessers left
         this.transitionToRoundEnd(room, 'timeout');
-      } else if (gameState.correctGuessers.length > 0 && gameState.correctGuessers.length >= activeGuessersCount) {
+      } else if (onlineCorrectGuessersCount > 0 && onlineCorrectGuessersCount >= activeGuessersCount) {
         // Everyone online guessed correctly
         this.transitionToRoundEnd(room, 'all_guessed');
       }
@@ -394,12 +399,17 @@ class RoomManager {
 
       // Deduct time dynamically based on active (online, non-drawer) guessers
       const activeGuessersCount = room.players.filter(p => p.id !== room.gameState.currentDrawerId && !p.isOffline).length;
+      const onlineCorrectGuessersCount = room.gameState.correctGuessers.filter(id => {
+        const p = room.players.find(pl => pl.id === id);
+        return p && !p.isOffline;
+      }).length;
+
       if (activeGuessersCount > 0) {
-         const timeReduction = Math.floor(room.gameState.timeLeft / (activeGuessersCount - room.gameState.correctGuessers.length + 1));
+         const timeReduction = Math.floor(room.gameState.timeLeft / (activeGuessersCount - onlineCorrectGuessersCount + 1));
          room.gameState.timeLeft = Math.max(1, room.gameState.timeLeft - timeReduction);
       }
 
-      if (room.gameState.correctGuessers.length >= activeGuessersCount) {
+      if (onlineCorrectGuessersCount >= activeGuessersCount) {
         this.transitionToRoundEnd(room, 'all_guessed');
       } else {
         this.broadcastState(room);
@@ -627,6 +637,7 @@ class RoomManager {
       if (room) {
         room.players = room.players.filter(p => p.id !== socketId);
         room.gameState.turnQueue = room.gameState.turnQueue.filter(id => id !== socketId);
+        room.gameState.correctGuessers = room.gameState.correctGuessers.filter(id => id !== socketId);
         
         const player = this.players.get(socketId);
         if (player) {
@@ -658,6 +669,37 @@ class RoomManager {
       console.error("Error removing player from room:", e);
       return undefined;
     }
+  }
+
+  public reconnectPlayer(roomId: string, persistentId: string, newSocketId: string): Room | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+
+    const existingPlayer = room.players.find(p => p.persistentId === persistentId);
+    if (!existingPlayer) return null;
+
+    const oldSocketId = existingPlayer.id;
+
+    console.log(`[Reattach] Swapping socket ${oldSocketId} -> ${newSocketId} for player ${existingPlayer.name}`);
+
+    // Update Player ID mapping
+    existingPlayer.id = newSocketId;
+    existingPlayer.isOffline = false;
+    delete existingPlayer.offlineSince;
+
+    // Update RoomManager players map
+    this.players.delete(oldSocketId);
+    this.players.set(newSocketId, existingPlayer);
+
+    // Update Room gameState with new socket ID
+    if (room.gameState.currentDrawerId === oldSocketId) {
+      room.gameState.currentDrawerId = newSocketId;
+    }
+    room.gameState.turnQueue = room.gameState.turnQueue.map(id => id === oldSocketId ? newSocketId : id);
+    room.gameState.correctGuessers = room.gameState.correctGuessers.map(id => id === oldSocketId ? newSocketId : id);
+
+    this.broadcastState(room);
+    return room;
   }
 
   getPlayer(socketId: string): Player | undefined {
