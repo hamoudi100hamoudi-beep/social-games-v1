@@ -230,6 +230,17 @@ async function startServer() {
         });
       }
     });
+
+    socket.on('player_away', () => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        io.to(player.roomId).emit('receive_message', {
+          id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+          text: `اللاعب ${player.name} يتواجد الآن في الخلفية (خارج المتصفح)...`,
+          type: 'system'
+        });
+      }
+    });
     
     socket.on('disconnect', () => {
       console.log(`[Socket] Client disconnected: ${socket.id}`);

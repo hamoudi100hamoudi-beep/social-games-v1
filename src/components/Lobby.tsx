@@ -47,6 +47,16 @@ export default function Lobby({ onPlay }: LobbyProps) {
   const [showAvatarGrid, setShowAvatarGrid] = useState(false);
   const [nicknameError, setNicknameError] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+  const [afkWarning, setAfkWarning] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (localStorage.getItem('gartic_afk_kicked') === 'true') {
+        setAfkWarning(true);
+        localStorage.removeItem('gartic_afk_kicked');
+      }
+    }
+  }, []);
   
   const [roomCount, setRoomCount] = useState<number>(0);
   const [testRoomCount, setTestRoomCount] = useState<number>(0);
@@ -189,6 +199,12 @@ export default function Lobby({ onPlay }: LobbyProps) {
             </div>
             
             <div className="w-full space-y-4">
+              {afkWarning && (
+                <div className="w-full bg-amber-500/10 border border-amber-500/40 text-amber-200 font-bold p-4 rounded-2xl flex flex-col gap-1 text-center text-xs relative select-none animate-in fade-in slide-in-from-top-2 duration-300">
+                  <span className="text-sm font-black text-amber-300">⚠️ تنبيه خمول النظام</span>
+                  <span>تم إخراجك تلقائياً بسبب خمول طويل وتوفير باقة البيانات/الطاقة!</span>
+                </div>
+              )}
               <div className="space-y-1">
                 <label className="text-sm font-bold ml-2 text-white/90">NICKNAME</label>
                 <input 

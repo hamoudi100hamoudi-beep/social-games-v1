@@ -38,7 +38,7 @@ class RoomManager {
   private tick() {
     try {
       const now = Date.now();
-      const offlineTimeout = 120 * 1000;
+      const offlineTimeout = 130 * 1000;
       
       this.rooms.forEach(room => {
         try {
