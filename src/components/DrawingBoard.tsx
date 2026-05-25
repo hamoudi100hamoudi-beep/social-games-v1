@@ -26,7 +26,20 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const canvas = ctx.canvas;
   const cw = canvas.width, ch = canvas.height;
   
-  const imageData = ctx.getImageData(0, 0, cw, ch);
+  let offscreenCanvas: HTMLCanvasElement | null = document.createElement('canvas');
+  offscreenCanvas.width = cw;
+  offscreenCanvas.height = ch;
+  const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+  if (!offscreenCtx) {
+     offscreenCanvas.width = 0;
+     offscreenCanvas.height = 0;
+     offscreenCanvas = null;
+     return;
+  }
+  
+  offscreenCtx.drawImage(canvas, 0, 0);
+  
+  const imageData = offscreenCtx.getImageData(0, 0, cw, ch);
   const data = imageData.data;
   
   const sx = Math.floor(startX * DPR);
@@ -114,6 +127,10 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   }
   
   ctx.putImageData(imageData, 0, 0);
+  
+  offscreenCanvas.width = 0;
+  offscreenCanvas.height = 0;
+  offscreenCanvas = null;
 };
 
 const LOGICAL_WIDTH = 800;

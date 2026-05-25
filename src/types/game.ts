@@ -14,8 +14,7 @@ export interface GameState {
 }
 
 export interface Player {
-  id: string; // Socket ID
-  playerId?: string; // Persistent client unique ID
+  id: string; // Persistent Player ID
   name: string;
   avatar: string;
   roomId: string | null;
@@ -23,7 +22,7 @@ export interface Player {
   wins: number;
   isOffline?: boolean;
   offlineSince?: number;
-  lastHeartbeat?: number;
+  socketId?: string; // Current or last known socket ID
 }
 
 export interface Room {

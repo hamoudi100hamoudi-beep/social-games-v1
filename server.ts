@@ -38,23 +38,31 @@ async function startServer() {
       }
     });
 
-    socket.on('join_room', ({ roomId, nickname, avatar, playerId }, callback) => {
+    socket.on('join_room', ({ roomId, nickname, avatar, persistentId }, callback) => {
       try {
         const existingRoom = roomManager.getRoom(roomId);
-        if (existingRoom && existingRoom.players.length >= 5 && !existingRoom.players.find(p => ((playerId && p.playerId === playerId) || p.name === nickname) && p.isOffline)) {
+        
+        // Associate the socket with the persistentId so we can find it on disconnect
+        const playerId = persistentId || socket.id;
+        socket.data.playerId = playerId;
+
+        const isReconnecting = existingRoom && existingRoom.players.find(p => p.id === playerId);
+        
+        if (!isReconnecting && existingRoom && existingRoom.players.length >= 5) {
           if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
           return;
         }
 
         socket.join(roomId);
         const room = roomManager.addPlayerToRoom(roomId, {
-          id: socket.id,
-          playerId: playerId || socket.id,
+          id: playerId,
+          socketId: socket.id,
           name: nickname,
           avatar: avatar || nickname.charAt(0).toUpperCase(),
           roomId: roomId,
           score: 0,
-          wins: 0
+          wins: 0,
+          isOffline: false
         });
         
         if (callback) callback({ success: true });
@@ -87,9 +95,9 @@ async function startServer() {
     socket.on('leave_room', ({ roomId }) => {
       try {
         socket.leave(roomId);
-        const player = roomManager.getPlayer(socket.id);
+        const player = roomManager.getPlayer(socket.data.playerId);
         const playerName = player ? player.name : 'لاعب';
-        const room = roomManager.removePlayerFromRoom(roomId, socket.id, true); // Force hard remove
+        const room = roomManager.removePlayerFromRoom(roomId, socket.data.playerId);
         if (room) {
           const { drawHistory, ...publicGameState } = room.gameState;
           io.to(roomId).emit('room_state_update', {
@@ -97,156 +105,141 @@ async function startServer() {
             players: room.players,
             gameState: publicGameState
           });
+          io.to(roomId).emit('receive_message', {
+            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            text: `${playerName} غادر الغرفة`,
+            type: 'system'
+          });
         }
       } catch (e) {
         console.error(e);
       }
     });
 
-    socket.on('heartbeat', () => {
-      try {
-        const player = roomManager.getPlayer(socket.id);
-        if (player) {
-          player.lastHeartbeat = Date.now();
-          if (player.isOffline) {
-            player.isOffline = false;
-            player.offlineSince = undefined;
-            console.log(`[Anti-AFK] Player ${player.name} resumed active connection via heartbeat.`);
-            if (player.roomId) {
-              const room = roomManager.getRoom(player.roomId);
-              if (room) roomManager.broadcastState(room);
-            }
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    });
-
-    // Relay drawing events strictly from the currently active drawer in active ROUND
+    // Relay drawing events to other clients in the same room (if we had rooms), for now broadcast to all
     socket.on('draw_start', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        const room = roomManager.getRoom(player.roomId);
-        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentDrawerId === socket.id && !player.isOffline) {
-          roomManager.recordDrawCommand(player.roomId, 'draw_start', data);
-          socket.broadcast.to(player.roomId).emit('draw_start', data);
-        }
+         const room = roomManager.getRoom(player.roomId);
+         if (room && room.gameState.currentDrawerId === socket.data.playerId) {
+            roomManager.recordDrawCommand(player.roomId, 'draw_start', data);
+            socket.broadcast.to(player.roomId).emit('draw_start', data);
+         }
       }
     });
     
     socket.on('draw_move', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        const room = roomManager.getRoom(player.roomId);
-        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentDrawerId === socket.id && !player.isOffline) {
-          roomManager.recordDrawCommand(player.roomId, 'draw_move', data);
-          socket.broadcast.to(player.roomId).emit('draw_move', data);
-        }
+         const room = roomManager.getRoom(player.roomId);
+         if (room && room.gameState.currentDrawerId === socket.data.playerId) {
+            roomManager.recordDrawCommand(player.roomId, 'draw_move', data);
+            socket.broadcast.to(player.roomId).emit('draw_move', data);
+         }
       }
     });
     
     socket.on('draw_end', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        const room = roomManager.getRoom(player.roomId);
-        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentDrawerId === socket.id && !player.isOffline) {
-          roomManager.recordDrawCommand(player.roomId, 'draw_end', data);
-          socket.broadcast.to(player.roomId).emit('draw_end', data);
-        }
+         const room = roomManager.getRoom(player.roomId);
+         if (room && room.gameState.currentDrawerId === socket.data.playerId) {
+            roomManager.recordDrawCommand(player.roomId, 'draw_end', data);
+            socket.broadcast.to(player.roomId).emit('draw_end', data);
+         }
       }
     });
 
     socket.on('draw_action', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        const room = roomManager.getRoom(player.roomId);
-        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentDrawerId === socket.id && !player.isOffline) {
-          roomManager.recordDrawCommand(player.roomId, 'draw_action', data);
-          socket.broadcast.to(player.roomId).emit('draw_action', data);
-        }
+         const room = roomManager.getRoom(player.roomId);
+         if (room && room.gameState.currentDrawerId === socket.data.playerId) {
+            roomManager.recordDrawCommand(player.roomId, 'draw_action', data);
+            socket.broadcast.to(player.roomId).emit('draw_action', data);
+         }
       }
     });
 
     socket.on('draw_clear', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        const room = roomManager.getRoom(player.roomId);
-        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentDrawerId === socket.id && !player.isOffline) {
-          roomManager.clearDrawHistory(player.roomId);
-          io.to(player.roomId).emit('draw_clear', data);
-        }
+         const room = roomManager.getRoom(player.roomId);
+         if (room && room.gameState.currentDrawerId === socket.data.playerId) {
+            roomManager.clearDrawHistory(player.roomId);
+            io.to(player.roomId).emit('draw_clear', data);
+         }
       }
     });
 
     socket.on('draw_cancel', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        const room = roomManager.getRoom(player.roomId);
-        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentDrawerId === socket.id && !player.isOffline) {
-          socket.broadcast.to(player.roomId).emit('draw_cancel', data);
-        }
+         const room = roomManager.getRoom(player.roomId);
+         if (room && room.gameState.currentDrawerId === socket.data.playerId) {
+            socket.broadcast.to(player.roomId).emit('draw_cancel', data);
+         }
       }
     });
 
     socket.on('draw_undo', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        const room = roomManager.getRoom(player.roomId);
-        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentDrawerId === socket.id && !player.isOffline) {
-          roomManager.undoLastDrawing(player.roomId);
-          io.to(player.roomId).emit('draw_undo_local', data);
-        }
+         const room = roomManager.getRoom(player.roomId);
+         if (room && room.gameState.currentDrawerId === socket.data.playerId) {
+            roomManager.undoLastDrawing(player.roomId);
+            io.to(player.roomId).emit('draw_undo_local', data);
+         }
       }
     });
 
     socket.on('draw_redo', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        const room = roomManager.getRoom(player.roomId);
-        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentDrawerId === socket.id && !player.isOffline) {
-          roomManager.redoDrawing(player.roomId);
-          io.to(player.roomId).emit('draw_redo_local', data);
-        }
+         const room = roomManager.getRoom(player.roomId);
+         if (room && room.gameState.currentDrawerId === socket.data.playerId) {
+            roomManager.redoDrawing(player.roomId);
+            io.to(player.roomId).emit('draw_redo_local', data);
+         }
       }
     });
     
     socket.on('skip_turn', () => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        roomManager.handleSkipTurn(player.roomId, socket.id);
+        roomManager.handleSkipTurn(player.roomId, socket.data.playerId);
       }
     });
 
     socket.on('select_word', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        roomManager.startGameRound(player.roomId, data.word, socket.id);
+        roomManager.startGameRound(player.roomId, data.word, socket.data.playerId);
       }
     });
 
     socket.on('submit_guess', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        roomManager.submitGuess(player.roomId, socket.id, data.guess);
+        roomManager.submitGuess(player.roomId, socket.data.playerId, data.guess);
       }
     });
 
     socket.on('request_hint', () => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
-        roomManager.requestHint(player.roomId, socket.id);
+        roomManager.requestHint(player.roomId, socket.data.playerId);
       }
     });
 
     socket.on('send_message', (data) => {
-      const player = roomManager.getPlayer(socket.id);
+      const player = roomManager.getPlayer(socket.data.playerId);
       if (player && player.roomId) {
         io.to(player.roomId).emit('receive_message', {
           id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
           text: data.text,
           sender: player.name,
-          senderId: socket.id,
+          senderId: socket.data.playerId,
           avatar: player.avatar,
           type: 'message'
         });
@@ -256,7 +249,20 @@ async function startServer() {
     socket.on('disconnect', () => {
       console.log(`[Socket] Client disconnected: ${socket.id}`);
       try {
-        roomManager.removePlayer(socket.id);
+        const player = roomManager.getPlayer(socket.data.playerId);
+        if (player && player.roomId) {
+          const roomId = player.roomId;
+          const playerName = player.name;
+          roomManager.disconnectPlayer(socket.data.playerId);
+          const room = roomManager.getRoom(roomId);
+          if (room) {
+            io.to(roomId).emit('receive_message', {
+              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+              text: `${playerName} فقد الاتصال مؤقتاً`,
+              type: 'system'
+            });
+          }
+        }
       } catch (e) {
         console.error("Error during disconnect", e);
       }
