@@ -22,7 +22,7 @@ interface Message {
   color?: string;
 }
 
-type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string; wins?: number; isOffline?: boolean; };
+type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string; wins?: number; isOffline?: boolean; persistentId?: string; };
 
 interface HitNotification {
   id: string;
@@ -273,7 +273,7 @@ const SmoothTimer = ({ gameState, maxTime, isFullScreen = false }: { gameState: 
 };
 
 export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomProps) {
-  const { socket } = useSocket();
+  const { socket, isConnected } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const bgTouchStartTime = React.useRef<number>(0);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
@@ -325,7 +325,28 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   const [guesses, setGuesses] = useState<Message[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
-  const isDrawingMode = gameState.status === 'DRAWING' && gameState.currentDrawerId === socket?.id;
+
+  const amIDrawer = React.useMemo(() => {
+    if (!gameState.currentDrawerId) return false;
+    const drawerPlayer = currentPlayers.find(p => p.id === gameState.currentDrawerId);
+    if (drawerPlayer && drawerPlayer.persistentId) {
+      return drawerPlayer.persistentId === persistentPlayerId;
+    }
+    const slotMe = currentPlayers.find(p => p.persistentId === persistentPlayerId);
+    const slotDrawer = currentPlayers.find(p => p.id === gameState.currentDrawerId);
+    if (slotMe && slotDrawer && slotMe.persistentId === slotDrawer.persistentId) {
+      return true;
+    }
+    return gameState.currentDrawerId === socket?.id;
+  }, [gameState.currentDrawerId, currentPlayers, persistentPlayerId, socket?.id]);
+
+  const drawerPersistentId = React.useMemo(() => {
+    if (!gameState.currentDrawerId) return 'lobby';
+    const drawerPlayer = currentPlayers.find(p => p.id === gameState.currentDrawerId);
+    return drawerPlayer?.persistentId || gameState.currentDrawerId;
+  }, [gameState.currentDrawerId, currentPlayers]);
+
+  const isDrawingMode = gameState.status === 'DRAWING' && amIDrawer;
 
   useEffect(() => {
     if (!socket) return;
@@ -356,7 +377,8 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
         isCurrent: isActiveRound && state.gameState?.currentDrawerId === p.id,
         isOffline: p.isOffline || false,
         avatar: p.avatar,
-        isEmpty: false
+        isEmpty: false,
+        persistentId: p.persistentId
       })).sort((a, b) => b.points - a.points);
       
       setCurrentPlayers(players);
@@ -488,7 +510,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     gameState.status === 'ROUND_END' || 
     gameState.status === 'PODIUM' || 
     gameState.status === 'CHOOSING' || 
-    gameState.currentDrawerId === socket?.id || 
+    amIDrawer || 
     gameState.correctGuessers?.includes(socket?.id || '');
 
   useEffect(() => {
@@ -502,7 +524,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guessInput.trim() || gameState.correctGuessers?.includes(socket?.id) || gameState.currentDrawerId === socket?.id) return;
+    if (!guessInput.trim() || gameState.correctGuessers?.includes(socket?.id) || amIDrawer) return;
     
     socket?.emit('submit_guess', { guess: guessInput.trim() });
     setGuessInput('');
@@ -535,11 +557,11 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
   const renderWordOverlay = (isFullScreenMode: boolean = false) => {
      if (gameState.status !== 'DRAWING') return null;
-     if (gameState.currentDrawerId === socket?.id && !isFullScreenMode) return null;
+     if (amIDrawer && !isFullScreenMode) return null;
      return (
         <div className="absolute top-1 sm:top-2 left-0 right-0 flex items-center justify-center z-[150] pointer-events-none drop-shadow-md">
            {(() => {
-               const isDrawer = gameState.currentDrawerId === socket?.id;
+               const isDrawer = amIDrawer;
                const hintsUsed = gameState.hintsUsed || 0;
                const maskedArray = gameState.maskedWordArray || [];
 
@@ -711,7 +733,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
         >
           {renderWordOverlay(true)}
           <DrawingBoard 
-            key={`full-${gameState.currentDrawerId || 'lobby'}`}
+            key={`full-${drawerPersistentId}`}
             readOnly={false}
             onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
             onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
@@ -763,8 +785,8 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
           {renderWordOverlay()}
 
           <DrawingBoard 
-            key={gameState.currentDrawerId || 'lobby'}
-            readOnly={gameState.currentDrawerId !== socket?.id}
+            key={drawerPersistentId}
+            readOnly={!amIDrawer}
             timerPercentage={timerPercentage}
           />
           
@@ -854,7 +876,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
           {gameState.status === 'ROUND_END' && (() => {
              const reason = gameState.roundEndReason;
              const word = gameState.roundEndWord || '';
-             const isDrawer = gameState.currentDrawerId === socket?.id;
+             const isDrawer = amIDrawer;
              const drawerName = getCurrentDrawerName() || 'الرسام';
              const hasSucceeded = (gameState.correctGuessers || []).length > 0;
 
@@ -1248,7 +1270,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
                    // Lost turn / Inactive
                    if (subType === 'lost_turn' || text.toLowerCase().includes('lost the turn') || text.toLowerCase().includes('lost your turn')) {
-                     const isDrawerSelf = gameState.currentDrawerId === socket?.id;
+                     const isDrawerSelf = amIDrawer;
                      const displayText = isDrawerSelf ? "You've lost your turn" : text;
                      return (
                        <div key={msg.id} className="flex items-center gap-2 text-[#EF4444] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200">
@@ -1304,13 +1326,13 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
            {/* Guess Input Area */}
            <div className="p-1.5 shrink-0 mt-auto bg-[#1A103C] border-t border-white/5">
              <form onSubmit={handleGuessSubmit} className="relative">
-               <div className={`absolute left-2.5 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "text-white/15" : "text-white/50"}`}>
+               <div className={`absolute left-2.5 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')) ? "text-white/15" : "text-white/50"}`}>
                  <Pencil size={12} />
                </div>
                <input 
                  ref={guessInputRef}
                  type="text"
-                 disabled={gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')} value={(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "" : guessInput}
+                 disabled={gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')} value={(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')) ? "" : guessInput}
                  onChange={(e) => setGuessInput(e.target.value)}
                  onFocus={() => setIsInputFocused(true)}
                  onBlur={() => setIsInputFocused(false)}
@@ -1319,16 +1341,16 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                     gameState.status === 'ROUND_END' ? (gameState.roundEndReason === 'skipped' ? "Skipped" : gameState.roundEndReason === 'turn_lost' ? "Inactive" : "Interval") :
                     gameState.status === 'PODIUM' ? "Game Over" :
                     gameState.status === 'CHOOSING' ? "Waiting for the drawing" :
-                    gameState.currentDrawerId === socket?.id ? "You are drawing!" :
+                    amIDrawer ? "You are drawing!" :
                     gameState.correctGuessers?.includes(socket?.id || '') ? "You've found the answer!" :
                     "Answer here..."
                   }
-                 className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')) ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-[#00D9FF] placeholder:text-white/45"}`}
+                 className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')) ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-[#00D9FF] placeholder:text-white/45"}`}
                />
                <button 
                  type="submit"
                  onPointerDown={(e) => e.preventDefault()}
-                 disabled={!guessInput.trim() || gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || gameState.currentDrawerId === socket?.id || gameState.correctGuessers?.includes(socket?.id || '')}
+                 disabled={!guessInput.trim() || gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')}
                  className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-[#1A103C] disabled:opacity-0 bg-[#00D9FF] rounded-md hover:bg-white transition-opacity"
                >
                  <Send size={12} className="-ml-0.5" />
@@ -1464,7 +1486,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     )}
 
     {/* Global Overlays for CHOOSING state */}
-    {gameState.status === 'CHOOSING' && gameState.currentDrawerId === socket?.id && (
+    {gameState.status === 'CHOOSING' && amIDrawer && (
        <div className="fixed inset-0 z-[150] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 touch-none">
              <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
                 <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 drop-shadow-md tracking-wide">IT'S YOUR TURN!</h2>
@@ -1503,6 +1525,40 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
              </div>
        </div>
     )}
+
+    {/* Dynamic Glassmorphic Blur Reconnecting Overlay */}
+    <AnimatePresence>
+      {!isConnected && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.3 }}
+          className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center select-none"
+        >
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ type: "spring", damping: 25, stiffness: 300, delay: 0.1 }}
+            className="bg-[#24174D]/95 border border-white/10 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center max-w-sm w-full relative overflow-hidden"
+          >
+            {/* Subtle light pulse effect */}
+            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#29C6F6]/40 to-transparent animate-pulse" />
+            
+            {/* Soft, ultra-performant spinning wheel */}
+            <div className="w-16 h-16 border-4 border-[#29C6F6]/10 border-t-[#29C6F6] rounded-full animate-spin mb-6" />
+            
+            <h3 className="text-white text-2xl font-black mb-3 select-none" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.4)' }} dir="rtl">
+              جاري استعادة الاتصال بالشبكة...
+            </h3>
+            <p className="text-white/60 text-sm font-medium leading-relaxed select-none" dir="rtl">
+              يرجى الانتظار قليلاً، يتم الآن إعادة ربط جلستك تلقائياً دون فقدان نقاطك أو دورك.
+            </p>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
 
     </>
   );

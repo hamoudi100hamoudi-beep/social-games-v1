@@ -577,6 +577,10 @@ export default function DrawingBoard({
       const canvas = canvasRef.current;
       if (!ctx || !canvas) return;
       ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+      const tempCtx = tempCtxRef.current;
+      if (tempCtx) {
+         tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      }
       
       // Rebuild history completely from server sequence
       history.current = [];
