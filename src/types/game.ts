@@ -15,11 +15,15 @@ export interface GameState {
 
 export interface Player {
   id: string; // Socket ID
+  playerId?: string; // Persistent client unique ID
   name: string;
   avatar: string;
   roomId: string | null;
   score: number;
   wins: number;
+  isOffline?: boolean;
+  offlineSince?: number;
+  lastHeartbeat?: number;
 }
 
 export interface Room {

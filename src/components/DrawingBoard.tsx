@@ -26,20 +26,7 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const canvas = ctx.canvas;
   const cw = canvas.width, ch = canvas.height;
   
-  let offscreenCanvas: HTMLCanvasElement | null = document.createElement('canvas');
-  offscreenCanvas.width = cw;
-  offscreenCanvas.height = ch;
-  const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
-  if (!offscreenCtx) {
-     offscreenCanvas.width = 0;
-     offscreenCanvas.height = 0;
-     offscreenCanvas = null;
-     return;
-  }
-  
-  offscreenCtx.drawImage(canvas, 0, 0);
-  
-  const imageData = offscreenCtx.getImageData(0, 0, cw, ch);
+  const imageData = ctx.getImageData(0, 0, cw, ch);
   const data = imageData.data;
   
   const sx = Math.floor(startX * DPR);
@@ -126,18 +113,7 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
     }
   }
   
-  offscreenCtx.putImageData(imageData, 0, 0);
-  
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0); // Ignore DPR scaling for exact physical pixel copy
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = 'copy';
-  ctx.drawImage(offscreenCanvas, 0, 0);
-  ctx.restore();
-  
-  offscreenCanvas.width = 0;
-  offscreenCanvas.height = 0;
-  offscreenCanvas = null;
+  ctx.putImageData(imageData, 0, 0);
 };
 
 const LOGICAL_WIDTH = 800;

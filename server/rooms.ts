@@ -43,6 +43,33 @@ class RoomManager {
 
   private processRoomTick(room: Room) {
     const { gameState } = room;
+    const now = Date.now();
+
+    // 1. Inactivity & Grace Period Audit
+    const toKickIds: string[] = [];
+    room.players.forEach(player => {
+      if (player.isOffline) {
+        if (player.offlineSince && (now - player.offlineSince >= 120000)) {
+          toKickIds.push(player.id);
+        }
+      } else {
+        // If they missed heartbeats for 25 seconds, mark them offline
+        if (player.lastHeartbeat && (now - player.lastHeartbeat >= 25000)) {
+          console.log(`[Anti-AFK] Player ${player.name} missed heartbeats. Marking offline.`);
+          this.markPlayerAsOffline(room.id, player.id);
+        }
+      }
+    });
+
+    toKickIds.forEach(id => {
+       console.log(`[Anti-AFK] Kicking player ${id} permanently due to offline timeout.`);
+       if (this.io) {
+          this.io.to(id).emit('kicked_inactive');
+       }
+       this.removePlayerFromRoom(room.id, id, true);
+    });
+
+    if (room.players.length === 0) return; // Room was deleted
 
     if (gameState.status === 'WAITING') {
       if (room.players.length >= 2) {
@@ -400,7 +427,7 @@ class RoomManager {
     this.broadcastState(room);
   }
 
-  private broadcastState(room: Room) {
+  broadcastState(room: Room) {
     if (this.io) {
       // Create a masked version of the word for everyone
       const word = room.gameState.currentWord || '';
@@ -547,13 +574,42 @@ class RoomManager {
   addPlayerToRoom(roomId: string, player: Player): Room {
     const room = this.createRoom(roomId);
     
-    // Remove from previous room if any
+    // Check if we can reconnect an existing offline player in the room. Match by persistent playerId or fallback name.
+    const existingOfflinePlayer = room.players.find(p => 
+      ((player.playerId && p.playerId === player.playerId) || p.name === player.name) && p.isOffline
+    );
+
+    if (existingOfflinePlayer) {
+      console.log(`[Reconnection] Player ${existingOfflinePlayer.name} reassociated with socket ${player.id} (old socket: ${existingOfflinePlayer.id})`);
+      const oldId = existingOfflinePlayer.id;
+      existingOfflinePlayer.id = player.id;
+      existingOfflinePlayer.playerId = player.playerId || existingOfflinePlayer.playerId;
+      existingOfflinePlayer.isOffline = false;
+      existingOfflinePlayer.offlineSince = undefined;
+      existingOfflinePlayer.lastHeartbeat = Date.now();
+      
+      this.players.delete(oldId);
+      this.players.set(player.id, existingOfflinePlayer);
+
+      // Re-map game state references to the new socket id
+      room.gameState.turnQueue = room.gameState.turnQueue.map(id => id === oldId ? player.id : id);
+      room.gameState.correctGuessers = room.gameState.correctGuessers.map(id => id === oldId ? player.id : id);
+      if (room.gameState.currentDrawerId === oldId) {
+        room.gameState.currentDrawerId = player.id;
+      }
+
+      this.broadcastState(room);
+      return room;
+    }
+
+    // Normal join flow: remove from previous room if any (forced hard-cleanup)
     const existingPlayer = this.players.get(player.id);
     if (existingPlayer && existingPlayer.roomId && existingPlayer.roomId !== roomId) {
-      this.removePlayerFromRoom(existingPlayer.roomId, player.id);
+      this.removePlayerFromRoom(existingPlayer.roomId, player.id, true);
     }
     
     player.roomId = roomId;
+    player.lastHeartbeat = Date.now();
     this.players.set(player.id, player);
     
     // Add to new room if not already in it
@@ -566,17 +622,46 @@ class RoomManager {
     return room;
   }
 
-  removePlayerFromRoom(roomId: string, socketId: string): Room | undefined {
+  markPlayerAsOffline(roomId: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    
+    const player = room.players.find(p => p.id === socketId);
+    if (player && !player.isOffline) {
+       player.isOffline = true;
+       player.offlineSince = Date.now();
+       console.log(`[Anti-AFK] Player ${player.name} (${socketId}) became inactive or offline.`);
+       
+       this.broadcastState(room);
+       
+       if (this.io) {
+          this.io.to(roomId).emit('receive_message', {
+             id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+             text: `${player.name} فقد الاتصال مؤقتاً`,
+             type: 'system'
+          });
+       }
+    }
+  }
+
+  removePlayerFromRoom(roomId: string, socketId: string, force: boolean = false): Room | undefined {
     try {
       const room = this.rooms.get(roomId);
       if (room) {
+        // If soft remove on sudden connection loss, only mark offline unless forced
+        if (!force) {
+           this.markPlayerAsOffline(roomId, socketId);
+           return room;
+        }
+
+        const player = room.players.find(p => p.id === socketId);
+        const playerName = player ? player.name : 'لاعب';
+
         room.players = room.players.filter(p => p.id !== socketId);
         room.gameState.turnQueue = room.gameState.turnQueue.filter(id => id !== socketId);
+        room.gameState.correctGuessers = room.gameState.correctGuessers.filter(id => id !== socketId);
         
-        const player = this.players.get(socketId);
-        if (player) {
-          player.roomId = null;
-        }
+        this.players.delete(socketId);
         
         if (room.players.length === 0) {
           this.rooms.delete(roomId);
@@ -597,6 +682,14 @@ class RoomManager {
         } else {
            this.broadcastState(room);
         }
+
+        if (this.io) {
+          this.io.to(roomId).emit('receive_message', {
+            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            text: `${playerName} غادر الغرفة`,
+            type: 'system'
+          });
+        }
       }
       return room;
     } catch (e) {
@@ -613,9 +706,9 @@ class RoomManager {
     try {
       const player = this.players.get(socketId);
       if (player && player.roomId) {
-        this.removePlayerFromRoom(player.roomId, socketId);
+        // Soft-remove by default on socket disconnect
+        this.removePlayerFromRoom(player.roomId, socketId, false);
       }
-      this.players.delete(socketId);
     } catch (e) {
       console.error("Error removing player:", e);
     }

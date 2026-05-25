@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import DrawingBoard from './DrawingBoard';
 import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon, Pencil, Copy, Check, Clock } from 'lucide-react';
 import { useSocket } from './SocketProvider';
@@ -22,7 +22,7 @@ interface Message {
   color?: string;
 }
 
-type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string; wins?: number };
+type PlayerSlot = { id: string; name: string; points: number | null; isCurrent: boolean; isEmpty?: boolean; avatar?: string; wins?: number; isOffline?: boolean };
 
 interface HitNotification {
   id: string;
@@ -317,17 +317,76 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
 
+  const [showInactiveModal, setShowInactiveModal] = useState(false);
+  const myPlayerId = useMemo(() => {
+    let pid = localStorage.getItem('gartic_player_id');
+    if (!pid) {
+      pid = 'usr-' + Math.random().toString(36).substring(2, 11);
+      localStorage.setItem('gartic_player_id', pid);
+    }
+    return pid;
+  }, []);
+
+  // Heartbeat & General Inactivity Tracker (Gartic.io style)
+  useEffect(() => {
+    if (!socket) return;
+
+    let lastActivity = Date.now();
+    const updateActivity = () => {
+      lastActivity = Date.now();
+    };
+
+    // Tracking real physical interactions to prevent false positives
+    window.addEventListener('pointerdown', updateActivity, { passive: true });
+    window.addEventListener('keydown', updateActivity, { passive: true });
+    window.addEventListener('touchstart', updateActivity, { passive: true });
+
+    // 10s Heartbeat Timer - silently suspended when Inactivity Modal is open
+    const heartbeatInterval = setInterval(() => {
+      if (!showInactiveModal) {
+        socket.emit('heartbeat');
+      }
+    }, 10000);
+
+    // 1s Inactivity Audit Timer
+    const inactivityInterval = setInterval(() => {
+      if (Date.now() - lastActivity >= 120000) { // 120 seconds (2 minutes)
+        if (!showInactiveModal) {
+          setShowInactiveModal(true);
+        }
+      }
+    }, 1000);
+
+    return () => {
+      window.removeEventListener('pointerdown', updateActivity);
+      window.removeEventListener('keydown', updateActivity);
+      window.removeEventListener('touchstart', updateActivity);
+      clearInterval(heartbeatInterval);
+      clearInterval(inactivityInterval);
+    };
+  }, [socket, showInactiveModal]);
+
   useEffect(() => {
     if (!socket) return;
     
     socket.emit('join_room', {
       roomId: room,
       nickname,
-      avatar: avatar || nickname.charAt(0).toUpperCase()
+      avatar: avatar || nickname.charAt(0).toUpperCase(),
+      playerId: myPlayerId
     });
 
     const onRoomStateUpdate = (state: { roomId: string, players: any[], gameState: any }) => {
       const isActiveRound = state.gameState?.status === 'DRAWING' || state.gameState?.status === 'CHOOSING';
+      
+      // Ensure we are still recognized as part of this room
+      const amIStillInRoom = state.players.some(p => p.id === socket.id || p.playerId === myPlayerId);
+      if (!amIStillInRoom && state.players.length > 0) {
+        console.log("[Anti-AFK] Left room or kicked by inactivity.");
+        onLeave?.();
+        return;
+      }
+
       const players = state.players.map(p => ({
         id: p.id,
         name: p.name,
@@ -335,7 +394,8 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
         wins: p.wins || 0,
         isCurrent: isActiveRound && state.gameState?.currentDrawerId === p.id,
         avatar: p.avatar,
-        isEmpty: false
+        isEmpty: false,
+        isOffline: p.isOffline
       })).sort((a, b) => b.points - a.points);
       
       setCurrentPlayers(players);
@@ -380,14 +440,14 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
       
       if (msg.subType === 'hit') {
          if (msg.senderId === socket.id) {
-             setShowCorrectAnimation(true);
-             setTimeout(() => setShowCorrectAnimation(false), 1200);
+              setShowCorrectAnimation(true);
+              setTimeout(() => setShowCorrectAnimation(false), 1200);
          }
          
          const hitId = Date.now().toString() + Math.random().toString();
          setHitNotifications(prev => {
             const next = [...prev, { id: hitId, name: msg.sender }];
-            return next.slice(-20); // allow up to 20 notifications at once for larger rooms
+            return next.slice(-20);
          });
          
          setTimeout(() => {
@@ -396,10 +456,17 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
       }
     };
 
+    const onKickedInactive = () => {
+      console.log("[Anti-AFK] Kicked by server.");
+      alert("لقد تم طردك بسبب الخمود الطويل!");
+      onLeave?.();
+    };
+
     socket.on('room_state_update', onRoomStateUpdate);
     socket.on('receive_message', onReceiveMessage);
     socket.on('receive_guess', onReceiveGuess);
     socket.on('timer_tick', onTimerTick);
+    socket.on('kicked_inactive', onKickedInactive);
 
     return () => {
       socket.emit('leave_room', { roomId: room });
@@ -407,8 +474,9 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
       socket.off('receive_message', onReceiveMessage);
       socket.off('receive_guess', onReceiveGuess);
       socket.off('timer_tick', onTimerTick);
+      socket.off('kicked_inactive', onKickedInactive);
     };
-  }, [socket, nickname, room]);
+  }, [socket, nickname, room, myPlayerId]);
 
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
@@ -685,6 +753,66 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                     <span className="text-[#0A2540] font-black text-lg">YES</span>
                   </button>
                 </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Anti-AFK Inactivity Dialog (Gartic.io style) */}
+        <AnimatePresence>
+          {showInactiveModal && (
+            <div className="absolute inset-0 z-[200] flex flex-col items-center justify-center p-4">
+              {/* Backdrop */}
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-black/80 backdrop-blur-md"
+              />
+              {/* Dialog Content */}
+              <motion.div 
+                initial={{ scale: 0.85, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.85, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                className="relative bg-white border-[4px] border-[#0A2540] rounded-[2rem] w-full max-w-sm flex flex-col items-center shadow-2xl p-6 sm:p-8 pt-12 pb-8 overflow-visible z-10 animate-fade-in"
+              >
+                {/* Banner Ribbon (CCS Ribbon) */}
+                <div className="absolute -top-[1.2rem] left-1/2 -translate-x-1/2 w-48 flex justify-center z-20">
+                    <div className="absolute top-4 -left-3 border-[12px] border-red-800 border-l-transparent border-b-transparent z-[-1]"></div>
+                    <div className="absolute top-4 -right-3 border-[12px] border-red-800 border-r-transparent border-b-transparent z-[-1]"></div>
+                    
+                    <div className="relative bg-[#F44336] border-[3px] border-[#0A2540] rounded-lg px-8 py-1 shadow-[0_4px_0_#0A2540]">
+                        <span className="text-[#FFFFFF] font-black text-lg tracking-wider" style={{ WebkitTextStroke: '1px #0A2540' }}>الخمول!</span>
+                    </div>
+                </div>
+
+                {/* Big Hourglass / Clock Representation */}
+                <div className="w-28 h-28 rounded-full bg-[#FFB300] border-[4px] border-[#0A2540] mt-6 flex items-center justify-center relative shadow-[0_4px_0_#0A2540] text-5xl">
+                  ⌛
+                </div>
+
+                {/* Warning message */}
+                <h3 className="text-gray-700 font-bold text-lg sm:text-xl text-center mt-6 mb-2">
+                  هل أنت هنا؟
+                </h3>
+                <p className="text-[#0A2540] font-medium text-xs sm:text-sm text-center mb-6 leading-relaxed px-2">
+                  لقد توقفت مؤقتاً لحماية نقاطك. انقر أدناه لإبلاغ الخادم بوجودك ولتجنب طردك من اللعبة.
+                </p>
+
+                {/* OK Button */}
+                <button 
+                  onClick={() => {
+                    setShowInactiveModal(false);
+                    socket?.emit('heartbeat');
+                    // Simulating page activity trigger
+                    const event = new Event('pointerdown');
+                    window.dispatchEvent(event);
+                  }}
+                  className="w-full h-14 bg-[#4CAF50] border-[3px] border-[#0A2540] rounded-full flex items-center justify-center gap-2 shadow-[0_4px_0_#0A2540] active:translate-y-1 active:shadow-[0_0px_0_#0A2540] transition-all cursor-pointer"
+                >
+                  <span className="text-white font-black text-xl">موافق، أنا هنا!</span>
+                </button>
               </motion.div>
             </div>
           )}
@@ -1077,7 +1205,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                 layout="position" // Only animate positional changes (reordering) to avoid height morphing delay
                 transition={{ type: "tween", duration: 0.15 }}
                 key={slot.id} 
-                className={`flex items-center p-2 sm:p-4 border-b border-[#00D9FF]/10 h-[65px] sm:h-[80px] shrink-0 transition-colors duration-200 ${bgClass}`}
+                className={`flex items-center p-2 sm:p-4 border-b border-[#00D9FF]/10 h-[65px] sm:h-[80px] shrink-0 transition-colors duration-200 ${bgClass} ${slot.isOffline ? 'opacity-40 grayscale-[50%]' : ''}`}
               >
                 {/* Avatar */}
                 <div className="relative shrink-0 mr-2 sm:mr-3">
@@ -1107,7 +1235,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                 <div className="flex flex-col justify-center overflow-hidden">
                    <span className={`font-bold flex items-center gap-1 text-[12px] sm:text-[15px] truncate max-w-full transition-colors duration-200
                      ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
-                     <span className="truncate">{slot.name}</span>
+                     <span className="truncate">{slot.name} {slot.isOffline && <span className="text-red-400 font-normal text-[10px] sm:text-[11px] shrink-0">(منقطع)</span>}</span>
                      {(slot.wins ?? 0) > 0 && (
                        <span className="text-yellow-500 scale-110 shrink-0" title={`${slot.wins} Wins`}>🏆 {slot.wins}</span>
                      )}
