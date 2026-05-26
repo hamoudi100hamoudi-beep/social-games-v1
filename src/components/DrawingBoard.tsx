@@ -316,45 +316,40 @@ export default function DrawingBoard({
       if (!ctx || !tempCtx || !tempCanvas) return;
 
       const { tool, color, opacity } = data;
-      let activeCtx = (tool === 'pencil' || tool === 'eraser') ? tempCtx : ctx;
 
-      if (tool === 'pencil' || tool === 'eraser') {
+      if (tool !== 'bucket' && tool !== 'pipette') {
         tempCanvas.style.opacity = opacity.toString();
-        activeCtx.globalAlpha = 1;
-        activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
-        activeCtx.globalCompositeOperation = 'source-over';
-      } else {
-        activeCtx.globalAlpha = opacity;
-        activeCtx.strokeStyle = color;
-        activeCtx.fillStyle = color;
-        activeCtx.globalCompositeOperation = 'source-over';
-      }
+        tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        tempCtx.globalAlpha = 1;
+        tempCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+        tempCtx.fillStyle = color;
+        tempCtx.globalCompositeOperation = 'source-over';
+        
+        tempCtx.beginPath();
+        tempCtx.lineCap = 'round';
+        tempCtx.lineJoin = 'round';
+        tempCtx.lineWidth = data.width;
+        tempCtx.moveTo(x, y);
+        tempCtx.lineTo(x, y);
 
-      if (tool === 'pencil' || tool === 'eraser' || tool === 'line') {
-        activeCtx.beginPath();
-        activeCtx.lineCap = 'round';
-        activeCtx.lineJoin = 'round';
-        activeCtx.lineWidth = data.width;
-        activeCtx.moveTo(x, y);
-        activeCtx.lineTo(x, y);
         if (tool === 'pencil') {
-          activeCtx.shadowBlur = IS_LOW_END ? 0 : 1;
-          activeCtx.shadowColor = color;
+          tempCtx.shadowBlur = IS_LOW_END ? 0 : 1;
+          tempCtx.shadowColor = color;
         } else {
-          activeCtx.shadowBlur = 0;
-          activeCtx.shadowColor = 'transparent';
+          tempCtx.shadowBlur = 0;
+          tempCtx.shadowColor = 'transparent';
         }
-        activeCtx.stroke();
-        activeCtx.shadowBlur = 0;
-      } else if (tool === 'strokeCircle') {
-        activeCtx.beginPath();
-        activeCtx.lineWidth = data.width;
-        activeCtx.arc(x, y, 1, 0, Math.PI*2);
-        activeCtx.stroke();
-      } else if (tool === 'fillCircle') {
-        activeCtx.beginPath();
-        activeCtx.arc(x, y, 1, 0, Math.PI*2);
-        activeCtx.fill();
+
+        if (tool === 'pencil' || tool === 'eraser' || tool === 'line') {
+          tempCtx.stroke();
+        } else if (tool === 'strokeCircle') {
+          tempCtx.arc(x, y, 1, 0, Math.PI * 2);
+          tempCtx.stroke();
+        } else if (tool === 'fillCircle') {
+          tempCtx.arc(x, y, 1, 0, Math.PI * 2);
+          tempCtx.fill();
+        }
+        tempCtx.shadowBlur = 0;
       }
     };
 
@@ -369,12 +364,10 @@ export default function DrawingBoard({
         const x = ptX * LOGICAL_WIDTH;
         const y = ptY * LOGICAL_HEIGHT;
 
-        remotePathRef.current.push({x, y});
+        remotePathRef.current.push({ x, y });
 
-        if (tool === 'pencil' || tool === 'eraser') {
-          let activeCtx = tempCtx;
-          
-          // Use full redraw algorithm for remote curves too
+        if (tool !== 'bucket' && tool !== 'pipette') {
+          const activeCtx = tempCtx;
           activeCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
           activeCtx.beginPath();
           activeCtx.lineWidth = width;
@@ -382,79 +375,68 @@ export default function DrawingBoard({
           activeCtx.lineJoin = 'round';
           activeCtx.globalAlpha = 1;
           activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
-          
+          activeCtx.fillStyle = color;
+
           if (tool === 'pencil') {
-            activeCtx.shadowBlur = 1;
+            activeCtx.shadowBlur = IS_LOW_END ? 0 : 1;
             activeCtx.shadowColor = color;
           } else {
             activeCtx.shadowBlur = 0;
             activeCtx.shadowColor = 'transparent';
           }
-          
+
           const path = remotePathRef.current;
           const n = path.length;
-          
-          if (n === 1) {
-            activeCtx.fillStyle = activeCtx.strokeStyle;
-            activeCtx.arc(path[0].x, path[0].y, width / 2, 0, Math.PI * 2);
-            activeCtx.fill();
-          } else if (n === 2) {
-            activeCtx.moveTo(path[0].x, path[0].y);
-            activeCtx.lineTo(path[1].x, path[1].y);
-            activeCtx.stroke();
-          } else {
-            activeCtx.moveTo(path[0].x, path[0].y);
-            const mid1X = (path[0].x + path[1].x) / 2;
-            const mid1Y = (path[0].y + path[1].y) / 2;
-            activeCtx.lineTo(mid1X, mid1Y);
-            
-            for (let i = 1; i < n - 1; i++) {
-              const p1 = path[i];
-              const p2 = path[i + 1];
-              const mid2X = (p1.x + p2.x) / 2;
-              const mid2Y = (p1.y + p2.y) / 2;
-              activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
+
+          if (tool === 'pencil' || tool === 'eraser') {
+            if (n === 1) {
+              activeCtx.fillStyle = activeCtx.strokeStyle;
+              activeCtx.arc(path[0].x, path[0].y, width / 2, 0, Math.PI * 2);
+              activeCtx.fill();
+            } else if (n === 2) {
+              activeCtx.moveTo(path[0].x, path[0].y);
+              activeCtx.lineTo(path[1].x, path[1].y);
+              activeCtx.stroke();
+            } else {
+              activeCtx.moveTo(path[0].x, path[0].y);
+              const mid1X = (path[0].x + path[1].x) / 2;
+              const mid1Y = (path[0].y + path[1].y) / 2;
+              activeCtx.lineTo(mid1X, mid1Y);
+              
+              for (let i = 1; i < n - 1; i++) {
+                const p1 = path[i];
+                const p2 = path[i + 1];
+                const mid2X = (p1.x + p2.x) / 2;
+                const mid2Y = (p1.y + p2.y) / 2;
+                activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
+              }
+              activeCtx.lineTo(path[n - 1].x, path[n - 1].y);
+              activeCtx.stroke();
             }
-            activeCtx.lineTo(path[n - 1].x, path[n - 1].y);
-            activeCtx.stroke();
-          }
-        } else if (!isReplay) {
-          const canvas = canvasRef.current;
-          const lastData = history.current[historyIndex.current];
-          if (lastData) {
-            ctx.putImageData(lastData, 0, 0);
-          } else if (canvas) {
-            ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-          }
-          
-          ctx.beginPath();
-          ctx.strokeStyle = color;
-          ctx.fillStyle = color;
-          ctx.lineWidth = width;
-          ctx.globalAlpha = opacity;
+          } else {
+            const startX = path[0].x;
+            const startY = path[0].y;
 
-          const startX = remotePathRef.current[0].x;
-          const startY = remotePathRef.current[0].y;
-
-          if (tool === 'line') {
-            ctx.moveTo(startX, startY);
-            ctx.lineTo(x, y);
-            ctx.stroke();
-          } else if (tool === 'strokeRect') {
-            ctx.lineJoin = 'miter';
-            ctx.strokeRect(startX, startY, x - startX, y - startY);
-          } else if (tool === 'fillRect') {
-            ctx.fillRect(startX, startY, x - startX, y - startY);
-          } else if (tool === 'strokeCircle') {
-            const radius = Math.hypot(x - startX, y - startY);
-            ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-            ctx.stroke();
-          } else if (tool === 'fillCircle') {
-            const radius = Math.hypot(x - startX, y - startY);
-            ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-            ctx.fill();
+            if (tool === 'line') {
+              activeCtx.moveTo(startX, startY);
+              activeCtx.lineTo(x, y);
+              activeCtx.stroke();
+            } else if (tool === 'strokeRect') {
+              activeCtx.lineJoin = 'miter';
+              activeCtx.strokeRect(startX, startY, x - startX, y - startY);
+            } else if (tool === 'fillRect') {
+              activeCtx.fillRect(startX, startY, x - startX, y - startY);
+            } else if (tool === 'strokeCircle') {
+              const radius = Math.hypot(x - startX, y - startY);
+              activeCtx.arc(startX, startY, radius, 0, Math.PI * 2);
+              activeCtx.stroke();
+            } else if (tool === 'fillCircle') {
+              const radius = Math.hypot(x - startX, y - startY);
+              activeCtx.arc(startX, startY, radius, 0, Math.PI * 2);
+              activeCtx.fill();
+            }
           }
-          ctx.globalAlpha = 1;
+          activeCtx.shadowBlur = 0;
         }
       };
 
@@ -472,23 +454,12 @@ export default function DrawingBoard({
       
       const tool = data?.tool || remoteProps.current.tool;
       const opacity = data?.opacity || remoteProps.current.opacity;
-      const color = data?.color || remoteProps.current.color;
-      const width = data?.width || remoteProps.current.width;
       const ctx = ctxRef.current;
+      const tempCanvas = tempCanvasRef.current;
+      const tempCtx = tempCtxRef.current;
       
-      if (tool === 'pencil' || tool === 'eraser') {
-        const tempCanvas = tempCanvasRef.current;
-        const tempCtx = tempCtxRef.current;
-        
+      if (tool !== 'bucket' && tool !== 'pipette') {
         if (ctx && tempCanvas && tempCtx) {
-          // Restore last known good state from JS memory before compositing.
-          // This prevents a major issue on low-end Androids where the main canvas GPU 
-          // buffer gets discarded to save VRAM while the user is busy dragging a long stroke on the temp canvas.
-          const lastData = history.current[historyIndex.current];
-          if (lastData) {
-            ctx.putImageData(lastData, 0, 0);
-          }
-
           ctx.globalAlpha = opacity;
           ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
           ctx.drawImage(tempCanvas, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
@@ -496,50 +467,6 @@ export default function DrawingBoard({
           ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = 1;
         }
-      } else if (data && data.x !== undefined && data.y !== undefined && ctx) {
-        // Restore last known good state from JS memory to fix GPU discarding bug
-        const lastData = history.current[historyIndex.current];
-        if (lastData) {
-          ctx.putImageData(lastData, 0, 0);
-        }
-
-        // Draw exact final shape for line and shapes without restoring local history
-        // since we no longer dirty the canvas with shape previews.
-        ctx.beginPath();
-        const activeColor = data.color || color;
-        ctx.strokeStyle = activeColor;
-        ctx.fillStyle = activeColor;
-        ctx.lineWidth = data.width || width;
-        ctx.globalAlpha = data.opacity || opacity;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        const startX = data.startX * LOGICAL_WIDTH;
-        const startY = data.startY * LOGICAL_HEIGHT;
-        const finalX = data.x * LOGICAL_WIDTH;
-        const finalY = data.y * LOGICAL_HEIGHT;
-
-        const remoteTool = data.tool || tool;
-
-        if (remoteTool === 'line') {
-          ctx.moveTo(startX, startY);
-          ctx.lineTo(finalX, finalY);
-          ctx.stroke();
-        } else if (remoteTool === 'strokeRect') {
-          ctx.lineJoin = 'miter';
-          ctx.strokeRect(startX, startY, finalX - startX, finalY - startY);
-        } else if (remoteTool === 'fillRect') {
-          ctx.fillRect(startX, startY, finalX - startX, finalY - startY);
-        } else if (remoteTool === 'strokeCircle') {
-          const radius = Math.hypot(finalX - startX, finalY - startY);
-          ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-          ctx.stroke();
-        } else if (remoteTool === 'fillCircle') {
-          const radius = Math.hypot(finalX - startX, finalY - startY);
-          ctx.arc(startX, startY, radius, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.globalAlpha = 1;
       }
 
       remotePathRef.current = [];
@@ -563,24 +490,8 @@ export default function DrawingBoard({
 
     const onDrawCancel = (data?: any) => {
       if (data?.instanceId === instanceId) return;
-      const { tool } = remoteProps.current;
-      if (tool === 'pencil' || tool === 'eraser') {
-        const tempCtx = tempCtxRef.current;
-        tempCtx?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-      } else {
-        const ctx = ctxRef.current;
-        if (ctx) {
-           const lastData = history.current[historyIndex.current];
-           if (lastData) {
-             ctx.putImageData(lastData, 0, 0);
-           } else {
-             const canvas = canvasRef.current;
-             if (canvas) {
-               ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-             }
-           }
-        }
-      }
+      const tempCtx = tempCtxRef.current;
+      tempCtx?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       remotePathRef.current = [];
     };
 
@@ -871,11 +782,7 @@ export default function DrawingBoard({
     
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
     
-    // Explicitly pushing the pixels back can still help force composite updates on some older Androids,
-    // though the primary fix for the vanishing strokes is restoring from history before compositing.
-    if (IS_LOW_END) {
-      ctx.putImageData(data, 0, 0);
-    }
+    // Storing state in JS memory history list. No redundant GPU uploads are needed.
     
     history.current = history.current.slice(0, historyIndex.current + 1);
     history.current.push(data);
@@ -1014,19 +921,7 @@ export default function DrawingBoard({
           ctxRef.current?.closePath();
           tempCtxRef.current?.closePath();
           tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-          // Erase the accidental start of the stroke
-          const lastData = history.current[historyIndex.current];
-          if (lastData) {
-            ctxRef.current?.putImageData(lastData, 0, 0);
-          } else {
-            const canvas = canvasRef.current;
-            if (canvas) {
-              const ctx = ctxRef.current;
-              if (ctx) {
-                ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-              }
-            }
-          }
+          // Since active drawing is isolated to tempCanvas, clearing tempCtx is fully sufficient.
           if (socket) {
             socket.emit('draw_cancel', { instanceId });
           }
@@ -1158,19 +1053,7 @@ export default function DrawingBoard({
             ctxRef.current?.closePath();
             tempCtxRef.current?.closePath();
             tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-            // Erase the accidental start of the stroke
-            const lastData = history.current[historyIndex.current];
-            if (lastData) {
-              ctxRef.current?.putImageData(lastData, 0, 0);
-            } else {
-              const canvas = canvasRef.current;
-              if (canvas) {
-                const ctx = ctxRef.current;
-                if (ctx) {
-                  ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-                }
-              }
-            }
+            // Since active drawing is isolated to tempCanvas, clearing tempCtx is fully sufficient.
             if (socket) {
               socket.emit('draw_cancel', { instanceId });
             }
