@@ -22,21 +22,29 @@ const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b:
          Math.abs(data[i+3] - a) <= tolerance;
 };
 
+let sharedOffscreenCanvas: HTMLCanvasElement | null = null;
+let sharedOffscreenCtx: CanvasRenderingContext2D | null = null;
+
 const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number, fillColorStr: string, fillOpacity: number = 1) => {
   const canvas = ctx.canvas;
   const cw = canvas.width, ch = canvas.height;
   
-  let offscreenCanvas: HTMLCanvasElement | null = document.createElement('canvas');
-  offscreenCanvas.width = cw;
-  offscreenCanvas.height = ch;
-  const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
-  if (!offscreenCtx) {
-     offscreenCanvas.width = 0;
-     offscreenCanvas.height = 0;
-     offscreenCanvas = null;
-     return;
+  if (!sharedOffscreenCanvas) {
+    sharedOffscreenCanvas = document.createElement('canvas');
+  }
+  if (sharedOffscreenCanvas.width !== cw || sharedOffscreenCanvas.height !== ch) {
+    sharedOffscreenCanvas.width = cw;
+    sharedOffscreenCanvas.height = ch;
+    sharedOffscreenCtx = null;
+  }
+  if (!sharedOffscreenCtx) {
+    sharedOffscreenCtx = sharedOffscreenCanvas.getContext('2d', { willReadFrequently: true });
   }
   
+  const offscreenCtx = sharedOffscreenCtx;
+  if (!offscreenCtx) return;
+  
+  offscreenCtx.clearRect(0, 0, cw, ch);
   offscreenCtx.drawImage(canvas, 0, 0);
   
   const imageData = offscreenCtx.getImageData(0, 0, cw, ch);
@@ -127,10 +135,6 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   }
   
   ctx.putImageData(imageData, 0, 0);
-  
-  offscreenCanvas.width = 0;
-  offscreenCanvas.height = 0;
-  offscreenCanvas = null;
 };
 
 const LOGICAL_WIDTH = 800;
