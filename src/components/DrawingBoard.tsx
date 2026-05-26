@@ -300,6 +300,56 @@ export default function DrawingBoard({
   const remotePathRef = useRef<{x: number, y: number}[]>([]);
   const remoteProps = useRef({ tool: 'pencil', color: '#000', width: 5, opacity: 1 });
 
+  const drawStrokeSegment = (
+    activeCtx: CanvasRenderingContext2D,
+    path: { x: number, y: number }[],
+    tool: string,
+    color: string,
+    width: number
+  ) => {
+    const len = path.length;
+    if (len === 0) return;
+
+    activeCtx.beginPath();
+    activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+    activeCtx.fillStyle = color;
+    activeCtx.lineWidth = width;
+    activeCtx.lineCap = 'round';
+    activeCtx.lineJoin = 'round';
+    
+    if (tool === 'pencil') {
+       activeCtx.shadowBlur = IS_LOW_END ? 0 : 1;
+       activeCtx.shadowColor = color;
+    } else {
+       activeCtx.shadowBlur = 0;
+       activeCtx.shadowColor = 'transparent';
+    }
+
+    if (len === 1) {
+      activeCtx.fillStyle = activeCtx.strokeStyle;
+      activeCtx.arc(path[0].x, path[0].y, width / 2, 0, Math.PI * 2);
+      activeCtx.fill();
+    } else if (len === 2) {
+      activeCtx.moveTo(path[0].x, path[0].y);
+      activeCtx.lineTo(path[1].x, path[1].y);
+      activeCtx.stroke();
+    } else {
+      const p0 = path[len - 3];
+      const p1 = path[len - 2];
+      const p2 = path[len - 1];
+
+      const mid1X = (p0.x + p1.x) / 2;
+      const mid1Y = (p0.y + p1.y) / 2;
+      const mid2X = (p1.x + p2.x) / 2;
+      const mid2Y = (p1.y + p2.y) / 2;
+
+      activeCtx.moveTo(mid1X, mid1Y);
+      activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
+      activeCtx.stroke();
+    }
+    activeCtx.shadowBlur = 0;
+  };
+
   useEffect(() => {
     if (!socket) return;
     
@@ -315,7 +365,7 @@ export default function DrawingBoard({
       const tempCanvas = tempCanvasRef.current;
       if (!ctx || !tempCtx || !tempCanvas) return;
 
-      const { tool, color, opacity } = data;
+      const { tool, color, opacity, width } = data;
 
       if (tool !== 'bucket' && tool !== 'pipette') {
         tempCanvas.style.opacity = opacity.toString();
@@ -325,31 +375,25 @@ export default function DrawingBoard({
         tempCtx.fillStyle = color;
         tempCtx.globalCompositeOperation = 'source-over';
         
-        tempCtx.beginPath();
-        tempCtx.lineCap = 'round';
-        tempCtx.lineJoin = 'round';
-        tempCtx.lineWidth = data.width;
-        tempCtx.moveTo(x, y);
-        tempCtx.lineTo(x, y);
-
-        if (tool === 'pencil') {
-          tempCtx.shadowBlur = IS_LOW_END ? 0 : 1;
-          tempCtx.shadowColor = color;
+        if (tool === 'pencil' || tool === 'eraser') {
+          drawStrokeSegment(tempCtx, remotePathRef.current, tool, color, width);
         } else {
-          tempCtx.shadowBlur = 0;
-          tempCtx.shadowColor = 'transparent';
+          tempCtx.beginPath();
+          tempCtx.lineCap = 'round';
+          tempCtx.lineJoin = 'round';
+          tempCtx.lineWidth = width;
+          tempCtx.moveTo(x, y);
+          tempCtx.lineTo(x, y);
+          if (tool === 'line') {
+            tempCtx.stroke();
+          } else if (tool === 'strokeCircle') {
+            tempCtx.arc(x, y, 1, 0, Math.PI * 2);
+            tempCtx.stroke();
+          } else if (tool === 'fillCircle') {
+            tempCtx.arc(x, y, 1, 0, Math.PI * 2);
+            tempCtx.fill();
+          }
         }
-
-        if (tool === 'pencil' || tool === 'eraser' || tool === 'line') {
-          tempCtx.stroke();
-        } else if (tool === 'strokeCircle') {
-          tempCtx.arc(x, y, 1, 0, Math.PI * 2);
-          tempCtx.stroke();
-        } else if (tool === 'fillCircle') {
-          tempCtx.arc(x, y, 1, 0, Math.PI * 2);
-          tempCtx.fill();
-        }
-        tempCtx.shadowBlur = 0;
       }
     };
 
@@ -358,7 +402,7 @@ export default function DrawingBoard({
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
       if (!ctx || !tempCtx || !remotePathRef.current || remotePathRef.current.length === 0) return;
-      const { color, width, tool, opacity } = remoteProps.current;
+      const { color, width, tool } = remoteProps.current;
       
       const processPoint = (ptX: number, ptY: number) => {
         const x = ptX * LOGICAL_WIDTH;
@@ -366,77 +410,40 @@ export default function DrawingBoard({
 
         remotePathRef.current.push({ x, y });
 
-        if (tool !== 'bucket' && tool !== 'pipette') {
-          const activeCtx = tempCtx;
-          activeCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-          activeCtx.beginPath();
-          activeCtx.lineWidth = width;
-          activeCtx.lineCap = 'round';
-          activeCtx.lineJoin = 'round';
-          activeCtx.globalAlpha = 1;
-          activeCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
-          activeCtx.fillStyle = color;
+        if (tool === 'pencil' || tool === 'eraser') {
+          drawStrokeSegment(tempCtx, remotePathRef.current, tool, color, width);
+        } else {
+          tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+          tempCtx.beginPath();
+          tempCtx.strokeStyle = color;
+          tempCtx.fillStyle = color;
+          tempCtx.lineWidth = width;
+          tempCtx.lineCap = 'round';
+          tempCtx.lineJoin = 'round';
+          tempCtx.shadowBlur = 0;
+          tempCtx.shadowColor = 'transparent';
 
-          if (tool === 'pencil') {
-            activeCtx.shadowBlur = IS_LOW_END ? 0 : 1;
-            activeCtx.shadowColor = color;
-          } else {
-            activeCtx.shadowBlur = 0;
-            activeCtx.shadowColor = 'transparent';
+          const startX = remotePathRef.current[0].x;
+          const startY = remotePathRef.current[0].y;
+
+          if (tool === 'line') {
+            tempCtx.moveTo(startX, startY);
+            tempCtx.lineTo(x, y);
+            tempCtx.stroke();
+          } else if (tool === 'strokeRect') {
+            tempCtx.lineJoin = 'miter';
+            tempCtx.strokeRect(startX, startY, x - startX, y - startY);
+          } else if (tool === 'fillRect') {
+            tempCtx.fillRect(startX, startY, x - startX, y - startY);
+          } else if (tool === 'strokeCircle') {
+            const radius = Math.hypot(x - startX, y - startY);
+            tempCtx.arc(startX, startY, radius, 0, Math.PI * 2);
+            tempCtx.stroke();
+          } else if (tool === 'fillCircle') {
+            const radius = Math.hypot(x - startX, y - startY);
+            tempCtx.arc(startX, startY, radius, 0, Math.PI * 2);
+            tempCtx.fill();
           }
-
-          const path = remotePathRef.current;
-          const n = path.length;
-
-          if (tool === 'pencil' || tool === 'eraser') {
-            if (n === 1) {
-              activeCtx.fillStyle = activeCtx.strokeStyle;
-              activeCtx.arc(path[0].x, path[0].y, width / 2, 0, Math.PI * 2);
-              activeCtx.fill();
-            } else if (n === 2) {
-              activeCtx.moveTo(path[0].x, path[0].y);
-              activeCtx.lineTo(path[1].x, path[1].y);
-              activeCtx.stroke();
-            } else {
-              activeCtx.moveTo(path[0].x, path[0].y);
-              const mid1X = (path[0].x + path[1].x) / 2;
-              const mid1Y = (path[0].y + path[1].y) / 2;
-              activeCtx.lineTo(mid1X, mid1Y);
-              
-              for (let i = 1; i < n - 1; i++) {
-                const p1 = path[i];
-                const p2 = path[i + 1];
-                const mid2X = (p1.x + p2.x) / 2;
-                const mid2Y = (p1.y + p2.y) / 2;
-                activeCtx.quadraticCurveTo(p1.x, p1.y, mid2X, mid2Y);
-              }
-              activeCtx.lineTo(path[n - 1].x, path[n - 1].y);
-              activeCtx.stroke();
-            }
-          } else {
-            const startX = path[0].x;
-            const startY = path[0].y;
-
-            if (tool === 'line') {
-              activeCtx.moveTo(startX, startY);
-              activeCtx.lineTo(x, y);
-              activeCtx.stroke();
-            } else if (tool === 'strokeRect') {
-              activeCtx.lineJoin = 'miter';
-              activeCtx.strokeRect(startX, startY, x - startX, y - startY);
-            } else if (tool === 'fillRect') {
-              activeCtx.fillRect(startX, startY, x - startX, y - startY);
-            } else if (tool === 'strokeCircle') {
-              const radius = Math.hypot(x - startX, y - startY);
-              activeCtx.arc(startX, startY, radius, 0, Math.PI * 2);
-              activeCtx.stroke();
-            } else if (tool === 'fillCircle') {
-              const radius = Math.hypot(x - startX, y - startY);
-              activeCtx.arc(startX, startY, radius, 0, Math.PI * 2);
-              activeCtx.fill();
-            }
-          }
-          activeCtx.shadowBlur = 0;
         }
       };
 
@@ -444,7 +451,7 @@ export default function DrawingBoard({
         for (const pt of data.moves) {
            processPoint(pt.x, pt.y);
         }
-      } else {
+      } else if (data.x !== undefined && data.y !== undefined) {
         processPoint(data.x, data.y);
       }
     };
@@ -460,6 +467,63 @@ export default function DrawingBoard({
       
       if (tool !== 'bucket' && tool !== 'pipette') {
         if (ctx && tempCanvas && tempCtx) {
+          
+          if (data && data.startX !== undefined && data.x !== undefined && tool !== 'pencil' && tool !== 'eraser') {
+            const startX = data.startX * LOGICAL_WIDTH;
+            const startY = data.startY * LOGICAL_HEIGHT;
+            const x = data.x * LOGICAL_WIDTH;
+            const y = data.y * LOGICAL_HEIGHT;
+            const width = data.width || remoteProps.current.width;
+            const color = data.color || remoteProps.current.color;
+
+            tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+            tempCtx.beginPath();
+            tempCtx.strokeStyle = color;
+            tempCtx.fillStyle = color;
+            tempCtx.lineWidth = width;
+            tempCtx.lineCap = 'round';
+            tempCtx.lineJoin = 'round';
+
+            if (tool === 'line') {
+              tempCtx.moveTo(startX, startY);
+              tempCtx.lineTo(x, y);
+              tempCtx.stroke();
+            } else if (tool === 'strokeRect') {
+              tempCtx.lineJoin = 'miter';
+              tempCtx.strokeRect(startX, startY, x - startX, y - startY);
+            } else if (tool === 'fillRect') {
+              tempCtx.fillRect(startX, startY, x - startX, y - startY);
+            } else if (tool === 'strokeCircle') {
+              const radius = Math.hypot(x - startX, y - startY);
+              tempCtx.arc(startX, startY, radius, 0, Math.PI * 2);
+              tempCtx.stroke();
+            } else if (tool === 'fillCircle') {
+              const radius = Math.hypot(x - startX, y - startY);
+              tempCtx.arc(startX, startY, radius, 0, Math.PI * 2);
+              tempCtx.fill();
+            }
+          } else if (tool === 'pencil' || tool === 'eraser') {
+            const path = remotePathRef.current;
+            const n = path.length;
+            if (n >= 2) {
+              const width = remoteProps.current.width;
+              const color = remoteProps.current.color;
+              tempCtx.beginPath();
+              tempCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+              tempCtx.lineWidth = width;
+              tempCtx.lineCap = 'round';
+              tempCtx.lineJoin = 'round';
+              
+              const p1 = path[n - 2];
+              const p2 = path[n - 1];
+              const midX = (p1.x + p2.x) / 2;
+              const midY = (p1.y + p2.y) / 2;
+              tempCtx.moveTo(midX, midY);
+              tempCtx.lineTo(p2.x, p2.y);
+              tempCtx.stroke();
+            }
+          }
+
           ctx.globalAlpha = opacity;
           ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
           ctx.drawImage(tempCanvas, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
@@ -930,7 +994,7 @@ export default function DrawingBoard({
         const cxViewport = (t1.clientX + t2.clientX) / 2;
         const cyViewport = (t1.clientY + t2.clientY) / 2;
         const { x: cx, y: cy } = getContainerCoord(cxViewport, cyViewport);
-
+        
         lastTouch.current = {
           dist: Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY),
           x: cx,
@@ -964,7 +1028,6 @@ export default function DrawingBoard({
     }
 
     currentPath.current = [{x, y}];
-    needsRenderRef.current = true;
     setIsDrawing(true);
     
     // Choose context based on tool
@@ -978,36 +1041,33 @@ export default function DrawingBoard({
       activeCtx.globalCompositeOperation = 'source-over';
     }
 
-    activeCtx.beginPath();
-    activeCtx.lineCap = 'round';
-    activeCtx.lineJoin = 'round';
-    activeCtx.lineWidth = currentWidth;
-    
-    if (socket && (tool === 'pencil' || tool === 'eraser')) {
+    if (socket && tool !== 'bucket' && tool !== 'pipette') {
        socket.emit('draw_start', {
           instanceId, tool, color, width: currentWidth, opacity: currentOpacity,
           x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
        });
     }
 
-    if (tool === 'pencil' || tool === 'eraser' || tool === 'line') {
-      activeCtx.moveTo(x, y);
-      activeCtx.lineTo(x, y);
-      if (tool === 'pencil') {
-        activeCtx.shadowBlur = IS_LOW_END ? 0 : 1;
-        activeCtx.shadowColor = color;
-      } else {
-        activeCtx.shadowBlur = 0;
-        activeCtx.shadowColor = 'transparent';
+    if (tool === 'pencil' || tool === 'eraser') {
+      drawStrokeSegment(tempCtx, currentPath.current, tool, color, currentWidth);
+      needsRenderRef.current = false;
+    } else if (tool !== 'bucket' && tool !== 'pipette') {
+      tempCtx.beginPath();
+      tempCtx.lineCap = 'round';
+      tempCtx.lineJoin = 'round';
+      tempCtx.lineWidth = currentWidth;
+      tempCtx.moveTo(x, y);
+      tempCtx.lineTo(x, y);
+      if (tool === 'line') {
+        tempCtx.stroke();
+      } else if (tool === 'strokeCircle') {
+        tempCtx.arc(x, y, 1, 0, Math.PI*2);
+        tempCtx.stroke();
+      } else if (tool === 'fillCircle') {
+        tempCtx.arc(x, y, 1, 0, Math.PI*2);
+        tempCtx.fill();
       }
-      activeCtx.stroke();
-      activeCtx.shadowBlur = 0;
-    } else if (tool === 'strokeCircle') {
-      activeCtx.arc(x, y, 1, 0, Math.PI*2);
-      activeCtx.stroke();
-    } else if (tool === 'fillCircle') {
-      activeCtx.arc(x, y, 1, 0, Math.PI*2);
-      activeCtx.fill();
+      needsRenderRef.current = true;
     }
     
     if (ctx) ctx.shadowBlur = 0;
@@ -1078,10 +1138,13 @@ export default function DrawingBoard({
     if (!ctx || !tempCtx) return;
 
     currentPath.current.push({x, y});
-    needsRenderRef.current = true;
     
-    if (socket) {
-      if (tool === 'pencil' || tool === 'eraser') {
+    if (tool === 'pencil' || tool === 'eraser') {
+      const { color, currentWidth } = stateRefs.current;
+      drawStrokeSegment(tempCtx, currentPath.current, tool, color, currentWidth);
+      needsRenderRef.current = false;
+      
+      if (socket) {
         const normX = x / LOGICAL_WIDTH;
         const normY = y / LOGICAL_HEIGHT;
         let shouldAdd = true;
@@ -1113,6 +1176,17 @@ export default function DrawingBoard({
             throttleTimeoutRef.current = null;
           }, DPR < 2 ? 26 : 16); // Optimize Batch Interval: 26ms for weak devices, 16ms for fast
         }
+      }
+    } else {
+      needsRenderRef.current = true;
+      if (socket) {
+        const normX = x / LOGICAL_WIDTH;
+        const normY = y / LOGICAL_HEIGHT;
+        socket.emit('draw_move', {
+          instanceId,
+          x: normX,
+          y: normY
+        });
       }
     }
   };
