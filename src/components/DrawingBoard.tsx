@@ -149,6 +149,31 @@ const getAdaptiveDPR = () => {
   _cachedDPR = dpr;
   return dpr;
 };
+
+const isLowEndHardware = () => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const nav: any = navigator;
+    const cpuCount = nav.hardwareConcurrency;
+    const memory = nav.deviceMemory;
+
+    if (cpuCount !== undefined && cpuCount <= 4) return true;
+    if (memory !== undefined && memory <= 3) return true;
+
+    if (cpuCount === undefined || memory === undefined) {
+      if (window.devicePixelRatio !== undefined && window.devicePixelRatio < 1.5) {
+        return true;
+      }
+    }
+  } catch (err) {
+    if (window.devicePixelRatio !== undefined && window.devicePixelRatio < 1.5) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const IS_LOW_END = typeof window !== 'undefined' ? isLowEndHardware() : false;
 const DPR = typeof window !== 'undefined' ? getAdaptiveDPR() : 2;
 
 export default function DrawingBoard({ 
@@ -313,7 +338,7 @@ export default function DrawingBoard({
         activeCtx.moveTo(x, y);
         activeCtx.lineTo(x, y);
         if (tool === 'pencil') {
-          activeCtx.shadowBlur = 1;
+          activeCtx.shadowBlur = IS_LOW_END ? 0 : 1;
           activeCtx.shadowColor = color;
         } else {
           activeCtx.shadowBlur = 0;
@@ -601,7 +626,7 @@ export default function DrawingBoard({
          }
       }
       
-      const MAX_HISTORY = 5;
+      const MAX_HISTORY = IS_LOW_END ? 1 : 5;
       while (history.current.length > MAX_HISTORY + 1) {
          history.current.shift();
       }
@@ -701,7 +726,7 @@ export default function DrawingBoard({
         activeCtx.globalAlpha = 1;
         
         if (tool === 'pencil') {
-           activeCtx.shadowBlur = 1;
+           activeCtx.shadowBlur = IS_LOW_END ? 0 : 1;
            activeCtx.shadowColor = color;
         } else {
            activeCtx.shadowBlur = 0;
@@ -834,7 +859,7 @@ export default function DrawingBoard({
     history.current = history.current.slice(0, historyIndex.current + 1);
     history.current.push(data);
     
-    const MAX_HISTORY = 5;
+    const MAX_HISTORY = IS_LOW_END ? 1 : 5;
     while (history.current.length > MAX_HISTORY + 1) {
       history.current.shift();
     }
@@ -1046,7 +1071,7 @@ export default function DrawingBoard({
       activeCtx.moveTo(x, y);
       activeCtx.lineTo(x, y);
       if (tool === 'pencil') {
-        activeCtx.shadowBlur = 1;
+        activeCtx.shadowBlur = IS_LOW_END ? 0 : 1;
         activeCtx.shadowColor = color;
       } else {
         activeCtx.shadowBlur = 0;

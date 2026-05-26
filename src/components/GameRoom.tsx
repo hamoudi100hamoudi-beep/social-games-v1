@@ -146,7 +146,7 @@ const ChatMessageItem: React.FC<{
           onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
           style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
         >
-          <span className="text-[11px] text-[#00D9FF] font-bold mb-1 mr-1">{msg.sender}</span>
+          <span className="text-[15px] text-[#00D9FF] font-bold mb-1 mr-1">{msg.sender}</span>
           <div 
             className="bg-[#7C4DFF] px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-[#6A3DE8]"
             dir="auto"
@@ -166,8 +166,8 @@ const ChatMessageItem: React.FC<{
             </button>
           )}
         </div>
-        <div className="w-10 h-10 rounded-full bg-[#1A103C] border-[3px] border-[#00D9FF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
-          <span className="text-2xl translate-y-[1px]">{msg.avatar}</span>
+        <div className="w-16 h-16 rounded-full bg-[#1A103C] border-[3px] border-[#00D9FF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
+          <span className="text-4xl translate-y-[1px]">{msg.avatar}</span>
         </div>
       </div>
     );
@@ -175,8 +175,8 @@ const ChatMessageItem: React.FC<{
 
   return (
     <div className="flex justify-start items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none">
-      <div className="w-10 h-10 rounded-full bg-[#24174D] border-[3px] border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
-        <span className="text-2xl translate-y-[1px]">{msg.avatar || '?'}</span>
+      <div className="w-16 h-16 rounded-full bg-[#24174D] border-[3px] border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
+        <span className="text-4xl translate-y-[1px]">{msg.avatar || '?'}</span>
       </div>
       <div 
         className="flex flex-col items-start max-w-[80%] relative"
@@ -188,7 +188,7 @@ const ChatMessageItem: React.FC<{
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
         style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
       >
-        <span className={`text-[11px] font-bold mb-1 ml-1 ${getSenderColor(msg.sender)}`}>{msg.sender}</span>
+        <span className={`text-[15px] font-bold mb-1 ml-1 ${getSenderColor(msg.sender)}`}>{msg.sender}</span>
         <div 
           className="bg-[#24174D] px-4 py-2.5 rounded-2xl rounded-tl-sm text-white text-[15px] font-medium shadow-md break-words border border-white/10"
           dir="auto"
@@ -278,6 +278,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   const bgTouchStartTime = React.useRef<number>(0);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
+  const [viewportOffsetTop, setViewportOffsetTop] = useState<number>(0);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -569,6 +570,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
       
       const currentHeight = window.visualViewport.height;
       setLockedHeight(currentHeight);
+      setViewportOffsetTop(window.visualViewport.offsetTop || 0);
 
       if (currentHeight > currentMax) {
         currentMax = currentHeight;
@@ -600,12 +602,15 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
     if (window.visualViewport) {
       setLockedHeight(window.visualViewport.height);
+      setViewportOffsetTop(window.visualViewport.offsetTop || 0);
       window.visualViewport.addEventListener('resize', handleResize);
+      window.visualViewport.addEventListener('scroll', handleResize);
     }
 
     return () => {
       window.removeEventListener('scroll', handleScroll);
       window.visualViewport?.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('scroll', handleResize);
     };
   }, []);
 
@@ -1467,8 +1472,11 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
       {/* Chat Overlay */}
       {isChatOpen && (
          <div 
-           className="fixed top-0 left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none"
-           style={{ height: lockedHeight ? `${lockedHeight}px` : '100dvh' }}
+           className="fixed left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none"
+           style={{ 
+             top: `${viewportOffsetTop}px`,
+             height: lockedHeight ? `${lockedHeight}px` : '100dvh' 
+           }}
          >
             
             <div className="w-full h-full flex flex-col">
