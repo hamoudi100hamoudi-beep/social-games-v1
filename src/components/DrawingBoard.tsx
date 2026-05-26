@@ -281,9 +281,36 @@ export default function DrawingBoard({
 
   const clampTransform = (newX: number, newY: number, newScale: number, currentBaseScale: number) => {
     const container = containerRef.current;
-    if (!container) return { x: newX, y: newY };
+    if (!container) return { x: newX, y: newY, scale: newScale };
     const { width, height } = container.getBoundingClientRect();
     
+    if (IS_LOW_END) {
+      // Force scale to be exactly 1 on low-end hardware
+      const cw = LOGICAL_WIDTH * currentBaseScale * 1;
+      const ch = LOGICAL_HEIGHT * currentBaseScale * 1;
+      
+      // Calculate centered Y (no vertical panning allowed)
+      const initialY = (height - ch) / 2;
+      
+      // Calculate X limits (no scrolling beyond canvas bounds)
+      let clampedX = newX;
+      if (cw <= width) {
+        // Can fit completely inside horizontally, center it
+        clampedX = (width - cw) / 2;
+      } else {
+        // Wider than screen, allow horizontal panning but clamp precisely to edges [width - cw, 0]
+        const minX = width - cw;
+        const maxX = 0;
+        clampedX = Math.max(minX, Math.min(maxX, newX));
+      }
+      
+      return {
+        x: clampedX,
+        y: initialY,
+        scale: 1, // forced scale
+      };
+    }
+
     const cw = LOGICAL_WIDTH * currentBaseScale * newScale;
     const ch = LOGICAL_HEIGHT * currentBaseScale * newScale;
     
@@ -298,6 +325,7 @@ export default function DrawingBoard({
     return {
       x: Math.max(minX, Math.min(maxX, newX)),
       y: Math.max(minY, Math.min(maxY, newY)),
+      scale: newScale
     };
   };
   
@@ -1104,8 +1132,18 @@ export default function DrawingBoard({
         let newX = cx + dx - (cx - prev.x) * (newScale / prev.scale);
         let newY = cy + dy - (cy - prev.y) * (newScale / prev.scale);
 
+        if (IS_LOW_END) {
+          newScale = 1;
+          newX = prev.x + dx; // Lock to purely horizontal movement
+          newY = prev.y; // Keep vertical translation completely centered
+        }
+
         const clamped = clampTransform(newX, newY, newScale, baseScale);
-        transformRef.current = { scale: newScale, x: clamped.x, y: clamped.y };
+        transformRef.current = { 
+          scale: clamped.scale !== undefined ? clamped.scale : newScale, 
+          x: clamped.x, 
+          y: clamped.y 
+        };
         applyTransform();
 
         lastTouch.current = { dist, x: cx, y: cy };

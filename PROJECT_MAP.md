@@ -9,12 +9,12 @@
 - **Core Loop Focus:** صب التركيز على جعل نواة اللعبة (Game Loop) ممتعة وسريعة ومستقرة قبل أي توسع.
 
 ## 3. MVP Scope (M1 - M3)
-- إنشاء غرفة ومشاركتها عبر رابط.
-- الانضمام لغرفة.
-- الرسم اللحظي وتزامنه مع اللاعبين.
-- التخمين عبر نظام الدردشة.
-- إدارة الجولات واختيار الرسام.
-- نظام نقاط مبسط جداً ومؤقت للجولة.
+- [x] إنشاء غرفة ومشاركتها عبر رابط.
+- [x] الانضمام لغرفة.
+- [x] الرسم اللحظي وتزامنه مع اللاعبين.
+- [x] التخمين عبر نظام الدردشة.
+- [x] إدارة الجولات واختيار الرسام.
+- [x] نظام نقاط مبسط جداً ومؤقت للجولة.
 
 ## 4. Architecture Overview
 **Monolith Modular Architecture**
@@ -22,88 +22,56 @@
 - الـ Frontend والـ Backend يعملان عبر خادم واحد (Express + Vite Middleware).
 - **الطبقات:**
   - `Core/Room Engine`: إدارة الغرف واللاعبين، بغض النظر عن اللعبة الحالية.
-  - `Game Logic`: الوحدات الخاصة بكل لعبة (مثل وحدة الرسم).
+  - `Game Logic`: الوحدات الخاصة بكل لعبة (مثل وحدة الرسم والتخمين).
   - `Socket Layer`: استقبال الأوامر وتوزيع الحالات (State Broadcast).
 
-## 5. Tech Stack
+## 5. Network, Reconnection & Session Resilience [MAPPED]
+يحتوي النظام على آليات حماية وتماسك فائق عند تقلب جودة الاتصال بالإنترنت على الهواتف:
+- **المعرف الثابت الموفر للجلسة (`persistentPlayerId`):** يتم إنشاؤه وحفظه محليًا في `localStorage` للعميل. لا يُعامل اللاعب كعضو جديد عند تدوير المتصفح أو قطع الاتصال بل يحفظ هويته وبياناته.
+- **إعادة ربط الاتصال الذكية (`reconnectPlayer`):** يستقبل الخادم طلب إعادة اتصال اللاعب، فيقوم فورًا باستبدال الـ `socket.id` القديم بالجديد، وينزع وسم المنقطع (`isOffline = false`) ويوقف مؤقت الإبادة التراكمي.
+- **مزامنة خطوط الرسم الآمنة (`draw_history_sync`):** كشف صمام الأمان على الرسم؛ عند عودة اللاعب، يتلقى حزمة تاريخ الرسم المكتملة `draw_history_sync`. يقوم محرك الرسم فورًا بمسح اللوحة محليًا بـ `ctx.clearRect` قبل إعادة طباعة الحزمة بالكامل لمنع التفاف أو تضاعف الخطوط المرسومة.
+- **واجهة الحجب الضبابية المأمنة (Glassmorphic Reconnection Overlay):** بـ `z-index: 300` وخلفية بلورية تفاعلية ونصوص عربية صريحة "جاري استعادة الاتصال بالشبكة...". تظهر بقوة فور تعثر المقبس لمنع العرقلة البصرية أو تشتيت المستخدم وضمان استمرارية الجلسة بكفاءة عالية.
+
+## 6. Game Turn System Resilience [MAPPED]
+صُممت نواة إدارة الجولات لتكون محصنة ضد سلوكيات الخروج المؤقت والدائم:
+- **استقلالية حركة الجولات:** خروج اللاعبين المشاهدين (Spectators) أو تذبذب شبكاتهم لا يؤدي أبدًا إلى إيقاف جولات الرسم أو تجميد مؤقت اللعبة النشط.
+- **التخطي التلقائي للاعب المنقطع (`isOffline`):** يقوم الخادم بفحص طابور الأدوار بمرونة. إذا حان دور لاعب مسجل بحالة `isOffline` في السيرفر، يتخطاه المحرك فورًا وتلقائيًا دون تعليق أو تجميد العمليات الخلفية للغرفة.
+
+## 7. Tech Stack
 - **Frontend:** React 18, Vite, Tailwind CSS (Mobile-First UI).
 - **Backend:** Node.js, Express, Socket.io (Realtime).
-- **Database:** SQLite (سيتم دمجها لاحقاً لحفظ بيانات الغرف أو الجلسات المعمرة - حالياً الاعتماد على In-Memory).
+- **Database:** In-Memory maps.
 
-## 6. Folder Structure Proposal (Flat & Simple)
-```text
-/src
-  /components     # واجهات React التشاركية والأساسية
-  /providers      # React Contexts (Socket Provider, etc.)
-  /lib            # وظائف مساعدة عامة (Utils)
-/server.ts        # المدخل الأساسي (Vite + Express)
-```
+## 8. Performance & Hardware Optimization [MAPPED]
+تم تحسين استجابة ورسم اللوحة لتعمل بتردد 60 إطاراً بالثانية على الهواتف القديمة:
+1. **مستشعر مواصفات العتاد (`isLowEndHardware`):** يكشف ذكياً قدرة الهاتف (عدد الأنوية <= 4، الذاكرة العشوائية <= 3GB) مع صمام فحص مرن بمعدل دقة الـ `devicePixelRatio < 1.5` للأنظمة الصارمة التي تحجب معلومات الخصوصية.
+2. **محفزات التحسين الفورية:**
+   - **محو الغبش الساقط:** إلغاء الـ `shadowBlur` كليًا لتسريع معالجة GPU في الهواتف الضعيفة.
+   - **ضغط الـ Undo Queue:** الأجهزة القوية تحتفظ بـ [5] خطوات تراجع لمستويات أريحية عالية. للأجهزة الضعيفة، يتم ضغط مساحة التراجع إلى [1] خطوة عمل لتجنب تعبئة بطانة الذاكرة والتخلص الكلي من انهيار VRAM وتشنج المتصفح أثناء تحريك الخطوط الكبيرة.
+   - **تدوير ذاكرة دلو الطلاء (Ref Recycling):** تفادي إعدام البنيات وتجنب استثارة (GC Garbage Collector)؛ تم دمج ذاكرة ثابتة ومعاد استخدامها (`sharedOffscreenCanvas` و `sharedOffscreenCtx`) تُقيد وتدور لإجراء تعبئة الألوان (Bucket Flood Fill) بمرجعية ثابتة توفر استجابة فورية بدون توقفات مفاجئة.
+3. **الرسم الهزيل التفاضلي (`lastRenderedIndexRef`):** بدلاً من إعادة رسم الخط بالكامل مع كل لمسة (مما يثقل المعالج أسياً مع زيادة طول الخط)، يقوم الكود الآن برسم الفروقات الجديدة فقط باستخدام مؤشر الفهرسة التفاضلية مع `requestAnimationFrame`.
 
-## 7. Room System Concept
-الغرفة هي المحور. تتكون من `RoomID`، قائمة الـ `Players`، ولها `GameState`. النظام يجب أن يدير دخول/خروج اللاعبين واكتشاف انقطاع الاتصال تلقائياً (Disconnect Handling) وتنظيف الغرف الفارغة.
+## 9. Things Explicitly Avoided
+حالياً: متجر، عملات، نظام أصدقاء، قواعد بيانات ضخمة و Microservices.
 
-## 8. Game Module Concept
-أي لعبة يجب أن تمتلك واجهة موحدة `IGameModule` لتسجيل أحداثها (Events) وتحديث حالتها، مما يجعل فصل منطق اللعبة عن محرك الغرف ممكناً.
+## 10. Development Priorities & Future Milestones
 
-## 9. Socket Communication Principles
-- **Event-Driven:** الاعتماد على الـ Sockets للإرسال والاستقبال.
-- **State Broadcast:** الخادم هو مصدر الحقيقة (Single Source of Truth). يرسل حالة الغرفة الكاملة أو تحديثات جزئية (Diffs) لتحديث الـ UI.
+### 🟩 المنجز والجاهز ميدانياً (Completed)
+- [x] **M1 - M2:** الهيكلية والاتصال وتزامن الحالات الفورية.
+- [x] **M3 - M4.3:** معالجة نسب الأبعاد 4:3 ومزامنة الرسم النسبي.
+- [x] **M4.4:** محرك وإدارة الأدوار الكاملة وحزمة Batching لضربات الرسم.
+- [x] **M4.5:** إعادة اتصال الجلسات عبر المعرف الثابت، والواجهة الضبابية ذات المعيار العالي.
+- [x] **M4.6:** نظام الخمول الكسول ومستشعرات الرؤية الذكية للغلق الهادئ والآمن.
+- [x] **Phase 5 (Performance & Resource Recycling):** تدوير ذاكرة دلو الطلاء، واستشعار العتاد، وتطوير تتابع الرسم التفاضلي بـ rAF لسرعة خرافية على الأجهزة الضعيفة.
+- [x] **تثبيت اللوحة وقفل التكبير للأجهزة الضعيفة:** إلغاء التكبير والتصغير كليًا، منع السحب العمودي لمنع التموج البصري، وقصر السحب الأفقي بإصبعين بدقة تامة على أطراف الكانفاس الحقيقية لمنع الفراغات الرمادية.
 
-## 10. Database Philosophy
-تأجيل تعقيد قواعد البيانات المستضافة. البدء بحالة في الذاكرة (In-Memory Maps)، ثم التدرج نحو SQLite كملف محلي إذا تطلب الأمر تخزين الجلسات (Sessions) أو إحصائيات مبسطة.
+### 🟨 قيد التنفيذ والمستقر تجريبًا (WIP / Under Observation)
+- [wip] مراقبة أجهزة المستخدمين الضعيفة ميدانياً لتقييم تحسن مستويات استجابة الإطارات.
 
-## 11. Performance Principles
-- الحد من تأثير إعادة الرسم بـ React.
-- ضغط بيانات الرسم المرسلة عبر Socket.io (تجميع النقاط في مصفوفة وتمريرها بدل تمرير حدث لكل بكسل).
-
-## 12. Mobile-First Rules
-لا توجد حالات Hover. مساحة الرسم تستغل الشاشة أو جزء كبير منها المريح للإصبع. الشات يقع بأسفل השاشة أو ينزلق ليُسهل الكتابة والتخمين.
-
-## 13. Things Explicitly Avoided
-متجر، عملات، نظام أصدقاء، متابعة، Voice Chat، قواعد بيانات ضخمة و Microservices.
-
-## 14. Scalability Strategy
-Scale-Up prior to Scale-Out. تعظيم قدرة الخادم الفردي، ثم الانتقال لـ Redis Adapter لدعم أكثر من خادم (Node) فقط عندما يكون هناك ضغط فعلي موثق.
-
-## 15. Risk Assessment
-- **Socket Overload:** زيادة الـ Payload أثناء الرسم بـ Socket.io (الحل: Batching للـ draw points).
-- **Memory Leaks:** الغرف النشطة إلى الأبد (الحل: Garbage collection للغرف الخاملة لمدة ساعة).
-
-## 16. Development Priorities (M1 to M4)
-- **M1:** الهيكل الأساسي + Socket Connection. *(Completed)*
-- **M2:** Room Engine + Syncing State. *(Completed)*
-- **M3:** Drawing Logic (UI Fully Enhanced, Snapshot, Undo limits, Buck Fill fix, External Strokes, Zoom limit) *(Completed)*.
-- **M4.1:** Login System UI (Electric Purple & Cyan Theme, Home, Rooms Browser, Room Info Modal). *(Completed)*
-- **M4.2:** Guessing Logic (Core Loop, Socket events for game state, Game Room UI). *(Completed)*
-- **M4.3:** Canvas Dimension Normalization و Sync Fixes (Fixed 4:3 aspect ratio, relative coordinate broadcast, responsive Guesser View, Socket loopback double-draw & undo/redo sync fixed). *(Completed)*
-- **M4.4:** Integrate real Socket.io events for Game State (Turn management, Scoring, Word Selection, synchronization). *(Completed)*
-  - [x] **إعادة تهيئة السيرفر:** تنظيف `server.ts` من التعديلات المؤقتة وإلغاء التعارضات (`display: none` و `io.emit`).
-  - [x] **بناء الـ Room Engine:** إنشاء ملف `src/server/rooms.ts` لإدارة الـ Maps الخاصة بالغرف واللاعبين.
-  - [x] **تفعيل الـ Join Event:** ربط الواجهة بالسيرفر لتبادل "الهوية" (الاسم والغرفة).
-  - [x] **الـ State Broadcast:** إرسال حالة الغرفة الكاملة (`RoomState`) للواجهة وتخزينها، ليكون السيرفر مصدر الحقيقة لا العميل.
-  - [x] **بناء واجهة اللعبة الموحدة (`IGameModule`):** فصل منطق الرسم والتخمين وتوجيه الأحداث الخاصة به.
-  - [x] **نظام الـ Batching وتخفيف الحمل على الـ Socket:** تجميع أحداث الرسم وإرسالها بحزم منتظمة (مثلاً كل 50ms) لكفاءة الأداء.
-- **M4.5 / Phase 3:** Session Reconnection, Persistent Identifiers and Glassmorphic Reconnection Overlay. *(Completed)*
-- **M4.6 / Phase 4:** Passive Debounced Idle System & Smart Page Visibility Sensor (Zero CPU load, Single setTimeout, 15s tolerance window, system clock drift protection, 130s server grace timeout). *(Completed)*
-
-**⚠️ TEMPORARY TESTING MODIFICATIONS (REVERTED) ⚠️**
-- `server.ts`: Returning to `socket.broadcast.emit` completed.
-- `GameRoom.tsx`: Restored conditional rendering of `DrawingBoard` instead of `display: none` loopback mode.
-
-
-## 17. Success Criteria For MVP
-- [x] واجهة رسم احترافية للهواتف (Pinch-to-Zoom, Tools, Colors).
-- [x] لعبة تعمل بدون تقطعات ظاهرة.
-- [x] يمكن لـ 5 أصدقاء الدخول في نفس الغرفة بسلاسة.
-- [x] لعب 3 جولات وفوز لاعب مع عرض اللوحة النهائية.
-
-## 18. Technical Debt Warnings
-الاعتماد الكلي على In-Memory State قد يؤدي لضياع الغرف عند إعادة التشغيل (Restart). مقبول للمرحلة الحالية، لكن يجب توثيقه.
-
-## 19. Future Expansion Rules
-لإضافة لعبة، لا نعدل الـ Core. ننشئ لعبة في `/games/ludo` تتوافق مع `IGameModule`.
-
----
-## ORPHANS & PENDING (قيد المراجعة أو معلق)
-- تثبيت وتفعيل Type Definitions لمنطق الغرف والأحداث.
-- تحديد أقصى سعة تحميل للخادم للـ Drawing Data.
+### 🟦 الخطوات القادمة المرتبة حسب الأولوية وتوافق العتاد الضعيف (Upcoming Roadmap)
+1. **الخطوة الأولى: لوحة الأفاتار المرسوم للألعاب اليدوية (Custom Drawn Avatars)**
+   - *الشرح:* حقن محرك رسم مصغر في شاشة الترحيب لابتداع أفاتار مخصص يُرسم بالإصبع ويحفظ محلياً في `localStorage` ليبرز به اللاعب في قائمة الحضور والمنافسة ومقاعد الشرف.
+2. **الخطوة الثانية: رفع الصور كشخصية مساندة (Optional Avatar Upload)**
+   - السماح بقص الصورة دائرياً لسهولة التحكم الفني للمستخدمين.
+4. **الخطوة الرابعة: متجر التألق البصري التراكمي (Points-Based Shop)**
+   - تطبيق متجر معنوي لشراء الألوان المميزة للاسم في الدردشة وإطارات فريدة للأفاتار دون الخروج عن بساطة المنصة.
