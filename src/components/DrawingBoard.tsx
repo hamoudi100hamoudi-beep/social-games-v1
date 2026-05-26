@@ -856,6 +856,13 @@ export default function DrawingBoard({
     if (!canvas || !ctx) return;
     
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    
+    // Workaround for older Android / low-end Chrome GPU compositor texture bug:
+    // Forces direct canvas texture buffer upload to GPU by writing the same pixels back via putImageData.
+    if (IS_LOW_END) {
+      ctx.putImageData(data, 0, 0);
+    }
+    
     history.current = history.current.slice(0, historyIndex.current + 1);
     history.current.push(data);
     
