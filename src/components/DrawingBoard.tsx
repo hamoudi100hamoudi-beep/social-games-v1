@@ -626,7 +626,7 @@ export default function DrawingBoard({
          }
       }
       
-      const MAX_HISTORY = IS_LOW_END ? 1 : 5;
+      const MAX_HISTORY = 5;
       while (history.current.length > MAX_HISTORY + 1) {
          history.current.shift();
       }
@@ -859,7 +859,7 @@ export default function DrawingBoard({
     history.current = history.current.slice(0, historyIndex.current + 1);
     history.current.push(data);
     
-    const MAX_HISTORY = IS_LOW_END ? 1 : 5;
+    const MAX_HISTORY = 5;
     while (history.current.length > MAX_HISTORY + 1) {
       history.current.shift();
     }
@@ -873,6 +873,13 @@ export default function DrawingBoard({
   const undo = (emit = true) => {
     if (emit && Date.now() - lastUndoTime.current < 200) return;
     if (emit) lastUndoTime.current = Date.now();
+    
+    // Low-end device active-drawer restriction: only allow 1 undo step.
+    if (emit && IS_LOW_END && !readOnly) {
+      if (historyIndex.current <= history.current.length - 2) {
+        return;
+      }
+    }
     
     if (historyIndex.current > 0) {
       historyIndex.current--;
