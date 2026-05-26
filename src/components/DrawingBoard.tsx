@@ -481,6 +481,14 @@ export default function DrawingBoard({
         const tempCtx = tempCtxRef.current;
         
         if (ctx && tempCanvas && tempCtx) {
+          // Restore last known good state from JS memory before compositing.
+          // This prevents a major issue on low-end Androids where the main canvas GPU 
+          // buffer gets discarded to save VRAM while the user is busy dragging a long stroke on the temp canvas.
+          const lastData = history.current[historyIndex.current];
+          if (lastData) {
+            ctx.putImageData(lastData, 0, 0);
+          }
+
           ctx.globalAlpha = opacity;
           ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
           ctx.drawImage(tempCanvas, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
@@ -489,6 +497,12 @@ export default function DrawingBoard({
           ctx.globalAlpha = 1;
         }
       } else if (data && data.x !== undefined && data.y !== undefined && ctx) {
+        // Restore last known good state from JS memory to fix GPU discarding bug
+        const lastData = history.current[historyIndex.current];
+        if (lastData) {
+          ctx.putImageData(lastData, 0, 0);
+        }
+
         // Draw exact final shape for line and shapes without restoring local history
         // since we no longer dirty the canvas with shape previews.
         ctx.beginPath();
@@ -857,8 +871,8 @@ export default function DrawingBoard({
     
     const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
     
-    // Workaround for older Android / low-end Chrome GPU compositor texture bug:
-    // Forces direct canvas texture buffer upload to GPU by writing the same pixels back via putImageData.
+    // Explicitly pushing the pixels back can still help force composite updates on some older Androids,
+    // though the primary fix for the vanishing strokes is restoring from history before compositing.
     if (IS_LOW_END) {
       ctx.putImageData(data, 0, 0);
     }
@@ -1300,6 +1314,15 @@ export default function DrawingBoard({
         const ctx = ctxRef.current;
         const tempCanvas = tempCanvasRef.current;
         if (ctx && tempCanvas && tempCtx) {
+          // Restore last known good state from JS memory before compositing.
+          // This prevents a major issue on low-end Android browsers where the main canvas GPU 
+          // backing buffer gets silently discarded to save VRAM while the user is busy dragging 
+          // a long stroke on the temp canvas.
+          const lastData = history.current[historyIndex.current];
+          if (lastData) {
+            ctx.putImageData(lastData, 0, 0);
+          }
+
           ctx.globalAlpha = currentOpacity;
           ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
           ctx.drawImage(tempCanvas, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
