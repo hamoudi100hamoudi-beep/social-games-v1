@@ -1461,7 +1461,7 @@ export default function DrawingBoard({
 
         {/* Overlay Menus */}
         {!readOnly && activeMenu === 'tools' && (
-          <div className="absolute bottom-24 right-4 grid grid-cols-2 gap-2 bg-black/60 p-3 rounded-2xl border border-white/20 shadow-xl z-20 animate-in fade-in slide-in-from-bottom-2">
+          <div className="absolute bottom-24 left-4 grid grid-cols-2 gap-2 bg-black/60 p-3 rounded-2xl border border-white/20 shadow-xl z-20 animate-in fade-in slide-in-from-bottom-2">
             <SubToolBtn icon={<Pencil />} active={tool==='pencil'} onClick={() => changeTool('pencil')} />
             <SubToolBtn icon={<Eraser />} active={tool==='eraser'} onClick={() => changeTool('eraser')} />
             <SubToolBtn icon={<Square fill="currentColor" />} active={tool==='fillRect'} onClick={() => changeTool('fillRect')} />
@@ -1475,9 +1475,9 @@ export default function DrawingBoard({
           </div>
         )}
 
-        {/* Fixed Action Buttons (Undo/Redo) - Positioned bottom-left physical above toolbar */}
+        {/* Fixed Action Buttons (Undo/Redo) - Positioned bottom-right physical above toolbar */}
         {!readOnly && (
-          <div className="absolute bottom-20 left-4 flex flex-col gap-3 z-20">
+          <div className="absolute bottom-20 right-4 flex flex-col gap-3 z-20">
             <button 
               onClick={undo} 
               disabled={historyState.index <= 0}
@@ -1553,7 +1553,7 @@ export default function DrawingBoard({
 
       {/* Bottom Toolbar */}
       {!readOnly && (
-        <div className="bg-[#1a56db] p-3 sm:p-4 flex items-center justify-between gap-3 shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30">
+        <div className="bg-[#1a56db] p-3 sm:p-4 flex items-center justify-between gap-3 shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30" dir="ltr">
         
         {/* Action Buttons (Left side visually, but we are RTL, so right side visually) */}
         <div className="flex items-center gap-2 shrink-0">
@@ -1661,7 +1661,7 @@ function ColorBtn({ color, active, onClick }: { key?: React.Key, color: string, 
     <button 
       onClick={onClick}
       className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg border-2 transition-all p-0.5
-        ${active ? 'border-white scale-110 shadow-lg z-10' : 'border-transparent hover:scale-105'}`}
+        ${active ? 'border-yellow-400 scale-110 shadow-lg z-10' : 'border-transparent hover:scale-105'}`}
     >
       <div 
         className="w-full h-full rounded-md shadow-inner" 
