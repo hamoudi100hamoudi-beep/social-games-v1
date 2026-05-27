@@ -844,8 +844,8 @@ export default function DrawingBoard({
     tempCanvas.width = LOGICAL_WIDTH * DPR;
     tempCanvas.height = LOGICAL_HEIGHT * DPR;
     
-    const ctx = canvas.getContext('2d');
-    const tempCtx = tempCanvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { desynchronized: true });
+    const tempCtx = tempCanvas.getContext('2d', { desynchronized: true });
     if (ctx && tempCtx) {
       ctx.scale(DPR, DPR);
       ctx.lineCap = 'round';
@@ -1189,7 +1189,30 @@ export default function DrawingBoard({
     const tempCtx = tempCtxRef.current;
     if (!ctx || !tempCtx) return;
 
-    currentPath.current.push({x, y});
+    let shouldPush = true;
+    if (currentPath.current.length > 0 && (tool === 'pencil' || tool === 'eraser')) {
+      const lastPt = currentPath.current[currentPath.current.length - 1];
+      const dx = x - lastPt.x;
+      const dy = y - lastPt.y;
+      const distSq = dx * dx + dy * dy;
+
+      let minDistance = 0.5; // low default debounce to filter out sensor sub-pixel noise
+      if (PERF_TIER === 3) {
+        minDistance = 4.0; // Level 3: filter out points closer than 4 logical pixels (~4px on 1.0 DPR)
+      } else if (PERF_TIER === 2) {
+        minDistance = 2.0; // Level 2: filter out points closer than 2 logical pixels (~2.4px on 1.2 DPR)
+      }
+
+      if (distSq < minDistance * minDistance) {
+        shouldPush = false;
+      }
+    }
+
+    if (shouldPush) {
+      currentPath.current.push({x, y});
+    } else {
+      return; // Skip rendering and websocket syncing for redundant jitter coordinates
+    }
     
     if (tool === 'pencil' || tool === 'eraser') {
       needsRenderRef.current = true;
@@ -1383,7 +1406,8 @@ export default function DrawingBoard({
           style={{ 
             width: LOGICAL_WIDTH,
             height: LOGICAL_HEIGHT,
-            transformOrigin: '0 0'
+            transformOrigin: '0 0',
+            willChange: 'transform'
           }}
         >
           <canvas 
