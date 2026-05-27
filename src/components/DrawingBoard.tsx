@@ -222,6 +222,45 @@ export default function DrawingBoard({
   const hasInitializedTransform = useRef(false);
   const moveBatchRef = useRef<{x: number, y: number}[]>([]);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const colorsScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = colorsScrollRef.current;
+    if (!el) return;
+    let isDown = false;
+    let startX: number;
+    let scrollLeft: number;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      isDown = true;
+      startX = e.pageX - el.offsetLeft;
+      scrollLeft = el.scrollLeft;
+    };
+    const handleMouseLeave = () => {
+      isDown = false;
+    };
+    const handleMouseUp = () => {
+      isDown = false;
+    };
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - el.offsetLeft;
+      const walk = (x - startX) * 1.5;
+      el.scrollLeft = scrollLeft - walk;
+    };
+
+    el.addEventListener('mousedown', handleMouseDown, { passive: false });
+    el.addEventListener('mouseleave', handleMouseLeave);
+    el.addEventListener('mouseup', handleMouseUp);
+    el.addEventListener('mousemove', handleMouseMove, { passive: false });
+    return () => {
+      el.removeEventListener('mousedown', handleMouseDown);
+      el.removeEventListener('mouseleave', handleMouseLeave);
+      el.removeEventListener('mouseup', handleMouseUp);
+      el.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
 
   const applyTransform = (overrideBaseScale?: number) => {
     if (transformWrapperRef.current) {
@@ -1008,7 +1047,10 @@ export default function DrawingBoard({
   const lastTouchTime = useRef(0);
 
   const handlePointerDown = (e: React.TouchEvent | React.MouseEvent) => {
-    setActiveMenu(null); // Close menus when interacting with canvas
+    if (activeMenu !== null) {
+      setActiveMenu(null);
+      return;
+    }
     
     let clientX, clientY;
     if ('touches' in e) {
@@ -1452,7 +1494,7 @@ export default function DrawingBoard({
 
         {/* Overlay Menus */}
         {!readOnly && activeMenu === 'tools' && (
-          <div className="absolute bottom-24 left-4 grid grid-cols-2 gap-2 bg-black/60 p-3 rounded-2xl border border-white/20 shadow-xl z-20 animate-in fade-in slide-in-from-bottom-2">
+          <div className="absolute bottom-[82px] left-[6px] grid grid-cols-2 gap-1.5 bg-black/75 p-2 rounded-xl border border-white/20 shadow-xl z-20 animate-in fade-in slide-in-from-bottom-2">
             <SubToolBtn icon={<Pencil />} active={tool==='pencil'} onClick={() => changeTool('pencil')} />
             <SubToolBtn icon={<Eraser />} active={tool==='eraser'} onClick={() => changeTool('eraser')} />
             <SubToolBtn icon={<Square fill="currentColor" />} active={tool==='fillRect'} onClick={() => changeTool('fillRect')} />
@@ -1466,35 +1508,37 @@ export default function DrawingBoard({
           </div>
         )}
 
-        {/* Fixed Action Buttons (Undo/Redo) - Positioned bottom-left physical above toolbar, smaller and light-gray as per user's screenshot */}
+        {/* Fixed Action Buttons (Undo/Redo) - Positioned bottom-left touching the screen edge vertically between sliders and popup tools */}
         {!readOnly && (
-          <div className="absolute bottom-20 left-4 flex flex-col gap-2.5 z-20">
+          <div className="absolute bottom-[20px] left-0 flex flex-col gap-1 z-20">
             <button 
+              type="button"
               onClick={undo} 
               disabled={historyState.index <= 0}
-              className={`w-10 h-10 bg-gray-300/80 text-white rounded-xl flex items-center justify-center shadow-md transition-all ${historyState.index <= 0 ? 'opacity-30 pointer-events-none' : 'hover:bg-gray-400/80 active:scale-95'}`}
+              className={`w-[28px] h-[28px] bg-gray-200/90 text-slate-700 rounded-r-md flex items-center justify-center border-r border-y border-black/10 shadow-sm transition-all ${historyState.index <= 0 ? 'opacity-30 pointer-events-none' : 'hover:bg-gray-300 active:scale-95'}`}
             >
-              <Undo2 size={18} strokeWidth={3} />
+              <Undo2 size={15} strokeWidth={3} />
             </button>
             <button 
+              type="button"
               onClick={redo} 
               disabled={historyState.index >= historyState.length - 1}
-              className={`w-10 h-10 bg-gray-300/80 text-white rounded-xl flex items-center justify-center shadow-md transition-all ${historyState.index >= historyState.length - 1 ? 'opacity-30 pointer-events-none' : 'hover:bg-gray-400/80 active:scale-95'}`}
+              className={`w-[28px] h-[28px] bg-gray-200/90 text-slate-700 rounded-r-md flex items-center justify-center border-r border-y border-black/10 shadow-sm transition-all ${historyState.index >= historyState.length - 1 ? 'opacity-30 pointer-events-none' : 'hover:bg-gray-300 active:scale-95'}`}
             >
-              <Redo2 size={18} strokeWidth={3} />
+              <Redo2 size={15} strokeWidth={3} />
             </button>
           </div>
         )}
         {!readOnly && (
-          <div className="absolute bottom-[-1px] left-0 right-0 w-full flex items-center justify-center px-4 gap-4 z-40 pointer-events-none" dir="ltr">
+          <div className="absolute bottom-[-5px] left-0 right-0 w-full flex items-center justify-center px-4 gap-4 z-40 pointer-events-none" dir="ltr">
             
             {/* Stroke Width Slider */}
-            <div className="flex-1 relative flex items-center h-5 max-w-[45%] group pointer-events-auto" dir="ltr">
+            <div className="flex-1 relative flex items-center h-4 max-w-[45%] group pointer-events-auto" dir="ltr">
                {/* Track */}
-               <div className="absolute inset-x-0 top-1/2 -mt-[2.5px] h-[5px] rounded-full bg-slate-300 pointer-events-none shadow-inner" />
+               <div className="absolute inset-x-0 top-1/2 -mt-[1.5px] h-[3px] rounded-full bg-slate-200 pointer-events-none shadow-sm" />
                {/* Fill */}
                <div 
-                  className="absolute left-0 top-1/2 -mt-[2.5px] h-[5px] rounded-l-full bg-[#1a56db] pointer-events-none" 
+                  className="absolute left-0 top-1/2 -mt-[1.5px] h-[3px] rounded-l-full bg-[#1a56db] pointer-events-none" 
                   style={{ width: `${((currentWidth - 1) / ((tool === 'eraser' ? (typeof window !== 'undefined' ? window.innerWidth / 2 : 200) : 40) - 1)) * 100}%` }} 
                />
                
@@ -1508,14 +1552,14 @@ export default function DrawingBoard({
                   }}
                   onPointerUp={() => setPreviewSize(null)}
                   onPointerLeave={() => setPreviewSize(null)}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
+                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_1px_4px_rgba(0,0,0,0.3)] [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300/80 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-[0_1px_4px_rgba(0,0,0,0.3)] [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300/80"
                 />
             </div>
 
             {/* Opacity Slider */}
-            <div className="flex-1 relative flex items-center h-5 max-w-[45%] group pointer-events-auto" dir="ltr">
+            <div className="flex-1 relative flex items-center h-4 max-w-[45%] group pointer-events-auto" dir="ltr">
                {/* Track Background (Checkered) */}
-               <div className="absolute inset-x-0 top-1/2 -mt-[2.5px] h-[5px] rounded-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjY2NjIi8+CjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz4KPC9zdmc+')] pointer-events-none overflow-hidden border border-slate-300/50 shadow-inner block">
+               <div className="absolute inset-x-0 top-1/2 -mt-[1.5px] h-[3px] rounded-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjY2NjIi8+CjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz4KPC9zdmc+')] pointer-events-none overflow-hidden border border-slate-300/30 shadow-inner block">
                   {/* Gradient Fill */}
                   <div className="absolute inset-0 w-full h-full" style={{ background: `linear-gradient(to right, transparent, ${tool === 'eraser' ? '#ffffff' : color})` }} />
                </div>
@@ -1528,7 +1572,7 @@ export default function DrawingBoard({
                     else if (tool === 'bucket') setBucketOpacity(val);
                     else setPenOpacity(val);
                   }}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
+                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_1px_4px_rgba(0,0,0,0.3)] [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300/80 [&::-moz-range-thumb]:w-3.5 [&::-moz-range-thumb]:h-3.5 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-[0_1px_4px_rgba(0,0,0,0.3)] [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300/80"
                 />
             </div>
 
@@ -1559,7 +1603,7 @@ export default function DrawingBoard({
                   else if (tool === 'pencil') changeTool('eraser');
                   else changeTool('pencil');
                 }} 
-                className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-2xl"
+                className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-lg"
               />
 
               {/* 2. White pencil selector */}
@@ -1577,7 +1621,7 @@ export default function DrawingBoard({
                 } 
                 active={activeMenu === 'tools' || (tool !== 'eraser' && !activeMenu)} 
                 onClick={() => setActiveMenu(m => m === 'tools' ? null : 'tools')} 
-                className="!bg-white !text-[#1a56db] !border-transparent !rounded-2xl" /* Active white with blue icon */
+                className="!bg-white !text-[#1a56db] !border-transparent !rounded-lg" /* Active white with blue icon */
               />
 
               {/* 3. Yellow hint bulb with Red Badge */}
@@ -1586,7 +1630,7 @@ export default function DrawingBoard({
                   <ActionBtn 
                     icon={<Lightbulb />} 
                     onClick={onRequestHint} 
-                    className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-2xl flex" 
+                    className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-lg flex" 
                   />
                   <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4.5 h-4.5 flex items-center justify-center rounded-full border border-[#1a56db]">
                     {hintsRemaining}
@@ -1599,22 +1643,29 @@ export default function DrawingBoard({
                 <ActionBtn 
                   icon={<UserMinus />} 
                   onClick={onSkipTurn} 
-                  className="!bg-[#f23c4f] !text-white hover:!bg-red-600 !border-transparent !rounded-2xl shrink-0" 
+                  className="!bg-[#f23c4f] !text-white hover:!bg-red-600 !border-transparent !rounded-lg shrink-0" 
                 />
               )}
             </div>
 
-            {/* Color Palette on the Right (Fills up to the right edge with no gaps) */}
-            <div className="flex-1 flex flex-col gap-[3px] select-none touch-pan-x ml-1 mr-0" dir="ltr">
-              <div className="flex gap-[3px] justify-between w-full">
-                {TOP_COLORS.map(c => (
-                  <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
-                ))}
-              </div>
-              <div className="flex gap-[3px] justify-between w-full">
-                {BOT_COLORS.map(c => (
-                  <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
-                ))}
+            {/* Color Palette on the Right (Scrollable/draggable horizontally, fills to the right edge with square color cells) */}
+            <div 
+              ref={colorsScrollRef} 
+              className="flex-1 overflow-x-auto select-none touch-pan-x no-scrollbar ml-1.5 -mr-2 sm:-mr-2.5 max-w-full py-0.5" 
+              dir="ltr"
+              style={{ scrollbarWidth: 'none' }}
+            >
+              <div className="flex flex-col gap-[3px] min-w-max pr-2 sm:pr-2.5">
+                <div className="flex gap-[3px]">
+                  {TOP_COLORS.map(c => (
+                    <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
+                  ))}
+                </div>
+                <div className="flex gap-[3px]">
+                  {BOT_COLORS.map(c => (
+                    <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -1629,8 +1680,9 @@ export default function DrawingBoard({
 function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string }) {
   return (
     <button 
+      type="button"
       onClick={onClick}
-      className={`w-[38px] h-[38px] flex items-center justify-center rounded-2xl transition-all shadow-sm focus:outline-none select-none
+      className={`w-[38px] h-[38px] flex items-center justify-center rounded-lg transition-all shadow-sm focus:outline-none select-none
         ${active 
           ? 'bg-white text-[#1a56db] scale-105 shadow-md' 
           : 'bg-[#ffcc00] text-[#1a56db] hover:bg-white hover:scale-105 active:scale-95'
@@ -1644,15 +1696,16 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
 function SubToolBtn({ icon, active, onClick, className = '' }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string }) {
   return (
     <button 
+      type="button"
       onClick={onClick}
-      className={`w-12 h-12 flex items-center justify-center rounded-xl border transition-all
+      className={`w-9 h-9 flex items-center justify-center rounded-lg border transition-all
         ${active 
           ? 'bg-blue-600 border-blue-400 text-white shadow-inner scale-105' 
           : 'bg-white/10 border-transparent text-white hover:bg-white/20 ' + className
         }`}
     >
       {/* We clone icon to pass consistent sizing */}
-      {React.cloneElement(icon as React.ReactElement, { size: 24, strokeWidth: 2.5 })}
+      {React.cloneElement(icon as React.ReactElement, { size: 18, strokeWidth: 2.5 })}
     </button>
   );
 }
@@ -1660,9 +1713,10 @@ function SubToolBtn({ icon, active, onClick, className = '' }: { icon: React.Rea
 function ColorBtn({ color, active, onClick }: { key?: React.Key, color: string, active: boolean, onClick: () => void }) {
   return (
     <button 
+      type="button"
       onClick={onClick}
-      className={`flex-1 h-[17.5px] rounded-[4px] border transition-all relative focus:outline-none select-none
-        ${active ? 'border-[#FBBF24] border-[2px] scale-105 shadow-md z-10' : 'border-black/10 hover:scale-105'}`}
+      className={`w-[17.5px] h-[17.5px] flex-shrink-0 rounded-[3px] border transition-none relative focus:outline-none select-none
+        ${active ? 'border-[#FBBF24] border-[2.5px] z-10' : 'border-black/20'}`}
       style={{ backgroundColor: color }}
     />
   );
