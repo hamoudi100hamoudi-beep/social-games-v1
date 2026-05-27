@@ -1435,16 +1435,7 @@ export default function DrawingBoard({
           />
         )}
 
-        {/* Screenshot Button */}
-        <div className="absolute top-2.5 left-2.5 z-20">
-          <button 
-            onClick={downloadScreenshot} 
-            className="w-8 h-8 bg-black/40 text-white rounded-xl flex items-center justify-center shadow-sm hover:bg-black/55 active:scale-95 transition-all"
-            title="التقاط صورة للرسمة"
-          >
-            <Camera size={16} strokeWidth={2.5} />
-          </button>
-        </div>
+        {/* Screenshot Button removed as per user request */}
 
         {/* Brush Size Preview Bubble */}
         {previewSize !== null && (
@@ -1475,27 +1466,27 @@ export default function DrawingBoard({
           </div>
         )}
 
-        {/* Fixed Action Buttons (Undo/Redo) - Positioned bottom-right physical above toolbar */}
+        {/* Fixed Action Buttons (Undo/Redo) - Positioned bottom-left physical above toolbar, smaller and light-gray as per user's screenshot */}
         {!readOnly && (
-          <div className="absolute bottom-20 right-4 flex flex-col gap-3 z-20">
+          <div className="absolute bottom-20 left-4 flex flex-col gap-2.5 z-20">
             <button 
               onClick={undo} 
               disabled={historyState.index <= 0}
-              className={`w-12 h-12 bg-black/60 text-white rounded-2xl flex items-center justify-center shadow-md transition-all ${historyState.index <= 0 ? 'opacity-30 pointer-events-none' : 'hover:bg-black/70 active:scale-95'}`}
+              className={`w-10 h-10 bg-gray-300/80 text-white rounded-xl flex items-center justify-center shadow-md transition-all ${historyState.index <= 0 ? 'opacity-30 pointer-events-none' : 'hover:bg-gray-400/80 active:scale-95'}`}
             >
-              <Undo2 size={24} strokeWidth={2.5} />
+              <Undo2 size={18} strokeWidth={3} />
             </button>
             <button 
               onClick={redo} 
               disabled={historyState.index >= historyState.length - 1}
-              className={`w-12 h-12 bg-black/60 text-white rounded-2xl flex items-center justify-center shadow-md transition-all ${historyState.index >= historyState.length - 1 ? 'opacity-30 pointer-events-none' : 'hover:bg-black/70 active:scale-95'}`}
+              className={`w-10 h-10 bg-gray-300/80 text-white rounded-xl flex items-center justify-center shadow-md transition-all ${historyState.index >= historyState.length - 1 ? 'opacity-30 pointer-events-none' : 'hover:bg-gray-400/80 active:scale-95'}`}
             >
-              <Redo2 size={24} strokeWidth={2.5} />
+              <Redo2 size={18} strokeWidth={3} />
             </button>
           </div>
         )}
 
-        {/* Horizontal Sliders Area (Floating) */}
+        {/* Horizontal Sliders Area (Floating) - Elegant and positioned right above the toolbar */}
         {!readOnly && (
           <div className="absolute bottom-4 left-0 right-0 w-full flex items-center justify-center px-6 gap-6 z-20 pointer-events-none" dir="ltr">
             
@@ -1519,7 +1510,7 @@ export default function DrawingBoard({
                   }}
                   onPointerUp={() => setPreviewSize(null)}
                   onPointerLeave={() => setPreviewSize(null)}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-7 [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-7 [&::-moz-range-thumb]:h-7 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
+                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
                 />
             </div>
 
@@ -1527,8 +1518,8 @@ export default function DrawingBoard({
             <div className="flex-1 relative flex items-center h-8 max-w-[45%] group pointer-events-auto" dir="ltr">
                {/* Track Background (Checkered) */}
                <div className="absolute inset-x-0 top-1/2 -mt-[5px] h-[10px] rounded-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjY2NjIi8+CjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz4KPC9zdmc+')] pointer-events-none overflow-hidden border border-slate-300/50 shadow-inner block">
-                 {/* Gradient Fill */}
-                 <div className="absolute inset-0 w-full h-full" style={{ background: `linear-gradient(to right, transparent, ${tool === 'eraser' ? '#ffffff' : color})` }} />
+                  {/* Gradient Fill */}
+                  <div className="absolute inset-0 w-full h-full" style={{ background: `linear-gradient(to right, transparent, ${tool === 'eraser' ? '#ffffff' : color})` }} />
                </div>
                
                <input 
@@ -1539,7 +1530,7 @@ export default function DrawingBoard({
                     else if (tool === 'bucket') setBucketOpacity(val);
                     else setPenOpacity(val);
                   }}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-7 [&::-webkit-slider-thumb]:h-7 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-md [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-7 [&::-moz-range-thumb]:h-7 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-md [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
+                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
                 />
             </div>
 
@@ -1548,76 +1539,88 @@ export default function DrawingBoard({
 
       </div>
       
-      {/* External Timer Bar from GameRoom */}
-      {!readOnly && timerBarNode}
-
-      {/* Bottom Toolbar */}
+      {/* Bottom Toolbar with integrated timer and controls */}
       {!readOnly && (
-        <div className="bg-[#1a56db] p-3 sm:p-4 flex items-center justify-between gap-3 shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30" dir="ltr">
-        
-        {/* Action Buttons (Left side visually, but we are RTL, so right side visually) */}
-        <div className="flex items-center gap-2 shrink-0">
-          <ActionBtn 
-            icon={<RefreshCcw strokeWidth={2.5} size={22} />} 
-            active={tool === 'eraser'} 
-            onClick={() => {
-              if (tool === 'eraser') changeTool('pencil');
-              else if (tool === 'pencil') changeTool('eraser');
-              else changeTool('pencil');
-            }} 
-            className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent"
-          />
-          <ActionBtn 
-            icon={
-              tool === 'eraser' ? <Eraser strokeWidth={2.5} size={22} /> :
-              tool === 'bucket' ? <PaintBucket strokeWidth={2.5} size={22} /> :
-              tool === 'fillRect' ? <Square fill="currentColor" size={22} /> :
-              tool === 'strokeRect' ? <Square strokeWidth={2.5} size={22} /> :
-              tool === 'fillCircle' ? <Circle fill="currentColor" size={22} /> :
-              tool === 'strokeCircle' ? <Circle strokeWidth={2.5} size={22} /> :
-              tool === 'line' ? <Minus strokeWidth={2.5} size={22} /> :
-              tool === 'pipette' ? <Pipette strokeWidth={2.5} size={22} /> :
-              <Pencil strokeWidth={2.5} size={22} />
-            } 
-            active={activeMenu === 'tools' || (tool !== 'eraser' && !activeMenu)} 
-            onClick={() => setActiveMenu(m => m === 'tools' ? null : 'tools')} 
-            className="!bg-white !text-blue-600 !border-white" /* To make it prominent as main tool */
-          />
-          {hintsRemaining > 0 && onRequestHint && (
-            <div className="relative">
-              <ActionBtn 
-                icon={<Lightbulb strokeWidth={2.5} size={22} />} 
-                onClick={onRequestHint} 
-                className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent flex" 
-              />
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
-                {hintsRemaining}
-              </span>
+        <div className="bg-[#1a56db] flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30" dir="ltr">
+          {/* Integrated timer bar from GameRoom at the top edge of bottom bar */}
+          {timerBarNode && (
+            <div className="w-full">
+              {timerBarNode}
             </div>
           )}
-          {onSkipTurn && (
-            <ActionBtn 
-              icon={<UserMinus strokeWidth={2.5} size={22} />} 
-              onClick={onSkipTurn} 
-              className="!bg-red-500 !text-white hover:!bg-red-600 !border-transparent" 
-            />
-          )}
-        </div>
-        
-        {/* Color Palette (Scrollable horizontally) */}
-        <div className="flex-1 overflow-x-auto flex flex-col gap-1.5 no-scrollbar pl-1 select-none touch-pan-x" style={{ scrollbarWidth: 'none' }}>
-          <div className="flex gap-1.5 min-w-max">
-            {TOP_COLORS.map(c => (
-              <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
-            ))}
+
+          <div className="p-3 sm:p-4 pt-1 flex items-center justify-between gap-3">
+            {/* Color Palette on the Left (Scrollable horizontally) */}
+            <div className="flex-1 overflow-x-auto flex flex-col gap-1.5 no-scrollbar pl-1 select-none touch-pan-x" style={{ scrollbarWidth: 'none' }}>
+              <div className="flex gap-1.5 min-w-max">
+                {TOP_COLORS.map(c => (
+                  <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
+                ))}
+              </div>
+              <div className="flex gap-1.5 min-w-max">
+                {BOT_COLORS.map(c => (
+                  <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
+                ))}
+              </div>
+            </div>
+
+            {/* Action Buttons on the Right (Order exactly as User's attachment) */}
+            <div className="flex items-center gap-2 shrink-0">
+              {/* 1. Red Skip/Kick Button */}
+              {onSkipTurn && (
+                <ActionBtn 
+                  icon={<UserMinus strokeWidth={2.5} size={22} />} 
+                  onClick={onSkipTurn} 
+                  className="!bg-[#f23c4f] !text-white hover:!bg-red-600 !border-transparent !rounded-2xl" 
+                />
+              )}
+
+              {/* 2. Yellow hint bulb with Red Badge */}
+              {hintsRemaining > 0 && onRequestHint && (
+                <div className="relative">
+                  <ActionBtn 
+                    icon={<Lightbulb strokeWidth={2.5} size={22} />} 
+                    onClick={onRequestHint} 
+                    className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-2xl flex" 
+                  />
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4.5 h-4.5 flex items-center justify-center rounded-full border border-[#1a56db]">
+                    {hintsRemaining}
+                  </span>
+                </div>
+              )}
+
+              {/* 3. White pencil selector */}
+              <ActionBtn 
+                icon={
+                  tool === 'eraser' ? <Eraser strokeWidth={2.5} size={22} /> :
+                  tool === 'bucket' ? <PaintBucket strokeWidth={2.5} size={22} /> :
+                  tool === 'fillRect' ? <Square fill="currentColor" size={22} /> :
+                  tool === 'strokeRect' ? <Square strokeWidth={2.5} size={22} /> :
+                  tool === 'fillCircle' ? <Circle fill="currentColor" size={22} /> :
+                  tool === 'strokeCircle' ? <Circle strokeWidth={2.5} size={22} /> :
+                  tool === 'line' ? <Minus strokeWidth={2.5} size={22} /> :
+                  tool === 'pipette' ? <Pipette strokeWidth={2.5} size={22} /> :
+                  <Pencil strokeWidth={2.5} size={22} />
+                } 
+                active={activeMenu === 'tools' || (tool !== 'eraser' && !activeMenu)} 
+                onClick={() => setActiveMenu(m => m === 'tools' ? null : 'tools')} 
+                className="!bg-white !text-[#1a56db] !border-transparent !rounded-2xl" /* Active white with blue icon */
+              />
+
+              {/* 4. Yellow Swap eraser/pencil toggle button */}
+              <ActionBtn 
+                icon={<RefreshCcw strokeWidth={2.5} size={22} />} 
+                active={tool === 'eraser'} 
+                onClick={() => {
+                  if (tool === 'eraser') changeTool('pencil');
+                  else if (tool === 'pencil') changeTool('eraser');
+                  else changeTool('pencil');
+                }} 
+                className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-2xl"
+              />
+            </div>
           </div>
-          <div className="flex gap-1.5 min-w-max">
-            {BOT_COLORS.map(c => (
-              <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
-            ))}
-          </div>
         </div>
-      </div>
       )}
       
     </div>
@@ -1629,7 +1632,7 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
   return (
     <button 
       onClick={onClick}
-      className={`w-11 h-11 sm:w-12 sm:h-12 flex items-center justify-center rounded-xl transition-all shadow-sm
+      className={`w-[44px] h-[44px] sm:w-12 sm:h-12 flex items-center justify-center rounded-2xl transition-all shadow-sm
         ${active 
           ? 'bg-white text-[#1a56db] scale-105 shadow-md' 
           : 'bg-[#ffcc00] text-[#1a56db] hover:bg-white hover:scale-105 active:scale-95'
@@ -1661,7 +1664,7 @@ function ColorBtn({ color, active, onClick }: { key?: React.Key, color: string, 
     <button 
       onClick={onClick}
       className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg border-2 transition-all p-0.5
-        ${active ? 'border-yellow-400 scale-110 shadow-lg z-10' : 'border-transparent hover:scale-105'}`}
+        ${active ? 'border-white ring-2 ring-black scale-110 shadow-lg z-10' : 'border-transparent hover:scale-105'}`}
     >
       <div 
         className="w-full h-full rounded-md shadow-inner" 
