@@ -1,6 +1,9 @@
 {
-  "name": "",
-  "description": "",
+  "name": "DRAW.IO Drawing Game",
+  "description": "A real-time multiplayer drawing and guessing game, optimized for premium responsiveness across high, medium, and low-end hardware tiers.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
+

@@ -1,0 +1,32 @@
+{
+  "name": "DRAW.IO Drawing Game",
+  "short_name": "DRAW.IO",
+  "description": "A high-performance real-time multiplayer drawing and guessing game with device-optimized rendering.",
+  "categories": ["games", "entertainment", "social"],
+  "theme_color": "#5c36cc",
+  "background_color": "#1A103C",
+  "display": "standalone",
+  "orientation": "any",
+  "id": "/?standalone=true",
+  "start_url": "/?standalone=true",
+  "icons": [
+    {
+      "src": "/pwa_icon_512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa_icon_512.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa_icon_512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
