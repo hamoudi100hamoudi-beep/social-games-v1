@@ -140,44 +140,40 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
 const LOGICAL_WIDTH = 800;
 const LOGICAL_HEIGHT = 600;
 
-let _cachedDPR = 0;
-const getAdaptiveDPR = () => {
-  if (typeof window === 'undefined') return 2;
-  if (_cachedDPR > 0) return _cachedDPR;
-  let dpr = Math.min(2, window.devicePixelRatio || 1);
-  const nav: any = navigator;
-  const cpuCount = nav.hardwareConcurrency || 4;
-  const memory = nav.deviceMemory || 4;
-  if (cpuCount <= 4 || memory <= 4) dpr = Math.min(dpr, 1.2);
-  if (cpuCount <= 2 || memory <= 2) dpr = Math.min(dpr, 1.0);
-  _cachedDPR = dpr;
-  return dpr;
-};
-
-const isLowEndHardware = () => {
-  if (typeof window === 'undefined') return false;
+const getPerformanceTier = () => {
+  if (typeof window === 'undefined') return 1;
   try {
     const nav: any = navigator;
     const cpuCount = nav.hardwareConcurrency;
     const memory = nav.deviceMemory;
 
-    if (cpuCount !== undefined && cpuCount <= 4) return true;
-    if (memory !== undefined && memory <= 3) return true;
+    const cpus = cpuCount !== undefined ? cpuCount : 4;
+    const mem = memory !== undefined ? memory : 4;
 
-    if (cpuCount === undefined || memory === undefined) {
-      if (window.devicePixelRatio !== undefined && window.devicePixelRatio < 1.5) {
-        return true;
-      }
+    if (cpus <= 2 || mem <= 2) {
+      return 3; // Level 3: Low-End (ultra-low VRAM memory restrictions, no panning/zoom)
+    }
+    if (cpus <= 4 || mem <= 3) {
+      return 2; // Level 2: Medium-End (restricted zoom, only horizontal panning)
     }
   } catch (err) {
     if (window.devicePixelRatio !== undefined && window.devicePixelRatio < 1.5) {
-      return true;
+      return 3;
     }
   }
-  return false;
+  return 1; // Level 1: High-End (unrestricted full features)
 };
 
-const IS_LOW_END = typeof window !== 'undefined' ? isLowEndHardware() : false;
+const PERF_TIER = typeof window !== 'undefined' ? getPerformanceTier() : 1;
+const IS_LOW_END = PERF_TIER === 3;
+
+const getAdaptiveDPR = () => {
+  if (typeof window === 'undefined') return 2;
+  if (PERF_TIER === 3) return 1.0;
+  if (PERF_TIER === 2) return 1.2;
+  return Math.min(2, window.devicePixelRatio || 1);
+};
+
 const DPR = typeof window !== 'undefined' ? getAdaptiveDPR() : 2;
 
 export default function DrawingBoard({ 
@@ -284,21 +280,28 @@ export default function DrawingBoard({
     if (!container) return { x: newX, y: newY, scale: newScale };
     const { width, height } = container.getBoundingClientRect();
     
-    if (IS_LOW_END) {
-      // Force scale to be exactly 1 on low-end hardware
+    if (PERF_TIER === 3) {
+      // Level 3: Locked completely centered in space, absolutely no movement or zooming
+      const cw = LOGICAL_WIDTH * currentBaseScale;
+      const ch = LOGICAL_HEIGHT * currentBaseScale;
+      return {
+        x: (width - cw) / 2,
+        y: (height - ch) / 2,
+        scale: 1,
+      };
+    }
+    
+    if (PERF_TIER === 2) {
+      // Level 2: Zoom locked to 1, Horizontal pan ONLY, Vertical centered
       const cw = LOGICAL_WIDTH * currentBaseScale * 1;
       const ch = LOGICAL_HEIGHT * currentBaseScale * 1;
       
-      // Calculate centered Y (no vertical panning allowed)
       const initialY = (height - ch) / 2;
       
-      // Calculate X limits (no scrolling beyond canvas bounds)
       let clampedX = newX;
       if (cw <= width) {
-        // Can fit completely inside horizontally, center it
         clampedX = (width - cw) / 2;
       } else {
-        // Wider than screen, allow horizontal panning but clamp precisely to edges [width - cw, 0]
         const minX = width - cw;
         const maxX = 0;
         clampedX = Math.max(minX, Math.min(maxX, newX));
@@ -307,10 +310,11 @@ export default function DrawingBoard({
       return {
         x: clampedX,
         y: initialY,
-        scale: 1, // forced scale
+        scale: 1,
       };
     }
 
+    // Level 1: Full freedom
     const cw = LOGICAL_WIDTH * currentBaseScale * newScale;
     const ch = LOGICAL_HEIGHT * currentBaseScale * newScale;
     
@@ -1132,10 +1136,16 @@ export default function DrawingBoard({
         let newX = cx + dx - (cx - prev.x) * (newScale / prev.scale);
         let newY = cy + dy - (cy - prev.y) * (newScale / prev.scale);
 
-        if (IS_LOW_END) {
+        if (PERF_TIER === 3) {
+          // Level 3: Locking zoom and panning completely static
           newScale = 1;
-          newX = prev.x + dx; // Lock to purely horizontal movement
-          newY = prev.y; // Keep vertical translation completely centered
+          newX = prev.x;
+          newY = prev.y;
+        } else if (PERF_TIER === 2) {
+          // Level 2: Lock scale to 1, lock Y to initial, and let it pan horizontally
+          newScale = 1;
+          newX = prev.x + dx;
+          newY = prev.y;
         }
 
         const clamped = clampTransform(newX, newY, newScale, baseScale);
@@ -1315,10 +1325,10 @@ export default function DrawingBoard({
           // This prevents a major issue on low-end Android browsers where the main canvas GPU 
           // backing buffer gets silently discarded to save VRAM while the user is busy dragging 
           // a long stroke on the temp canvas.
-          const lastData = history.current[historyIndex.current];
-          if (lastData) {
-            ctx.putImageData(lastData, 0, 0);
-          }
+          // Skip redundant putImageData to prevent critical timing/blanking bugs on low-end hardware.
+          // Since we aggressively optimize canvas memory resolution with DPR 1.0 (Level 3) and DPR 1.2 (Level 2),
+          // browser memory discard is fully prevented. Bypassing putImageData completely resolves disappearing drawings 
+          // and saves valuable CPU cycles.
 
           ctx.globalAlpha = currentOpacity;
           ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
