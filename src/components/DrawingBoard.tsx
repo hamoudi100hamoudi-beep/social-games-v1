@@ -1485,18 +1485,16 @@ export default function DrawingBoard({
             </button>
           </div>
         )}
-
-        {/* Horizontal Sliders Area (Floating) - Elegant and positioned right above the toolbar */}
         {!readOnly && (
-          <div className="absolute bottom-4 left-0 right-0 w-full flex items-center justify-center px-6 gap-6 z-20 pointer-events-none" dir="ltr">
+          <div className="absolute bottom-[-1px] left-0 right-0 w-full flex items-center justify-center px-4 gap-4 z-40 pointer-events-none" dir="ltr">
             
             {/* Stroke Width Slider */}
-            <div className="flex-1 relative flex items-center h-8 max-w-[45%] group pointer-events-auto" dir="ltr">
+            <div className="flex-1 relative flex items-center h-5 max-w-[45%] group pointer-events-auto" dir="ltr">
                {/* Track */}
-               <div className="absolute inset-x-0 top-1/2 -mt-[5px] h-[10px] rounded-full bg-slate-300 pointer-events-none shadow-inner" />
+               <div className="absolute inset-x-0 top-1/2 -mt-[2.5px] h-[5px] rounded-full bg-slate-300 pointer-events-none shadow-inner" />
                {/* Fill */}
                <div 
-                  className="absolute left-0 top-1/2 -mt-[5px] h-[10px] rounded-l-full bg-[#1a56db] pointer-events-none" 
+                  className="absolute left-0 top-1/2 -mt-[2.5px] h-[5px] rounded-l-full bg-[#1a56db] pointer-events-none" 
                   style={{ width: `${((currentWidth - 1) / ((tool === 'eraser' ? (typeof window !== 'undefined' ? window.innerWidth / 2 : 200) : 40) - 1)) * 100}%` }} 
                />
                
@@ -1510,14 +1508,14 @@ export default function DrawingBoard({
                   }}
                   onPointerUp={() => setPreviewSize(null)}
                   onPointerLeave={() => setPreviewSize(null)}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
+                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
                 />
             </div>
 
             {/* Opacity Slider */}
-            <div className="flex-1 relative flex items-center h-8 max-w-[45%] group pointer-events-auto" dir="ltr">
+            <div className="flex-1 relative flex items-center h-5 max-w-[45%] group pointer-events-auto" dir="ltr">
                {/* Track Background (Checkered) */}
-               <div className="absolute inset-x-0 top-1/2 -mt-[5px] h-[10px] rounded-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjY2NjIi8+CjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz4KPC9zdmc+')] pointer-events-none overflow-hidden border border-slate-300/50 shadow-inner block">
+               <div className="absolute inset-x-0 top-1/2 -mt-[2.5px] h-[5px] rounded-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjY2NjIi8+CjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz4KPC9zdmc+')] pointer-events-none overflow-hidden border border-slate-300/50 shadow-inner block">
                   {/* Gradient Fill */}
                   <div className="absolute inset-0 w-full h-full" style={{ background: `linear-gradient(to right, transparent, ${tool === 'eraser' ? '#ffffff' : color})` }} />
                </div>
@@ -1530,7 +1528,7 @@ export default function DrawingBoard({
                     else if (tool === 'bucket') setBucketOpacity(val);
                     else setPenOpacity(val);
                   }}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-8 [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-8 [&::-moz-range-thumb]:h-8 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
+                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300 [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-lg [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300"
                 />
             </div>
 
@@ -1549,37 +1547,44 @@ export default function DrawingBoard({
             </div>
           )}
 
-          <div className="p-3 sm:p-4 pt-1 flex items-center justify-between gap-3">
-            {/* Color Palette on the Left (Scrollable horizontally) */}
-            <div className="flex-1 overflow-x-auto flex flex-col gap-1.5 no-scrollbar pl-1 select-none touch-pan-x" style={{ scrollbarWidth: 'none' }}>
-              <div className="flex gap-1.5 min-w-max">
-                {TOP_COLORS.map(c => (
-                  <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
-                ))}
-              </div>
-              <div className="flex gap-1.5 min-w-max">
-                {BOT_COLORS.map(c => (
-                  <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
-                ))}
-              </div>
-            </div>
+          <div className="p-2 sm:p-2.5 pt-1.5 flex items-center justify-between gap-2.5">
+            {/* Action Buttons on the Left (Order exactly as User's attachment) */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* 1. Yellow Swap eraser/pencil toggle button */}
+              <ActionBtn 
+                icon={<RefreshCcw />} 
+                active={tool === 'eraser'} 
+                onClick={() => {
+                  if (tool === 'eraser') changeTool('pencil');
+                  else if (tool === 'pencil') changeTool('eraser');
+                  else changeTool('pencil');
+                }} 
+                className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-2xl"
+              />
 
-            {/* Action Buttons on the Right (Order exactly as User's attachment) */}
-            <div className="flex items-center gap-2 shrink-0">
-              {/* 1. Red Skip/Kick Button */}
-              {onSkipTurn && (
-                <ActionBtn 
-                  icon={<UserMinus strokeWidth={2.5} size={22} />} 
-                  onClick={onSkipTurn} 
-                  className="!bg-[#f23c4f] !text-white hover:!bg-red-600 !border-transparent !rounded-2xl" 
-                />
-              )}
+              {/* 2. White pencil selector */}
+              <ActionBtn 
+                icon={
+                  tool === 'eraser' ? <Eraser /> :
+                  tool === 'bucket' ? <PaintBucket /> :
+                  tool === 'fillRect' ? <Square fill="currentColor" /> :
+                  tool === 'strokeRect' ? <Square /> :
+                  tool === 'fillCircle' ? <Circle fill="currentColor" /> :
+                  tool === 'strokeCircle' ? <Circle /> :
+                  tool === 'line' ? <Minus /> :
+                  tool === 'pipette' ? <Pipette /> :
+                  <Pencil />
+                } 
+                active={activeMenu === 'tools' || (tool !== 'eraser' && !activeMenu)} 
+                onClick={() => setActiveMenu(m => m === 'tools' ? null : 'tools')} 
+                className="!bg-white !text-[#1a56db] !border-transparent !rounded-2xl" /* Active white with blue icon */
+              />
 
-              {/* 2. Yellow hint bulb with Red Badge */}
+              {/* 3. Yellow hint bulb with Red Badge */}
               {hintsRemaining > 0 && onRequestHint && (
                 <div className="relative">
                   <ActionBtn 
-                    icon={<Lightbulb strokeWidth={2.5} size={22} />} 
+                    icon={<Lightbulb />} 
                     onClick={onRequestHint} 
                     className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-2xl flex" 
                   />
@@ -1589,35 +1594,28 @@ export default function DrawingBoard({
                 </div>
               )}
 
-              {/* 3. White pencil selector */}
-              <ActionBtn 
-                icon={
-                  tool === 'eraser' ? <Eraser strokeWidth={2.5} size={22} /> :
-                  tool === 'bucket' ? <PaintBucket strokeWidth={2.5} size={22} /> :
-                  tool === 'fillRect' ? <Square fill="currentColor" size={22} /> :
-                  tool === 'strokeRect' ? <Square strokeWidth={2.5} size={22} /> :
-                  tool === 'fillCircle' ? <Circle fill="currentColor" size={22} /> :
-                  tool === 'strokeCircle' ? <Circle strokeWidth={2.5} size={22} /> :
-                  tool === 'line' ? <Minus strokeWidth={2.5} size={22} /> :
-                  tool === 'pipette' ? <Pipette strokeWidth={2.5} size={22} /> :
-                  <Pencil strokeWidth={2.5} size={22} />
-                } 
-                active={activeMenu === 'tools' || (tool !== 'eraser' && !activeMenu)} 
-                onClick={() => setActiveMenu(m => m === 'tools' ? null : 'tools')} 
-                className="!bg-white !text-[#1a56db] !border-transparent !rounded-2xl" /* Active white with blue icon */
-              />
+              {/* 4. Red Skip/Kick Button */}
+              {onSkipTurn && (
+                <ActionBtn 
+                  icon={<UserMinus />} 
+                  onClick={onSkipTurn} 
+                  className="!bg-[#f23c4f] !text-white hover:!bg-red-600 !border-transparent !rounded-2xl shrink-0" 
+                />
+              )}
+            </div>
 
-              {/* 4. Yellow Swap eraser/pencil toggle button */}
-              <ActionBtn 
-                icon={<RefreshCcw strokeWidth={2.5} size={22} />} 
-                active={tool === 'eraser'} 
-                onClick={() => {
-                  if (tool === 'eraser') changeTool('pencil');
-                  else if (tool === 'pencil') changeTool('eraser');
-                  else changeTool('pencil');
-                }} 
-                className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-2xl"
-              />
+            {/* Color Palette on the Right (Fills up to the right edge with no gaps) */}
+            <div className="flex-1 flex flex-col gap-[3px] select-none touch-pan-x ml-1 mr-0" dir="ltr">
+              <div className="flex gap-[3px] justify-between w-full">
+                {TOP_COLORS.map(c => (
+                  <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
+                ))}
+              </div>
+              <div className="flex gap-[3px] justify-between w-full">
+                {BOT_COLORS.map(c => (
+                  <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1632,13 +1630,13 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
   return (
     <button 
       onClick={onClick}
-      className={`w-[44px] h-[44px] sm:w-12 sm:h-12 flex items-center justify-center rounded-2xl transition-all shadow-sm
+      className={`w-[38px] h-[38px] flex items-center justify-center rounded-2xl transition-all shadow-sm focus:outline-none select-none
         ${active 
           ? 'bg-white text-[#1a56db] scale-105 shadow-md' 
           : 'bg-[#ffcc00] text-[#1a56db] hover:bg-white hover:scale-105 active:scale-95'
         } ${className}`}
     >
-      {icon}
+      {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { size: 19, strokeWidth: 2.5 }) : icon}
     </button>
   );
 }
@@ -1663,13 +1661,9 @@ function ColorBtn({ color, active, onClick }: { key?: React.Key, color: string, 
   return (
     <button 
       onClick={onClick}
-      className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg border-2 transition-all p-0.5
-        ${active ? 'border-white ring-2 ring-black scale-110 shadow-lg z-10' : 'border-transparent hover:scale-105'}`}
-    >
-      <div 
-        className="w-full h-full rounded-md shadow-inner" 
-        style={{ backgroundColor: color }}
-      />
-    </button>
+      className={`flex-1 h-[17.5px] rounded-[4px] border transition-all relative focus:outline-none select-none
+        ${active ? 'border-[#FBBF24] border-[2px] scale-105 shadow-md z-10' : 'border-black/10 hover:scale-105'}`}
+      style={{ backgroundColor: color }}
+    />
   );
 }
