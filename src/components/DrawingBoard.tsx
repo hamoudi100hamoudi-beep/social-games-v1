@@ -844,8 +844,8 @@ export default function DrawingBoard({
     tempCanvas.width = LOGICAL_WIDTH * DPR;
     tempCanvas.height = LOGICAL_HEIGHT * DPR;
     
-    const ctx = canvas.getContext('2d', { desynchronized: true });
-    const tempCtx = tempCanvas.getContext('2d', { desynchronized: true });
+    const ctx = canvas.getContext('2d');
+    const tempCtx = tempCanvas.getContext('2d');
     if (ctx && tempCtx) {
       ctx.scale(DPR, DPR);
       ctx.lineCap = 'round';
