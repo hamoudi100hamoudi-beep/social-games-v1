@@ -107,73 +107,69 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const fr = parseInt(fillHex.slice(1, 3), 16) || 0;
   const fg = parseInt(fillHex.slice(3, 5), 16) || 0;
   const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
+  const fa = Math.round(fillOpacity * 255);
   
-  const visited = new Uint8Array(cw * ch);
+  // Guard against filling the exact same color to prevent infinite loops
+  if (Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5 && Math.abs(ta - fa) <= 5) {
+    return;
+  }
   
-  const stack = [sx, sy];
-  let iterations = 0;
-  const maxIterations = cw * ch;
-
-  while(stack.length > 0 && iterations < maxIterations) {
-    iterations++;
-    const y = stack.pop()!;
-    let x = stack.pop()!;
+  // Standard queue-based scanline algorithm
+  const queueX: number[] = [sx];
+  const queueY: number[] = [sy];
+  let head = 0;
+  
+  while (head < queueX.length) {
+    const cx = queueX[head];
+    const cy = queueY[head];
+    head++;
     
-    let idx = (y * cw + x) * 4;
-    let pixelIdx = y * cw + x;
-    while(x >= 0 && !visited[pixelIdx] && matchColor(data, idx, tr, tg, tb, ta)) {
-      x--;
+    let xCurr = cx;
+    let yCurr = cy;
+    
+    let idx = (yCurr * cw + xCurr) * 4;
+    while (xCurr >= 0 && matchColor(data, idx, tr, tg, tb, ta)) {
+      xCurr--;
       idx -= 4;
-      pixelIdx--;
     }
-    x++;
+    xCurr++;
     idx += 4;
-    pixelIdx++;
     
-    let reachAbove = false;
-    let reachBelow = false;
+    let spanAbove = false;
+    let spanBelow = false;
     
-    while(x < cw && !visited[pixelIdx] && matchColor(data, idx, tr, tg, tb, ta)) {
-      // Alpha blending
-      const destA = data[idx+3] / 255;
-      const outA = fillOpacity + destA * (1 - fillOpacity);
+    while (xCurr < cw && matchColor(data, idx, tr, tg, tb, ta)) {
+      data[idx] = fr;
+      data[idx+1] = fg;
+      data[idx+2] = fb;
+      data[idx+3] = fa;
       
-      if (outA > 0) {
-        data[idx] = Math.round((fr * fillOpacity + data[idx] * destA * (1 - fillOpacity)) / outA);
-        data[idx+1] = Math.round((fg * fillOpacity + data[idx+1] * destA * (1 - fillOpacity)) / outA);
-        data[idx+2] = Math.round((fb * fillOpacity + data[idx+2] * destA * (1 - fillOpacity)) / outA);
-        data[idx+3] = Math.round(outA * 255);
-      } else {
-        data[idx] = fr;
-        data[idx+1] = fg;
-        data[idx+2] = fb;
-        data[idx+3] = 0;
-      }
-      visited[pixelIdx] = 1;
-      
-      if (y > 0) {
-        if (!visited[pixelIdx - cw] && matchColor(data, idx - cw*4, tr, tg, tb, ta)) {
-          if (!reachAbove) {
-            stack.push(x, y-1);
-            reachAbove = true;
-          }
-        } else if (reachAbove) {
-          reachAbove = false;
+      if (yCurr > 0) {
+        const idxAbove = ((yCurr - 1) * cw + xCurr) * 4;
+        const matchesAbove = matchColor(data, idxAbove, tr, tg, tb, ta);
+        if (!spanAbove && matchesAbove) {
+          queueX.push(xCurr);
+          queueY.push(yCurr - 1);
+          spanAbove = true;
+        } else if (spanAbove && !matchesAbove) {
+          spanAbove = false;
         }
       }
-      if (y < ch - 1) {
-        if (!visited[pixelIdx + cw] && matchColor(data, idx + cw*4, tr, tg, tb, ta)) {
-          if (!reachBelow) {
-            stack.push(x, y+1);
-            reachBelow = true;
-          }
-        } else if (reachBelow) {
-          reachBelow = false;
+      
+      if (yCurr < ch - 1) {
+        const idxBelow = ((yCurr + 1) * cw + xCurr) * 4;
+        const matchesBelow = matchColor(data, idxBelow, tr, tg, tb, ta);
+        if (!spanBelow && matchesBelow) {
+          queueX.push(xCurr);
+          queueY.push(yCurr + 1);
+          spanBelow = true;
+        } else if (spanBelow && !matchesBelow) {
+          spanBelow = false;
         }
       }
-      x++;
+      
+      xCurr++;
       idx += 4;
-      pixelIdx++;
     }
   }
   
@@ -242,6 +238,7 @@ export default function DrawingBoard({
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const tempCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const lastMoveProcessedTime = useRef(0);
+  const lastBucketFillTimeRef = useRef(0);
   const [isDrawing, setIsDrawing] = useState(false);
   
   // State
@@ -1388,6 +1385,13 @@ export default function DrawingBoard({
         const ctx = ctxRef.current;
         if (ctx) {
           if (tool === 'bucket') {
+            const now = Date.now();
+            if (now - lastBucketFillTimeRef.current < 500) {
+              currentPath.current = [];
+              return;
+            }
+            lastBucketFillTimeRef.current = now;
+
             floodFill(ctx, x, y, color, currentOpacity);
             saveHistory();
             if (socket) {
