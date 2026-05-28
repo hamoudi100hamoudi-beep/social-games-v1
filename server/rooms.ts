@@ -556,19 +556,31 @@ class RoomManager {
     const history = room.gameState.drawHistory;
     //@ts-ignore
     const redoStack = room.gameState.redoStack;
+
+    const isDrawEnd = (cmd: any) => 
+      cmd.event === 'draw_end' || 
+      (cmd.event === 'draw_binary' && Buffer.isBuffer(cmd.data) && cmd.data.length > 0 && cmd.data[0] === 3);
+
+    const isDrawAction = (cmd: any) => 
+      cmd.event === 'draw_action' || 
+      (cmd.event === 'draw_binary' && Buffer.isBuffer(cmd.data) && cmd.data.length > 0 && cmd.data[0] === 4);
+
+    const isDrawStart = (cmd: any) => 
+      cmd.event === 'draw_start' || 
+      (cmd.event === 'draw_binary' && Buffer.isBuffer(cmd.data) && cmd.data.length > 0 && cmd.data[0] === 1);
     
     let endIndex = history.length - 1;
-    while (endIndex >= 0 && history[endIndex].event !== 'draw_end' && history[endIndex].event !== 'draw_action') {
+    while (endIndex >= 0 && !isDrawEnd(history[endIndex]) && !isDrawAction(history[endIndex])) {
        endIndex--;
     }
     
     if (endIndex >= 0) {
-      if (history[endIndex].event === 'draw_action') {
+      if (isDrawAction(history[endIndex])) {
         const removed = history.splice(endIndex, history.length - endIndex);
         redoStack.push(removed);
       } else {
         let startIndex = endIndex;
-        while (startIndex >= 0 && history[startIndex].event !== 'draw_start') {
+        while (startIndex >= 0 && !isDrawStart(history[startIndex])) {
            startIndex--;
         }
         if (startIndex >= 0) {

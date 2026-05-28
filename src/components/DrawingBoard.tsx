@@ -57,6 +57,290 @@ const decompressPayload = (comp: any): any => {
   return data;
 };
 
+const MSG_DRAW_START = 1;
+const MSG_DRAW_MOVE = 2;
+const MSG_DRAW_END = 3;
+const MSG_DRAW_ACTION = 4;
+const MSG_DRAW_CLEAR = 5;
+const MSG_DRAW_CANCEL = 6;
+const MSG_DRAW_UNDO = 7;
+const MSG_DRAW_REDO = 8;
+
+const TOOLS_LIST = ['pencil', 'eraser', 'bucket', 'line', 'strokeRect', 'fillRect', 'strokeCircle', 'fillCircle', 'pipette'];
+
+const getToolIndex = (toolName: string): number => {
+  const idx = TOOLS_LIST.indexOf(toolName);
+  return idx >= 0 ? idx : 0;
+};
+
+const getToolName = (idx: number): string => {
+  return TOOLS_LIST[idx] || 'pencil';
+};
+
+const writeString7 = (view: DataView, offset: number, str: string) => {
+  for (let i = 0; i < 7; i++) {
+    const code = i < str.length ? str.charCodeAt(i) : 0;
+    view.setUint8(offset + i, code);
+  }
+};
+
+const readString7 = (view: DataView, offset: number): string => {
+  let str = '';
+  for (let i = 0; i < 7; i++) {
+    const code = view.getUint8(offset + i);
+    if (code > 0) {
+      str += String.fromCharCode(code);
+    }
+  }
+  return str;
+};
+
+const parseColorToRGB = (colorStr: string): {r: number, g: number, b: number} => {
+  if (!colorStr) return { r: 0, g: 0, b: 0 };
+  if (colorStr.startsWith('#')) {
+    const hex = colorStr.slice(1);
+    if (hex.length === 3) {
+      const r = parseInt(hex[0] + hex[0], 16) || 0;
+      const g = parseInt(hex[1] + hex[1], 16) || 0;
+      const b = parseInt(hex[2] + hex[2], 16) || 0;
+      return { r, g, b };
+    } else {
+      const r = parseInt(hex.slice(0, 2), 16) || 0;
+      const g = parseInt(hex.slice(2, 4), 16) || 0;
+      const b = parseInt(hex.slice(4, 6), 16) || 0;
+      return { r, g, b };
+    }
+  }
+  return { r: 0, g: 0, b: 0 };
+};
+
+const formatRGBToHex = (r: number, g: number, b: number): string => {
+  const pad = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${pad(r)}${pad(g)}${pad(b)}`;
+};
+
+const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer => {
+  const instId = data.instanceId || '';
+  
+  if (event === 'draw_start') {
+    const buffer = new ArrayBuffer(18);
+    const view = new DataView(buffer);
+    view.setUint8(0, MSG_DRAW_START);
+    writeString7(view, 1, instId);
+    
+    view.setUint8(8, getToolIndex(data.tool));
+    const rgb = parseColorToRGB(data.color);
+    view.setUint8(9, rgb.r);
+    view.setUint8(10, rgb.g);
+    view.setUint8(11, rgb.b);
+    
+    const width = Math.min(255, Math.max(0, Math.round(data.width || 0)));
+    view.setUint8(12, width);
+    
+    const opacityVal = Math.min(100, Math.max(0, Math.round((data.opacity !== undefined ? data.opacity : 1) * 100)));
+    view.setUint8(13, opacityVal);
+    
+    const scaledX = Math.min(10000, Math.max(0, Math.round((data.x || 0) * 10000)));
+    const scaledY = Math.min(10000, Math.max(0, Math.round((data.y || 0) * 10000)));
+    view.setUint16(14, scaledX, true);
+    view.setUint16(16, scaledY, true);
+    
+    return buffer;
+  }
+  
+  if (event === 'draw_move') {
+    const moves = Array.isArray(data.moves) ? data.moves : (data.x !== undefined ? [{ x: data.x, y: data.y }] : []);
+    const movesLength = moves.length;
+    
+    const buffer = new ArrayBuffer(10 + movesLength * 4);
+    const view = new DataView(buffer);
+    view.setUint8(0, MSG_DRAW_MOVE);
+    writeString7(view, 1, instId);
+    
+    view.setUint16(8, movesLength, true);
+    for (let i = 0; i < movesLength; i++) {
+      const pt = moves[i];
+      const scaledPtX = Math.min(10000, Math.max(0, Math.round((pt.x || 0) * 10000)));
+      const scaledPtY = Math.min(10000, Math.max(0, Math.round((pt.y || 0) * 10000)));
+      view.setUint16(10 + i * 4, scaledPtX, true);
+      view.setUint16(12 + i * 4, scaledPtY, true);
+    }
+    
+    return buffer;
+  }
+  
+  if (event === 'draw_end') {
+    const buffer = new ArrayBuffer(22);
+    const view = new DataView(buffer);
+    view.setUint8(0, MSG_DRAW_END);
+    writeString7(view, 1, instId);
+    
+    view.setUint8(8, getToolIndex(data.tool));
+    const rgb = parseColorToRGB(data.color);
+    view.setUint8(9, rgb.r);
+    view.setUint8(10, rgb.g);
+    view.setUint8(11, rgb.b);
+    
+    const width = Math.min(255, Math.max(0, Math.round(data.width || 0)));
+    view.setUint8(12, width);
+    
+    const opacityVal = Math.min(100, Math.max(0, Math.round((data.opacity !== undefined ? data.opacity : 1) * 100)));
+    view.setUint8(13, opacityVal);
+    
+    const scaledSX = Math.min(10000, Math.max(0, Math.round((data.startX || 0) * 10000)));
+    const scaledSY = Math.min(10000, Math.max(0, Math.round((data.startY || 0) * 10000)));
+    view.setUint16(14, scaledSX, true);
+    view.setUint16(16, scaledSY, true);
+    
+    const scaledX = Math.min(10000, Math.max(0, Math.round((data.x || 0) * 10000)));
+    const scaledY = Math.min(10000, Math.max(0, Math.round((data.y || 0) * 10000)));
+    view.setUint16(18, scaledX, true);
+    view.setUint16(20, scaledY, true);
+    
+    return buffer;
+  }
+  
+  if (event === 'draw_action') {
+    const buffer = new ArrayBuffer(17);
+    const view = new DataView(buffer);
+    view.setUint8(0, MSG_DRAW_ACTION);
+    writeString7(view, 1, instId);
+    
+    view.setUint8(8, getToolIndex(data.tool));
+    const rgb = parseColorToRGB(data.color);
+    view.setUint8(9, rgb.r);
+    view.setUint8(10, rgb.g);
+    view.setUint8(11, rgb.b);
+    
+    const opacityVal = Math.min(100, Math.max(0, Math.round((data.opacity !== undefined ? data.opacity : 1) * 100)));
+    view.setUint8(12, opacityVal);
+    
+    const scaledX = Math.min(10000, Math.max(0, Math.round((data.x || 0) * 10000)));
+    const scaledY = Math.min(10000, Math.max(0, Math.round((data.y || 0) * 10000)));
+    view.setUint16(13, scaledX, true);
+    view.setUint16(15, scaledY, true);
+    
+    return buffer;
+  }
+  
+  let type = 5;
+  if (event === 'draw_clear') type = MSG_DRAW_CLEAR;
+  else if (event === 'draw_cancel') type = MSG_DRAW_CANCEL;
+  else if (event === 'draw_undo') type = MSG_DRAW_UNDO;
+  else if (event === 'draw_redo') type = MSG_DRAW_REDO;
+  
+  const buffer = new ArrayBuffer(8);
+  const view = new DataView(buffer);
+  view.setUint8(0, type);
+  writeString7(view, 1, instId);
+  return buffer;
+};
+
+const decodeBinaryDrawMessage = (input: any): { event: string, data: any } | null => {
+  if (!input) return null;
+  
+  let buffer: ArrayBuffer;
+  if (input instanceof ArrayBuffer) {
+    buffer = input;
+  } else if (input.buffer instanceof ArrayBuffer) {
+    buffer = input.buffer;
+  } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(input)) {
+    buffer = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+  } else {
+    return null;
+  }
+  
+  const view = new DataView(buffer);
+  if (view.byteLength < 8) return null;
+  
+  const type = view.getUint8(0);
+  const instId = readString7(view, 1);
+  
+  if (type === MSG_DRAW_START) {
+    const tool = getToolName(view.getUint8(8));
+    const r = view.getUint8(9);
+    const g = view.getUint8(10);
+    const b = view.getUint8(11);
+    const color = formatRGBToHex(r, g, b);
+    const width = view.getUint8(12);
+    const opacity = view.getUint8(13) / 100;
+    const x = view.getUint16(14, true) / 10000;
+    const y = view.getUint16(16, true) / 10000;
+    
+    return {
+      event: 'draw_start',
+      data: { instanceId: instId, tool, color, width, opacity, x, y }
+    };
+  }
+  
+  if (type === MSG_DRAW_MOVE) {
+    const movesLength = view.getUint16(8, true);
+    const moves = [];
+    for (let i = 0; i < movesLength; i++) {
+      const x = view.getUint16(10 + i * 4, true) / 10000;
+      const y = view.getUint16(12 + i * 4, true) / 10000;
+      moves.push({ x, y });
+    }
+    
+    if (movesLength === 1) {
+      return {
+        event: 'draw_move',
+        data: { instanceId: instId, x: moves[0].x, y: moves[0].y }
+      };
+    } else {
+      return {
+        event: 'draw_move',
+        data: { instanceId: instId, moves }
+      };
+    }
+  }
+  
+  if (type === MSG_DRAW_END) {
+    const tool = getToolName(view.getUint8(8));
+    const r = view.getUint8(9);
+    const g = view.getUint8(10);
+    const b = view.getUint8(11);
+    const color = formatRGBToHex(r, g, b);
+    const width = view.getUint8(12);
+    const opacity = view.getUint8(13) / 100;
+    const startX = view.getUint16(14, true) / 10000;
+    const startY = view.getUint16(16, true) / 10000;
+    const x = view.getUint16(18, true) / 10000;
+    const y = view.getUint16(20, true) / 10000;
+    
+    return {
+      event: 'draw_end',
+      data: { instanceId: instId, tool, color, width, opacity, startX, startY, x, y }
+    };
+  }
+  
+  if (type === MSG_DRAW_ACTION) {
+    const tool = getToolName(view.getUint8(8));
+    const r = view.getUint8(9);
+    const g = view.getUint8(10);
+    const b = view.getUint8(11);
+    const color = formatRGBToHex(r, g, b);
+    const opacity = view.getUint8(12) / 100;
+    const x = view.getUint16(13, true) / 10000;
+    const y = view.getUint16(15, true) / 10000;
+    
+    return {
+      event: 'draw_action',
+      data: { instanceId: instId, tool, color, opacity, x, y }
+    };
+  }
+  
+  let eventName = 'draw_clear';
+  if (type === MSG_DRAW_CANCEL) eventName = 'draw_cancel';
+  else if (type === MSG_DRAW_UNDO) eventName = 'draw_undo';
+  else if (type === MSG_DRAW_REDO) eventName = 'draw_redo';
+  
+  return {
+    event: eventName,
+    data: { instanceId: instId }
+  };
+};
+
 const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b: number, a: number) => {
   const tolerance = 40; 
   return Math.abs(data[i] - r) <= tolerance && 
@@ -700,6 +984,33 @@ export default function DrawingBoard({
       remotePathRef.current = [];
     };
 
+    const onDrawBinary = (raw: any) => {
+      const decoded = decodeBinaryDrawMessage(raw);
+      if (!decoded) return;
+      const { event, data } = decoded;
+      if (!data) return;
+      if (data.instanceId === instanceId) return;
+
+      if (event === 'draw_start') {
+        onDrawStart(data);
+      } else if (event === 'draw_move') {
+        onDrawMove(data);
+      } else if (event === 'draw_end') {
+        onDrawEnd(data, false);
+      } else if (event === 'draw_clear') {
+        onDrawClear(data, false);
+      } else if (event === 'draw_action') {
+        onDrawAction(data, false);
+      } else if (event === 'draw_cancel') {
+        onDrawCancel(data);
+      } else if (event === 'draw_undo') {
+        undo(false);
+      } else if (event === 'draw_redo') {
+        redo(false);
+      }
+    };
+
+    socket.on('draw_binary', onDrawBinary);
     socket.on('draw_start', onDrawStart);
     socket.on('draw_move', onDrawMove);
     socket.on('draw_end', onDrawEnd);
@@ -749,14 +1060,25 @@ export default function DrawingBoard({
 
       // Replay all commands
       for (const cmd of commands) {
-         if (cmd.event === 'draw_start') onDrawStart(cmd.data, true);
-         else if (cmd.event === 'draw_move') onDrawMove(cmd.data, true);
-         else if (cmd.event === 'draw_end') {
-            onDrawEnd(cmd.data, true, true);
+         let event = cmd.event;
+         let data = cmd.data;
+         
+         if (event === 'draw_binary') {
+            const decoded = decodeBinaryDrawMessage(data);
+            if (decoded) {
+               event = decoded.event;
+               data = decoded.data;
+            }
+         }
+         
+         if (event === 'draw_start') onDrawStart(data, true);
+         else if (event === 'draw_move') onDrawMove(data, true);
+         else if (event === 'draw_end') {
+            onDrawEnd(data, true, true);
             history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
          }
-         else if (cmd.event === 'draw_action') {
-            onDrawAction(cmd.data, true, true);
+         else if (event === 'draw_action') {
+            onDrawAction(data, true, true);
             history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
          }
       }
@@ -771,6 +1093,7 @@ export default function DrawingBoard({
     });
 
     return () => {
+      socket.off('draw_binary', onDrawBinary);
       socket.off('draw_start', onDrawStart);
       socket.off('draw_move', onDrawMove);
       socket.off('draw_end', onDrawEnd);
@@ -1068,7 +1391,7 @@ export default function DrawingBoard({
       setHistoryState({ index: historyIndex.current, length: history.current.length });
       
       if (emit && socket) {
-        socket.emit('draw_undo', compressPayload({ instanceId }));
+        socket.emit('draw_binary', encodeBinaryDrawMessage('draw_undo', { instanceId }));
       }
     }
   };
@@ -1084,7 +1407,7 @@ export default function DrawingBoard({
       setHistoryState({ index: historyIndex.current, length: history.current.length });
       
       if (emit && socket) {
-        socket.emit('draw_redo', compressPayload({ instanceId }));
+        socket.emit('draw_binary', encodeBinaryDrawMessage('draw_redo', { instanceId }));
       }
     }
   };
@@ -1107,7 +1430,7 @@ export default function DrawingBoard({
     saveHistory(); // Creates the first blank snapshot at index 0
 
     if (emit && socket) {
-      socket.emit('draw_clear', compressPayload({ instanceId }));
+      socket.emit('draw_binary', encodeBinaryDrawMessage('draw_clear', { instanceId }));
     }
   };
 
@@ -1184,7 +1507,7 @@ export default function DrawingBoard({
           tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
           // Since active drawing is isolated to tempCanvas, clearing tempCtx is fully sufficient.
           if (socket) {
-            socket.emit('draw_cancel', compressPayload({ instanceId }));
+            socket.emit('draw_binary', encodeBinaryDrawMessage('draw_cancel', { instanceId }));
           }
         }
         const t1 = e.touches[0], t2 = e.touches[1];
@@ -1239,7 +1562,7 @@ export default function DrawingBoard({
     }
 
     if (socket && tool !== 'bucket' && tool !== 'pipette') {
-       socket.emit('draw_start', compressPayload({
+       socket.emit('draw_binary', encodeBinaryDrawMessage('draw_start', {
           instanceId, tool, color, width: currentWidth, opacity: currentOpacity,
           x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
        }));
@@ -1333,7 +1656,7 @@ export default function DrawingBoard({
             tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
             // Since active drawing is isolated to tempCanvas, clearing tempCtx is fully sufficient.
             if (socket) {
-              socket.emit('draw_cancel', compressPayload({ instanceId }));
+              socket.emit('draw_binary', encodeBinaryDrawMessage('draw_cancel', { instanceId }));
             }
         }
         return;
@@ -1406,7 +1729,7 @@ export default function DrawingBoard({
         if (!throttleTimeoutRef.current) {
           throttleTimeoutRef.current = setTimeout(() => {
             if (socket && moveBatchRef.current.length > 0) {
-               socket.emit('draw_move', compressPayload({
+               socket.emit('draw_binary', encodeBinaryDrawMessage('draw_move', {
                  instanceId, 
                  moves: moveBatchRef.current
                }));
@@ -1421,7 +1744,7 @@ export default function DrawingBoard({
       if (socket) {
         const normX = x / LOGICAL_WIDTH;
         const normY = y / LOGICAL_HEIGHT;
-        socket.emit('draw_move', compressPayload({
+        socket.emit('draw_binary', encodeBinaryDrawMessage('draw_move', {
           instanceId,
           x: normX,
           y: normY
@@ -1452,7 +1775,7 @@ export default function DrawingBoard({
             floodFill(ctx, x, y, color, currentOpacity);
             saveHistory();
             if (socket) {
-               socket.emit('draw_action', compressPayload({
+               socket.emit('draw_binary', encodeBinaryDrawMessage('draw_action', {
                  instanceId, tool: 'bucket', color, opacity: currentOpacity, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
                }));
             }
@@ -1487,7 +1810,7 @@ export default function DrawingBoard({
          throttleTimeoutRef.current = null;
       }
       if (socket && moveBatchRef.current.length > 0) {
-         socket.emit('draw_move', compressPayload({
+         socket.emit('draw_binary', encodeBinaryDrawMessage('draw_move', {
            instanceId, 
            moves: moveBatchRef.current
          }));
@@ -1546,7 +1869,7 @@ export default function DrawingBoard({
         const startCoords = currentPath.current && currentPath.current.length > 0
           ? currentPath.current[0]
           : {x: 0, y: 0};
-        socket.emit('draw_end', compressPayload({ 
+        socket.emit('draw_binary', encodeBinaryDrawMessage('draw_end', { 
           instanceId,
           tool, color, width: currentWidth, opacity: currentOpacity,
           startX: startCoords.x / LOGICAL_WIDTH, startY: startCoords.y / LOGICAL_HEIGHT,

@@ -119,6 +119,35 @@ async function startServer() {
       }
     });
 
+    socket.on('draw_binary', (buf) => {
+      // High-performance binary parser for instant passthrough and server CPU protection
+      const player = roomManager.getPlayer(socket.id);
+      const roomId = player ? player.roomId : null;
+      
+      if (buf && Buffer.isBuffer(buf) && buf.length > 0) {
+        const type = buf[0];
+        
+        if (roomId) {
+          if (type === 5) { // draw_clear
+            roomManager.clearDrawHistory(roomId);
+            io.to(roomId).emit('draw_binary', buf);
+          } else if (type === 7) { // draw_undo
+            roomManager.undoLastDrawing(roomId);
+            io.to(roomId).emit('draw_binary', buf);
+          } else if (type === 8) { // draw_redo
+            roomManager.redoDrawing(roomId);
+            io.to(roomId).emit('draw_binary', buf);
+          } else {
+            // Raw Binary Passthrough (blindly broadcast to other room members to save CPU)
+            roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+            socket.broadcast.to(roomId).emit('draw_binary', buf);
+          }
+        } else {
+          socket.broadcast.emit('draw_binary', buf);
+        }
+      }
+    });
+
     // Relay drawing events to other clients in the same room (if we had rooms), for now broadcast to all
     socket.on('draw_start', (data) => {
       const player = roomManager.getPlayer(socket.id);
