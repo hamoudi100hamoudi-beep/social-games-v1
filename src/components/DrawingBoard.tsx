@@ -14,6 +14,49 @@ const BOT_COLORS = ['#8B4513', '#800000', '#ff00ff', '#ffb6c1', '#00fa9a', '#add
 
 type ToolType = 'pencil' | 'eraser' | 'bucket' | 'line' | 'strokeRect' | 'fillRect' | 'strokeCircle' | 'fillCircle' | 'pipette';
 
+const compressPayload = (data: any): any => {
+  if (!data) return data;
+  const comp: any = {};
+  if (data.instanceId !== undefined) comp.i = data.instanceId;
+  if (data.tool !== undefined) comp.t = data.tool;
+  if (data.color !== undefined) comp.c = data.color;
+  if (data.width !== undefined) comp.w = data.width;
+  if (data.opacity !== undefined) comp.o = Math.round(data.opacity * 100) / 100;
+  if (data.x !== undefined) comp.x = Math.round(data.x * 10000);
+  if (data.y !== undefined) comp.y = Math.round(data.y * 10000);
+  if (data.startX !== undefined) comp.sx = Math.round(data.startX * 10000);
+  if (data.startY !== undefined) comp.sy = Math.round(data.startY * 10000);
+  if (data.moves !== undefined && Array.isArray(data.moves)) {
+    comp.m = data.moves.map((pt: any) => ({
+      x: Math.round(pt.x * 10000),
+      y: Math.round(pt.y * 10000)
+    }));
+  }
+  return comp;
+};
+
+const decompressPayload = (comp: any): any => {
+  if (!comp) return comp;
+  if (comp.instanceId !== undefined) return comp;
+  const data: any = {};
+  if (comp.i !== undefined) data.instanceId = comp.i;
+  if (comp.t !== undefined) data.tool = comp.t;
+  if (comp.c !== undefined) data.color = comp.c;
+  if (comp.w !== undefined) data.width = comp.w;
+  if (comp.o !== undefined) data.opacity = comp.o;
+  if (comp.x !== undefined) data.x = comp.x / 10000;
+  if (comp.y !== undefined) data.y = comp.y / 10000;
+  if (comp.sx !== undefined) data.startX = comp.sx / 10000;
+  if (comp.sy !== undefined) data.startY = comp.sy / 10000;
+  if (comp.m !== undefined && Array.isArray(comp.m)) {
+    data.moves = comp.m.map((pt: any) => ({
+      x: pt.x / 10000,
+      y: pt.y / 10000
+    }));
+  }
+  return data;
+};
+
 const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b: number, a: number) => {
   const tolerance = 40; 
   return Math.abs(data[i] - r) <= tolerance && 
@@ -198,6 +241,7 @@ export default function DrawingBoard({
   const tempCanvasRef = useRef<HTMLCanvasElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const tempCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const lastMoveProcessedTime = useRef(0);
   const [isDrawing, setIsDrawing] = useState(false);
   
   // State
@@ -429,7 +473,8 @@ export default function DrawingBoard({
   useEffect(() => {
     if (!socket) return;
     
-    const onDrawStart = (data: any, isReplay = false) => {
+    const onDrawStart = (raw: any, isReplay = false) => {
+      const data = decompressPayload(raw);
       if (!isReplay && data.instanceId === instanceId) return;
       remoteProps.current = data;
       const x = data.x * LOGICAL_WIDTH;
@@ -473,7 +518,8 @@ export default function DrawingBoard({
       }
     };
 
-    const onDrawMove = (data: any, isReplay = false) => {
+    const onDrawMove = (raw: any, isReplay = false) => {
+      const data = decompressPayload(raw);
       if (!isReplay && data.instanceId === instanceId) return;
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
@@ -532,7 +578,8 @@ export default function DrawingBoard({
       }
     };
 
-    const onDrawEnd = (data?: any, skipSave = false, isReplay = false) => {
+    const onDrawEnd = (raw?: any, skipSave = false, isReplay = false) => {
+      const data = decompressPayload(raw);
       if (!isReplay && data?.instanceId === instanceId) return;
       
       const tool = data?.tool || remoteProps.current.tool;
@@ -601,7 +648,7 @@ export default function DrawingBoard({
           }
 
           ctx.globalAlpha = opacity;
-          ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+          ctx.globalCompositeOperation = 'source-over';
           ctx.drawImage(tempCanvas, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
           tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
           ctx.globalCompositeOperation = 'source-over';
@@ -618,7 +665,8 @@ export default function DrawingBoard({
       clearCanvas(false);
     };
 
-    const onDrawAction = (data: any, skipSave = false, isReplay = false) => {
+    const onDrawAction = (raw: any, skipSave = false, isReplay = false) => {
+      const data = decompressPayload(raw);
       if (!isReplay && data.instanceId === instanceId) return;
       const ctx = ctxRef.current;
       if (!ctx) return;
@@ -666,7 +714,8 @@ export default function DrawingBoard({
       const ctx = ctxRef.current;
       const canvas = canvasRef.current;
       if (!ctx || !canvas) return;
-      ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
       const tempCtx = tempCtxRef.current;
       if (tempCtx) {
          tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
@@ -884,7 +933,7 @@ export default function DrawingBoard({
     tempCanvas.width = LOGICAL_WIDTH * DPR;
     tempCanvas.height = LOGICAL_HEIGHT * DPR;
     
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
     const tempCtx = tempCanvas.getContext('2d');
     if (ctx && tempCtx) {
       ctx.scale(DPR, DPR);
@@ -897,8 +946,9 @@ export default function DrawingBoard({
       tempCtx.lineJoin = 'round';
       tempCtxRef.current = tempCtx;
       
-      // Initialize with white background
-      ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+      // Initialize with solid white background (highly performant and opaque)
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
       
       // Reset history to avoid double initialization in React StrictMode
       history.current = [];
@@ -955,7 +1005,7 @@ export default function DrawingBoard({
       setHistoryState({ index: historyIndex.current, length: history.current.length });
       
       if (emit && socket) {
-        socket.emit('draw_undo', { instanceId });
+        socket.emit('draw_undo', compressPayload({ instanceId }));
       }
     }
   };
@@ -971,7 +1021,7 @@ export default function DrawingBoard({
       setHistoryState({ index: historyIndex.current, length: history.current.length });
       
       if (emit && socket) {
-        socket.emit('draw_redo', { instanceId });
+        socket.emit('draw_redo', compressPayload({ instanceId }));
       }
     }
   };
@@ -981,7 +1031,8 @@ export default function DrawingBoard({
     const ctx = ctxRef.current;
     if (!canvas || !ctx) return;
 
-    ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
     const tempCtx = tempCtxRef.current;
     if (tempCtx) {
        tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
@@ -993,7 +1044,7 @@ export default function DrawingBoard({
     saveHistory(); // Creates the first blank snapshot at index 0
 
     if (emit && socket) {
-      socket.emit('draw_clear', { instanceId });
+      socket.emit('draw_clear', compressPayload({ instanceId }));
     }
   };
 
@@ -1070,7 +1121,7 @@ export default function DrawingBoard({
           tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
           // Since active drawing is isolated to tempCanvas, clearing tempCtx is fully sufficient.
           if (socket) {
-            socket.emit('draw_cancel', { instanceId });
+            socket.emit('draw_cancel', compressPayload({ instanceId }));
           }
         }
         const t1 = e.touches[0], t2 = e.touches[1];
@@ -1125,10 +1176,10 @@ export default function DrawingBoard({
     }
 
     if (socket && tool !== 'bucket' && tool !== 'pipette') {
-       socket.emit('draw_start', {
+       socket.emit('draw_start', compressPayload({
           instanceId, tool, color, width: currentWidth, opacity: currentOpacity,
           x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
-       });
+       }));
     }
 
     if (tool === 'pencil' || tool === 'eraser') {
@@ -1161,6 +1212,16 @@ export default function DrawingBoard({
     if (menuJustClosedRef.current) {
       return;
     }
+
+    const now = Date.now();
+    const isPinch = 'touches' in e && e.touches.length >= 2;
+    if (!isPinch) {
+      if (now - lastMoveProcessedTime.current < 18) {
+        return;
+      }
+      lastMoveProcessedTime.current = now;
+    }
+
     let clientX, clientY;
 
     if ('touches' in e) {
@@ -1218,7 +1279,7 @@ export default function DrawingBoard({
             tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
             // Since active drawing is isolated to tempCanvas, clearing tempCtx is fully sufficient.
             if (socket) {
-              socket.emit('draw_cancel', { instanceId });
+              socket.emit('draw_cancel', compressPayload({ instanceId }));
             }
         }
         return;
@@ -1291,10 +1352,10 @@ export default function DrawingBoard({
         if (!throttleTimeoutRef.current) {
           throttleTimeoutRef.current = setTimeout(() => {
             if (socket && moveBatchRef.current.length > 0) {
-               socket.emit('draw_move', {
+               socket.emit('draw_move', compressPayload({
                  instanceId, 
                  moves: moveBatchRef.current
-               });
+               }));
                moveBatchRef.current = [];
             }
             throttleTimeoutRef.current = null;
@@ -1306,11 +1367,11 @@ export default function DrawingBoard({
       if (socket) {
         const normX = x / LOGICAL_WIDTH;
         const normY = y / LOGICAL_HEIGHT;
-        socket.emit('draw_move', {
+        socket.emit('draw_move', compressPayload({
           instanceId,
           x: normX,
           y: normY
-        });
+        }));
       }
     }
   };
@@ -1330,9 +1391,9 @@ export default function DrawingBoard({
             floodFill(ctx, x, y, color, currentOpacity);
             saveHistory();
             if (socket) {
-               socket.emit('draw_action', {
+               socket.emit('draw_action', compressPayload({
                  instanceId, tool: 'bucket', color, opacity: currentOpacity, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
-               });
+               }));
             }
           } else if (tool === 'pipette') {
             let offscreenCanvas: HTMLCanvasElement | null = document.createElement('canvas');
@@ -1365,10 +1426,10 @@ export default function DrawingBoard({
          throttleTimeoutRef.current = null;
       }
       if (socket && moveBatchRef.current.length > 0) {
-         socket.emit('draw_move', {
+         socket.emit('draw_move', compressPayload({
            instanceId, 
            moves: moveBatchRef.current
-         });
+         }));
          moveBatchRef.current = [];
       }
       
@@ -1409,7 +1470,7 @@ export default function DrawingBoard({
           // and saves valuable CPU cycles.
 
           ctx.globalAlpha = currentOpacity;
-          ctx.globalCompositeOperation = tool === 'eraser' ? 'destination-out' : 'source-over';
+          ctx.globalCompositeOperation = 'source-over';
           ctx.drawImage(tempCanvas, 0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
           tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         }
@@ -1424,13 +1485,13 @@ export default function DrawingBoard({
         const startCoords = currentPath.current && currentPath.current.length > 0
           ? currentPath.current[0]
           : {x: 0, y: 0};
-        socket.emit('draw_end', { 
+        socket.emit('draw_end', compressPayload({ 
           instanceId,
           tool, color, width: currentWidth, opacity: currentOpacity,
           startX: startCoords.x / LOGICAL_WIDTH, startY: startCoords.y / LOGICAL_HEIGHT,
           x: lastCoords ? lastCoords.x / LOGICAL_WIDTH : 0, 
           y: lastCoords ? lastCoords.y / LOGICAL_HEIGHT : 0
-        });
+        }));
       }
     }
   };
