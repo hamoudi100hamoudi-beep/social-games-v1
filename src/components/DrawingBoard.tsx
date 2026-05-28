@@ -107,17 +107,20 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const fr = parseInt(fillHex.slice(1, 3), 16) || 0;
   const fg = parseInt(fillHex.slice(3, 5), 16) || 0;
   const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
-  const fa = Math.round(fillOpacity * 255);
   
-  // Guard against filling the exact same color to prevent infinite loops
-  if (Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5 && Math.abs(ta - fa) <= 5) {
+  // Guard against filling the exact same color at full opacity
+  if (fillOpacity >= 0.95 && Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5) {
     return;
   }
   
-  // Standard queue-based scanline algorithm
+  const visited = new Uint8Array(cw * ch);
+  
+  // Standard queue-based scanline algorithm with visited tracking to prevent back-tracking or infinite loops
   const queueX: number[] = [sx];
   const queueY: number[] = [sy];
   let head = 0;
+  
+  visited[sy * cw + sx] = 1;
   
   while (head < queueX.length) {
     const cx = queueX[head];
@@ -139,17 +142,27 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
     let spanBelow = false;
     
     while (xCurr < cw && matchColor(data, idx, tr, tg, tb, ta)) {
-      data[idx] = fr;
-      data[idx+1] = fg;
-      data[idx+2] = fb;
-      data[idx+3] = fa;
+      const pixelIdx = yCurr * cw + xCurr;
+      visited[pixelIdx] = 1;
+      
+      // Perform manual alpha blending on the opaque canvas (alpha: false)
+      const destR = data[idx];
+      const destG = data[idx+1];
+      const destB = data[idx+2];
+      
+      data[idx] = Math.round(fr * fillOpacity + destR * (1 - fillOpacity));
+      data[idx+1] = Math.round(fg * fillOpacity + destG * (1 - fillOpacity));
+      data[idx+2] = Math.round(fb * fillOpacity + destB * (1 - fillOpacity));
+      data[idx+3] = 255; // Keep opaque on alpha:false context
       
       if (yCurr > 0) {
         const idxAbove = ((yCurr - 1) * cw + xCurr) * 4;
-        const matchesAbove = matchColor(data, idxAbove, tr, tg, tb, ta);
+        const pixelIdxAbove = (yCurr - 1) * cw + xCurr;
+        const matchesAbove = !visited[pixelIdxAbove] && matchColor(data, idxAbove, tr, tg, tb, ta);
         if (!spanAbove && matchesAbove) {
           queueX.push(xCurr);
           queueY.push(yCurr - 1);
+          visited[pixelIdxAbove] = 1;
           spanAbove = true;
         } else if (spanAbove && !matchesAbove) {
           spanAbove = false;
@@ -158,10 +171,12 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
       
       if (yCurr < ch - 1) {
         const idxBelow = ((yCurr + 1) * cw + xCurr) * 4;
-        const matchesBelow = matchColor(data, idxBelow, tr, tg, tb, ta);
+        const pixelIdxBelow = (yCurr + 1) * cw + xCurr;
+        const matchesBelow = !visited[pixelIdxBelow] && matchColor(data, idxBelow, tr, tg, tb, ta);
         if (!spanBelow && matchesBelow) {
           queueX.push(xCurr);
           queueY.push(yCurr + 1);
+          visited[pixelIdxBelow] = 1;
           spanBelow = true;
         } else if (spanBelow && !matchesBelow) {
           spanBelow = false;
@@ -235,6 +250,7 @@ export default function DrawingBoard({
   const { socket } = useSocket();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tempCanvasRef = useRef<HTMLCanvasElement>(null);
+  const interactionLayerRef = useRef<HTMLDivElement>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const tempCtxRef = useRef<CanvasRenderingContext2D | null>(null);
   const lastMoveProcessedTime = useRef(0);
@@ -687,22 +703,26 @@ export default function DrawingBoard({
     socket.on('draw_clear', onDrawClear);
     socket.on('draw_action', onDrawAction);
 
-    socket.on('draw_undo', (data?: any) => {
+    socket.on('draw_undo', (raw?: any) => {
+      const data = decompressPayload(raw);
       if (data?.instanceId === instanceId) return;
       undo(false);
     });
     
-    socket.on('draw_undo_local', (data?: any) => {
+    socket.on('draw_undo_local', (raw?: any) => {
+      const data = decompressPayload(raw);
       if (data?.instanceId === instanceId) return;
       undo(false);
     });
     
-    socket.on('draw_redo', (data?: any) => {
+    socket.on('draw_redo', (raw?: any) => {
+      const data = decompressPayload(raw);
       if (data?.instanceId === instanceId) return;
       redo(false);
     });
 
-    socket.on('draw_redo_local', (data?: any) => {
+    socket.on('draw_redo_local', (raw?: any) => {
+      const data = decompressPayload(raw);
       if (data?.instanceId === instanceId) return;
       redo(false);
     });
@@ -961,6 +981,48 @@ export default function DrawingBoard({
     return () => document.removeEventListener('touchmove', preventDefault);
   }, []);
 
+  // Register native pointer/touch event listeners directly to bypass React synthetic event overhead and prevent input lag
+  useEffect(() => {
+    const el = interactionLayerRef.current;
+    if (!el || readOnly) return;
+
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+      handlePointerDown(e);
+    };
+
+    const onMove = (e: MouseEvent | TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+      handlePointerMove(e);
+    };
+
+    const onUp = (e: MouseEvent | TouchEvent) => {
+      handlePointerUp(e);
+    };
+
+    el.addEventListener('mousedown', onDown);
+    el.addEventListener('mousemove', onMove);
+    el.addEventListener('mouseup', onUp);
+    el.addEventListener('mouseleave', onUp);
+
+    el.addEventListener('touchstart', onDown, { passive: false });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onUp, { passive: false });
+    el.addEventListener('touchcancel', onUp, { passive: false });
+
+    return () => {
+      el.removeEventListener('mousedown', onDown);
+      el.removeEventListener('mousemove', onMove);
+      el.removeEventListener('mouseup', onUp);
+      el.removeEventListener('mouseleave', onUp);
+
+      el.removeEventListener('touchstart', onDown);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onUp);
+      el.removeEventListener('touchcancel', onUp);
+    };
+  }, [readOnly, activeMenu, tool, color, bucketOpacity, penOpacity, eraserOpacity, penWidth, eraserWidth, isDrawing]);
+
   const saveHistory = () => {
     const canvas = canvasRef.current;
     const ctx = ctxRef.current;
@@ -1095,7 +1157,7 @@ export default function DrawingBoard({
 
   const lastTouchTime = useRef(0);
 
-  const handlePointerDown = (e: React.TouchEvent | React.MouseEvent) => {
+  const handlePointerDown = (e: React.TouchEvent | React.MouseEvent | TouchEvent | MouseEvent) => {
     if (activeMenu !== null) {
       setActiveMenu(null);
       menuJustClosedRef.current = true;
@@ -1205,18 +1267,9 @@ export default function DrawingBoard({
     if (ctx) ctx.shadowBlur = 0;
   };
 
-  const handlePointerMove = (e: React.TouchEvent | React.MouseEvent) => {
+  const handlePointerMove = (e: React.TouchEvent | React.MouseEvent | TouchEvent | MouseEvent) => {
     if (menuJustClosedRef.current) {
       return;
-    }
-
-    const now = Date.now();
-    const isPinch = 'touches' in e && e.touches.length >= 2;
-    if (!isPinch) {
-      if (now - lastMoveProcessedTime.current < 18) {
-        return;
-      }
-      lastMoveProcessedTime.current = now;
     }
 
     let clientX, clientY;
@@ -1373,7 +1426,7 @@ export default function DrawingBoard({
     }
   };
 
-  const handlePointerUp = (e: React.TouchEvent | React.MouseEvent) => {
+  const handlePointerUp = (e: React.TouchEvent | React.MouseEvent | TouchEvent | MouseEvent) => {
     if (menuJustClosedRef.current) {
       menuJustClosedRef.current = false;
       return;
@@ -1543,15 +1596,8 @@ export default function DrawingBoard({
         {/* Interaction Layer (covers full screen container) */}
         {!readOnly && (
           <div 
+            ref={interactionLayerRef}
             className="absolute inset-0 z-10 touch-none"
-            onMouseDown={handlePointerDown}
-            onMouseMove={handlePointerMove}
-            onMouseUp={handlePointerUp}
-            onMouseLeave={handlePointerUp}
-            onTouchStart={handlePointerDown}
-            onTouchMove={handlePointerMove}
-            onTouchEnd={handlePointerUp}
-            onTouchCancel={handlePointerUp}
           />
         )}
 
