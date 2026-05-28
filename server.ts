@@ -180,75 +180,7 @@ async function startServer() {
       }
     });
 
-    // Relay drawing events to other clients in the same room (if we had rooms), for now broadcast to all
-    socket.on('draw_start', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-         roomManager.recordDrawCommand(player.roomId, 'draw_start', data);
-         socket.broadcast.to(player.roomId).emit('draw_start', data);
-      }
-      else socket.broadcast.emit('draw_start', data);
-    });
-    
-    socket.on('draw_move', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-         roomManager.recordDrawCommand(player.roomId, 'draw_move', data);
-         socket.broadcast.to(player.roomId).emit('draw_move', data);
-      }
-      else socket.broadcast.emit('draw_move', data);
-    });
-    
-    socket.on('draw_end', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-         roomManager.recordDrawCommand(player.roomId, 'draw_end', data);
-         socket.broadcast.to(player.roomId).emit('draw_end', data);
-      }
-      else socket.broadcast.emit('draw_end', data);
-    });
-
-    socket.on('draw_action', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-         roomManager.recordDrawCommand(player.roomId, 'draw_action', data);
-         socket.broadcast.to(player.roomId).emit('draw_action', data);
-      }
-      else socket.broadcast.emit('draw_action', data);
-    });
-
-    socket.on('draw_clear', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-         roomManager.clearDrawHistory(player.roomId);
-         io.to(player.roomId).emit('draw_clear', data); // Broadcasts to everyone including sender!
-      }
-      else io.emit('draw_clear', data);
-    });
-
-    socket.on('draw_cancel', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) socket.broadcast.to(player.roomId).emit('draw_cancel', data);
-      else socket.broadcast.emit('draw_cancel', data);
-    });
-
-    socket.on('draw_undo', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-         roomManager.undoLastDrawing(player.roomId);
-         io.to(player.roomId).emit('draw_undo_local', data);
-      }
-      else io.emit('draw_undo', data);
-    });
-
-    socket.on('draw_redo', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-         roomManager.redoDrawing(player.roomId);
-         io.to(player.roomId).emit('draw_redo_local', data);
-      }
-      else io.emit('draw_redo', data);
-    });
+    // Post-migration: All legacy JSON-based drawing events are retired in favor of high-performance MSG_DRAW binary protocol.
     
     socket.on('skip_turn', () => {
       const player = roomManager.getPlayer(socket.id);

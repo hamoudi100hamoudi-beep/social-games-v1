@@ -119,6 +119,36 @@ const formatRGBToHex = (r: number, g: number, b: number): string => {
   return `#${pad(r)}${pad(g)}${pad(b)}`;
 };
 
+// High-performance static Point Pool to prevent Garbage Collection and heap allocations inside rendering/pointer loops
+type PooledPoint = { x: number; y: number };
+const pointPool: PooledPoint[] = [];
+
+// Pre-hydrate point pool with healthy default slots to ensure instantaneous reuse at start
+for (let i = 0; i < 400; i++) {
+  pointPool.push({ x: 0, y: 0 });
+}
+
+const acquirePoint = (x: number, y: number): PooledPoint => {
+  const pt = pointPool.pop();
+  if (pt) {
+    pt.x = x;
+    pt.y = y;
+    return pt;
+  }
+  return { x, y };
+};
+
+const releasePoints = (points: PooledPoint[]) => {
+  const len = points.length;
+  for (let i = 0; i < len; i++) {
+    if (pointPool.length < 2000) {
+      pointPool.push(points[i]);
+    }
+  }
+  // Clear the array natively without creating a new reference
+  points.length = 0;
+};
+
 const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer => {
   const instId = data.instanceId || '';
   
@@ -780,7 +810,10 @@ export default function DrawingBoard({
       remoteProps.current = data;
       const x = data.x * LOGICAL_WIDTH;
       const y = data.y * LOGICAL_HEIGHT;
-      remotePathRef.current = [{x, y}];
+      
+      // Cleanly recycle existing remote points before seeding new stroke
+      releasePoints(remotePathRef.current);
+      remotePathRef.current.push(acquirePoint(x, y));
 
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
@@ -831,7 +864,29 @@ export default function DrawingBoard({
         const x = ptX * LOGICAL_WIDTH;
         const y = ptY * LOGICAL_HEIGHT;
 
-        remotePathRef.current.push({ x, y });
+        // Ultimate Line Smoothing Engine:
+        // When receiving real-time coordinates, if the transmission gap is wide due to throttling,
+        // dynamically generate intermediate points during live gameplay to maintain an elegant, seamless 60fps look!
+        if (!isReplay && remotePathRef.current.length > 0) {
+          const last = remotePathRef.current[remotePathRef.current.length - 1];
+          const dist = Math.hypot(x - last.x, y - last.y);
+          if (dist > 8) {
+            // Smoothly divide and interpolate up to 10 points
+            const steps = Math.min(10, Math.floor(dist / 4));
+            for (let i = 1; i < steps; i++) {
+              const t = i / steps;
+              const interpX = last.x + (x - last.x) * t;
+              const interpY = last.y + (y - last.y) * t;
+              remotePathRef.current.push(acquirePoint(interpX, interpY));
+              
+              if (tool === 'pencil' || tool === 'eraser') {
+                drawStrokeSegment(tempCtx, remotePathRef.current, tool, color, width);
+              }
+            }
+          }
+        }
+
+        remotePathRef.current.push(acquirePoint(x, y));
 
         if (tool === 'pencil' || tool === 'eraser') {
           drawStrokeSegment(tempCtx, remotePathRef.current, tool, color, width);
@@ -957,7 +1012,8 @@ export default function DrawingBoard({
         }
       }
 
-      remotePathRef.current = [];
+      // Return points of finished stroke to the static pointPool
+      releasePoints(remotePathRef.current);
       if (!skipSave) saveHistory();
     };
 
@@ -981,7 +1037,7 @@ export default function DrawingBoard({
       if (data?.instanceId === instanceId) return;
       const tempCtx = tempCtxRef.current;
       tempCtx?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-      remotePathRef.current = [];
+      releasePoints(remotePathRef.current);
     };
 
     const onDrawBinary = (raw: any) => {
@@ -1509,6 +1565,7 @@ export default function DrawingBoard({
           if (socket) {
             socket.emit('draw_binary', encodeBinaryDrawMessage('draw_cancel', { instanceId }));
           }
+          releasePoints(currentPath.current);
         }
         const t1 = e.touches[0], t2 = e.touches[1];
         const cxViewport = (t1.clientX + t2.clientX) / 2;
@@ -1543,11 +1600,13 @@ export default function DrawingBoard({
     if (!ctx || !tempCtx || !tempCanvas) return;
 
     if (tool === 'bucket' || tool === 'pipette') {
-       currentPath.current = [{x, y}];
+       releasePoints(currentPath.current);
+       currentPath.current.push(acquirePoint(x, y));
        return;
     }
 
-    currentPath.current = [{x, y}];
+    releasePoints(currentPath.current);
+    currentPath.current.push(acquirePoint(x, y));
     setIsDrawing(true);
     
     // Choose context based on tool
@@ -1698,7 +1757,7 @@ export default function DrawingBoard({
     }
 
     if (shouldPush) {
-      currentPath.current.push({x, y});
+      currentPath.current.push(acquirePoint(x, y));
     } else {
       return; // Skip rendering and websocket syncing for redundant jitter coordinates
     }
@@ -1767,7 +1826,7 @@ export default function DrawingBoard({
           if (tool === 'bucket') {
             const now = Date.now();
             if (now - lastBucketFillTimeRef.current < 500) {
-              currentPath.current = [];
+              releasePoints(currentPath.current);
               return;
             }
             lastBucketFillTimeRef.current = now;
@@ -1801,7 +1860,7 @@ export default function DrawingBoard({
           }
         }
       }
-      currentPath.current = [];
+      releasePoints(currentPath.current);
     }
 
     if (isDrawing) {
@@ -1877,6 +1936,8 @@ export default function DrawingBoard({
           y: lastCoords ? lastCoords.y / LOGICAL_HEIGHT : 0
         }));
       }
+
+      releasePoints(currentPath.current);
     }
   };
 
