@@ -120,29 +120,34 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const queueY: number[] = [sy];
   let head = 0;
   
-  visited[sy * cw + sx] = 1;
-  
   while (head < queueX.length) {
     const cx = queueX[head];
     const cy = queueY[head];
     head++;
     
+    const seedIdx = cy * cw + cx;
+    if (visited[seedIdx]) {
+      continue;
+    }
+    
     let xCurr = cx;
     let yCurr = cy;
     
     let idx = (yCurr * cw + xCurr) * 4;
-    while (xCurr >= 0 && matchColor(data, idx, tr, tg, tb, ta)) {
+    let pixelIdx = yCurr * cw + xCurr;
+    while (xCurr >= 0 && !visited[pixelIdx] && matchColor(data, idx, tr, tg, tb, ta)) {
       xCurr--;
       idx -= 4;
+      pixelIdx--;
     }
     xCurr++;
     idx += 4;
+    pixelIdx++;
     
     let spanAbove = false;
     let spanBelow = false;
     
-    while (xCurr < cw && matchColor(data, idx, tr, tg, tb, ta)) {
-      const pixelIdx = yCurr * cw + xCurr;
+    while (xCurr < cw && !visited[pixelIdx] && matchColor(data, idx, tr, tg, tb, ta)) {
       visited[pixelIdx] = 1;
       
       // Perform manual alpha blending on the opaque canvas (alpha: false)
@@ -162,7 +167,6 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
         if (!spanAbove && matchesAbove) {
           queueX.push(xCurr);
           queueY.push(yCurr - 1);
-          visited[pixelIdxAbove] = 1;
           spanAbove = true;
         } else if (spanAbove && !matchesAbove) {
           spanAbove = false;
@@ -176,7 +180,6 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
         if (!spanBelow && matchesBelow) {
           queueX.push(xCurr);
           queueY.push(yCurr + 1);
-          visited[pixelIdxBelow] = 1;
           spanBelow = true;
         } else if (spanBelow && !matchesBelow) {
           spanBelow = false;
@@ -185,6 +188,7 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
       
       xCurr++;
       idx += 4;
+      pixelIdx++;
     }
   }
   
@@ -950,7 +954,7 @@ export default function DrawingBoard({
     tempCanvas.width = LOGICAL_WIDTH * DPR;
     tempCanvas.height = LOGICAL_HEIGHT * DPR;
     
-    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+    const ctx = canvas.getContext('2d', { alpha: false });
     const tempCtx = tempCanvas.getContext('2d');
     if (ctx && tempCtx) {
       ctx.scale(DPR, DPR);
