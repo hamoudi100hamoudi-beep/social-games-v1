@@ -1795,7 +1795,7 @@ export default function DrawingBoard({
                moveBatchRef.current = [];
             }
             throttleTimeoutRef.current = null;
-          }, DPR < 2 ? 26 : 16); // Optimize Batch Interval: 26ms for weak devices, 16ms for fast
+          }, 16); // Network Throttling locked strictly at 16ms to ensure buttery smooth update intervals with the binary protocol
         }
       }
     } else {
