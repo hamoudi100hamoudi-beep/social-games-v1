@@ -58,13 +58,11 @@ class RoomManager {
             this.removePlayerFromRoom(room.id, socketId);
             this.players.delete(socketId);
             
-            if (this.io) {
-              this.io.to(room.id).emit('receive_message', {
-                id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-                text: `تم طرد ${playerName} بسبب الغياب الطويل`,
-                type: 'system'
-              });
-            }
+            this.broadcastMessage(room, {
+              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+              text: `تم طرد ${playerName} بسبب الغياب الطويل`,
+              type: 'system'
+            });
           });
 
           this.processRoomTick(room);
@@ -208,19 +206,16 @@ class RoomManager {
     room.gameState.redoStack = [];
     room.gameState.timeLeft = 100;
     
-    if (this.io) {
-       this.io.to(room.id).emit('draw_clear', { instanceId: 'system' });
-       
-       const drawer = room.players.find(p => p.id === nextDrawerId);
-       const name = drawer ? drawer.name : 'Unknown';
-       this.io.to(room.id).emit('receive_guess', {
-         id: 'sys-' + Date.now() + '-turn',
-         text: `Turn of ${name}`,
-         type: 'system',
-         subType: 'turn',
-         color: '#38BDF8'
-       });
-    }
+    this.clearDrawHistoryForRoomAndClient(room);
+    const drawer = room.players.find(p => p.id === nextDrawerId);
+    const name = drawer ? drawer.name : 'Unknown';
+    this.broadcastGuess(room, {
+      id: 'sys-' + Date.now() + '-turn',
+      text: `Turn of ${name}`,
+      type: 'system',
+      subType: 'turn',
+      color: '#38BDF8'
+    });
     
     this.broadcastState(room);
   }
@@ -231,15 +226,13 @@ class RoomManager {
     room.gameState.timeLeft = 15;
 
     const winner = [...room.players].reduce((max, p) => (p.score > max.score ? p : max), room.players[0] || { name: 'Unknown', score: 0 });
-    if (this.io) {
-       this.io.to(room.id).emit('receive_guess', {
-          id: 'sys-' + Date.now() + '-podium-winner',
-          text: `Game over. The winner is ${winner.name} with ${winner.score} points`,
-          type: 'system',
-          subType: 'game_over',
-          color: '#38BDF8'
-       });
-    }
+    this.broadcastGuess(room, {
+       id: 'sys-' + Date.now() + '-podium-winner',
+       text: `Game over. The winner is ${winner.name} with ${winner.score} points`,
+       type: 'system',
+       subType: 'game_over',
+       color: '#38BDF8'
+    });
 
     this.broadcastState(room);
   }
@@ -258,75 +251,76 @@ class RoomManager {
 
     const word = room.gameState.currentWord || '';
 
-    if (this.io) {
-       if (reason === 'all_guessed') {
-          this.io.to(room.id).emit('receive_guess', {
-             id: 'sys-' + Date.now() + '-all-guessed',
-             text: `Everybody hit the answer!`,
-             type: 'system',
-             subType: 'all_guessed',
-             color: '#10B981'
-          });
-       } else if (reason === 'timeout' || reason === 'drawer_left') {
-          const hasSucceeded = (room.gameState.correctGuessers || []).length > 0;
-          this.io.to(room.id).emit('receive_guess', {
-             id: 'sys-' + Date.now() + '-timeover',
-             text: hasSucceeded ? `Time's Up!` : `Nobody hit the answer`,
-             type: 'system',
-             subType: 'answer_reveal',
-             color: '#38BDF8'
-          });
-          if (word) {
-             this.io.to(room.id).emit('receive_guess', {
-                id: 'sys-' + Date.now() + '-answer-word',
-                text: `The answer was: ${word}`,
-                type: 'system',
-                subType: 'answer_reveal',
-                word: word,
-                color: '#38BDF8'
-             });
-          }
-       } else if (reason === 'skipped') {
-          const drawer = room.players.find(p => p.id === room.gameState.currentDrawerId);
-          const name = drawer ? drawer.name : 'الرسام';
-          this.io.to(room.id).emit('receive_guess', {
-             id: 'sys-' + Date.now() + '-skip',
-             text: `${name} skipped the turn`,
-             type: 'system',
-             subType: 'skipped',
-             color: '#EF4444'
-          });
-          if (word) {
-             this.io.to(room.id).emit('receive_guess', {
-                id: 'sys-' + Date.now() + '-answer-word',
-                text: `The answer was: ${word}`,
-                type: 'system',
-                subType: 'answer_reveal',
-                word: word,
-                color: '#38BDF8'
-             });
-          }
-       } else if (reason === 'turn_lost') {
-          const drawer = room.players.find(p => p.id === room.gameState.currentDrawerId);
-          const name = drawer ? drawer.name : 'الرسام';
-          this.io.to(room.id).emit('receive_guess', {
-             id: 'sys-' + Date.now() + '-lost',
-             text: `${name} has lost the turn`,
-             type: 'system',
-             subType: 'lost_turn',
-             color: '#EF4444'
-          });
-       }
+    // Wiping drawHistory to guard server memory from RAM Bloat
+    this.clearDrawHistoryForRoomAndClient(room);
 
-       // Emit Interval message in logs
-       this.io.to(room.id).emit('receive_guess', {
-          id: 'sys-' + Date.now() + '-interval',
-          text: `Interval...`,
+    if (reason === 'all_guessed') {
+       this.broadcastGuess(room, {
+          id: 'sys-' + Date.now() + '-all-guessed',
+          text: `Everybody hit the answer!`,
           type: 'system',
-          subType: 'interval',
+          subType: 'all_guessed',
+          color: '#10B981'
+       });
+    } else if (reason === 'timeout' || reason === 'drawer_left') {
+       const hasSucceeded = (room.gameState.correctGuessers || []).length > 0;
+       this.broadcastGuess(room, {
+          id: 'sys-' + Date.now() + '-timeover',
+          text: hasSucceeded ? `Time's Up!` : `Nobody hit the answer`,
+          type: 'system',
+          subType: 'answer_reveal',
           color: '#38BDF8'
        });
+       if (word) {
+          this.broadcastGuess(room, {
+             id: 'sys-' + Date.now() + '-answer-word',
+             text: `The answer was: ${word}`,
+             type: 'system',
+             subType: 'answer_reveal',
+             word: word,
+             color: '#38BDF8'
+          });
+       }
+    } else if (reason === 'skipped') {
+       const drawer = room.players.find(p => p.id === room.gameState.currentDrawerId);
+       const name = drawer ? drawer.name : 'الرسام';
+       this.broadcastGuess(room, {
+          id: 'sys-' + Date.now() + '-skip',
+          text: `${name} skipped the turn`,
+          type: 'system',
+          subType: 'skipped',
+          color: '#EF4444'
+       });
+       if (word) {
+          this.broadcastGuess(room, {
+             id: 'sys-' + Date.now() + '-answer-word',
+             text: `The answer was: ${word}`,
+             type: 'system',
+             subType: 'answer_reveal',
+             word: word,
+             color: '#38BDF8'
+          });
+       }
+    } else if (reason === 'turn_lost') {
+       const drawer = room.players.find(p => p.id === room.gameState.currentDrawerId);
+       const name = drawer ? drawer.name : 'الرسام';
+       this.broadcastGuess(room, {
+          id: 'sys-' + Date.now() + '-lost',
+          text: `${name} has lost the turn`,
+          type: 'system',
+          subType: 'lost_turn',
+          color: '#EF4444'
+       });
     }
+
+    // Emit Interval message in logs
+    this.broadcastGuess(room, {
+       id: 'sys-' + Date.now() + '-interval',
+       text: `Interval...`,
+       type: 'system',
+       subType: 'interval',
+       color: '#38BDF8'
+    });
 
     this.broadcastState(room);
   }
@@ -384,18 +378,16 @@ class RoomManager {
          }
       }
 
-      if (this.io) {
-        this.io.to(room.id).emit('receive_guess', {
-          id: 'sys-' + Date.now(),
-          text: `${player.name} guessed the word!`,
-          type: 'system',
-          subType: 'hit',
-          senderId: socketId,
-          word: room.gameState.currentWord,
-          sender: player.name,
-          color: '#10B981' // emerald-500
-        });
-      }
+      this.broadcastGuess(room, {
+        id: 'sys-' + Date.now(),
+        text: `${player.name} guessed the word!`,
+        type: 'system',
+        subType: 'hit',
+        senderId: socketId,
+        word: room.gameState.currentWord,
+        sender: player.name,
+        color: '#10B981' // emerald-500
+      });
 
       // Deduct time dynamically based on active (online, non-drawer) guessers
       const activeGuessersCount = room.players.filter(p => p.id !== room.gameState.currentDrawerId && !p.isOffline).length;
@@ -416,15 +408,13 @@ class RoomManager {
       }
     } else {
       // Broadcast incorrect guess to chat but maybe with a specific 'guess' type or regular message
-      if (this.io) {
-        this.io.to(room.id).emit('receive_guess', {
-          id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
-          text: guess,
-          sender: player.name,
-          senderId: socketId,
-          type: 'message'
-        });
-      }
+      this.broadcastGuess(room, {
+        id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
+        text: guess,
+        sender: player.name,
+        senderId: socketId,
+        type: 'message'
+      });
     }
   }
 
@@ -523,10 +513,67 @@ class RoomManager {
           revealedIndices: [],
           drawHistory: []
         },
-        usedWords: []
+        usedWords: [],
+        chatMessages: [],
+        guessMessages: []
       });
     }
     return this.rooms.get(roomId)!;
+  }
+
+  public saveChatMessage(roomId: string, message: any) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    if (!room.chatMessages) room.chatMessages = [];
+    room.chatMessages.push(message);
+    if (room.chatMessages.length > 40) {
+      room.chatMessages.shift(); // sliding window / rolling queue of 40 max
+    }
+  }
+
+  public saveGuessMessage(roomId: string, message: any) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    if (!room.guessMessages) room.guessMessages = [];
+    room.guessMessages.push(message);
+    if (room.guessMessages.length > 40) {
+      room.guessMessages.shift(); // sliding window / rolling queue of 40 max
+    }
+  }
+
+  public broadcastMessage(room: Room, msg: any) {
+    this.saveChatMessage(room.id, msg);
+    if (this.io) {
+      this.io.to(room.id).emit('receive_message', msg);
+    }
+  }
+
+  public broadcastGuess(room: Room, msg: any) {
+    this.saveGuessMessage(room.id, msg);
+    if (this.io) {
+      this.io.to(room.id).emit('receive_guess', msg);
+    }
+  }
+
+  public clearDrawHistoryForRoomAndClient(room: Room) {
+    if (room) {
+      room.gameState.drawHistory = [];
+      //@ts-ignore
+      room.gameState.redoStack = [];
+      
+      console.log(`[Memory Sweeper] Wiped drawing history completely to avoid RAM Bloat`);
+      
+      if (this.io) {
+         // Emit explicit draw_clear message to the room to wipe locally
+         this.io.to(room.id).emit('draw_clear', { instanceId: 'server-sweeper' });
+         
+         // Also construct an 8-byte MSG_DRAW_CLEAR binary draw_binary buffer to ensure any binary client clears
+         const clearBuf = Buffer.alloc(8);
+         clearBuf.writeUInt8(5, 0); // MSG_DRAW_CLEAR type
+         clearBuf.write('server', 1, 7, 'ascii'); // string padding or server identification
+         this.io.to(room.id).emit('draw_binary', clearBuf);
+      }
+    }
   }
 
   getRoom(roomId: string): Room | undefined {
@@ -734,13 +781,11 @@ class RoomManager {
           this.broadcastState(room);
 
           // System Message in Arabic
-          if (this.io) {
-            this.io.to(roomId).emit('receive_message', {
-              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-              text: `${player.name} فقد الاتصال، بانتظار عودته...`,
-              type: 'system'
-            });
-          }
+          this.broadcastMessage(room, {
+            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            text: `${player.name} فقد الاتصال، بانتظار عودته...`,
+            type: 'system'
+          });
         }
       }
     } catch (e) {

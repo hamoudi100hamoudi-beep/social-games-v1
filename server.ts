@@ -52,13 +52,28 @@ async function startServer() {
                socket.emit('draw_history_sync', reconnectedRoom.gameState.drawHistory);
             }
 
+            // Send past chat messages strictly to the reconnected player
+            if (reconnectedRoom.chatMessages && reconnectedRoom.chatMessages.length > 0) {
+              reconnectedRoom.chatMessages.forEach((msg) => {
+                socket.emit('receive_message', msg);
+              });
+            }
+            // Send past guess messages strictly to the reconnected player
+            if (reconnectedRoom.guessMessages && reconnectedRoom.guessMessages.length > 0) {
+              reconnectedRoom.guessMessages.forEach((msg) => {
+                socket.emit('receive_guess', msg);
+              });
+            }
+
             // System Message in Arabic
             const name = reconnectedRoom.players.find(p => p.id === socket.id)?.name || nickname;
-            io.to(roomId).emit('receive_message', {
+            const msg = {
               id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
               text: `${name} عاد للقاعة واستأنف اللعب`,
               type: 'system'
-            });
+            };
+            roomManager.saveChatMessage(roomId, msg);
+            io.to(roomId).emit('receive_message', msg);
 
             return;
           }
@@ -89,12 +104,27 @@ async function startServer() {
            socket.emit('draw_history_sync', room.gameState.drawHistory);
         }
 
+        // Send past chat messages strictly to the newly joined player
+        if (room.chatMessages && room.chatMessages.length > 0) {
+          room.chatMessages.forEach((msg) => {
+            socket.emit('receive_message', msg);
+          });
+        }
+        // Send past guess messages strictly to the newly joined player
+        if (room.guessMessages && room.guessMessages.length > 0) {
+          room.guessMessages.forEach((msg) => {
+            socket.emit('receive_guess', msg);
+          });
+        }
+
         // System Message
-        io.to(roomId).emit('receive_message', {
+        const joinMsg = {
           id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
           text: `${nickname} انضم للغرفة`,
           type: 'system'
-        });
+        };
+        roomManager.saveChatMessage(roomId, joinMsg);
+        io.to(roomId).emit('receive_message', joinMsg);
       } catch (e) {
         console.error(e);
         if (callback) callback({ error: 'حدث خطأ أثناء الانضمام للغرفة' });
@@ -108,11 +138,13 @@ async function startServer() {
         const playerName = player ? player.name : 'لاعب';
         const room = roomManager.removePlayerFromRoom(roomId, socket.id);
         if (room) {
-          io.to(roomId).emit('receive_message', {
+          const leaveMsg = {
             id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
             text: `${playerName} غادر الغرفة`,
             type: 'system'
-          });
+          };
+          roomManager.saveChatMessage(roomId, leaveMsg);
+          io.to(roomId).emit('receive_message', leaveMsg);
         }
       } catch (e) {
         console.error(e);
@@ -249,25 +281,29 @@ async function startServer() {
     socket.on('send_message', (data) => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {
-        io.to(player.roomId).emit('receive_message', {
+        const msg = {
           id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
           text: data.text,
           sender: player.name,
           senderId: socket.id,
           avatar: player.avatar,
           type: 'message'
-        });
+        };
+        roomManager.saveChatMessage(player.roomId, msg);
+        io.to(player.roomId).emit('receive_message', msg);
       }
     });
 
     socket.on('player_away', () => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {
-        io.to(player.roomId).emit('receive_message', {
+        const awayMsg = {
           id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
           text: `اللاعب ${player.name} يتواجد الآن في الخلفية (خارج المتصفح)...`,
           type: 'system'
-        });
+        };
+        roomManager.saveChatMessage(player.roomId, awayMsg);
+        io.to(player.roomId).emit('receive_message', awayMsg);
       }
     });
     

@@ -31,4 +31,6 @@ export interface Room {
   gameState: GameState;
   timer?: NodeJS.Timeout; // For backend interval reference
   usedWords: string[];
+  chatMessages?: any[];
+  guessMessages?: any[];
 }
