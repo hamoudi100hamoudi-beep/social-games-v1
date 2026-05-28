@@ -1876,6 +1876,11 @@ export default function DrawingBoard({
          moveBatchRef.current = [];
       }
       
+      // Force render of any remaining unrendered points added in handlePointerMove
+      if (flushLocalRenderRef.current) {
+        flushLocalRenderRef.current();
+      }
+      
       ctxRef.current?.closePath();
       tempCtxRef.current?.closePath();
       setIsDrawing(false);
@@ -1889,6 +1894,12 @@ export default function DrawingBoard({
             const n = currentPath.current.length;
             if (n >= 2) {
               tempCtx.beginPath();
+              tempCtx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+              tempCtx.lineWidth = currentWidth;
+              tempCtx.lineCap = 'round';
+              tempCtx.lineJoin = 'round';
+              tempCtx.globalAlpha = 1;
+              
               const p1 = currentPath.current[n - 2];
               const p2 = currentPath.current[n - 1];
               const midX = (p1.x + p2.x) / 2;
