@@ -763,17 +763,7 @@ class RoomManager {
 
     console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Old Socket ID: ${oldSocketId}, New Socket ID: ${newSocketId}`);
     
-    // Disconnect the old socket if it's still somehow alive and connected
-    if (this.io) {
-      const oldSocket = this.io.sockets.sockets.get(oldSocketId);
-      if (oldSocket) {
-        console.error(`[KILL SOCKET] Destroying old connection for ${existingPlayer.name}: ${oldSocketId}`);
-        oldSocket.emit('force_disconnect', { reason: 'session_replaced' });
-        oldSocket.disconnect(true);
-      }
-    }
-
-    // Update Player ID mapping
+    // Update Player ID mappingFIRST to prevent handledisconnect collisions
     existingPlayer.id = newSocketId;
     existingPlayer.isOffline = false;
     delete existingPlayer.offlineSince;
@@ -789,8 +779,7 @@ class RoomManager {
     room.gameState.turnQueue = room.gameState.turnQueue.map(id => id === oldSocketId ? newSocketId : id);
     room.gameState.correctGuessers = room.gameState.correctGuessers.map(id => id === oldSocketId ? newSocketId : id);
     
-    // Also explicitly update the chat messages and guesses to reference the new ID natively, 
-    // to prevent the UI from displaying "old/new" duplicate instances as separate people
+    // Also explicitly update the chat messages and guesses to reference the new ID natively
     if (room.chatMessages) {
        room.chatMessages.forEach(msg => {
           if (msg.senderId === oldSocketId) msg.senderId = newSocketId;
@@ -800,6 +789,17 @@ class RoomManager {
        room.guessMessages.forEach(msg => {
           if (msg.senderId === oldSocketId) msg.senderId = newSocketId;
        });
+    }
+
+    // Now safely disconnect the old socket, which will trigger handleDisconnect synchronously,
+    // but handleDisconnect will ignore it because this.players.get(oldSocketId) is now undefined.
+    if (this.io) {
+      const oldSocket = this.io.sockets.sockets.get(oldSocketId);
+      if (oldSocket) {
+        console.error(`[KILL SOCKET] Destroying old connection for ${existingPlayer.name}: ${oldSocketId}`);
+        oldSocket.emit('force_disconnect', { reason: 'session_replaced' });
+        oldSocket.disconnect(true);
+      }
     }
 
     this.broadcastState(room);
@@ -813,14 +813,49 @@ class RoomManager {
   public handleDisconnect(socketId: string) {
     try {
       const player = this.players.get(socketId);
-      if (!player) return;
+      
+      // Explicitly check the room's player array as well to ensure it's not a dangling old socket
+      // matched by username or old map entry
+      let activeRoomPlayer = null;
+      let roomId = player?.roomId;
+      
+      if (!roomId) {
+         // Fallback manual scan just in case this.players map was out of sync
+         for (const [rid, room] of this.rooms.entries()) {
+            const found = room.players.find(p => p.id === socketId);
+            if (found) {
+               activeRoomPlayer = found;
+               roomId = rid;
+               break;
+            }
+         }
+      } else {
+         const room = this.rooms.get(roomId);
+         if (room) {
+             activeRoomPlayer = room.players.find(p => p.id === socketId);
+             
+             // If player is found in this.players map but their actual ID in the room array was updated to a NEW socket, ignore this disconnect
+             const playerByNameOrRef = room.players.find(p => p.name === player?.name);
+             if (playerByNameOrRef && playerByNameOrRef.id !== socketId) {
+                console.warn(`[IGNORED DISCONNECT] Socket ${socketId} belongs to old connection of ${playerByNameOrRef.name}. Current active socket is ${playerByNameOrRef.id}.`);
+                return;
+             }
+         }
+      }
 
-      console.error(`[PLAYER DISCONNECTED] Socket ID: ${socketId}, Username: ${player.name}`);
+      const pToUpdate = activeRoomPlayer || player;
+      if (!pToUpdate) return;
+      
+      if (pToUpdate.id !== socketId) {
+          console.warn(`[IGNORED DISCONNECT - ID MISMATCH] Disconnecting: ${socketId}, Active: ${pToUpdate.id}`);
+          return;
+      }
 
-      player.isOffline = true;
-      player.offlineSince = Date.now();
+      console.error(`[PLAYER DISCONNECTED] Socket ID: ${socketId}, Username: ${pToUpdate.name}`);
 
-      const roomId = player.roomId;
+      pToUpdate.isOffline = true;
+      pToUpdate.offlineSince = Date.now();
+
       if (roomId) {
         const room = this.rooms.get(roomId);
         if (room) {
@@ -837,6 +872,17 @@ class RoomManager {
     try {
       const player = this.players.get(socketId);
       if (player && player.roomId) {
+        // Strict guard: only proceed if the current room's player still uses THIS socketId
+        const room = this.rooms.get(player.roomId);
+        if (room) {
+           const activePlayer = room.players.find(p => p.name === player.name);
+           if (activePlayer && activePlayer.id !== socketId) {
+               console.warn(`[IGNORED REMOVE] Socket ${socketId} belongs to old connection of ${activePlayer.name}. Active socket is ${activePlayer.id}. ignoring.`);
+               this.players.delete(socketId); // Just clean map if it's lingering
+               return;
+           }
+        }
+        
         this.removePlayerFromRoom(player.roomId, socketId);
       }
       this.players.delete(socketId);
