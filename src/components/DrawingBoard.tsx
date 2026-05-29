@@ -569,7 +569,7 @@ export default function DrawingBoard({
   const emitDrawCommand = (event: string, data: any) => {
     if (socket && socket.connected) {
       const msg = encodeBinaryDrawMessage(event, { ...data, instanceId });
-      if (socket.volatile) {
+      if (event === 'draw_move' && socket.volatile) {
         socket.volatile.emit('draw_binary', msg);
       } else {
         socket.emit('draw_binary', msg);
@@ -1871,11 +1871,7 @@ export default function DrawingBoard({
                const msg = encodeBinaryDrawMessage('draw_action', {
                  instanceId, tool: 'bucket', color, opacity: currentOpacity, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
                });
-               if (socket.volatile) {
-                 socket.volatile.emit('draw_binary', msg);
-               } else {
-                 socket.emit('draw_binary', msg);
-               }
+               socket.emit('draw_binary', msg);
             }
           } else if (tool === 'pipette') {
             let offscreenCanvas: HTMLCanvasElement | null = document.createElement('canvas');
