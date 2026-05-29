@@ -1263,11 +1263,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                    <span className={`font-bold flex items-center gap-1 text-[12px] sm:text-[15px] truncate max-w-full transition-colors duration-200
                      ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
                      <span className="truncate">{slot.name}</span>
-                     {!slot.isEmpty && slot.isOffline && (
-                       <span className="text-red-400 text-[10px] font-bold shrink-0 bg-red-950/40 px-1 py-0.5 rounded border border-red-500/20 flex items-center gap-0.5" title="اتصال منقطع">
-                         منقطع
-                       </span>
-                     )}
                      {(slot.wins ?? 0) > 0 && (
                        <span className="text-yellow-500 scale-110 shrink-0" title={`${slot.wins} Wins`}>🏆 {slot.wins}</span>
                      )}
@@ -1638,29 +1633,21 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
        </div>
     )}
 
-    {/* Dynamic Non-Intrusive Floating Connection Status Badge */}
+    {/* Dynamic Non-Intrusive Connection Status (Wi-Fi Icon and Pulsing Circle in top-left) */}
     <AnimatePresence>
       {!isConnected && (
         <motion.div
-          initial={{ opacity: 0, y: -25, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -25, scale: 0.95 }}
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
           transition={{ duration: 0.2 }}
-          className="fixed top-4 sm:top-6 left-1/2 -translate-x-1/2 z-[300] pointer-events-none flex flex-col items-center gap-2 w-[90%] max-w-sm"
+          className="fixed top-4 left-4 z-[320] flex items-center gap-2 bg-[#1e1044]/90 border border-red-500/50 rounded-full px-3 py-1.5 shadow-lg select-none backdrop-blur-md"
         >
-          <div className="bg-[#1e1044]/95 border border-red-500/60 shadow-[0_8px_32px_rgba(239,68,68,0.35)] rounded-full px-5 py-2.5 flex items-center gap-3 backdrop-blur-sm pointer-events-auto">
-            <div className="relative flex h-3 w-3 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-            </div>
-            <WifiOff className="text-red-400 h-5 w-5 animate-pulse shrink-0" />
-            <span className="text-white text-sm font-black tracking-normal select-none whitespace-nowrap" dir="rtl">
-              الاتصال مقطوع! جاري إعادتة تلقائياً...
-            </span>
+          <div className="relative flex h-2 w-2 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
           </div>
-          <div className="bg-[#120B2F]/85 border border-white/5 text-white/80 text-[11px] font-black px-4 py-1.5 rounded-full backdrop-blur-xs select-none text-center shadow-lg" dir="rtl">
-            يمكنك الاستمرار بالرسم أو تخمين الرسمات محلياً حتى يعود الاتصال
-          </div>
+          <WifiOff className="text-red-400 h-4 w-4 shrink-0" />
         </motion.div>
       )}
     </AnimatePresence>

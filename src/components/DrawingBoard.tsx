@@ -565,7 +565,18 @@ export default function DrawingBoard({
   key?: any;
 }) {
   const instanceId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
-  const { socket } = useSocket();
+  const { socket: rawSocket } = useSocket();
+  const socket = useMemo(() => {
+    if (!rawSocket) return null;
+    const proxied = Object.create(rawSocket);
+    proxied.emit = (event: string, ...args: any[]) => {
+      if (rawSocket.connected) {
+        return rawSocket.emit(event, ...args);
+      }
+      return rawSocket;
+    };
+    return proxied as typeof rawSocket;
+  }, [rawSocket]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tempCanvasRef = useRef<HTMLCanvasElement>(null);
   const interactionLayerRef = useRef<HTMLDivElement>(null);

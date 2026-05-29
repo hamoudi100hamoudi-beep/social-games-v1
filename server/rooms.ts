@@ -779,13 +779,6 @@ class RoomManager {
         if (room) {
           // Broadcast state so clients see isOffline
           this.broadcastState(room);
-
-          // System Message in Arabic
-          this.broadcastMessage(room, {
-            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-            text: `${player.name} فقد الاتصال، بانتظار عودته...`,
-            type: 'system'
-          });
         }
       }
     } catch (e) {

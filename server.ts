@@ -65,16 +65,6 @@ async function startServer() {
               });
             }
 
-            // System Message in Arabic
-            const name = reconnectedRoom.players.find(p => p.id === socket.id)?.name || nickname;
-            const msg = {
-              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-              text: `${name} عاد للقاعة واستأنف اللعب`,
-              type: 'system'
-            };
-            roomManager.saveChatMessage(roomId, msg);
-            io.to(roomId).emit('receive_message', msg);
-
             return;
           }
         }
