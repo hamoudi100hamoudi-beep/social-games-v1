@@ -557,7 +557,8 @@ export default function DrawingBoard({
   onRequestHint,
   hintsRemaining = 0,
   timerPercentage = 0,
-  timerBarNode
+  timerBarNode,
+  historySyncCommands
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -565,6 +566,7 @@ export default function DrawingBoard({
   hintsRemaining?: number;
   timerPercentage?: number;
   timerBarNode?: React.ReactNode;
+  historySyncCommands?: any[] | null;
   key?: any;
 }) {
   const instanceId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
@@ -1116,13 +1118,19 @@ export default function DrawingBoard({
     const applySyncedHistory = (commands: any[]) => {
       const ctx = ctxRef.current;
       const canvas = canvasRef.current;
-      if (!ctx || !canvas) return;
+      const tempCtx = tempCtxRef.current;
+      const tempCanvas = tempCanvasRef.current;
+      
+      if (!ctx || !canvas || !tempCtx || !tempCanvas) {
+         console.warn("[History Sync] Missing references, buffering for later");
+         return;
+      }
+      
+      console.log("[History Sync] Replaying", commands.length, "commands");
+
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-      const tempCtx = tempCtxRef.current;
-      if (tempCtx) {
-         tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-      }
+      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       
       // Rebuild history completely from server sequence
       history.current = [];
@@ -1169,11 +1177,6 @@ export default function DrawingBoard({
     if (lastSyncCommands.current && ctxRef.current && canvasRef.current) {
       applySyncedHistory(lastSyncCommands.current);
     }
-
-    socket.on('draw_history_sync', (commands: any[]) => {
-      lastSyncCommands.current = commands;
-      applySyncedHistory(commands);
-    });
 
     return () => {
       socket.off('draw_binary', onDrawBinary);
@@ -1348,6 +1351,15 @@ export default function DrawingBoard({
     }
     return () => cancelAnimationFrame(rAFId);
   }, [isDrawing]);
+
+  useEffect(() => {
+    if (historySyncCommands) {
+      lastSyncCommands.current = historySyncCommands;
+      if (applySyncedHistoryRef.current) {
+        applySyncedHistoryRef.current(historySyncCommands);
+      }
+    }
+  }, [historySyncCommands]);
 
   // Init canvas
   useEffect(() => {

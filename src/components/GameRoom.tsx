@@ -291,6 +291,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
+  const [syncHistory, setSyncHistory] = useState<any[] | null>(null);
 
   const persistentPlayerId = React.useMemo(() => {
     if (typeof window === 'undefined') return '';
@@ -554,12 +555,14 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     socket.on('receive_message', onReceiveMessage);
     socket.on('receive_guess', onReceiveGuess);
     socket.on('timer_tick', onTimerTick);
+    socket.on('draw_history_sync', setSyncHistory);
 
     return () => {
       socket.off('room_state_update', onRoomStateUpdate);
       socket.off('receive_message', onReceiveMessage);
       socket.off('receive_guess', onReceiveGuess);
       socket.off('timer_tick', onTimerTick);
+      socket.off('draw_history_sync', setSyncHistory);
     };
   }, [socket]);
 
@@ -849,6 +852,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
           <DrawingBoard 
             key={`full-${drawerPersistentId}`}
             readOnly={false}
+            historySyncCommands={syncHistory}
             onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
             onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
             timerPercentage={timerPercentage}
@@ -901,6 +905,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
           <DrawingBoard 
             key={drawerPersistentId}
             readOnly={!amIDrawer}
+            historySyncCommands={syncHistory}
             timerPercentage={timerPercentage}
           />
           
@@ -1628,25 +1633,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
        </div>
     )}
 
-    {/* Dynamic Non-Intrusive Connection Status (Wi-Fi Icon and Pulsing Circle in top-left) */}
-    <AnimatePresence>
-      {!isConnected && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.8 }}
-          transition={{ duration: 0.2 }}
-          className="fixed top-4 left-4 z-[320] flex items-center gap-2 bg-[#1e1044]/90 border border-red-500/50 rounded-full px-3 py-1.5 shadow-lg select-none backdrop-blur-md"
-        >
-          <div className="relative flex h-2 w-2 shrink-0">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-          </div>
-          <WifiOff className="text-red-400 h-4 w-4 shrink-0" />
-        </motion.div>
-      )}
-    </AnimatePresence>
-
+    {/* Dynamic Non-Intrusive Connection Status removed to allow silent background connection */}
     </>
   );
 }
