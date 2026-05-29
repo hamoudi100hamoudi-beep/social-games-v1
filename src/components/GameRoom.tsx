@@ -1208,12 +1208,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
             let nameClass = 'text-white';
             let ptsClass = 'text-[#7C4DFF]';
 
-            if (slot.isOffline) {
-               bgClass = 'bg-[#EF4444]/5 opacity-60'; 
-               borderClass = 'border-[#EF4444]/40';
-               nameClass = 'text-white/50';
-               ptsClass = 'text-white/40';
-            } else if (isDrawer) {
+            if (isDrawer) {
                bgClass = 'bg-[#00D9FF]/10'; // Cyan bg
                borderClass = 'border-[#00D9FF]'; // Cyan border
                nameClass = 'text-[#00D9FF]';
@@ -1254,11 +1249,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                    {!slot.isEmpty && isDrawer && !isCorrectGuesser && (
                      <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#00D9FF] rounded-full border-2 border-[#1A103C] flex items-center justify-center shadow-sm z-10">
                         <Pencil size={10} strokeWidth={3} className="text-[#1A103C]" />
-                     </div>
-                   )}
-                   {!slot.isEmpty && slot.isOffline && (
-                     <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 rounded-full border-2 border-[#1A103C] flex items-center justify-center shadow-sm z-10" title="منقطع">
-                        <WifiOff size={10} strokeWidth={2.5} className="text-white" />
                      </div>
                    )}
                 </div>

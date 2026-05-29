@@ -276,6 +276,9 @@ const decodeBinaryDrawMessage = (input: any): { event: string, data: any } | nul
     buffer = input.buffer;
   } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(input)) {
     buffer = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+  } else if (input && input.type === 'Buffer' && Array.isArray(input.data)) {
+    // Handle Node.js Buffer serialized to JSON by socket.io
+    buffer = new Uint8Array(input.data).buffer;
   } else {
     return null;
   }

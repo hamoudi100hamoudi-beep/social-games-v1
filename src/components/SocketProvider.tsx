@@ -50,14 +50,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    // Instant disconnect when browser goes offline to bypass Ping/Pong lag
-    const handleOffline = () => {
-      console.log('[Socket] Browser offline event! Forcing instant disconnect...');
-      if (socketInstance && socketInstance.connected) {
-        socketInstance.disconnect();
-      }
-    };
-
     // Low-latency Heartbeat: checks connection status and forces socket connect if browser online but socket is zombie
     const interval = setInterval(() => {
       if (typeof window !== 'undefined' && navigator.onLine && socketInstance && !socketInstance.connected) {
@@ -67,12 +59,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }, 2000);
 
     window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
 
     return () => {
       clearInterval(interval);
       window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
       socketInstance.disconnect();
     };
   }, []);
