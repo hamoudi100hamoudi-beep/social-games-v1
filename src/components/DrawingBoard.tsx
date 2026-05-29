@@ -1252,6 +1252,7 @@ export default function DrawingBoard({
             const p1 = path[i - 1];
             const p2 = path[i];
             
+            activeCtx.beginPath();
             if (i === 1) {
               activeCtx.moveTo(p1.x, p1.y);
               activeCtx.lineTo(p2.x, p2.y);
@@ -1757,6 +1758,19 @@ export default function DrawingBoard({
     }
 
     if (shouldPush) {
+      if (currentPath.current.length > 0 && (tool === 'pencil' || tool === 'eraser')) {
+         const lastPt = currentPath.current[currentPath.current.length - 1];
+         const dist = Math.hypot(x - lastPt.x, y - lastPt.y);
+         if (dist > 6) {
+           const steps = Math.min(8, Math.floor(dist / 3));
+           for (let i = 1; i < steps; i++) {
+              const t = i / steps;
+              const interpX = lastPt.x + (x - lastPt.x) * t;
+              const interpY = lastPt.y + (y - lastPt.y) * t;
+              currentPath.current.push(acquirePoint(interpX, interpY));
+           }
+         }
+      }
       currentPath.current.push(acquirePoint(x, y));
     } else {
       return; // Skip rendering and websocket syncing for redundant jitter coordinates
