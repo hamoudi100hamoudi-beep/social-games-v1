@@ -86,8 +86,8 @@ class RoomManager {
     } else if (gameState.status === 'CHOOSING') {
       gameState.timeLeft--;
       const drawer = room.players.find(p => p.id === gameState.currentDrawerId);
-      // Immediately skip under-choosing drawer if they go offline, or missed deadline
-      if (gameState.timeLeft <= 91 || (drawer && drawer.isOffline)) {
+      // Let the choosing drawer have the full choosing window to reconnect if offline
+      if (gameState.timeLeft <= 91) {
         // Player missed their turn
         this.transitionToRoundEnd(room, 'turn_lost'); // Show round end overlay instead of skipping immediately
       }
@@ -171,9 +171,9 @@ class RoomManager {
       // Put at the back of the queue
       room.gameState.turnQueue.push(candidateId);
       
-      // Let's check if player exists in room AND is online
+      // Permit turn to go to candidates even if they are offline (as they can join/reconnect any second)
       const p = room.players.find(player => player.id === candidateId);
-      if (p && !p.isOffline) {
+      if (p) {
         nextDrawerId = candidateId;
         break;
       }

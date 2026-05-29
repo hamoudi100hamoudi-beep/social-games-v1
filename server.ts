@@ -13,7 +13,7 @@ async function startServer() {
   // Setup Socket.io
   const io = new Server(httpServer, {
     cors: { origin: '*' },
-    transports: ['websocket']
+    transports: ['polling', 'websocket']
   });
 
   roomManager.setIo(io);
@@ -42,10 +42,19 @@ async function startServer() {
       try {
         // Try to reconnect first if playerId is provided
         if (playerId) {
+          // Join room channel FIRST so that the socket receives room-wide broadcasts successfully
+          socket.join(roomId);
+
           const reconnectedRoom = roomManager.reconnectPlayer(roomId, playerId, socket.id);
           if (reconnectedRoom) {
-            socket.join(roomId);
             if (callback) callback({ success: true, reconnected: true });
+
+            // Immediately send current synced room state directly to this specific client
+            socket.emit('room_state_update', {
+              roomId: reconnectedRoom.id,
+              players: reconnectedRoom.players,
+              gameState: reconnectedRoom.gameState
+            });
 
             // Send draw history strictly to the reconnected player
             if (reconnectedRoom.gameState.drawHistory && reconnectedRoom.gameState.drawHistory.length > 0) {

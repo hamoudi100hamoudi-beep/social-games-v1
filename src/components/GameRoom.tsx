@@ -453,6 +453,19 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     };
   }, [socket, onLeave]);
 
+  // Proactive Reconnection Re-joining Trigger when internet recovers
+  useEffect(() => {
+    if (socket && isConnected) {
+      console.log('[GameRoom] Connection stabilized! Re-establishing room membership...', socket.id);
+      socket.emit('join_room', {
+        roomId: room,
+        nickname,
+        avatar: avatar || nickname.charAt(0).toUpperCase(),
+        playerId: persistentPlayerId
+      });
+    }
+  }, [isConnected, socket, room, nickname, avatar, persistentPlayerId]);
+
   useEffect(() => {
     if (!socket) return;
     
