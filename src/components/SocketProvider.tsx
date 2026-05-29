@@ -40,6 +40,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.log('[Socket] Disconnected!');
     });
 
+    socketInstance.on('force_disconnect', (data) => {
+      console.warn('[Socket] Force disconnected by server:', data);
+      socketInstance.disconnect(); // prevent auto-reconnect
+    });
+
     setSocket(socketInstance);
 
     // Prompt proactive reconnect immediately when browser fires "online" event

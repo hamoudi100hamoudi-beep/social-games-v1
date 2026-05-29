@@ -753,8 +753,25 @@ class RoomManager {
 
     const oldSocketId = existingPlayer.id;
 
+    if (oldSocketId === newSocketId) {
+      console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Socket ID unchanged: ${newSocketId}`);
+      existingPlayer.isOffline = false;
+      delete existingPlayer.offlineSince;
+      this.broadcastState(room);
+      return room;
+    }
+
     console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Old Socket ID: ${oldSocketId}, New Socket ID: ${newSocketId}`);
-    // console.log(`[Reattach] Swapping socket ${oldSocketId} -> ${newSocketId} for player ${existingPlayer.name}`);
+    
+    // Disconnect the old socket if it's still somehow alive and connected
+    if (this.io) {
+      const oldSocket = this.io.sockets.sockets.get(oldSocketId);
+      if (oldSocket) {
+        console.error(`[KILL SOCKET] Destroying old connection for ${existingPlayer.name}: ${oldSocketId}`);
+        oldSocket.emit('force_disconnect', { reason: 'session_replaced' });
+        oldSocket.disconnect(true);
+      }
+    }
 
     // Update Player ID mapping
     existingPlayer.id = newSocketId;
