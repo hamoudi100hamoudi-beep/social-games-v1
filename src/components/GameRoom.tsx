@@ -1638,36 +1638,29 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
        </div>
     )}
 
-    {/* Dynamic Glassmorphic Blur Reconnecting Overlay */}
+    {/* Dynamic Non-Intrusive Floating Connection Status Badge */}
     <AnimatePresence>
       {!isConnected && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.3 }}
-          className="fixed inset-0 z-[300] bg-black/60 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center select-none"
+          initial={{ opacity: 0, y: -25, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -25, scale: 0.95 }}
+          transition={{ duration: 0.2 }}
+          className="fixed top-4 sm:top-6 left-1/2 -translate-x-1/2 z-[300] pointer-events-none flex flex-col items-center gap-2 w-[90%] max-w-sm"
         >
-          <motion.div 
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: "spring", damping: 25, stiffness: 300, delay: 0.1 }}
-            className="bg-[#24174D]/95 border border-white/10 p-8 rounded-[2.5rem] shadow-2xl flex flex-col items-center max-w-sm w-full relative overflow-hidden"
-          >
-            {/* Subtle light pulse effect */}
-            <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#29C6F6]/40 to-transparent animate-pulse" />
-            
-            {/* Soft, ultra-performant spinning wheel */}
-            <div className="w-16 h-16 border-4 border-[#29C6F6]/10 border-t-[#29C6F6] rounded-full animate-spin mb-6" />
-            
-            <h3 className="text-white text-2xl font-black mb-3 select-none" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.4)' }} dir="rtl">
-              جاري استعادة الاتصال بالشبكة...
-            </h3>
-            <p className="text-white/60 text-sm font-medium leading-relaxed select-none" dir="rtl">
-              يرجى الانتظار قليلاً، يتم الآن إعادة ربط جلستك تلقائياً دون فقدان نقاطك أو دورك.
-            </p>
-          </motion.div>
+          <div className="bg-[#1e1044]/95 border border-red-500/60 shadow-[0_8px_32px_rgba(239,68,68,0.35)] rounded-full px-5 py-2.5 flex items-center gap-3 backdrop-blur-sm pointer-events-auto">
+            <div className="relative flex h-3 w-3 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </div>
+            <WifiOff className="text-red-400 h-5 w-5 animate-pulse shrink-0" />
+            <span className="text-white text-sm font-black tracking-normal select-none whitespace-nowrap" dir="rtl">
+              الاتصال مقطوع! جاري إعادتة تلقائياً...
+            </span>
+          </div>
+          <div className="bg-[#120B2F]/85 border border-white/5 text-white/80 text-[11px] font-black px-4 py-1.5 rounded-full backdrop-blur-xs select-none text-center shadow-lg" dir="rtl">
+            يمكنك الاستمرار بالرسم أو تخمين الرسمات محلياً حتى يعود الاتصال
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
