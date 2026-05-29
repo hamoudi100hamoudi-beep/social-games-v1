@@ -672,6 +672,7 @@ class RoomManager {
   }
 
   addPlayerToRoom(roomId: string, player: Player): Room {
+    console.error(`[NEW CONNECTION] Socket ID: ${player.id} , Username: ${player.name}, Persistent ID: ${player.persistentId || 'N/A'}`);
     const room = this.createRoom(roomId);
     
     // Remove from previous room if any
@@ -738,15 +739,22 @@ class RoomManager {
     if (!room) return null;
 
     let existingPlayer = room.players.find(p => p.persistentId && p.persistentId === persistentId);
+    let matchMethod = 'persistentId';
     if (!existingPlayer) {
        // fallback: find by name (even if technically online, it might be a ghost socket that hasn't timed out yet)
        existingPlayer = room.players.find(p => p.name === nickname);
+       if (existingPlayer) matchMethod = 'nickname';
     }
-    if (!existingPlayer) return null;
+    
+    if (!existingPlayer) {
+       console.error(`[RECONNECT ATTEMPT] Searching for User: ${nickname}, Found Match? No, Old Socket ID: N/A, New Socket ID: ${newSocketId}`);
+       return null;
+    }
 
     const oldSocketId = existingPlayer.id;
 
-    console.log(`[Reattach] Swapping socket ${oldSocketId} -> ${newSocketId} for player ${existingPlayer.name}`);
+    console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Old Socket ID: ${oldSocketId}, New Socket ID: ${newSocketId}`);
+    // console.log(`[Reattach] Swapping socket ${oldSocketId} -> ${newSocketId} for player ${existingPlayer.name}`);
 
     // Update Player ID mapping
     existingPlayer.id = newSocketId;
@@ -789,6 +797,8 @@ class RoomManager {
     try {
       const player = this.players.get(socketId);
       if (!player) return;
+
+      console.error(`[PLAYER DISCONNECTED] Socket ID: ${socketId}, Username: ${player.name}`);
 
       player.isOffline = true;
       player.offlineSince = Date.now();
