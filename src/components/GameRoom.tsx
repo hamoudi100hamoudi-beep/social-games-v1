@@ -112,12 +112,20 @@ const ChatMessageItem: React.FC<{
   };
 
   if (msg.type === 'system') {
+    const text = msg.text || '';
+    const isJoin = text.includes('انضم للغرفة') || text.toLowerCase().includes('joined');
+    const isLeave = text.includes('غادر الغرفة') || text.toLowerCase().includes('left');
+
+    if (!isJoin && !isLeave) {
+      return null;
+    }
+
     const isTargetingSelf = msg.senderId === mySocketId;
-    let text = msg.text;
-    if (isTargetingSelf && msg.text.includes('lost the turn')) {
-        text = "You've lost your turn";
-    } else if (isTargetingSelf && msg.text.includes('skipped the turn')) {
-        text = "You've skipped the turn";
+    let displayText = text;
+    if (isTargetingSelf && text.includes('lost the turn')) {
+        displayText = "You've lost your turn";
+    } else if (isTargetingSelf && text.includes('skipped the turn')) {
+        displayText = "You've skipped the turn";
     }
 
     return (
@@ -127,7 +135,7 @@ const ChatMessageItem: React.FC<{
           dir="auto"
           style={{ unicodeBidi: 'plaintext' }}
         >
-          {text}
+          {displayText}
         </div>
       </div>
     );
