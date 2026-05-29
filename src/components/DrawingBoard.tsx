@@ -566,6 +566,11 @@ export default function DrawingBoard({
 }) {
   const instanceId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
   const { socket } = useSocket();
+  const emitDrawCommand = (event: string, data: any) => {
+    if (socket && socket.connected) {
+      socket.emit('draw_binary', encodeBinaryDrawMessage(event, { ...data, instanceId }));
+    }
+  };
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tempCanvasRef = useRef<HTMLCanvasElement>(null);
   const interactionLayerRef = useRef<HTMLDivElement>(null);
@@ -1447,8 +1452,8 @@ export default function DrawingBoard({
       ctxRef.current?.putImageData(data, 0, 0);
       setHistoryState({ index: historyIndex.current, length: history.current.length });
       
-      if (emit && socket) {
-        socket.emit('draw_binary', encodeBinaryDrawMessage('draw_undo', { instanceId }));
+      if (emit) {
+        emitDrawCommand('draw_undo', {});
       }
     }
   };
@@ -1463,8 +1468,8 @@ export default function DrawingBoard({
       ctxRef.current?.putImageData(data, 0, 0);
       setHistoryState({ index: historyIndex.current, length: history.current.length });
       
-      if (emit && socket) {
-        socket.emit('draw_binary', encodeBinaryDrawMessage('draw_redo', { instanceId }));
+      if (emit) {
+        emitDrawCommand('draw_redo', {});
       }
     }
   };
@@ -1486,8 +1491,8 @@ export default function DrawingBoard({
     historyIndex.current = -1;
     saveHistory(); // Creates the first blank snapshot at index 0
 
-    if (emit && socket) {
-      socket.emit('draw_binary', encodeBinaryDrawMessage('draw_clear', { instanceId }));
+    if (emit) {
+      emitDrawCommand('draw_clear', {});
     }
   };
 
@@ -1563,9 +1568,7 @@ export default function DrawingBoard({
           tempCtxRef.current?.closePath();
           tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
           // Since active drawing is isolated to tempCanvas, clearing tempCtx is fully sufficient.
-          if (socket) {
-            socket.emit('draw_binary', encodeBinaryDrawMessage('draw_cancel', { instanceId }));
-          }
+          emitDrawCommand('draw_cancel', {});
           releasePoints(currentPath.current);
         }
         const t1 = e.touches[0], t2 = e.touches[1];
@@ -1621,11 +1624,11 @@ export default function DrawingBoard({
       activeCtx.globalCompositeOperation = 'source-over';
     }
 
-    if (socket && tool !== 'bucket' && tool !== 'pipette') {
-       socket.emit('draw_binary', encodeBinaryDrawMessage('draw_start', {
-          instanceId, tool, color, width: currentWidth, opacity: currentOpacity,
+    if (tool !== 'bucket' && tool !== 'pipette') {
+       emitDrawCommand('draw_start', {
+          tool, color, width: currentWidth, opacity: currentOpacity,
           x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
-       }));
+       });
     }
 
     if (tool === 'pencil' || tool === 'eraser') {
@@ -1715,9 +1718,7 @@ export default function DrawingBoard({
             tempCtxRef.current?.closePath();
             tempCtxRef.current?.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
             // Since active drawing is isolated to tempCanvas, clearing tempCtx is fully sufficient.
-            if (socket) {
-              socket.emit('draw_binary', encodeBinaryDrawMessage('draw_cancel', { instanceId }));
-            }
+            emitDrawCommand('draw_cancel', {});
         }
         return;
       }
@@ -1801,11 +1802,10 @@ export default function DrawingBoard({
 
         if (!throttleTimeoutRef.current) {
           throttleTimeoutRef.current = setTimeout(() => {
-            if (socket && moveBatchRef.current.length > 0) {
-               socket.emit('draw_binary', encodeBinaryDrawMessage('draw_move', {
-                 instanceId, 
+            if (moveBatchRef.current.length > 0) {
+               emitDrawCommand('draw_move', {
                  moves: moveBatchRef.current
-               }));
+               });
                moveBatchRef.current = [];
             }
             throttleTimeoutRef.current = null;
@@ -1814,15 +1814,12 @@ export default function DrawingBoard({
       }
     } else {
       needsRenderRef.current = true;
-      if (socket) {
-        const normX = x / LOGICAL_WIDTH;
-        const normY = y / LOGICAL_HEIGHT;
-        socket.emit('draw_binary', encodeBinaryDrawMessage('draw_move', {
-          instanceId,
-          x: normX,
-          y: normY
-        }));
-      }
+      const normX = x / LOGICAL_WIDTH;
+      const normY = y / LOGICAL_HEIGHT;
+      emitDrawCommand('draw_move', {
+        x: normX,
+        y: normY
+      });
     }
   };
 
@@ -1847,7 +1844,7 @@ export default function DrawingBoard({
 
             floodFill(ctx, x, y, color, currentOpacity);
             saveHistory();
-            if (socket) {
+            if (socket && socket.connected) {
                socket.emit('draw_binary', encodeBinaryDrawMessage('draw_action', {
                  instanceId, tool: 'bucket', color, opacity: currentOpacity, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
                }));
@@ -1882,11 +1879,10 @@ export default function DrawingBoard({
          clearTimeout(throttleTimeoutRef.current);
          throttleTimeoutRef.current = null;
       }
-      if (socket && moveBatchRef.current.length > 0) {
-         socket.emit('draw_binary', encodeBinaryDrawMessage('draw_move', {
-           instanceId, 
+      if (moveBatchRef.current.length > 0) {
+         emitDrawCommand('draw_move', {
            moves: moveBatchRef.current
-         }));
+         });
          moveBatchRef.current = [];
       }
       
@@ -1946,21 +1942,19 @@ export default function DrawingBoard({
 
       saveHistory();
 
-      if (socket) {
-        const lastCoords = currentPath.current && currentPath.current.length > 0
-          ? currentPath.current[currentPath.current.length - 1]
-          : null;
-        const startCoords = currentPath.current && currentPath.current.length > 0
-          ? currentPath.current[0]
-          : {x: 0, y: 0};
-        socket.emit('draw_binary', encodeBinaryDrawMessage('draw_end', { 
-          instanceId,
-          tool, color, width: currentWidth, opacity: currentOpacity,
-          startX: startCoords.x / LOGICAL_WIDTH, startY: startCoords.y / LOGICAL_HEIGHT,
-          x: lastCoords ? lastCoords.x / LOGICAL_WIDTH : 0, 
-          y: lastCoords ? lastCoords.y / LOGICAL_HEIGHT : 0
-        }));
-      }
+      const lastCoords = currentPath.current && currentPath.current.length > 0
+        ? currentPath.current[currentPath.current.length - 1]
+        : null;
+      const startCoords = currentPath.current && currentPath.current.length > 0
+        ? currentPath.current[0]
+        : {x: 0, y: 0};
+      
+      emitDrawCommand('draw_end', { 
+        tool, color, width: currentWidth, opacity: currentOpacity,
+        startX: startCoords.x / LOGICAL_WIDTH, startY: startCoords.y / LOGICAL_HEIGHT,
+        x: lastCoords ? lastCoords.x / LOGICAL_WIDTH : 0, 
+        y: lastCoords ? lastCoords.y / LOGICAL_HEIGHT : 0
+      });
 
       releasePoints(currentPath.current);
     }

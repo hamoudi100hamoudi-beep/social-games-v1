@@ -273,7 +273,7 @@ const SmoothTimer = ({ gameState, maxTime, isFullScreen = false }: { gameState: 
 };
 
 export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomProps) {
-  const { socket, isConnected } = useSocket();
+  const { socket, isConnected, socketId } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const bgTouchStartTime = React.useRef<number>(0);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
@@ -338,8 +338,8 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     if (slotMe && slotDrawer && slotMe.persistentId === slotDrawer.persistentId) {
       return true;
     }
-    return gameState.currentDrawerId === socket?.id;
-  }, [gameState.currentDrawerId, currentPlayers, persistentPlayerId, socket?.id]);
+    return gameState.currentDrawerId === socketId;
+  }, [gameState.currentDrawerId, currentPlayers, persistentPlayerId, socketId]);
 
   const drawerPersistentId = React.useMemo(() => {
     if (!gameState.currentDrawerId) return 'lobby';
@@ -617,7 +617,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     gameState.status === 'PODIUM' || 
     gameState.status === 'CHOOSING' || 
     amIDrawer || 
-    gameState.correctGuessers?.includes(socket?.id || '');
+    gameState.correctGuessers?.includes(socketId || '');
 
   useEffect(() => {
     if (isInputDisabled) {
@@ -630,7 +630,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!guessInput.trim() || gameState.correctGuessers?.includes(socket?.id) || amIDrawer) return;
+    if (!guessInput.trim() || gameState.correctGuessers?.includes(socketId || '') || amIDrawer) return;
     
     socket?.emit('submit_guess', { guess: guessInput.trim() });
     setGuessInput('');
@@ -955,7 +955,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
           )}
 
           {/* Overlays for CHOOSING state (non-drawer) */}
-          {gameState.status === 'CHOOSING' && gameState.currentDrawerId !== socket?.id && (
+          {gameState.status === 'CHOOSING' && gameState.currentDrawerId !== socketId && (
              <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
                 <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
                    <div className="mb-4">
@@ -1315,7 +1315,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
                    // Hit / guessed correctly
                    if (subType === 'hit') {
-                     const isSelfGuesser = msg.senderId === socket?.id;
+                     const isSelfGuesser = msg.senderId === socketId;
                      const displayWord = (msg as any).word || '';
                      const displayText = isSelfGuesser 
                        ? `You've found the answer: ${displayWord}` 
@@ -1427,13 +1427,13 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
            {/* Guess Input Area */}
            <div className="p-1.5 shrink-0 mt-auto bg-[#1A103C] border-t border-white/5">
              <form onSubmit={handleGuessSubmit} className="relative">
-               <div className={`absolute left-2.5 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')) ? "text-white/15" : "text-white/50"}`}>
+               <div className={`absolute left-2.5 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${isInputDisabled ? "text-white/15" : "text-white/50"}`}>
                  <Pencil size={12} />
                </div>
                <input 
                  ref={guessInputRef}
                  type="text"
-                 disabled={gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')} value={(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')) ? "" : guessInput}
+                 disabled={isInputDisabled} value={isInputDisabled ? "" : guessInput}
                  onChange={(e) => setGuessInput(e.target.value)}
                  onFocus={() => setIsInputFocused(true)}
                  onBlur={() => setIsInputFocused(false)}
@@ -1443,15 +1443,15 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                     gameState.status === 'PODIUM' ? "Game Over" :
                     gameState.status === 'CHOOSING' ? "Waiting for the drawing" :
                     amIDrawer ? "You are drawing!" :
-                    gameState.correctGuessers?.includes(socket?.id || '') ? "You've found the answer!" :
+                    gameState.correctGuessers?.includes(socketId || '') ? "You've found the answer!" :
                     "Answer here..."
                   }
-                 className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${(gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')) ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-[#00D9FF] placeholder:text-white/45"}`}
+                 className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${isInputDisabled ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-[#00D9FF] placeholder:text-white/45"}`}
                />
                <button 
                  type="submit"
                  onPointerDown={(e) => e.preventDefault()}
-                 disabled={!guessInput.trim() || gameState.status === 'WAITING' || gameState.status === 'ROUND_END' || gameState.status === 'PODIUM' || gameState.status === 'CHOOSING' || amIDrawer || gameState.correctGuessers?.includes(socket?.id || '')}
+                 disabled={!guessInput.trim() || isInputDisabled}
                  className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-[#1A103C] disabled:opacity-0 bg-[#00D9FF] rounded-md hover:bg-white transition-opacity"
                >
                  <Send size={12} className="-ml-0.5" />
@@ -1511,7 +1511,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
                          msg={msg} 
                          activeCopyId={activeCopyId}
                          onSetActiveCopy={setActiveCopyId}
-                         mySocketId={socket?.id}
+                         mySocketId={socketId}
                        />
                      ))}
                     </div>
