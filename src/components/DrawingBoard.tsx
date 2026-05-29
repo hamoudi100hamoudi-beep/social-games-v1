@@ -568,7 +568,12 @@ export default function DrawingBoard({
   const { socket } = useSocket();
   const emitDrawCommand = (event: string, data: any) => {
     if (socket && socket.connected) {
-      socket.emit('draw_binary', encodeBinaryDrawMessage(event, { ...data, instanceId }));
+      const msg = encodeBinaryDrawMessage(event, { ...data, instanceId });
+      if (socket.volatile) {
+        socket.volatile.emit('draw_binary', msg);
+      } else {
+        socket.emit('draw_binary', msg);
+      }
     }
   };
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -594,6 +599,8 @@ export default function DrawingBoard({
   // Transform is managed directly via ref to bypass React render for 60fps pinch-to-zoom
   const transformRef = useRef({ scale: 1, x: 0, y: 0 });
   const transformWrapperRef = useRef<HTMLDivElement>(null);
+  const lastSyncCommands = useRef<any[] | null>(null);
+  const applySyncedHistoryRef = useRef<((commands: any[]) => void) | null>(null);
   
   const [historyState, setHistoryState] = useState({ index: 0, length: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -1103,7 +1110,7 @@ export default function DrawingBoard({
       redo(false);
     });
 
-    socket.on('draw_history_sync', (commands: any[]) => {
+    const applySyncedHistory = (commands: any[]) => {
       const ctx = ctxRef.current;
       const canvas = canvasRef.current;
       if (!ctx || !canvas) return;
@@ -1151,6 +1158,18 @@ export default function DrawingBoard({
       
       historyIndex.current = history.current.length - 1;
       setHistoryState({ index: historyIndex.current, length: history.current.length });
+    };
+
+    applySyncedHistoryRef.current = applySyncedHistory;
+
+    // Apply any previously buffered sync commands directly if references are already fully initialized
+    if (lastSyncCommands.current && ctxRef.current && canvasRef.current) {
+      applySyncedHistory(lastSyncCommands.current);
+    }
+
+    socket.on('draw_history_sync', (commands: any[]) => {
+      lastSyncCommands.current = commands;
+      applySyncedHistory(commands);
     });
 
     return () => {
@@ -1360,6 +1379,10 @@ export default function DrawingBoard({
       history.current = [];
       historyIndex.current = -1;
       saveHistory(); // Save initial blank state
+
+      if (lastSyncCommands.current && applySyncedHistoryRef.current) {
+        applySyncedHistoryRef.current(lastSyncCommands.current);
+      }
     }
     
     // Prevent default touch behaviors entirely on window to be safe against pull-to-refresh
@@ -1845,9 +1868,14 @@ export default function DrawingBoard({
             floodFill(ctx, x, y, color, currentOpacity);
             saveHistory();
             if (socket && socket.connected) {
-               socket.emit('draw_binary', encodeBinaryDrawMessage('draw_action', {
+               const msg = encodeBinaryDrawMessage('draw_action', {
                  instanceId, tool: 'bucket', color, opacity: currentOpacity, x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT
-               }));
+               });
+               if (socket.volatile) {
+                 socket.volatile.emit('draw_binary', msg);
+               } else {
+                 socket.emit('draw_binary', msg);
+               }
             }
           } else if (tool === 'pipette') {
             let offscreenCanvas: HTMLCanvasElement | null = document.createElement('canvas');
