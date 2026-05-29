@@ -40,10 +40,9 @@ async function startServer() {
 
     socket.on('join_room', ({ roomId, nickname, avatar, playerId }, callback) => {
       try {
-        // Try to reconnect first if playerId is provided
-        if (playerId) {
-          const reconnectedRoom = roomManager.reconnectPlayer(roomId, playerId, socket.id);
-          if (reconnectedRoom) {
+        // Try to reconnect first by playerId or nickname
+        const reconnectedRoom = roomManager.reconnectPlayer(roomId, playerId || '', nickname, socket.id);
+        if (reconnectedRoom) {
             socket.join(roomId);
             if (callback) callback({ success: true, reconnected: true });
 
@@ -73,7 +72,6 @@ async function startServer() {
 
             return;
           }
-        }
 
         const existingRoom = roomManager.getRoom(roomId);
         const onlinePlayersCount = existingRoom ? existingRoom.players.filter(p => !p.isOffline).length : 0;

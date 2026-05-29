@@ -733,11 +733,15 @@ class RoomManager {
     }
   }
 
-  public reconnectPlayer(roomId: string, persistentId: string, newSocketId: string): Room | null {
+  public reconnectPlayer(roomId: string, persistentId: string, nickname: string, newSocketId: string): Room | null {
     const room = this.rooms.get(roomId);
     if (!room) return null;
 
-    const existingPlayer = room.players.find(p => p.persistentId === persistentId);
+    let existingPlayer = room.players.find(p => p.persistentId && p.persistentId === persistentId);
+    if (!existingPlayer) {
+       // fallback: find by name (even if technically online, it might be a ghost socket that hasn't timed out yet)
+       existingPlayer = room.players.find(p => p.name === nickname);
+    }
     if (!existingPlayer) return null;
 
     const oldSocketId = existingPlayer.id;
@@ -753,12 +757,25 @@ class RoomManager {
     this.players.delete(oldSocketId);
     this.players.set(newSocketId, existingPlayer);
 
-    // Update Room gameState with new socket ID
+    // Update Room gameState with new socket ID everywhere
     if (room.gameState.currentDrawerId === oldSocketId) {
       room.gameState.currentDrawerId = newSocketId;
     }
     room.gameState.turnQueue = room.gameState.turnQueue.map(id => id === oldSocketId ? newSocketId : id);
     room.gameState.correctGuessers = room.gameState.correctGuessers.map(id => id === oldSocketId ? newSocketId : id);
+    
+    // Also explicitly update the chat messages and guesses to reference the new ID natively, 
+    // to prevent the UI from displaying "old/new" duplicate instances as separate people
+    if (room.chatMessages) {
+       room.chatMessages.forEach(msg => {
+          if (msg.senderId === oldSocketId) msg.senderId = newSocketId;
+       });
+    }
+    if (room.guessMessages) {
+       room.guessMessages.forEach(msg => {
+          if (msg.senderId === oldSocketId) msg.senderId = newSocketId;
+       });
+    }
 
     this.broadcastState(room);
     return room;
