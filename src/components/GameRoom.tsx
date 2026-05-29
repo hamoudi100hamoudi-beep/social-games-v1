@@ -453,37 +453,22 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     };
   }, [socket, onLeave]);
 
-  // Proactive Reconnection Re-joining Trigger when internet recovers
+  // --- Block 1: Handle Room Join & Rejoin based on (Re)connection status ---
   useEffect(() => {
-    if (socket && isConnected) {
-      console.log('[GameRoom] Connection stabilized! Re-establishing room membership...', socket.id);
-      socket.emit('join_room', {
-        roomId: room,
-        nickname,
-        avatar: avatar || nickname.charAt(0).toUpperCase(),
-        playerId: persistentPlayerId
-      });
-    }
-  }, [isConnected, socket, room, nickname, avatar, persistentPlayerId]);
+    if (!socket || !isConnected) return;
+    
+    console.log('[GameRoom] Connection active, sending join_room:', room, 'with playerId:', persistentPlayerId, 'socket:', socket.id);
+    socket.emit('join_room', {
+      roomId: room,
+      nickname,
+      avatar: avatar || nickname.charAt(0).toUpperCase(),
+      playerId: persistentPlayerId
+    });
+  }, [socket, isConnected, room, nickname, avatar, persistentPlayerId]);
 
+  // --- Block 2: Register Persistent Socket Listeners ---
   useEffect(() => {
     if (!socket) return;
-    
-    const emitJoinRoom = () => {
-      console.log('[GameRoom] Joining room:', room, 'with playerId:', persistentPlayerId, 'socket:', socket.id);
-      socket.emit('join_room', {
-        roomId: room,
-        nickname,
-        avatar: avatar || nickname.charAt(0).toUpperCase(),
-        playerId: persistentPlayerId
-      });
-    };
-
-    // Emit immediately for initial mount
-    emitJoinRoom();
-
-    // Listen to connect event to automatically join on reconnection under the hood
-    socket.on('connect', emitJoinRoom);
 
     const onRoomStateUpdate = (state: { roomId: string, players: any[], gameState: any }) => {
       const isActiveRound = state.gameState?.status === 'DRAWING' || state.gameState?.status === 'CHOOSING';
@@ -563,13 +548,12 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
     socket.on('timer_tick', onTimerTick);
 
     return () => {
-      socket.off('connect', emitJoinRoom);
       socket.off('room_state_update', onRoomStateUpdate);
       socket.off('receive_message', onReceiveMessage);
       socket.off('receive_guess', onReceiveGuess);
       socket.off('timer_tick', onTimerTick);
     };
-  }, [socket, nickname, room, persistentPlayerId]);
+  }, [socket]);
 
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);

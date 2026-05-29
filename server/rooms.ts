@@ -86,7 +86,7 @@ class RoomManager {
     } else if (gameState.status === 'CHOOSING') {
       gameState.timeLeft--;
       const drawer = room.players.find(p => p.id === gameState.currentDrawerId);
-      // Let the choosing drawer have the full choosing window to reconnect if offline
+      // Skip turn only if they missed the deadline (do not skip immediately for being offline)
       if (gameState.timeLeft <= 91) {
         // Player missed their turn
         this.transitionToRoundEnd(room, 'turn_lost'); // Show round end overlay instead of skipping immediately
@@ -160,23 +160,23 @@ class RoomManager {
        return this.transitionToWaiting(room);
     }
     
-    // Logic for next turn - cycle through queue to find first online player in the room
+    // Logic for next turn - cycle through queue to find first player in the room (even if offline)
     let nextDrawerId: string | null = null;
     const queueLength = room.gameState.turnQueue.length;
     
     for (let i = 0; i < queueLength; i++) {
-      const candidateId = room.gameState.turnQueue.shift();
-      if (!candidateId) break;
-      
-      // Put at the back of the queue
-      room.gameState.turnQueue.push(candidateId);
-      
-      // Permit turn to go to candidates even if they are offline (as they can join/reconnect any second)
-      const p = room.players.find(player => player.id === candidateId);
-      if (p) {
-        nextDrawerId = candidateId;
-        break;
-      }
+       const candidateId = room.gameState.turnQueue.shift();
+       if (!candidateId) break;
+       
+       // Put at the back of the queue
+       room.gameState.turnQueue.push(candidateId);
+       
+       // Check if player exists in room (allow even if temporarily offline so they can reconnect during their turn)
+       const p = room.players.find(player => player.id === candidateId);
+       if (p) {
+         nextDrawerId = candidateId;
+         break;
+       }
     }
 
     if (!nextDrawerId) {
@@ -455,7 +455,7 @@ class RoomManager {
     this.broadcastState(room);
   }
 
-  private broadcastState(room: Room) {
+  public sendStateToPlayer(room: Room, p: Player) {
     if (this.io) {
       // Create a masked version of the word for everyone
       const word = room.gameState.currentWord || '';
@@ -477,22 +477,25 @@ class RoomManager {
         });
       }
 
-      // To make it secure, iterate over room.players and emit individually
-      room.players.forEach(p => {
-        if (this.io) {
-          const isDrawer = p.id === room.gameState.currentDrawerId;
-          const { drawHistory, ...publicGameState } = room.gameState;
-          this.io.to(p.id).emit('room_state_update', {
-            roomId: room.id,
-            players: room.players,
-            gameState: {
-               ...publicGameState,
-               currentWord: isDrawer ? room.gameState.currentWord : null,
-               wordOptions: isDrawer ? room.gameState.wordOptions : [],
-               maskedWordArray: maskedWordArray
-            }
-          });
+      const isDrawer = p.id === room.gameState.currentDrawerId;
+      const { drawHistory, ...publicGameState } = room.gameState;
+      this.io.to(p.id).emit('room_state_update', {
+        roomId: room.id,
+        players: room.players,
+        gameState: {
+           ...publicGameState,
+           currentWord: isDrawer ? room.gameState.currentWord : null,
+           wordOptions: isDrawer ? room.gameState.wordOptions : [],
+           maskedWordArray: maskedWordArray
         }
+      });
+    }
+  }
+
+  private broadcastState(room: Room) {
+    if (this.io) {
+      room.players.forEach(p => {
+        this.sendStateToPlayer(room, p);
       });
     }
   }
