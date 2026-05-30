@@ -879,54 +879,53 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
         </AnimatePresence>
         
       {/* Drawing Mode View (Full Screen for Drawer) */}
-      {isDrawingMode && (
-        <div 
-          className="fixed inset-0 z-[100] bg-white flex flex-col transition-opacity duration-300 opacity-100"
-        >
-          {renderWordOverlay(true)}
-          <DrawingBoard 
-            key={`full-${drawerPersistentId}`}
-            readOnly={false}
-            historySyncCommands={syncHistory}
-            onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
-            onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
-            timerPercentage={timerPercentage}
-            timerBarNode={<SmoothTimer gameState={gameState} maxTime={getMaxTime()} isFullScreen={true} />}
-            hintsRemaining={
-              (() => {
-                const word = gameState.currentWord || '';
-                const charCount = word.replace(/\s/g, '').length;
-                let maxHints = charCount < 3 ? 1 : 2;
-                if (charCount >= 5) maxHints = 3;
-                return Math.max(0, maxHints - (gameState.hintsUsed || 0));
-              })()
-            }
-          />
-          
-          {/* Hit Notifications Overlay */}
-          <div className="absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full">
-             <AnimatePresence>
-                {hitNotifications.map((hit) => (
-                   <motion.div
-                      layout
-                      key={hit.id}
-                      initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.6, y: -10, transition: { duration: 0.3 } }}
-                      transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
-                      style={{ textShadow: '1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(255,255,255,0.8)' }}
-                      className="flex items-center justify-center gap-1.5 text-[#10B981] font-bold text-[15px] whitespace-nowrap bg-transparent"
-                      dir="ltr"
-                   >
-                      <Check size={16} strokeWidth={4} />
-                      <span className="truncate max-w-[150px] sm:max-w-[200px] text-center" dir="ltr">{hit.name}</span>
-                      <span>hit!</span>
-                   </motion.div>
-                ))}
-             </AnimatePresence>
-          </div>
+      <div 
+        style={{ display: isDrawingMode ? 'flex' : 'none' }}
+        className="fixed inset-0 z-[100] bg-white flex flex-col transition-opacity duration-300 opacity-100"
+      >
+        {renderWordOverlay(true)}
+        <DrawingBoard 
+          key="drawer-full-board"
+          readOnly={false}
+          historySyncCommands={syncHistory}
+          onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
+          onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
+          timerPercentage={timerPercentage}
+          timerBarNode={<SmoothTimer gameState={gameState} maxTime={getMaxTime()} isFullScreen={true} />}
+          hintsRemaining={
+            (() => {
+              const word = gameState.currentWord || '';
+              const charCount = word.replace(/\s/g, '').length;
+              let maxHints = charCount < 3 ? 1 : 2;
+              if (charCount >= 5) maxHints = 3;
+              return Math.max(0, maxHints - (gameState.hintsUsed || 0));
+            })()
+          }
+        />
+        
+        {/* Hit Notifications Overlay */}
+        <div className="absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full">
+           <AnimatePresence>
+              {hitNotifications.map((hit) => (
+                 <motion.div
+                    layout
+                    key={hit.id}
+                    initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.6, y: -10, transition: { duration: 0.3 } }}
+                    transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
+                    style={{ textShadow: '1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(255,255,255,0.8)' }}
+                    className="flex items-center justify-center gap-1.5 text-[#10B981] font-bold text-[15px] whitespace-nowrap bg-transparent"
+                    dir="ltr"
+                 >
+                    <Check size={16} strokeWidth={4} />
+                    <span className="truncate max-w-[150px] sm:max-w-[200px] text-center" dir="ltr">{hit.name}</span>
+                    <span>hit!</span>
+                 </motion.div>
+              ))}
+           </AnimatePresence>
         </div>
-      )}
+      </div>
 
       {/* Top Area (Drawing / Waiting) */}
       <div className={`relative flex flex-col shrink-0 overflow-hidden bg-[#1A103C]
@@ -938,7 +937,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
           {renderWordOverlay()}
 
           <DrawingBoard 
-            key={drawerPersistentId}
+            key="view-inline-board"
             readOnly={!amIDrawer}
             historySyncCommands={syncHistory}
             timerPercentage={timerPercentage}
