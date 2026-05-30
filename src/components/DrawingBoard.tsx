@@ -270,21 +270,36 @@ const decodeBinaryDrawMessage = (input: any): { event: string, data: any } | nul
   if (!input) return null;
   
   let buffer: ArrayBuffer;
-  if (input instanceof ArrayBuffer) {
-    buffer = input;
-  } else if (input.buffer instanceof ArrayBuffer) {
-    buffer = input.buffer;
-  } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(input)) {
-    buffer = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
-  } else if (input && input.type === 'Buffer' && Array.isArray(input.data)) {
-    // Handle Node.js Buffer serialized to JSON by socket.io
-    buffer = new Uint8Array(input.data).buffer;
-  } else {
+  try {
+    if (input instanceof ArrayBuffer) {
+      buffer = input;
+    } else if (input && input.buffer instanceof ArrayBuffer) {
+      const offset = input.byteOffset || 0;
+      const length = input.byteLength || input.buffer.byteLength;
+      buffer = input.buffer.slice(offset, offset + length);
+    } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(input)) {
+      buffer = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
+    } else if (input && input.type === 'Buffer' && Array.isArray(input.data)) {
+      // Handle Node.js Buffer serialized to JSON by socket.io
+      buffer = new Uint8Array(input.data).buffer;
+    } else if (Array.isArray(input)) {
+      buffer = new Uint8Array(input).buffer;
+    } else if (input && typeof input === 'object' && Array.isArray(input.data)) {
+      buffer = new Uint8Array(input.data).buffer;
+    } else {
+      console.warn("[decodeBinaryDrawMessage] Unknown binary input type:", typeof input, input);
+      return null;
+    }
+  } catch (e) {
+    console.error("[decodeBinaryDrawMessage] Failed to slice/convert buffer:", e, input);
     return null;
   }
   
   const view = new DataView(buffer);
-  if (view.byteLength < 8) return null;
+  if (view.byteLength < 8) {
+    console.warn("[decodeBinaryDrawMessage] DataView byteLength is too small:", view.byteLength);
+    return null;
+  }
   
   const type = view.getUint8(0);
   const instId = readString7(view, 1);
@@ -1171,28 +1186,37 @@ export default function DrawingBoard({
       const blankData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       history.current.push(blankData);
 
-      // Replay all commands
+      // Replay all commands with ultimate resilience
       for (const cmd of commands) {
-         let event = cmd.event;
-         let data = cmd.data;
-         
-         if (event === 'draw_binary') {
-            const decoded = decodeBinaryDrawMessage(data);
-            if (decoded) {
-               event = decoded.event;
-               data = decoded.data;
+         try {
+            if (!cmd) continue;
+            let event = cmd.event;
+            let data = cmd.data;
+            
+            if (event === 'draw_binary') {
+               const decoded = decodeBinaryDrawMessage(data);
+               if (decoded) {
+                  event = decoded.event;
+                  data = decoded.data;
+               } else {
+                  continue; // skip corrupted or unparseable binary drawings
+               }
             }
-         }
-         
-         if (event === 'draw_start') onDrawStart(data, true);
-         else if (event === 'draw_move') onDrawMove(data, true);
-         else if (event === 'draw_end') {
-            onDrawEnd(data, true, true);
-            history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-         }
-         else if (event === 'draw_action') {
-            onDrawAction(data, true, true);
-            history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            
+            if (!data) continue;
+            
+            if (event === 'draw_start') onDrawStart(data, true);
+            else if (event === 'draw_move') onDrawMove(data, true);
+            else if (event === 'draw_end') {
+               onDrawEnd(data, true, true);
+               history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            }
+            else if (event === 'draw_action') {
+               onDrawAction(data, true, true);
+               history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+            }
+         } catch (err) {
+            console.error("[History Sync] Error replaying draw command:", err, cmd);
          }
       }
       

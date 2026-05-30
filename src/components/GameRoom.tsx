@@ -511,7 +511,15 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
       
       setCurrentPlayers(players);
       if (state.gameState) {
-        setGameState(state.gameState);
+        setGameState((prev: any) => {
+          if (prev && prev.currentDrawerId !== state.gameState.currentDrawerId) {
+            console.log('[GameRoom] Active drawer changed. Clearing old turn syncHistory.');
+            setTimeout(() => {
+              setSyncHistory(null);
+            }, 0);
+          }
+          return state.gameState;
+        });
       }
     };
 
@@ -576,15 +584,20 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
     socket.on('room_state_update', onRoomStateUpdate);
     socket.on('receive_message', onReceiveMessage);
     socket.on('receive_guess', onReceiveGuess);
+    const onDrawHistorySync = (commands: any[]) => {
+      console.log('[GameRoom - SOCKET] Received draw_history_sync with', commands?.length, 'commands');
+      setSyncHistory(commands);
+    };
+
     socket.on('timer_tick', onTimerTick);
-    socket.on('draw_history_sync', setSyncHistory);
+    socket.on('draw_history_sync', onDrawHistorySync);
 
     return () => {
       socket.off('room_state_update', onRoomStateUpdate);
       socket.off('receive_message', onReceiveMessage);
       socket.off('receive_guess', onReceiveGuess);
       socket.off('timer_tick', onTimerTick);
-      socket.off('draw_history_sync', setSyncHistory);
+      socket.off('draw_history_sync', onDrawHistorySync);
     };
   }, [socket, room, isConnected, socketId]);
 
