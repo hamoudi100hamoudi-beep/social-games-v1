@@ -586,7 +586,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
       socket.off('timer_tick', onTimerTick);
       socket.off('draw_history_sync', setSyncHistory);
     };
-  }, [socket]);
+  }, [socket, room, isConnected, socketId]);
 
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);

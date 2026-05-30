@@ -1090,43 +1090,70 @@ export default function DrawingBoard({
       }
     };
 
-    socket.on('draw_binary', onDrawBinary);
-    socket.on('draw_start', onDrawStart);
-    socket.on('draw_move', onDrawMove);
-    socket.on('draw_end', onDrawEnd);
-    socket.on('draw_cancel', onDrawCancel);
-    socket.on('draw_clear', onDrawClear);
-    socket.on('draw_action', onDrawAction);
-
-    socket.on('draw_undo', (raw?: any) => {
+    const onDrawUndo = (raw?: any) => {
       const data = decompressPayload(raw);
       if (data?.instanceId === instanceId) return;
       undo(false);
-    });
-    
-    socket.on('draw_undo_local', (raw?: any) => {
+    };
+
+    const onDrawUndoLocal = (raw?: any) => {
       const data = decompressPayload(raw);
       if (data?.instanceId === instanceId) return;
       undo(false);
-    });
-    
-    socket.on('draw_redo', (raw?: any) => {
-      const data = decompressPayload(raw);
-      if (data?.instanceId === instanceId) return;
-      redo(false);
-    });
+    };
 
-    socket.on('draw_redo_local', (raw?: any) => {
+    const onDrawRedo = (raw?: any) => {
       const data = decompressPayload(raw);
       if (data?.instanceId === instanceId) return;
       redo(false);
-    });
+    };
+
+    const onDrawRedoLocal = (raw?: any) => {
+      const data = decompressPayload(raw);
+      if (data?.instanceId === instanceId) return;
+      redo(false);
+    };
 
     const applySyncedHistory = (commands: any[]) => {
-      const ctx = ctxRef.current;
-      const canvas = canvasRef.current;
-      const tempCtx = tempCtxRef.current;
-      const tempCanvas = tempCanvasRef.current;
+      let ctx = ctxRef.current;
+      let canvas = canvasRef.current;
+      let tempCtx = tempCtxRef.current;
+      let tempCanvas = tempCanvasRef.current;
+      
+      // On-demand context initialization to draw history instantly before main useEffect
+      if ((!ctx || !canvas || !tempCtx || !tempCanvas) && canvasRef.current && tempCanvasRef.current) {
+         console.log("[DrawingBoard - History Sync] Initializing context on-demand for immediate rendering...");
+         const canvasEl = canvasRef.current;
+         const tempCanvasEl = tempCanvasRef.current;
+         
+         canvasEl.width = LOGICAL_WIDTH * DPR;
+         canvasEl.height = LOGICAL_HEIGHT * DPR;
+         tempCanvasEl.width = LOGICAL_WIDTH * DPR;
+         tempCanvasEl.height = LOGICAL_HEIGHT * DPR;
+         
+         const newCtx = canvasEl.getContext('2d', { alpha: false });
+         const newTempCtx = tempCanvasEl.getContext('2d');
+         
+         if (newCtx && newTempCtx) {
+           newCtx.scale(DPR, DPR);
+           newCtx.lineCap = 'round';
+           newCtx.lineJoin = 'round';
+           ctxRef.current = newCtx;
+           
+           newTempCtx.scale(DPR, DPR);
+           newTempCtx.lineCap = 'round';
+           newTempCtx.lineJoin = 'round';
+           tempCtxRef.current = newTempCtx;
+           
+           newCtx.fillStyle = '#ffffff';
+           newCtx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+           
+           ctx = newCtx;
+           canvas = canvasEl;
+           tempCtx = newTempCtx;
+           tempCanvas = tempCanvasEl;
+         }
+      }
       
       if (!ctx || !canvas || !tempCtx || !tempCanvas) {
          console.warn("[History Sync] Missing references, buffering for later");
@@ -1178,6 +1205,25 @@ export default function DrawingBoard({
       setHistoryState({ index: historyIndex.current, length: history.current.length });
     };
 
+    const onDrawHistorySync = (commands: any[]) => {
+      console.log("[DrawingBoard] draw_history_sync socket event received directly, count:", commands?.length);
+      lastSyncCommands.current = commands;
+      applySyncedHistory(commands);
+    };
+
+    socket.on('draw_binary', onDrawBinary);
+    socket.on('draw_start', onDrawStart);
+    socket.on('draw_move', onDrawMove);
+    socket.on('draw_end', onDrawEnd);
+    socket.on('draw_cancel', onDrawCancel);
+    socket.on('draw_clear', onDrawClear);
+    socket.on('draw_action', onDrawAction);
+    socket.on('draw_undo', onDrawUndo);
+    socket.on('draw_undo_local', onDrawUndoLocal);
+    socket.on('draw_redo', onDrawRedo);
+    socket.on('draw_redo_local', onDrawRedoLocal);
+    socket.on('draw_history_sync', onDrawHistorySync);
+
     applySyncedHistoryRef.current = applySyncedHistory;
 
     // Apply any previously buffered sync commands directly if references are already fully initialized
@@ -1192,11 +1238,11 @@ export default function DrawingBoard({
       socket.off('draw_end', onDrawEnd);
       socket.off('draw_clear', onDrawClear);
       socket.off('draw_action', onDrawAction);
-      socket.off('draw_undo');
-      socket.off('draw_undo_local');
-      socket.off('draw_redo');
-      socket.off('draw_redo_local');
-      socket.off('draw_history_sync');
+      socket.off('draw_undo', onDrawUndo);
+      socket.off('draw_undo_local', onDrawUndoLocal);
+      socket.off('draw_redo', onDrawRedo);
+      socket.off('draw_redo_local', onDrawRedoLocal);
+      socket.off('draw_history_sync', onDrawHistorySync);
     };
   }, [socket]);
 
