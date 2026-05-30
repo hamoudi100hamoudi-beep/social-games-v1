@@ -292,6 +292,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
+  const hasEmittedJoin = React.useRef(false);
 
   const persistentPlayerId = React.useMemo(() => {
     if (typeof window === 'undefined') return '';
@@ -362,29 +363,42 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
 
   // --- Block 1: Handle Room Join & Rejoin based on (Re)connection status ---
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    if (!socket) return;
     
-    const reconnectOnly = !justJoined;
-    console.log('[GameRoom] Connection active, sending join_room:', room, 'with playerId:', persistentPlayerId, 'socket:', socket.id, 'reconnectOnly:', reconnectOnly);
-    socket.emit('join_room', {
-      roomId: room,
-      nickname,
-      avatar: avatar || nickname.charAt(0).toUpperCase(),
-      playerId: persistentPlayerId,
-      reconnectOnly: reconnectOnly
-    }, (res: any) => {
-      if (res && res.success) {
-        console.log('[GameRoom] Successfully joined/reconnected room, requesting pull sync...');
-        socket.emit('request_round_sync');
-      } else if (res && (res.error === 'session_expired' || res.reason === 'session_expired')) {
-        console.warn('[GameRoom] Server session expired or evicted. Redirecting to setup/lobby.');
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('gartic_player_room');
+    const handleJoin = () => {
+      const reconnectOnly = hasEmittedJoin.current;
+      console.log('[GameRoom] Sending join_room:', room, 'with playerId:', persistentPlayerId, 'socket:', socket.id, 'reconnectOnly:', reconnectOnly);
+      socket.emit('join_room', {
+        roomId: room,
+        nickname,
+        avatar: avatar || nickname.charAt(0).toUpperCase(),
+        playerId: persistentPlayerId,
+        reconnectOnly: reconnectOnly
+      }, (res: any) => {
+        if (res && res.success) {
+          console.log('[GameRoom] Successfully joined/reconnected room, requesting pull sync...');
+          socket.emit('request_round_sync');
+          hasEmittedJoin.current = true;
+        } else if (res && (res.error === 'session_expired' || res.reason === 'session_expired')) {
+          console.warn('[GameRoom] Server session expired or evicted. Redirecting to setup/lobby.');
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('gartic_player_room');
+          }
+          onLeave?.();
         }
-        onLeave?.();
-      }
-    });
-  }, [socket, isConnected, room, nickname, avatar, persistentPlayerId, justJoined]);
+      });
+    };
+
+    if (socket.connected) {
+      handleJoin();
+    }
+
+    socket.on('connect', handleJoin);
+
+    return () => {
+      socket.off('connect', handleJoin);
+    };
+  }, [socket]);
 
   // --- Block 2: Register Persistent Socket Listeners ---
   useEffect(() => {
