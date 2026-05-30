@@ -791,17 +791,6 @@ class RoomManager {
        });
     }
 
-    // Now safely disconnect the old socket, which will trigger handleDisconnect synchronously,
-    // but handleDisconnect will ignore it because this.players.get(oldSocketId) is now undefined.
-    if (this.io) {
-      const oldSocket = this.io.sockets.sockets.get(oldSocketId);
-      if (oldSocket) {
-        console.error(`[KILL SOCKET] Destroying old connection for ${existingPlayer.name}: ${oldSocketId}`);
-        oldSocket.emit('force_disconnect', { reason: 'session_replaced' });
-        oldSocket.disconnect(true);
-      }
-    }
-
     this.broadcastState(room);
     return room;
   }

@@ -210,6 +210,17 @@ async function startServer() {
       }
     });
 
+    socket.on('request_canvas_sync', () => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        const room = roomManager.getRoom(player.roomId);
+        if (room && room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {
+          console.log(`[Socket] Sending active canvas sync history to player ${player.name} (${socket.id})`);
+          socket.emit('draw_history_sync', room.gameState.drawHistory);
+        }
+      }
+    });
+
     socket.on('send_message', (data) => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {

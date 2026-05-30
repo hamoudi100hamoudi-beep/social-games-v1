@@ -668,6 +668,13 @@ export default function DrawingBoard({
   }, [baseScale]);
 
   useEffect(() => {
+    if (socket) {
+      console.log("[DrawingBoard] Requesting canvas sync on mount...");
+      socket.emit('request_canvas_sync');
+    }
+  }, [socket]);
+
+  useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const obs = new ResizeObserver((entries) => {
