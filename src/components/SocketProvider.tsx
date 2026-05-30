@@ -21,9 +21,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [socketId, setSocketId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Automatically connects to the current host
+    // Automatically connects to the current host with stable factory options
     const socketInstance = io(typeof window !== 'undefined' ? window.location.origin : 'https://social-games-v1.onrender.com', {
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
       transports: ['websocket'],
       withCredentials: true,
     });
@@ -47,27 +50,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setSocket(socketInstance);
 
-    // Prompt proactive reconnect immediately when browser fires "online" event
-    const handleOnline = () => {
-      console.log('[Socket] Browser online event! Forcing connection check...');
-      if (socketInstance && !socketInstance.connected) {
-        socketInstance.connect();
-      }
-    };
-
-    // Low-latency Heartbeat: checks connection status and forces socket connect if browser online but socket is zombie
-    const interval = setInterval(() => {
-      if (typeof window !== 'undefined' && navigator.onLine && socketInstance && !socketInstance.connected) {
-        console.log('[Socket] Heartbeat forced reconnection...');
-        socketInstance.connect();
-      }
-    }, 2000);
-
-    window.addEventListener('online', handleOnline);
-
     return () => {
-      clearInterval(interval);
-      window.removeEventListener('online', handleOnline);
       socketInstance.disconnect();
     };
   }, []);
