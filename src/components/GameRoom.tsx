@@ -292,7 +292,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
-  const [syncHistory, setSyncHistory] = useState<any[] | null>(null);
 
   const persistentPlayerId = React.useMemo(() => {
     if (typeof window === 'undefined') return '';
@@ -361,110 +360,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
 
   const isDrawingMode = gameState.status === 'DRAWING' && amIDrawer;
 
-  // ==========================================
-  // PHASE 4: PASSIVE DEBOUNCED IDLE & VISIBILITY GRACE PERIOD
-  // ==========================================
-  useEffect(() => {
-    if (!socket) return;
-
-    // --- Part 1: Passive Debounced Idle Timeout (120s) ---
-    const IDLE_TIMEOUT_MS = 120 * 1000;
-    let idleTimer: any = null;
-
-    const handlePlayerIdle = () => {
-      console.log("[AFK Engine] User inactive for 120 seconds. Kicking back to lobby...");
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('gartic_afk_kicked', 'true');
-      }
-      onLeave?.();
-    };
-
-    // Resets the silent 120s idle timer
-    const resetIdleTimer = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(handlePlayerIdle, IDLE_TIMEOUT_MS);
-    };
-
-    // Attach lightweight event listeners
-    const interactionEvents = ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'];
-    const handleInteraction = () => {
-      resetIdleTimer();
-    };
-
-    interactionEvents.forEach(event => {
-      window.addEventListener(event, handleInteraction, { passive: true });
-    });
-
-    // Start initial timer
-    resetIdleTimer();
-
-    // --- Part 2: Smart Visibility Sensor & Timer Drift Fix ---
-    const GRACE_PERIOD_MS = 15 * 1000;
-    let visibilityTimer: any = null;
-    let lastHiddenTime = 0;
-    let hasEmittedAway = false;
-
-    const handleVisibilityChange = () => {
-      const state = document.visibilityState;
-      console.log(`[Visibility Engine] Page visibility changed: ${state}`);
-
-      if (state === 'hidden') {
-        // Page hidden: start background hide timestamp & 15s grace period
-        lastHiddenTime = Date.now();
-        hasEmittedAway = false;
-
-        if (visibilityTimer) clearTimeout(visibilityTimer);
-        visibilityTimer = setTimeout(() => {
-          if (document.visibilityState === 'hidden' && !hasEmittedAway) {
-            console.log("[Visibility Engine] User hidden for > 15s. Emitting away to server.");
-            socket.emit('player_away');
-            hasEmittedAway = true;
-          }
-        }, GRACE_PERIOD_MS);
-
-      } else if (state === 'visible') {
-        // Page returned/visible: calculate time drift
-        if (lastHiddenTime > 0) {
-          const delta = Date.now() - lastHiddenTime;
-          console.log(`[Visibility Engine] User returned after hidden for ${delta}ms`);
-          
-          // Timer Drift protection: systems sleep JS engines in bg.
-          // If we was away more than 15s, but system suspends prevented the setTimeout
-          // from firing, emit it now retrospectively to keep the server/chat sync accurate.
-          if (delta >= GRACE_PERIOD_MS && !hasEmittedAway) {
-            console.log("[Visibility Engine] User was hidden for >15s (retrospective drift). Emitting away.");
-            socket.emit('player_away');
-            hasEmittedAway = true;
-          }
-          
-          lastHiddenTime = 0;
-        }
-
-        // Cancel background timer as the user is visible now
-        if (visibilityTimer) {
-          clearTimeout(visibilityTimer);
-          visibilityTimer = null;
-        }
-
-        // Active return: reset we idle timer to start fresh 120s from now
-        resetIdleTimer();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // --- Cleanup function to prevent memory leaks ---
-    return () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      if (visibilityTimer) clearTimeout(visibilityTimer);
-      
-      interactionEvents.forEach(event => {
-        window.removeEventListener(event, handleInteraction);
-      });
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [socket, onLeave]);
-
   // --- Block 1: Handle Room Join & Rejoin based on (Re)connection status ---
   useEffect(() => {
     if (!socket || !isConnected) return;
@@ -512,12 +407,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
       setCurrentPlayers(players);
       if (state.gameState) {
         setGameState((prev: any) => {
-          if (prev && prev.currentDrawerId !== state.gameState.currentDrawerId) {
-            console.log('[GameRoom] Active drawer changed. Clearing old turn syncHistory.');
-            setTimeout(() => {
-              setSyncHistory(null);
-            }, 0);
-          }
           return state.gameState;
         });
       }
@@ -584,20 +473,13 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
     socket.on('room_state_update', onRoomStateUpdate);
     socket.on('receive_message', onReceiveMessage);
     socket.on('receive_guess', onReceiveGuess);
-    const onDrawHistorySync = (commands: any[]) => {
-      console.log('[GameRoom - SOCKET] Received draw_history_sync with', commands?.length, 'commands');
-      setSyncHistory(commands);
-    };
-
     socket.on('timer_tick', onTimerTick);
-    socket.on('draw_history_sync', onDrawHistorySync);
 
     return () => {
       socket.off('room_state_update', onRoomStateUpdate);
       socket.off('receive_message', onReceiveMessage);
       socket.off('receive_guess', onReceiveGuess);
       socket.off('timer_tick', onTimerTick);
-      socket.off('draw_history_sync', onDrawHistorySync);
     };
   }, [socket]);
 
@@ -887,7 +769,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
         <DrawingBoard 
           key="drawer-full-board"
           readOnly={false}
-          historySyncCommands={syncHistory}
           onSkipTurn={gameState.status === 'DRAWING' ? () => setShowSkipConfirm(true) : undefined}
           onRequestHint={gameState.status === 'DRAWING' ? () => socket?.emit('request_hint') : undefined}
           timerPercentage={timerPercentage}
@@ -939,7 +820,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
           <DrawingBoard 
             key="view-inline-board"
             readOnly={!amIDrawer}
-            historySyncCommands={syncHistory}
             timerPercentage={timerPercentage}
           />
           

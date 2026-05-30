@@ -572,8 +572,7 @@ export default function DrawingBoard({
   onRequestHint,
   hintsRemaining = 0,
   timerPercentage = 0,
-  timerBarNode,
-  historySyncCommands
+  timerBarNode
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -581,7 +580,6 @@ export default function DrawingBoard({
   hintsRemaining?: number;
   timerPercentage?: number;
   timerBarNode?: React.ReactNode;
-  historySyncCommands?: any[] | null;
   key?: any;
 }) {
   const instanceId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
@@ -1424,15 +1422,6 @@ export default function DrawingBoard({
     }
     return () => cancelAnimationFrame(rAFId);
   }, [isDrawing]);
-
-  useEffect(() => {
-    if (historySyncCommands) {
-      lastSyncCommands.current = historySyncCommands;
-      if (applySyncedHistoryRef.current) {
-        applySyncedHistoryRef.current(historySyncCommands);
-      }
-    }
-  }, [historySyncCommands]);
 
   // Init canvas
   useEffect(() => {
