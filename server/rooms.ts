@@ -24,6 +24,7 @@ const ALL_WORDS = [
 class RoomManager {
   private rooms: Map<string, Room> = new Map();
   private players: Map<string, Player> = new Map();
+  private evictionTimers: Map<string, NodeJS.Timeout> = new Map();
   private io: Server | null = null;
   private tickInterval: NodeJS.Timeout | null = null;
 
@@ -37,34 +38,8 @@ class RoomManager {
 
   private tick() {
     try {
-      const now = Date.now();
-      const offlineTimeout = 15 * 1000; // 15 seconds grace period
-      
       this.rooms.forEach(room => {
         try {
-          // Clean up players who are offline for > 15 seconds
-          const playersToEvict: string[] = [];
-          room.players.forEach(p => {
-            if (p.isOffline && p.offlineSince && (now - p.offlineSince > offlineTimeout)) {
-              playersToEvict.push(p.id);
-            }
-          });
-
-          playersToEvict.forEach(socketId => {
-            console.log(`[Game Engine] Evicting player ${socketId} from room ${room.id} due to offline timeout`);
-            const player = this.players.get(socketId);
-            const playerName = player ? player.name : 'لاعب';
-            
-            this.removePlayerFromRoom(room.id, socketId);
-            this.players.delete(socketId);
-            
-            this.broadcastMessage(room, {
-              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-              text: `تم طرد ${playerName} بسبب الغياب الطويل`,
-              type: 'system'
-            });
-          });
-
           this.processRoomTick(room);
         } catch (e) {
           console.error(`Error processing room tick for ${room.id}:`, e);
@@ -85,7 +60,7 @@ class RoomManager {
       }
     } else if (gameState.status === 'CHOOSING') {
       gameState.timeLeft--;
-      const drawer = room.players.find(p => p.id === gameState.currentDrawerId);
+      const drawer = room.players.find(p => (p.persistentId || p.id) === gameState.currentDrawerId);
       // Skip turn only if they missed the deadline (do not skip immediately for being offline)
       if (gameState.timeLeft <= 91) {
         // Player missed their turn
@@ -93,9 +68,9 @@ class RoomManager {
       }
     } else if (gameState.status === 'DRAWING') {
       gameState.timeLeft--;
-      const activeGuessersCount = room.players.filter(p => p.id !== gameState.currentDrawerId && !p.isOffline).length;
-      const onlineCorrectGuessersCount = gameState.correctGuessers.filter(id => {
-        const p = room.players.find(pl => pl.id === id);
+      const activeGuessersCount = room.players.filter(p => (p.persistentId || p.id) !== gameState.currentDrawerId && !p.isOffline).length;
+      const onlineCorrectGuessersCount = gameState.correctGuessers.filter(pId => {
+        const p = room.players.find(pl => (pl.persistentId || pl.id) === pId);
         return p && !p.isOffline;
       }).length;
 
@@ -172,7 +147,7 @@ class RoomManager {
        room.gameState.turnQueue.push(candidateId);
        
        // Check if player exists in room (allow even if temporarily offline so they can reconnect during their turn)
-       const p = room.players.find(player => player.id === candidateId);
+       const p = room.players.find(player => (player.persistentId || player.id) === candidateId);
        if (p) {
          nextDrawerId = candidateId;
          break;
@@ -207,7 +182,7 @@ class RoomManager {
     room.gameState.timeLeft = 100;
     
     this.clearDrawHistoryForRoomAndClient(room);
-    const drawer = room.players.find(p => p.id === nextDrawerId);
+    const drawer = room.players.find(p => (p.persistentId || p.id) === nextDrawerId);
     const name = drawer ? drawer.name : 'Unknown';
     this.broadcastGuess(room, {
       id: 'sys-' + Date.now() + '-turn',
@@ -327,7 +302,10 @@ class RoomManager {
 
   public startGameRound(roomId: string, word: string, socketId: string) {
     const room = this.rooms.get(roomId);
-    if (!room || room.gameState.status !== 'CHOOSING' || room.gameState.currentDrawerId !== socketId) return;
+    if (!room) return;
+    const player = this.players.get(socketId);
+    const pId = player ? (player.persistentId || player.id) : socketId;
+    if (room.gameState.status !== 'CHOOSING' || room.gameState.currentDrawerId !== pId) return;
 
     room.gameState.currentWord = word;
     room.gameState.status = 'DRAWING';
@@ -338,8 +316,10 @@ class RoomManager {
 
   public handleSkipTurn(roomId: string, socketId: string) {
     const room = this.rooms.get(roomId);
-    // Player can skip only if they are the current drawer and it's either CHOOSING or DRAWING
-    if (!room || room.gameState.currentDrawerId !== socketId) return;
+    if (!room) return;
+    const player = this.players.get(socketId);
+    const pId = player ? (player.persistentId || player.id) : socketId;
+    if (room.gameState.currentDrawerId !== pId) return;
     if (room.gameState.status !== 'CHOOSING' && room.gameState.status !== 'DRAWING') return;
 
     this.transitionToRoundEnd(room, 'skipped');
@@ -352,24 +332,26 @@ class RoomManager {
     const player = this.players.get(socketId);
     if (!player) return;
 
+    const pId = player.persistentId || player.id;
+
     // Reject if player is drawer
-    if (room.gameState.currentDrawerId === socketId) return;
+    if (room.gameState.currentDrawerId === pId) return;
 
     // Reject if player already guessed
-    if (room.gameState.correctGuessers.includes(socketId)) return;
+    if (room.gameState.correctGuessers.includes(pId)) return;
 
     const currentWord = room.gameState.currentWord || '';
     const isCorrect = guess.toLowerCase().trim() === currentWord.toLowerCase().trim();
 
     if (isCorrect) {
-      room.gameState.correctGuessers.push(socketId);
+      room.gameState.correctGuessers.push(pId);
       
       const hintsUsed = room.gameState.hintsUsed || 0;
       const baseScore = 10 - hintsUsed;
       const guesserScore = Math.max(1, baseScore - (room.gameState.correctGuessers.length - 1));
       player.score += guesserScore;
 
-      const drawer = this.players.get(room.gameState.currentDrawerId || '');
+      const drawer = room.players.find(p => (p.persistentId || p.id) === room.gameState.currentDrawerId);
       if (drawer) {
          if (room.gameState.correctGuessers.length === 1) {
             drawer.score += Math.max(1, 11 - hintsUsed);
@@ -390,9 +372,9 @@ class RoomManager {
       });
 
       // Deduct time dynamically based on active (online, non-drawer) guessers
-      const activeGuessersCount = room.players.filter(p => p.id !== room.gameState.currentDrawerId && !p.isOffline).length;
-      const onlineCorrectGuessersCount = room.gameState.correctGuessers.filter(id => {
-        const p = room.players.find(pl => pl.id === id);
+      const activeGuessersCount = room.players.filter(p => (p.persistentId || p.id) !== room.gameState.currentDrawerId && !p.isOffline).length;
+      const onlineCorrectGuessersCount = room.gameState.correctGuessers.filter(pIdToMatch => {
+        const p = room.players.find(pl => (pl.persistentId || pl.id) === pIdToMatch);
         return p && !p.isOffline;
       }).length;
 
@@ -687,7 +669,10 @@ class RoomManager {
     // Add to new room if not already in it
     if (!room.players.find(p => p.id === player.id)) {
       room.players.push(player);
-      room.gameState.turnQueue.push(player.id);
+      const pId = player.persistentId || player.id;
+      if (!room.gameState.turnQueue.includes(pId)) {
+        room.gameState.turnQueue.push(pId);
+      }
     }
 
     this.broadcastState(room);
@@ -698,11 +683,13 @@ class RoomManager {
     try {
       const room = this.rooms.get(roomId);
       if (room) {
-        room.players = room.players.filter(p => p.id !== socketId);
-        room.gameState.turnQueue = room.gameState.turnQueue.filter(id => id !== socketId);
-        room.gameState.correctGuessers = room.gameState.correctGuessers.filter(id => id !== socketId);
-        
         const player = this.players.get(socketId);
+        const pId = player ? (player.persistentId || player.id) : socketId;
+
+        room.players = room.players.filter(p => p.id !== socketId);
+        room.gameState.turnQueue = room.gameState.turnQueue.filter(id => id !== pId);
+        room.gameState.correctGuessers = room.gameState.correctGuessers.filter(id => id !== pId);
+        
         if (player) {
           player.roomId = null;
         }
@@ -717,7 +704,7 @@ class RoomManager {
         }
 
         // Handle if current drawer leaves
-        if (room.gameState.currentDrawerId === socketId) {
+        if (room.gameState.currentDrawerId === pId) {
            if (room.gameState.correctGuessers.length === 0 && room.players.length > 0) {
               this.transitionToRoundEnd(room, 'drawer_left');
            } else {
@@ -753,6 +740,14 @@ class RoomManager {
 
     const oldSocketId = existingPlayer.id;
 
+    // Rescue player: cancel their eviction timer
+    const pId = existingPlayer.persistentId || existingPlayer.name;
+    if (this.evictionTimers.has(pId)) {
+      console.log(`[GRACE PERIOD] Rescued player ${existingPlayer.name} (${pId}). Cancelling 10s eviction timer.`);
+      clearTimeout(this.evictionTimers.get(pId));
+      this.evictionTimers.delete(pId);
+    }
+
     if (oldSocketId === newSocketId) {
       console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Socket ID unchanged: ${newSocketId}`);
       existingPlayer.isOffline = false;
@@ -763,7 +758,7 @@ class RoomManager {
 
     console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Old Socket ID: ${oldSocketId}, New Socket ID: ${newSocketId}`);
     
-    // Update Player ID mappingFIRST to prevent handledisconnect collisions
+    // Update Player ID mapping
     existingPlayer.id = newSocketId;
     existingPlayer.isOffline = false;
     delete existingPlayer.offlineSince;
@@ -771,21 +766,6 @@ class RoomManager {
     // Update RoomManager players map
     this.players.delete(oldSocketId);
     this.players.set(newSocketId, existingPlayer);
-
-    // Update Room gameState with new socket ID everywhere (guarded and cautious)
-    const isPlayerInRoom = room.players.some(p => p.id === newSocketId);
-    if (isPlayerInRoom) {
-      if (room.gameState.currentDrawerId && room.gameState.currentDrawerId === oldSocketId) {
-        console.log(`[RECONNECT - DRAWER] Updating currentDrawerId from ${oldSocketId} to ${newSocketId}`);
-        room.gameState.currentDrawerId = newSocketId;
-      }
-      if (room.gameState.turnQueue) {
-        room.gameState.turnQueue = room.gameState.turnQueue.map(id => id === oldSocketId ? newSocketId : id);
-      }
-      if (room.gameState.correctGuessers) {
-        room.gameState.correctGuessers = room.gameState.correctGuessers.map(id => id === oldSocketId ? newSocketId : id);
-      }
-    }
     
     // Also explicitly update the chat messages and guesses to reference the new ID natively
     if (room.chatMessages) {
@@ -858,6 +838,39 @@ class RoomManager {
         if (room) {
           // Broadcast state so clients see isOffline
           this.broadcastState(room);
+
+          // Grace period setup (10 seconds)
+          const pId = pToUpdate.persistentId || pToUpdate.name;
+          if (this.evictionTimers.has(pId)) {
+            clearTimeout(this.evictionTimers.get(pId));
+          }
+
+          console.log(`[GRACE PERIOD] Starting 10-second grace timer for disconnected player ${pToUpdate.name} (${pId})`);
+          const timer = setTimeout(() => {
+            try {
+              const currentRoom = this.rooms.get(roomId!);
+              if (currentRoom) {
+                const checkPlayer = currentRoom.players.find(p => (p.persistentId || p.name) === pId);
+                if (checkPlayer && checkPlayer.isOffline) {
+                  console.log(`[GRACE PERIOD] Eviction timeout triggered for ${checkPlayer.name}. Cleaning up player representation.`);
+                  
+                  this.removePlayerFromRoom(roomId!, checkPlayer.id);
+                  this.players.delete(checkPlayer.id);
+                  this.evictionTimers.delete(pId);
+
+                  this.broadcastMessage(currentRoom, {
+                    id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                    text: `خرج ${checkPlayer.name} من اللعبة`,
+                    type: 'system'
+                  });
+                }
+              }
+            } catch (err) {
+              console.error("Error running grace eviction:", err);
+            }
+          }, 10000);
+
+          this.evictionTimers.set(pId, timer);
         }
       }
     } catch (e) {

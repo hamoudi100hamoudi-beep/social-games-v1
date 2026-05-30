@@ -338,13 +338,15 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
   const amIDrawer = React.useMemo(() => {
     if (!gameState.currentDrawerId) return false;
-    const drawerPlayer = currentPlayers.find(p => p.id === gameState.currentDrawerId);
+    if (gameState.currentDrawerId === persistentPlayerId) return true;
+    
+    // fallback: locate the player slots
+    const drawerPlayer = currentPlayers.find(p => p.persistentId === gameState.currentDrawerId || p.id === gameState.currentDrawerId);
     if (drawerPlayer && drawerPlayer.persistentId) {
       return drawerPlayer.persistentId === persistentPlayerId;
     }
     const slotMe = currentPlayers.find(p => p.persistentId === persistentPlayerId);
-    const slotDrawer = currentPlayers.find(p => p.id === gameState.currentDrawerId);
-    if (slotMe && slotDrawer && slotMe.persistentId === slotDrawer.persistentId) {
+    if (slotMe && drawerPlayer && slotMe.persistentId === drawerPlayer.persistentId) {
       return true;
     }
     return gameState.currentDrawerId === socketId;
@@ -352,7 +354,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
   const drawerPersistentId = React.useMemo(() => {
     if (!gameState.currentDrawerId) return 'lobby';
-    const drawerPlayer = currentPlayers.find(p => p.id === gameState.currentDrawerId);
+    const drawerPlayer = currentPlayers.find(p => p.persistentId === gameState.currentDrawerId || p.id === gameState.currentDrawerId);
     return drawerPlayer?.persistentId || gameState.currentDrawerId;
   }, [gameState.currentDrawerId, currentPlayers]);
 
@@ -491,7 +493,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
         name: p.name,
         points: p.score || 0,
         wins: p.wins || 0,
-        isCurrent: isActiveRound && state.gameState?.currentDrawerId === p.id,
+        isCurrent: isActiveRound && state.gameState?.currentDrawerId === (p.persistentId || p.id),
         isOffline: p.isOffline || false,
         avatar: p.avatar,
         isEmpty: false,
@@ -753,7 +755,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   const timerPercentage = Math.max(0, Math.min(100, (gameState.timeLeft / getMaxTime()) * 100));
 
   const getCurrentDrawerName = () => {
-    const player = currentPlayers.find(p => p.id === gameState.currentDrawerId);
+    const player = currentPlayers.find(p => p.persistentId === gameState.currentDrawerId || p.id === gameState.currentDrawerId);
     return player ? player.name : '';
   };
 
@@ -972,29 +974,29 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
              </div>
           )}
 
-          {/* Overlays for CHOOSING state (non-drawer) */}
-          {gameState.status === 'CHOOSING' && gameState.currentDrawerId !== socketId && (
-             <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
-                <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
-                   <div className="mb-4">
-                      <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
-                        NEW TURN!
-                      </span>
-                   </div>
-                   
-                   {/* Avatar element */}
-                   <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-[#F8FAFC] border-[5px] border-[#0A2540] rounded-full flex items-center justify-center shadow-lg mb-4 relative overflow-visible">
-                      <span className="text-4xl sm:text-5xl">{currentPlayers.find(p => p.id === gameState.currentDrawerId)?.avatar}</span>
-                      <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#FBBF24] rounded-full flex items-center justify-center shadow border-2 border-[#0A2540]">
-                        <span className="text-xs">✏️</span>
-                      </div>
-                   </div>
+           {/* Overlays for CHOOSING state (non-drawer) */}
+           {gameState.status === 'CHOOSING' && !amIDrawer && (
+              <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
+                 <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
+                    <div className="mb-4">
+                       <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                         NEW TURN!
+                       </span>
+                    </div>
+                    
+                    {/* Avatar element */}
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-[#F8FAFC] border-[5px] border-[#0A2540] rounded-full flex items-center justify-center shadow-lg mb-4 relative overflow-visible">
+                       <span className="text-4xl sm:text-5xl">{currentPlayers.find(p => p.persistentId === gameState.currentDrawerId || p.id === gameState.currentDrawerId)?.avatar}</span>
+                       <div className="absolute -bottom-1 -right-1 w-7 h-7 bg-[#FBBF24] rounded-full flex items-center justify-center shadow border-2 border-[#0A2540]">
+                         <span className="text-xs">✏️</span>
+                       </div>
+                    </div>
 
-                   <p className="text-[#728299] text-sm sm:text-base font-extrabold mb-0.5">It's the turn of</p>
-                   <h3 className="text-[#0B2E5C] font-black text-xl sm:text-2xl tracking-wide">{getCurrentDrawerName()}</h3>
-                </div>
-             </div>
-          )}
+                    <p className="text-[#728299] text-sm sm:text-base font-extrabold mb-0.5">It's the turn of</p>
+                    <h3 className="text-[#0B2E5C] font-black text-xl sm:text-2xl tracking-wide">{getCurrentDrawerName()}</h3>
+                 </div>
+              </div>
+           )}
 
           {/* Overlays for ROUND_END state */}
           {gameState.status === 'ROUND_END' && (() => {
