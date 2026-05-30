@@ -38,13 +38,20 @@ async function startServer() {
       }
     });
 
-    socket.on('join_room', ({ roomId, nickname, avatar, playerId }, callback) => {
+    socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly }, callback) => {
       try {
         // Try to reconnect first by playerId or nickname
         const reconnectedRoom = roomManager.reconnectPlayer(roomId, playerId || '', nickname, socket.id);
         if (reconnectedRoom) {
             socket.join(roomId);
             if (callback) callback({ success: true, reconnected: true });
+            return;
+        }
+
+        // If reconnectOnly is true, it means the client was attempting to reconnect to an existing session
+        // but the player or room was evicted/timed out.
+        if (reconnectOnly) {
+            if (callback) callback({ error: 'session_expired' });
             return;
         }
 

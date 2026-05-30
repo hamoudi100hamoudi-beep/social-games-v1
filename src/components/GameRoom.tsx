@@ -9,6 +9,7 @@ interface GameRoomProps {
   room: string;
   avatar: string;
   onLeave?: () => void;
+  justJoined?: boolean;
 }
 
 interface Message {
@@ -280,7 +281,7 @@ const SmoothTimer = ({ gameState, maxTime, isFullScreen = false }: { gameState: 
   );
 };
 
-export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomProps) {
+export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }: GameRoomProps) {
   const { socket, isConnected, socketId } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const bgTouchStartTime = React.useRef<number>(0);
@@ -468,19 +469,27 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
   useEffect(() => {
     if (!socket || !isConnected) return;
     
-    console.log('[GameRoom] Connection active, sending join_room:', room, 'with playerId:', persistentPlayerId, 'socket:', socket.id);
+    const reconnectOnly = !justJoined;
+    console.log('[GameRoom] Connection active, sending join_room:', room, 'with playerId:', persistentPlayerId, 'socket:', socket.id, 'reconnectOnly:', reconnectOnly);
     socket.emit('join_room', {
       roomId: room,
       nickname,
       avatar: avatar || nickname.charAt(0).toUpperCase(),
-      playerId: persistentPlayerId
+      playerId: persistentPlayerId,
+      reconnectOnly: reconnectOnly
     }, (res: any) => {
       if (res && res.success) {
         console.log('[GameRoom] Successfully joined/reconnected room, requesting pull sync...');
         socket.emit('request_round_sync');
+      } else if (res && (res.error === 'session_expired' || res.reason === 'session_expired')) {
+        console.warn('[GameRoom] Server session expired or evicted. Redirecting to setup/lobby.');
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('gartic_player_room');
+        }
+        onLeave?.();
       }
     });
-  }, [socket, isConnected, room, nickname, avatar, persistentPlayerId]);
+  }, [socket, isConnected, room, nickname, avatar, persistentPlayerId, justJoined]);
 
   // --- Block 2: Register Persistent Socket Listeners ---
   useEffect(() => {
@@ -516,6 +525,9 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
     const onReceiveMessage = (msg: any) => {
       setChatMessages((prev) => {
+        if (prev.some(m => m.id === msg.id)) {
+          return prev;
+        }
         const updated = [...prev, {
           ...msg,
           isSelf: msg.senderId === socket.id
@@ -533,6 +545,9 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
 
     const onReceiveGuess = (msg: any) => {
       setGuesses((prev) => {
+        if (prev.some(m => m.id === msg.id)) {
+          return prev;
+        }
         const updated = [...prev, {
           ...msg,
           isSelf: msg.senderId === socket.id

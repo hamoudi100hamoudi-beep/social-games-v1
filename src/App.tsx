@@ -27,6 +27,8 @@ export default function App() {
     return 'lobby';
   });
 
+  const [justJoined, setJustJoined] = useState(false);
+
   const handlePlay = (nickname: string, room: string, avatar: string) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('gartic_player_nickname', nickname);
@@ -34,6 +36,7 @@ export default function App() {
       localStorage.setItem('gartic_player_avatar', avatar);
     }
     setPlayerInfo({ nickname, room, avatar });
+    setJustJoined(true);
     setGameState('game');
   };
 
@@ -41,6 +44,7 @@ export default function App() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('gartic_player_room');
     }
+    setJustJoined(false);
     setGameState('lobby');
   };
 
@@ -49,7 +53,13 @@ export default function App() {
       {gameState === 'lobby' ? (
         <Lobby onPlay={handlePlay} />
       ) : (
-        <GameRoom nickname={playerInfo.nickname} room={playerInfo.room} avatar={playerInfo.avatar} onLeave={handleLeaveRoom} />
+        <GameRoom 
+          nickname={playerInfo.nickname} 
+          room={playerInfo.room} 
+          avatar={playerInfo.avatar} 
+          justJoined={justJoined}
+          onLeave={handleLeaveRoom} 
+        />
       )}
     </>
   );

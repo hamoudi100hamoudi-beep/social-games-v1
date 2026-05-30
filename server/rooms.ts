@@ -459,7 +459,7 @@ class RoomManager {
         });
       }
 
-      const isDrawer = p.id === room.gameState.currentDrawerId;
+      const isDrawer = p.id === room.gameState.currentDrawerId || (p.persistentId && p.persistentId === room.gameState.currentDrawerId);
       const { drawHistory, ...publicGameState } = room.gameState;
       this.io.to(p.id).emit('room_state_update', {
         roomId: room.id,
