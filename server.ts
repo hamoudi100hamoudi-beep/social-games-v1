@@ -13,7 +13,8 @@ async function startServer() {
   // Setup Socket.io
   const io = new Server(httpServer, {
     cors: { origin: '*' },
-    transports: ['websocket']
+    transports: ['websocket'],
+    maxHttpBufferSize: 1e8 // 100MB payload limit (solves infinite disconnect loop when history is huge)
   });
 
   roomManager.setIo(io);
