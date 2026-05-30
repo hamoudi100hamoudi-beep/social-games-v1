@@ -91,7 +91,13 @@ async function startServer() {
           persistentId: playerId
         });
         
-        if (callback) callback({ success: true });
+        if (callback) callback({ success: true, reconnected: false });
+
+        // Instantly force-sync state strictly to the newly joined player representation
+        const targetPlayer = room.players.find(p => p.id === socket.id);
+        if (targetPlayer) {
+          roomManager.sendStateToPlayer(room, targetPlayer);
+        }
 
         // Send draw history strictly to the newly joined player
         if (room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {
