@@ -15,48 +15,56 @@ const SocketContext = createContext<SocketContextData>({
 
 export const useSocket = () => useContext(SocketContext);
 
+// Global Socket Instance Singleton outside the React rendering/lifecycle tree
+const socketInstance = io(typeof window !== 'undefined' ? window.location.origin : 'https://social-games-v1.onrender.com', {
+  autoConnect: true,
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  transports: ['websocket'],
+  withCredentials: true,
+});
+
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [socketId, setSocketId] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(socketInstance.connected);
+  const [socketId, setSocketId] = useState<string | null>(socketInstance.id || null);
 
   useEffect(() => {
-    // Automatically connects to the current host with stable factory options
-    const socketInstance = io(typeof window !== 'undefined' ? window.location.origin : 'https://social-games-v1.onrender.com', {
-      autoConnect: true,
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      transports: ['websocket'],
-      withCredentials: true,
-    });
+    // Sync initial state if already connected
+    setIsConnected(socketInstance.connected);
+    setSocketId(socketInstance.id || null);
 
-    socketInstance.on('connect', () => {
+    const handleConnect = () => {
       setIsConnected(true);
       setSocketId(socketInstance.id || null);
       console.log('[Socket] Connected!', socketInstance.id);
-    });
+    };
 
-    socketInstance.on('disconnect', () => {
+    const handleDisconnect = () => {
       setIsConnected(false);
       setSocketId(null);
       console.log('[Socket] Disconnected!');
-    });
+    };
 
-    socketInstance.on('force_disconnect', (data) => {
+    const handleForceDisconnect = (data: any) => {
       console.warn('[Socket] Force disconnected by server:', data);
       socketInstance.disconnect(); // prevent auto-reconnect
-    });
+    };
 
-    setSocket(socketInstance);
+    socketInstance.on('connect', handleConnect);
+    socketInstance.on('disconnect', handleDisconnect);
+    socketInstance.on('force_disconnect', handleForceDisconnect);
 
     return () => {
-      socketInstance.disconnect();
+      // ONLY detach event listeners to prevent duplicate triggers; NEVER disconnect the global instance here
+      socketInstance.off('connect', handleConnect);
+      socketInstance.off('disconnect', handleDisconnect);
+      socketInstance.off('force_disconnect', handleForceDisconnect);
     };
   }, []);
 
   return (
-    <SocketContext.Provider value={{ socket, isConnected, socketId }}>
+    <SocketContext.Provider value={{ socket: socketInstance, isConnected, socketId }}>
       {children}
     </SocketContext.Provider>
   );
