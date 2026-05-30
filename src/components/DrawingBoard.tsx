@@ -1141,11 +1141,7 @@ export default function DrawingBoard({
          const canvasEl = canvasRef.current;
          const tempCanvasEl = tempCanvasRef.current;
          
-         canvasEl.width = LOGICAL_WIDTH * DPR;
-         canvasEl.height = LOGICAL_HEIGHT * DPR;
-         tempCanvasEl.width = LOGICAL_WIDTH * DPR;
-         tempCanvasEl.height = LOGICAL_HEIGHT * DPR;
-         
+         // STRICT DIRECTIVE: Avoid mutating .width and .height here to prevent browser layout-induced remounting of drawing board!
          const newCtx = canvasEl.getContext('2d', { alpha: false });
          const newTempCtx = tempCanvasEl.getContext('2d');
          
