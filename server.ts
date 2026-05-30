@@ -45,33 +45,8 @@ async function startServer() {
         if (reconnectedRoom) {
             socket.join(roomId);
             if (callback) callback({ success: true, reconnected: true });
-
-            // Instantly send the current room state strictly to the reconnected player
-            const targetPlayer = reconnectedRoom.players.find(p => p.id === socket.id);
-            if (targetPlayer) {
-              roomManager.sendStateToPlayer(reconnectedRoom, targetPlayer);
-            }
-
-            // Send draw history strictly to the reconnected player
-            if (reconnectedRoom.gameState.drawHistory && reconnectedRoom.gameState.drawHistory.length > 0) {
-               socket.emit('draw_history_sync', reconnectedRoom.gameState.drawHistory);
-            }
-
-            // Send past chat messages strictly to the reconnected player
-            if (reconnectedRoom.chatMessages && reconnectedRoom.chatMessages.length > 0) {
-              reconnectedRoom.chatMessages.forEach((msg) => {
-                socket.emit('receive_message', msg);
-              });
-            }
-            // Send past guess messages strictly to the reconnected player
-            if (reconnectedRoom.guessMessages && reconnectedRoom.guessMessages.length > 0) {
-              reconnectedRoom.guessMessages.forEach((msg) => {
-                socket.emit('receive_guess', msg);
-              });
-            }
-
             return;
-          }
+        }
 
         const existingRoom = roomManager.getRoom(roomId);
         const onlinePlayersCount = existingRoom ? existingRoom.players.filter(p => !p.isOffline).length : 0;
@@ -93,30 +68,6 @@ async function startServer() {
         
         if (callback) callback({ success: true, reconnected: false });
 
-        // Instantly force-sync state strictly to the newly joined player representation
-        const targetPlayer = room.players.find(p => p.id === socket.id);
-        if (targetPlayer) {
-          roomManager.sendStateToPlayer(room, targetPlayer);
-        }
-
-        // Send draw history strictly to the newly joined player
-        if (room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {
-           socket.emit('draw_history_sync', room.gameState.drawHistory);
-        }
-
-        // Send past chat messages strictly to the newly joined player
-        if (room.chatMessages && room.chatMessages.length > 0) {
-          room.chatMessages.forEach((msg) => {
-            socket.emit('receive_message', msg);
-          });
-        }
-        // Send past guess messages strictly to the newly joined player
-        if (room.guessMessages && room.guessMessages.length > 0) {
-          room.guessMessages.forEach((msg) => {
-            socket.emit('receive_guess', msg);
-          });
-        }
-
         // System Message
         const joinMsg = {
           id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
@@ -128,6 +79,42 @@ async function startServer() {
       } catch (e) {
         console.error(e);
         if (callback) callback({ error: 'حدث خطأ أثناء الانضمام للغرفة' });
+      }
+    });
+
+    socket.on('request_round_sync', () => {
+      try {
+        const player = roomManager.getPlayer(socket.id);
+        if (player && player.roomId) {
+          const room = roomManager.getRoom(player.roomId);
+          if (room) {
+            console.log(`[Socket] request_round_sync received from ${player.name} (${socket.id}) for room ${room.id}`);
+            
+            // 1. Send current room state
+            roomManager.sendStateToPlayer(room, player);
+
+            // 2. Send draw history
+            if (room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {
+              socket.emit('draw_history_sync', room.gameState.drawHistory);
+            }
+
+            // 3. Send past chat messages
+            if (room.chatMessages && room.chatMessages.length > 0) {
+              room.chatMessages.forEach((msg) => {
+                socket.emit('receive_message', msg);
+              });
+            }
+
+            // 4. Send past guess messages
+            if (room.guessMessages && room.guessMessages.length > 0) {
+              room.guessMessages.forEach((msg) => {
+                socket.emit('receive_guess', msg);
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Error in request_round_sync:", e);
       }
     });
 
@@ -218,6 +205,23 @@ async function startServer() {
           console.log(`[Socket] Sending active canvas sync history to player ${player.name} (${socket.id})`);
           socket.emit('draw_history_sync', room.gameState.drawHistory);
         }
+      }
+    });
+
+    socket.on('debug_room_status', () => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        const room = roomManager.getRoom(player.roomId);
+        if (room) {
+          console.error(`[DEBUG ROOM STATUS] Room: ${room.id}, PlayersCount: ${room.players.length}`);
+          room.players.forEach((p, idx) => {
+            console.error(`  -> Player[${idx}]: Name="${p.name}", SocketID="${p.id}", PersistentID="${p.persistentId}", isOffline=${p.isOffline}`);
+          });
+        } else {
+          console.error(`[DEBUG ROOM STATUS] Room not found for ID: ${player.roomId}`);
+        }
+      } else {
+        console.error(`[DEBUG ROOM STATUS] Player not found/no room assigned for socket: ${socket.id}`);
       }
     });
 

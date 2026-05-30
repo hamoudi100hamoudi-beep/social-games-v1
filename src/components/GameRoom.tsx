@@ -472,6 +472,11 @@ export default function GameRoom({ nickname, room, avatar, onLeave }: GameRoomPr
       nickname,
       avatar: avatar || nickname.charAt(0).toUpperCase(),
       playerId: persistentPlayerId
+    }, (res: any) => {
+      if (res && res.success) {
+        console.log('[GameRoom] Successfully joined/reconnected room, requesting pull sync...');
+        socket.emit('request_round_sync');
+      }
     });
   }, [socket, isConnected, room, nickname, avatar, persistentPlayerId]);
 

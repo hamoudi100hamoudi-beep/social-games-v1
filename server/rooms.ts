@@ -38,11 +38,11 @@ class RoomManager {
   private tick() {
     try {
       const now = Date.now();
-      const offlineTimeout = 130 * 1000;
+      const offlineTimeout = 15 * 1000; // 15 seconds grace period
       
       this.rooms.forEach(room => {
         try {
-          // Clean up players who are offline for > 120 seconds
+          // Clean up players who are offline for > 15 seconds
           const playersToEvict: string[] = [];
           room.players.forEach(p => {
             if (p.isOffline && p.offlineSince && (now - p.offlineSince > offlineTimeout)) {
@@ -772,12 +772,20 @@ class RoomManager {
     this.players.delete(oldSocketId);
     this.players.set(newSocketId, existingPlayer);
 
-    // Update Room gameState with new socket ID everywhere
-    if (room.gameState.currentDrawerId === oldSocketId) {
-      room.gameState.currentDrawerId = newSocketId;
+    // Update Room gameState with new socket ID everywhere (guarded and cautious)
+    const isPlayerInRoom = room.players.some(p => p.id === newSocketId);
+    if (isPlayerInRoom) {
+      if (room.gameState.currentDrawerId && room.gameState.currentDrawerId === oldSocketId) {
+        console.log(`[RECONNECT - DRAWER] Updating currentDrawerId from ${oldSocketId} to ${newSocketId}`);
+        room.gameState.currentDrawerId = newSocketId;
+      }
+      if (room.gameState.turnQueue) {
+        room.gameState.turnQueue = room.gameState.turnQueue.map(id => id === oldSocketId ? newSocketId : id);
+      }
+      if (room.gameState.correctGuessers) {
+        room.gameState.correctGuessers = room.gameState.correctGuessers.map(id => id === oldSocketId ? newSocketId : id);
+      }
     }
-    room.gameState.turnQueue = room.gameState.turnQueue.map(id => id === oldSocketId ? newSocketId : id);
-    room.gameState.correctGuessers = room.gameState.correctGuessers.map(id => id === oldSocketId ? newSocketId : id);
     
     // Also explicitly update the chat messages and guesses to reference the new ID natively
     if (room.chatMessages) {
