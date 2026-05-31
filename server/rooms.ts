@@ -438,43 +438,39 @@ class RoomManager {
   }
 
   public sendStateToPlayer(room: Room, p: Player) {
-    if (this.io) {
-      // Create a masked version of the word for everyone
-      const word = room.gameState.currentWord || '';
-      const charCount = word.replace(/\s/g, '').length;
-      let maxHints = charCount < 3 ? 1 : 2;
-      if (charCount >= 5) {
-         maxHints = 3;
-      }
-      const hintsUsed = room.gameState.hintsUsed || 0;
-      const revealedIndices = room.gameState.revealedIndices || [];
+    if (!this.io || !room || !p) return;
+    try {
+      const currentDrawerId = room.gameState?.currentDrawerId || '';
+      const isDrawer = p.id === currentDrawerId || (p.persistentId && p.persistentId === currentDrawerId);
       
+      const word = room.gameState?.currentWord || '';
+      const charCount = word.replace(/\s/g, '').length;
       let maskedWordArray = [] as any[];
-      if (hintsUsed >= 1) {
+      
+      if (room.gameState?.revealedIndices) {
         maskedWordArray = word.split('').map((char, index) => {
            if (char === ' ') return { isSpace: true, char: ' ' };
-           let reveal = false;
-           if (revealedIndices.includes(index)) reveal = true;
+           const reveal = room.gameState.revealedIndices.includes(index);
            return { isSpace: false, char: reveal ? char : null, index };
         });
       }
 
-      const isDrawer = p.id === room.gameState.currentDrawerId || (p.persistentId && p.persistentId === room.gameState.currentDrawerId);
-      
-      try {
-        this.io.to(p.id).emit('room_state_update', {
-          roomId: room.id,
-          players: room.players,
-          gameState: {
-             ...room.gameState,
-             currentWord: isDrawer ? room.gameState.currentWord : null,
-             wordOptions: isDrawer ? room.gameState.wordOptions : [],
-             maskedWordArray: maskedWordArray
-          }
-        });
-      } catch (err) {
-        console.error(`[Socket] Error sending state to player ${p.name}:`, err);
-      }
+      // إرسال البيانات مع تأمين الـ drawHistory بحد أقصى لمنع الـ RAM Bloat
+      const safeDrawHistory = room.gameState?.drawHistory ? room.gameState.drawHistory.slice(-500) : [];
+
+      this.io.to(p.id).emit('room_state_update', {
+        roomId: room.id,
+        players: room.players || [],
+        gameState: {
+           ...room.gameState,
+           drawHistory: safeDrawHistory,
+           currentWord: isDrawer ? word : null,
+           wordOptions: isDrawer ? (room.gameState.wordOptions || []) : [],
+           maskedWordArray: maskedWordArray
+        }
+      });
+    } catch (err) {
+      console.error("[CRITICAL CRASH PREVENTED] Error in sendStateToPlayer:", err);
     }
   }
 
