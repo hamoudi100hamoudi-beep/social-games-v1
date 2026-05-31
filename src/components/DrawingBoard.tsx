@@ -680,12 +680,7 @@ export default function DrawingBoard({
     applyTransform();
   }, [baseScale]);
 
-  useEffect(() => {
-    if (socket) {
-      console.log("[DrawingBoard] Requesting canvas sync on mount...");
-      socket.emit('request_canvas_sync');
-    }
-  }, [socket]);
+  // DrawingBoard redundant on-mount request_canvas_sync removed in Phase 2 consolidated join flow
 
   useEffect(() => {
     const container = containerRef.current;
