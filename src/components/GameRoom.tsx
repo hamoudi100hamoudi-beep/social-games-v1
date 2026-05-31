@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useSocket } from './SocketProvider';
-import { MainDrawingBoard } from './MainDrawingBoard';
+import { DrawingBoard } from './DrawingBoard';
 
 interface GameRoomProps {
   nickname: string;
@@ -36,7 +36,7 @@ export default function GameRoom({ nickname, room, avatar }: GameRoomProps) {
   }
 
   return (
-    <MainDrawingBoard
+    <DrawingBoard
       socket={socket}
       roomId={room}
       nickname={nickname}
