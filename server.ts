@@ -224,21 +224,40 @@ async function startServer() {
     });
 
     socket.on('disconnect', () => {
-      console.log(`[Socket] Client disconnected, securing ghost state: ${socket.id}`);
+      console.log(`[Socket] Raw disconnect detected for: ${socket.id}`);
       try {
+        // جلب اللاعب بالسوكت الحالي الذي يفصل الآن
         const player = roomManager.getPlayer(socket.id);
+        
         if (player && player.roomId) {
+          const pId = player.persistentId || player.id;
+          
+          // تأمين الهاتف: نضع علامة أوفلاين مؤقتة لحمايته
           player.isOffline = true;
           
+          console.log(`[Grace Period] Player ${player.name} went offline. Holding session for 30s...`);
+          
           setTimeout(() => {
-            const currentRoom = roomManager.getRoom(player.roomId);
-            const currentPlayerState = currentRoom ? currentRoom.players.find(p => p.persistentId === player.persistentId) : null;
-            if (!currentPlayerState || currentPlayerState.isOffline) {
-              roomManager.handleDisconnect(socket.id);
-              console.log(`[Grace Period] Player ${player.name} evicted after timeout.`);
+            try {
+              // التحقق الحاسم بعد 30 ثانية:
+              // نجلب حالة اللاعب الحالية في السيرفر عبر الـ Room للتأكد هل قام بتحديث السوكت الخاص به أم لا؟
+              const currentRoom = roomManager.getRoom(player.roomId);
+              if (currentRoom) {
+                const updatedPlayer = currentRoom.players.find(p => (p.persistentId && p.persistentId === player.persistentId) || p.name === player.name);
+                
+                // إذا مرت 30 ثانية وما زال اللاعب يحمل علامة offline، أو لم يقم بتحديث السوكت الخاص به، يتم طرده وتنظيف الغرفة
+                if (updatedPlayer && updatedPlayer.isOffline) {
+                  console.log(`[Grace Period Timeout] Evicting player ${player.name} due to inactivity.`);
+                  roomManager.handleDisconnect(updatedPlayer.id);
+                }
+              }
+            } catch (innerErr) {
+              console.error("Error inside grace period timeout handler:", innerErr);
             }
-          }, 30000); 
+          }, 30000); // فترة سماح 30 ثانية كاملة للهواتف
+          
         } else {
+          // إذا كان السوكت ميت ولا ينتمي لأي لاعب نشط حالياً، نقوم بتنظيفه فوراً دون المساس باللاعبين
           roomManager.handleDisconnect(socket.id);
         }
       } catch (e) {
