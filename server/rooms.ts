@@ -460,17 +460,21 @@ class RoomManager {
       }
 
       const isDrawer = p.id === room.gameState.currentDrawerId || (p.persistentId && p.persistentId === room.gameState.currentDrawerId);
-      const { drawHistory, ...publicGameState } = room.gameState;
-      this.io.to(p.id).emit('room_state_update', {
-        roomId: room.id,
-        players: room.players,
-        gameState: {
-           ...publicGameState,
-           currentWord: isDrawer ? room.gameState.currentWord : null,
-           wordOptions: isDrawer ? room.gameState.wordOptions : [],
-           maskedWordArray: maskedWordArray
-        }
-      });
+      
+      try {
+        this.io.to(p.id).emit('room_state_update', {
+          roomId: room.id,
+          players: room.players,
+          gameState: {
+             ...room.gameState,
+             currentWord: isDrawer ? room.gameState.currentWord : null,
+             wordOptions: isDrawer ? room.gameState.wordOptions : [],
+             maskedWordArray: maskedWordArray
+          }
+        });
+      } catch (err) {
+        console.error(`[Socket] Error sending state to player ${p.name}:`, err);
+      }
     }
   }
 
@@ -757,7 +761,6 @@ class RoomManager {
       console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Socket ID unchanged: ${newSocketId}`);
       existingPlayer.isOffline = false;
       delete existingPlayer.offlineSince;
-      this.broadcastState(room);
       return room;
     }
 
@@ -784,7 +787,6 @@ class RoomManager {
        });
     }
 
-    this.broadcastState(room);
     return room;
   }
 
