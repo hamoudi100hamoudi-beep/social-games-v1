@@ -573,6 +573,11 @@ class RoomManager {
     if (!room.gameState.redoStack) room.gameState.redoStack = [];
     room.gameState.drawHistory.push({ event, data });
     
+    // Safely limit history length to 500 to protect mobile clients from RAM/CPU bloat
+    if (room.gameState.drawHistory.length > 500) {
+      room.gameState.drawHistory = room.gameState.drawHistory.slice(-500);
+    }
+    
     // Any new drawing action clears the redo stack
     //@ts-ignore
     room.gameState.redoStack = [];

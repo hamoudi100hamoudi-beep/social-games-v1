@@ -1198,15 +1198,21 @@ export default function DrawingBoard({
             else if (event === 'draw_move') onDrawMove(data, true);
             else if (event === 'draw_end') {
                onDrawEnd(data, true, true);
-               history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
             }
             else if (event === 'draw_action') {
                onDrawAction(data, true, true);
-               history.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
             }
          } catch (err) {
             console.error("[History Sync] Error replaying draw command:", err, cmd);
          }
+      }
+      
+      // Save ONE single final snapshot of the canvas to the history stack safely
+      try {
+         const finalSnapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
+         history.current.push(finalSnapshot);
+      } catch (err) {
+         console.error("[History Sync] Error saving final snapshot:", err);
       }
       
       const MAX_HISTORY = 5;
