@@ -376,8 +376,7 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
         reconnectOnly: reconnectOnly
       }, (res: any) => {
         if (res && res.success) {
-          console.log('[GameRoom] Successfully joined/reconnected room, requesting pull sync...');
-          socket.emit('request_round_sync');
+          console.log('[GameRoom] Successfully joined/reconnected room.');
           hasEmittedJoin.current = true;
         } else if (res && (res.error === 'session_expired' || res.reason === 'session_expired')) {
           console.warn('[GameRoom] Server session expired or evicted. Redirecting to setup/lobby.');
