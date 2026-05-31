@@ -50,7 +50,9 @@ async function startServer() {
                 roomManager.sendStateToPlayer(reconnectedRoom, player);
 
                 if (reconnectedRoom.gameState.drawHistory && reconnectedRoom.gameState.drawHistory.length > 0) {
-                  socket.emit('draw_history_sync', reconnectedRoom.gameState.drawHistory);
+                  // Slice to last 200 items dynamically to save mobile memory
+                  const slicedHistory = reconnectedRoom.gameState.drawHistory.slice(-200);
+                  socket.emit('draw_history_sync', slicedHistory);
                 }
 
                 if (reconnectedRoom.chatMessages && reconnectedRoom.chatMessages.length > 0) {
@@ -94,7 +96,9 @@ async function startServer() {
             roomManager.sendStateToPlayer(room, player);
 
             if (room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {
-              socket.emit('draw_history_sync', room.gameState.drawHistory);
+              // Slice to last 200 items dynamically to save mobile memory
+              const slicedHistory = room.gameState.drawHistory.slice(-200);
+              socket.emit('draw_history_sync', slicedHistory);
             }
 
             if (room.chatMessages && room.chatMessages.length > 0) {
@@ -224,44 +228,34 @@ async function startServer() {
     });
 
     socket.on('disconnect', () => {
-      console.log(`[Socket] Raw disconnect detected for: ${socket.id}`);
+      console.log(`[Socket] Raw disconnect detected for socket id: ${socket.id}`);
       try {
-        // جلب اللاعب بالسوكت الحالي الذي يفصل الآن
         const player = roomManager.getPlayer(socket.id);
-        
         if (player && player.roomId) {
-          const pId = player.persistentId || player.id;
-          
-          // تأمين الهاتف: نضع علامة أوفلاين مؤقتة لحمايته
+          // وضع علامة أوفلاين لحماية الجلسة لمدة 30 ثانية كاملة
           player.isOffline = true;
-          
-          console.log(`[Grace Period] Player ${player.name} went offline. Holding session for 30s...`);
+          console.log(`[Grace Period] Player ${player.name} went offline مؤقتًا. Holding session...`);
           
           setTimeout(() => {
             try {
-              // التحقق الحاسم بعد 30 ثانية:
-              // نجلب حالة اللاعب الحالية في السيرفر عبر الـ Room للتأكد هل قام بتحديث السوكت الخاص به أم لا؟
-              const currentRoom = roomManager.getRoom(player.roomId);
+              const currentRoom = roomManager.getRoom(player.roomId!);
               if (currentRoom) {
                 const updatedPlayer = currentRoom.players.find(p => (p.persistentId && p.persistentId === player.persistentId) || p.name === player.name);
-                
-                // إذا مرت 30 ثانية وما زال اللاعب يحمل علامة offline، أو لم يقم بتحديث السوكت الخاص به، يتم طرده وتنظيف الغرفة
+                // إذا انقضت الـ 30 ثانية وما زال اللاعب أوفلاين ولم يربط سوكت جديد، يتم حذفه طبيعيًا
                 if (updatedPlayer && updatedPlayer.isOffline) {
                   console.log(`[Grace Period Timeout] Evicting player ${player.name} due to inactivity.`);
                   roomManager.handleDisconnect(updatedPlayer.id);
                 }
               }
             } catch (innerErr) {
-              console.error("Error inside grace period timeout handler:", innerErr);
+              console.error("Error inside grace period timeout:", innerErr);
             }
-          }, 30000); // فترة سماح 30 ثانية كاملة للهواتف
-          
+          }, 30000);
         } else {
-          // إذا كان السوكت ميت ولا ينتمي لأي لاعب نشط حالياً، نقوم بتنظيفه فوراً دون المساس باللاعبين
           roomManager.handleDisconnect(socket.id);
         }
       } catch (e) {
-        console.error("Error during resilient disconnect handling:", e);
+        console.error("Error during disconnect handling:", e);
         try { roomManager.handleDisconnect(socket.id); } catch (_) {}
       }
     });

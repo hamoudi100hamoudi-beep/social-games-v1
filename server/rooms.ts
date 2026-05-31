@@ -25,6 +25,7 @@ class RoomManager {
   private rooms: Map<string, Room> = new Map();
   private players: Map<string, Player> = new Map();
   private evictionTimers: Map<string, NodeJS.Timeout> = new Map();
+  private activeSessions: Map<string, { socketId: string, player: Player }> = new Map();
   private io: Server | null = null;
   private tickInterval: NodeJS.Timeout | null = null;
 
@@ -456,7 +457,7 @@ class RoomManager {
       }
 
       // إرسال البيانات مع تأمين الـ drawHistory بحد أقصى لمنع الـ RAM Bloat
-      const safeDrawHistory = room.gameState?.drawHistory ? room.gameState.drawHistory.slice(-500) : [];
+      const safeDrawHistory = room.gameState?.drawHistory ? room.gameState.drawHistory.slice(-200) : [];
 
       this.io.to(p.id).emit('room_state_update', {
         roomId: room.id,
@@ -662,6 +663,9 @@ class RoomManager {
     console.error(`[NEW CONNECTION] Socket ID: ${player.id} , Username: ${player.name}, Persistent ID: ${player.persistentId || 'N/A'}`);
     const room = this.createRoom(roomId);
     
+    const pId = player.persistentId || player.id;
+    this.activeSessions.set(pId, { socketId: player.id, player });
+    
     // Remove from previous room if any
     const existingPlayer = this.players.get(player.id);
     if (existingPlayer && existingPlayer.roomId && existingPlayer.roomId !== roomId) {
@@ -674,7 +678,6 @@ class RoomManager {
     // Add to new room if not already in it
     if (!room.players.find(p => p.id === player.id)) {
       room.players.push(player);
-      const pId = player.persistentId || player.id;
       if (!room.gameState.turnQueue.includes(pId)) {
         room.gameState.turnQueue.push(pId);
       }
@@ -744,14 +747,17 @@ class RoomManager {
     }
 
     const oldSocketId = existingPlayer.id;
+    const pId = existingPlayer.persistentId || existingPlayer.id;
 
     // Rescue player: cancel their eviction timer
-    const pId = existingPlayer.persistentId || existingPlayer.name;
     if (this.evictionTimers.has(pId)) {
-      console.log(`[GRACE PERIOD] Rescued player ${existingPlayer.name} (${pId}). Cancelling 10s eviction timer.`);
+      console.log(`[GRACE PERIOD] Rescued player ${existingPlayer.name} (${pId}). Cancelling 30s eviction timer.`);
       clearTimeout(this.evictionTimers.get(pId));
       this.evictionTimers.delete(pId);
     }
+
+    // Double-Lock: Bind the session to the new active socket ID
+    this.activeSessions.set(pId, { socketId: newSocketId, player: existingPlayer });
 
     if (oldSocketId === newSocketId) {
       console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Socket ID unchanged: ${newSocketId}`);
@@ -793,77 +799,59 @@ class RoomManager {
   public handleDisconnect(socketId: string) {
     try {
       const player = this.players.get(socketId);
-      
-      // Explicitly check the room's player array as well to ensure it's not a dangling old socket
-      // matched by username or old map entry
-      let activeRoomPlayer = null;
-      let roomId = player?.roomId;
-      
-      if (!roomId) {
-         // Fallback manual scan just in case this.players map was out of sync
-         for (const [rid, room] of this.rooms.entries()) {
-            const found = room.players.find(p => p.id === socketId);
-            if (found) {
-               activeRoomPlayer = found;
-               roomId = rid;
-               break;
-            }
-         }
-      } else {
-         const room = this.rooms.get(roomId);
-         if (room) {
-             activeRoomPlayer = room.players.find(p => p.id === socketId);
-             
-             // If player is found in this.players map but their actual ID in the room array was updated to a NEW socket, ignore this disconnect
-             const playerByNameOrRef = room.players.find(p => p.name === player?.name);
-             if (playerByNameOrRef && playerByNameOrRef.id !== socketId) {
-                console.warn(`[IGNORED DISCONNECT] Socket ${socketId} belongs to old connection of ${playerByNameOrRef.name}. Current active socket is ${playerByNameOrRef.id}.`);
-                return;
-             }
-         }
+      if (!player) {
+         console.log(`[Double-Lock] Ignored disconnect for unmapped socket: ${socketId}`);
+         return;
       }
 
-      const pToUpdate = activeRoomPlayer || player;
-      if (!pToUpdate) return;
+      const pId = player.persistentId || player.id;
+      const activeSession = this.activeSessions.get(pId);
       
-      if (pToUpdate.id !== socketId) {
-          console.warn(`[IGNORED DISCONNECT - ID MISMATCH] Disconnecting: ${socketId}, Active: ${pToUpdate.id}`);
-          return;
+      // If there is an active session for this player but it points to a DIFFERENT socket ID,
+      // it means they've already reconnected on a new socket! We MUST ignore this dead disconnect silently!
+      if (activeSession && activeSession.socketId !== socketId) {
+         console.warn(`[Double-Lock Ignored Disconnect] Dead socket ${socketId} disconnected, but player ${player.name} is already alive on socket ${activeSession.socketId}`);
+         this.players.delete(socketId); // cleanly discard the dead socket mapping
+         return;
       }
 
-      console.error(`[PLAYER DISCONNECTED] Socket ID: ${socketId}, Username: ${pToUpdate.name}`);
+      console.error(`[PLAYER DISCONNECTED] Socket ID: ${socketId}, Username: ${player.name}`);
 
-      pToUpdate.isOffline = true;
-      pToUpdate.offlineSince = Date.now();
+      player.isOffline = true;
+      player.offlineSince = Date.now();
 
+      const roomId = player.roomId;
       if (roomId) {
         const room = this.rooms.get(roomId);
         if (room) {
-          // Broadcast state so clients see isOffline
+          // Broadcast state so clients see offline indicators
           this.broadcastState(room);
 
-          // Grace period setup (10 seconds)
-          const pId = pToUpdate.persistentId || pToUpdate.name;
+          // Grace period setup (30-seconds)
           if (this.evictionTimers.has(pId)) {
             clearTimeout(this.evictionTimers.get(pId));
           }
 
-          console.log(`[GRACE PERIOD] Starting 10-second grace timer for disconnected player ${pToUpdate.name} (${pId})`);
+          console.log(`[GRACE PERIOD] Starting 30-second grace timer for disconnected player ${player.name} (${pId})`);
           const timer = setTimeout(() => {
             try {
-              const currentRoom = this.rooms.get(roomId!);
+              const currentRoom = this.rooms.get(roomId);
               if (currentRoom) {
-                const checkPlayer = currentRoom.players.find(p => (p.persistentId || p.name) === pId);
-                if (checkPlayer && checkPlayer.isOffline) {
-                  console.log(`[GRACE PERIOD] Eviction timeout triggered for ${checkPlayer.name}. Cleaning up player representation.`);
+                // Fetch latest active session
+                const latestSession = this.activeSessions.get(pId);
+                
+                // Evict only if they are STILL on the disconnected socket and offline
+                if (latestSession && latestSession.socketId === socketId && latestSession.player.isOffline) {
+                  console.log(`[GRACE PERIOD] Eviction timeout triggered for ${latestSession.player.name}. Cleaning up player representation.`);
                   
-                  this.removePlayerFromRoom(roomId!, checkPlayer.id);
-                  this.players.delete(checkPlayer.id);
+                  this.removePlayerFromRoom(roomId, latestSession.player.id);
+                  this.players.delete(latestSession.player.id);
+                  this.activeSessions.delete(pId);
                   this.evictionTimers.delete(pId);
 
                   this.broadcastMessage(currentRoom, {
                     id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-                    text: `خرج ${checkPlayer.name} من اللعبة`,
+                    text: `خرج ${latestSession.player.name} من اللعبة`,
                     type: 'system'
                   });
                 }
@@ -871,7 +859,7 @@ class RoomManager {
             } catch (err) {
               console.error("Error running grace eviction:", err);
             }
-          }, 10000);
+          }, 30000);
 
           this.evictionTimers.set(pId, timer);
         }
@@ -884,19 +872,19 @@ class RoomManager {
   removePlayer(socketId: string) {
     try {
       const player = this.players.get(socketId);
-      if (player && player.roomId) {
-        // Strict guard: only proceed if the current room's player still uses THIS socketId
-        const room = this.rooms.get(player.roomId);
-        if (room) {
-           const activePlayer = room.players.find(p => p.name === player.name);
-           if (activePlayer && activePlayer.id !== socketId) {
-               console.warn(`[IGNORED REMOVE] Socket ${socketId} belongs to old connection of ${activePlayer.name}. Active socket is ${activePlayer.id}. ignoring.`);
-               this.players.delete(socketId); // Just clean map if it's lingering
-               return;
-           }
-        }
-        
-        this.removePlayerFromRoom(player.roomId, socketId);
+      if (player) {
+         const pId = player.persistentId || player.id;
+         const activeSession = this.activeSessions.get(pId);
+         if (activeSession && activeSession.socketId !== socketId) {
+            console.warn(`[Double-Lock Ignored Remove] ignoring old socket removePlayer for active user ${player.name}`);
+            this.players.delete(socketId);
+            return;
+         }
+         
+         if (player.roomId) {
+            this.removePlayerFromRoom(player.roomId, socketId);
+         }
+         this.activeSessions.delete(pId);
       }
       this.players.delete(socketId);
     } catch (e) {
