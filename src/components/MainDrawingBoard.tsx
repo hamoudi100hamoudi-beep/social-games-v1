@@ -5,7 +5,7 @@ import { GameChat } from './game/GameChat';
 import { PlayersList } from './game/PlayersList';
 import { GameToolbar } from './game/GameToolbar';
 
-interface DrawingBoardProps {
+interface MainDrawingBoardProps {
   socket: Socket;
   roomId: string;
   nickname: string;
@@ -13,7 +13,7 @@ interface DrawingBoardProps {
   persistentId: string;
 }
 
-export const DrawingBoard: React.FC<DrawingBoardProps> = ({
+export const MainDrawingBoard: React.FC<MainDrawingBoardProps> = ({
   socket,
   roomId,
   nickname,
