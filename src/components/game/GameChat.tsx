@@ -63,16 +63,21 @@ export const GameChat: React.FC<GameChatProps> = ({ socket, roomId, status }) =>
   };
 
   return (
-    <div className="flex flex-col h-[300px] w-full bg-slate-50 border border-slate-200 rounded-xl overflow-hidden shadow-inner">
+    <div className="flex flex-col flex-1 min-h-[120px] w-full bg-[#180F33]/85 border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex-grow" dir="rtl">
       {/* منطقة عرض الرسائل */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 text-sm">
+      <div className="flex-1 overflow-y-auto p-3.5 space-y-2 text-sm no-scrollbar">
         {messages.map((msg) => {
           if (msg.type === 'system') {
+            const isHitSys = msg.subType === 'hit';
+            
             return (
               <div
                 key={msg.id}
-                style={{ color: msg.color || '#64748B' }}
-                className="text-center font-bold bg-white/80 py-1 px-3 rounded-lg border border-slate-100 shadow-sm animate-fade-in"
+                className={`text-center font-bold text-xs py-1.5 px-3 rounded-xl border my-1 max-w-[90%] mx-auto block animate-fade-in ${
+                  isHitSys 
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.15)]'
+                    : 'bg-[#20144B]/70 border-white/5 text-indigo-200'
+                }`}
               >
                 {msg.text}
               </div>
@@ -83,16 +88,16 @@ export const GameChat: React.FC<GameChatProps> = ({ socket, roomId, status }) =>
           return (
             <div
               key={msg.id}
-              className={`p-2 rounded-lg max-w-[90%] break-words border text-right transition-colors ${
+              className={`p-2.5 rounded-xl max-w-[85%] break-words border text-right transition-all duration-300 ${
                 isHit
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-medium'
-                  : 'bg-white border-slate-100 text-slate-700'
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.1)] font-bold mr-auto'
+                  : 'bg-[#24174D]/60 border-white/5 text-white/95'
               }`}
             >
-              <span className="font-bold text-xs text-slate-400 block mb-0.5">
+              <span className="font-extrabold text-[10px] text-[#00D9FF]/80 block mb-0.5">
                 {msg.sender}
               </span>
-              <span>{msg.text}</span>
+              <span className="text-sm font-semibold">{msg.text}</span>
             </div>
           );
         })}
@@ -100,18 +105,18 @@ export const GameChat: React.FC<GameChatProps> = ({ socket, roomId, status }) =>
       </div>
 
       {/* صندوق إدخال النص الزاحف السفلي */}
-      <form onSubmit={handleSendMessage} className="p-2 bg-white border-t border-slate-200 flex gap-2">
+      <form onSubmit={handleSendMessage} className="p-2 bg-[#20144B] border-t border-white/10 flex gap-2">
         <input
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder={status === 'DRAWING' ? 'اكتب تخمينك للكلمة هنا...' : 'اكتب رسالة للدردشة...'}
           maxLength={50}
-          className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-right text-sm focus:outline-none focus:border-indigo-500 focus:bg-white transition-all placeholder:text-slate-400"
+          className="flex-1 px-3.5 py-2.5 bg-[#140C2E]/95 border border-white/5 rounded-xl text-right text-sm text-white focus:outline-none focus:border-[#7C4DFF] focus:bg-[#110A26] transition-all placeholder:text-white/30"
         />
         <button
           type="submit"
-          className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors shadow-sm active:scale-95"
+          className="bg-[#7C4DFF] hover:bg-[#683FD6] active:scale-95 text-white font-black px-4 py-2.5 rounded-xl text-sm transition-all shadow-md shadow-[#7C4DFF]/20"
         >
           {status === 'DRAWING' ? 'خمن' : 'أرسل'}
         </button>
@@ -119,3 +124,4 @@ export const GameChat: React.FC<GameChatProps> = ({ socket, roomId, status }) =>
     </div>
   );
 };
+
