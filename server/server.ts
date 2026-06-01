@@ -25,7 +25,8 @@ async function startServer() {
   io.on('connection', (socket) => {
     console.log(`[Socket] Connected: ${socket.id}`);
 
-    socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly }, callback) => {
+    socket.on('join_room', (data, callback) => {
+      const { roomId, nickname, avatar, playerId, reconnectOnly } = data;
       try {
         let room = roomManager.reconnectPlayer(roomId, playerId || '', nickname, socket.id);
         let isReconnected = !!room;
@@ -34,14 +35,14 @@ async function startServer() {
           socket.join(roomId);
         } else {
           if (reconnectOnly) {
-            if (callback) callback({ error: 'session_expired' });
+            if (typeof callback === 'function') callback({ error: 'session_expired' });
             return;
           }
 
           const existingRoom = roomManager.getRoom(roomId);
           const onlinePlayersCount = existingRoom ? existingRoom.players.filter(p => !p.isOffline).length : 0;
           if (existingRoom && onlinePlayersCount >= 5) {
-            if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
+            if (typeof callback === 'function') callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
             return;
           }
 
@@ -65,12 +66,16 @@ async function startServer() {
           io.to(roomId).emit('receive_message', joinMsg);
         }
 
-        if (callback) callback({ success: true, reconnected: isReconnected });
+        if (typeof callback === 'function') {
+          callback({ success: true, reconnected: isReconnected });
+        }
 
         // مزامنة حالة الغرفة والرسم المقتطع فوراً عند الدخول
         const player = roomManager.getPlayer(socket.id);
         if (player && room) {
-          roomManager.sendStateToPlayer(room, player);
+          // تأكد أن السيرفر يرسل تحديث الغرفة الشامل لجميع اللاعبين باستخدام الحدث المعتمد 'room_update'
+          roomManager.broadcastState(room);
+          
           if (room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {
             const slicedHistory = room.gameState.drawHistory.slice(-200);
             socket.emit('draw_history_sync', slicedHistory);
@@ -78,7 +83,7 @@ async function startServer() {
         }
       } catch (e) {
         console.error(e);
-        if (callback) callback({ error: 'حدث خطأ أثناء الانضمام للغرفة' });
+        if (typeof callback === 'function') callback({ error: 'حدث خطأ أثناء الانضمام للغرفة' });
       }
     });
 

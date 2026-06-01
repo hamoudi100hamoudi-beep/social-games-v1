@@ -218,7 +218,7 @@ class RoomManager {
     }
   }
 
-  private broadcastState(room: Room) {
+  public broadcastState(room: Room) {
     if (this.io) {
       room.players.forEach(p => this.sendStateToPlayer(room, p));
     }
