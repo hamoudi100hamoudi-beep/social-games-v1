@@ -44,10 +44,26 @@ export const DrawingBoard: React.FC<DrawingBoardProps> = ({
       setRoomState(updatedRoom);
     };
 
+    const handleTimerTick = (data: { timeLeft: number; status: string }) => {
+      setRoomState((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          gameState: {
+            ...prev.gameState,
+            timeLeft: data.timeLeft,
+            status: data.status,
+          }
+        };
+      });
+    };
+
     socket.on('room_update', handleRoomUpdate);
+    socket.on('timer_tick', handleTimerTick);
 
     return () => {
       socket.off('room_update', handleRoomUpdate);
+      socket.off('timer_tick', handleTimerTick);
     };
   }, [socket, roomId, nickname, avatar, persistentId]);
 
@@ -83,7 +99,7 @@ export const DrawingBoard: React.FC<DrawingBoardProps> = ({
       <div className="w-full bg-white border border-slate-200 rounded-xl p-3 shadow-sm flex items-center justify-between">
         <div className="text-left">
           <span className="text-[10px] text-slate-400 block font-bold">المؤقت</span>
-          <span className="text-sm font-black text-indigo-600">{gameState.timer} ث</span>
+          <span className="text-sm font-black text-indigo-600">{gameState.timeLeft} ث</span>
         </div>
         <div className="text-center flex-1">
           <span className="text-[10px] text-slate-400 block font-bold">الكلمة المراد رسمها</span>

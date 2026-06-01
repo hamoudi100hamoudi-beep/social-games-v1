@@ -67,11 +67,13 @@ export const Canvas: React.FC<CanvasProps> = ({ socket, roomId, currentDrawerId,
 
     socket.on('draw_binary', handleDrawBinary);
     socket.on('draw_clear', handleDrawClear);
+    socket.on('clear_canvas', handleDrawClear);
     socket.on('draw_history_sync', handleHistorySync);
 
     return () => {
       socket.off('draw_binary', handleDrawBinary);
       socket.off('draw_clear', handleDrawClear);
+      socket.off('clear_canvas', handleDrawClear);
       socket.off('draw_history_sync', handleHistorySync);
     };
   }, [socket, isMyTurn]);

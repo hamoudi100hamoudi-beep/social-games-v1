@@ -253,6 +253,7 @@ class RoomManager {
       room.gameState.drawHistory = [];
       if (this.io) {
         this.io.to(room.id).emit('draw_clear', { instanceId: 'server-sweeper' });
+        this.io.to(room.id).emit('clear_canvas');
         const clearBuf = Buffer.alloc(8);
         clearBuf.writeUInt8(5, 0);
         this.io.to(room.id).emit('draw_binary', clearBuf);
