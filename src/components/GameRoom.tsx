@@ -8,8 +8,18 @@ interface GameRoomProps {
 }
 
 export const GameRoom: React.FC<GameRoomProps> = ({ socket, roomId }) => {
-  const [nickname, setNickname] = useState('');
-  const [avatar, setAvatar] = useState('🦊'); // أفتار افتراضي مؤقت
+  const [nickname, setNickname] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gartic_player_nickname') || '';
+    }
+    return '';
+  });
+  const [avatar, setAvatar] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gartic_player_avatar') || '🦊';
+    }
+    return '🦊';
+  });
   const [persistentId, setPersistentId] = useState('');
   const [isJoined, setIsJoined] = useState(false);
   const [error, setError] = useState('');

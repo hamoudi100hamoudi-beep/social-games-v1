@@ -25,6 +25,14 @@ async function startServer() {
   io.on('connection', (socket) => {
     console.log(`[Socket] Connected: ${socket.id}`);
 
+    socket.on('get_room_info', (roomId, callback) => {
+      const existingRoom = roomManager.getRoom(roomId);
+      const onlinePlayersCount = existingRoom ? existingRoom.players.filter(p => !p.isOffline).length : 0;
+      if (typeof callback === 'function') {
+        callback({ count: onlinePlayersCount });
+      }
+    });
+
     socket.on('join_room', (data, callback) => {
       console.log(`[Diagnostic] 📥 Server received 'join_room' from ${socket.id}:`, data);
       const { roomId, nickname, avatar, playerId, reconnectOnly } = data;

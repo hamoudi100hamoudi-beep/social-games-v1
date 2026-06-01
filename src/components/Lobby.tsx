@@ -106,7 +106,19 @@ export default function Lobby({ onPlay }: LobbyProps) {
     
     if (socket) {
       // Check again right before playing
+      let didRespond = false;
+      const timeout = setTimeout(() => {
+        if (!didRespond) {
+          didRespond = true;
+          console.log("[Diagnostic] ⏳ get_room_info timed out after 3s, applying fallback logic.");
+          onPlay(finalName, finalRoom, AVATARS[avatarIndex]);
+        }
+      }, 3000);
+
       socket.emit('get_room_info', finalRoom, (data: any) => {
+        if (didRespond) return;
+        didRespond = true;
+        clearTimeout(timeout);
         if (data && data.count >= 5) {
           setJoinError('عذراً، هذه الغرفة ممتلئة بالكامل!');
           if (!selectedRoom) {
