@@ -46,6 +46,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
   }, [avatarIndex]);
   const [showAvatarGrid, setShowAvatarGrid] = useState(false);
   const [nicknameError, setNicknameError] = useState(false);
+  const [error, setError] = useState('');
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [afkWarning, setAfkWarning] = useState(false);
 
@@ -94,11 +95,13 @@ export default function Lobby({ onPlay }: LobbyProps) {
   };
 
   const handlePlay = () => {
-    if (!nickname.trim()) {
+    const trimmed = nickname.trim();
+    if (!trimmed || trimmed.length < 2) {
       setNicknameError(true);
+      setError('⚠️ يجب إدخال اسم مستخدم يحتوي على حرفين على الأقل!');
       return;
     }
-    const finalName = nickname.trim();
+    const finalName = trimmed;
     const finalRoom = selectedRoom || 'general';
     
     if (socket) {
@@ -107,8 +110,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
         if (data && data.count >= 5) {
           setJoinError('عذراً، هذه الغرفة ممتلئة بالكامل!');
           if (!selectedRoom) {
-            // Also show it on home screen if they just clicked PLAY from there
-             setNicknameError(false); // Can reuse or create specific error state, but joinError is fine
+             setNicknameError(false);
           }
         } else {
           onPlay(finalName, finalRoom, AVATARS[avatarIndex]);
@@ -120,11 +122,14 @@ export default function Lobby({ onPlay }: LobbyProps) {
   };
 
   const handleGoToRooms = () => {
-    if (!nickname.trim()) {
+    const trimmed = nickname.trim();
+    if (!trimmed || trimmed.length < 2) {
       setNicknameError(true);
+      setError('⚠️ يجب إدخال اسم مستخدم يحتوي على حرفين على الأقل!');
       return;
     }
     setNicknameError(false);
+    setError('');
     setJoinError(null);
     setScreen('rooms');
   };
@@ -211,10 +216,15 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   type="text" 
                   maxLength={10}
                   value={nickname}
-                  onChange={(e) => { setNickname(e.target.value); setNicknameError(false); setJoinError(null); }}
+                  onChange={(e) => { setNickname(e.target.value); setNicknameError(false); setError(''); setJoinError(null); }}
                   placeholder="Enter your name..."
                   className={`w-full h-14 bg-white/10 backdrop-blur-md text-white placeholder-white/50 border-2 rounded-2xl px-6 font-bold text-lg outline-none transition-all focus:bg-white/20 ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-white/20 focus:border-[#00D9FF]'}`}
                 />
+                {error && (
+                  <p className="text-rose-400 text-xs font-bold text-right mt-1 animate-fade-in pr-2" dir="rtl">
+                    {error}
+                  </p>
+                )}
               </div>
               {joinError && (
                 <div className="text-center text-red-300 font-bold bg-red-900/40 p-2 rounded-xl border border-red-500/50">
