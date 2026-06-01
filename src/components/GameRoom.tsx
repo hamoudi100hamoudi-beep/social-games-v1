@@ -72,7 +72,7 @@ export const GameRoom: React.FC<GameRoomProps> = ({ socket, roomId }) => {
           type="button"
           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-sm shadow-sm transition-all active:scale-95"
         >
-          دخول الروم 🚀
+          دخول الروم - فحص التحديث V2 🚀
         </button>
       </form>
     </div>
