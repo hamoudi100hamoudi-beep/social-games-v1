@@ -118,6 +118,13 @@ async function startServer() {
       }
     });
 
+    socket.on('undo_draw', () => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        roomManager.undoLastDrawing(player.roomId);
+      }
+    });
+
     socket.on('skip_turn', () => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) roomManager.handleSkipTurn(player.roomId, socket.id);
