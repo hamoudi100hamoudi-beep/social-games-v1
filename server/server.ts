@@ -26,15 +26,18 @@ async function startServer() {
     console.log(`[Socket] Connected: ${socket.id}`);
 
     socket.on('join_room', (data, callback) => {
+      console.log(`[Diagnostic] 📥 Server received 'join_room' from ${socket.id}:`, data);
       const { roomId, nickname, avatar, playerId, reconnectOnly } = data;
       try {
         let room = roomManager.reconnectPlayer(roomId, playerId || '', nickname, socket.id);
         let isReconnected = !!room;
+        console.log(`[Diagnostic] Reconnect result: ${isReconnected}`);
 
         if (room) {
           socket.join(roomId);
         } else {
           if (reconnectOnly) {
+            console.log(`[Diagnostic] Session expired for ${nickname}`);
             if (typeof callback === 'function') callback({ error: 'session_expired' });
             return;
           }
@@ -42,6 +45,7 @@ async function startServer() {
           const existingRoom = roomManager.getRoom(roomId);
           const onlinePlayersCount = existingRoom ? existingRoom.players.filter(p => !p.isOffline).length : 0;
           if (existingRoom && onlinePlayersCount >= 5) {
+            console.log(`[Diagnostic] Room full for ${nickname}`);
             if (typeof callback === 'function') callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
             return;
           }
@@ -56,6 +60,7 @@ async function startServer() {
             wins: 0,
             persistentId: playerId
           });
+          console.log(`[Diagnostic] New player added: ${nickname}`);
 
           const joinMsg = {
             id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
@@ -66,14 +71,17 @@ async function startServer() {
           io.to(roomId).emit('receive_message', joinMsg);
         }
 
+        console.log(`[Diagnostic] 📤 Sending success callback to ${socket.id}`);
         if (typeof callback === 'function') {
           callback({ success: true, reconnected: isReconnected });
+        } else {
+          console.log(`[Diagnostic] ⚠️ WARNING: No callback function provided by client!`);
         }
 
         // مزامنة حالة الغرفة والرسم المقتطع فوراً عند الدخول
         const player = roomManager.getPlayer(socket.id);
         if (player && room) {
-          // تأكد أن السيرفر يرسل تحديث الغرفة الشامل لجميع اللاعبين باستخدام الحدث المعتمد 'room_update'
+          console.log(`[Diagnostic] Broadcasting state after join for room ${roomId}`);
           roomManager.broadcastState(room);
           
           if (room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {

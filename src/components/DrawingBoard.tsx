@@ -25,11 +25,13 @@ export const DrawingBoard: React.FC<DrawingBoardProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log("[Diagnostic] ✨ DrawingBoard mounted, emitting 'join_room' with:", { roomId, nickname, avatar, persistentId });
     socket.emit(
       'join_room',
       { roomId, nickname, avatar, playerId: persistentId },
       (res: any) => {
-        if (res.error) {
+        console.log("[Diagnostic] 📥 Received callback for 'join_room':", res);
+        if (res?.error) {
           setErrorMsg(res.error);
         } else {
           setJoined(true);
@@ -38,6 +40,7 @@ export const DrawingBoard: React.FC<DrawingBoardProps> = ({
     );
 
     const handleRoomUpdate = (updatedRoom: any) => {
+      console.log("[Diagnostic] 🔄 Received 'room_update' event:", updatedRoom);
       setRoomState(updatedRoom);
     };
 
@@ -63,6 +66,7 @@ export const DrawingBoard: React.FC<DrawingBoardProps> = ({
   }
 
   if (!joined || !roomState) {
+    console.log("[Diagnostic] ⏳ Rendering loading state. joined:", joined, "roomState:", !!roomState);
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
@@ -71,6 +75,7 @@ export const DrawingBoard: React.FC<DrawingBoardProps> = ({
     );
   }
 
+  console.log("[Diagnostic] ✅ Rendering DrawingBoard. roomState keys:", Object.keys(roomState));
   const { gameState, players } = roomState;
 
   return (
