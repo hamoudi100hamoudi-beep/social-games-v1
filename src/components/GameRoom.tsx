@@ -25,8 +25,14 @@ export const GameRoom: React.FC<GameRoomProps> = ({ socket, roomId }) => {
 
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nickname.trim()) return;
+    console.log("👆 [Button Clicked] Join Room button pressed. Data:", { roomId, nickname });
     
+    if (!nickname.trim()) {
+      console.log("⚠️ [Button Clicked] Nickname is empty. Halting.");
+      return;
+    }
+    
+    console.log("✅ [Button Clicked] Nickname valid. Setting isJoined to true.");
     // تفعيل التحول فوراً لعرض اللوحة الرئيسية ومباشرة الاتصال
     setIsJoined(true);
   };
@@ -62,7 +68,8 @@ export const GameRoom: React.FC<GameRoomProps> = ({ socket, roomId }) => {
         </div>
 
         <button
-          type="submit"
+          onClick={handleJoin}
+          type="button"
           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl text-sm shadow-sm transition-all active:scale-95"
         >
           دخول الروم 🚀
