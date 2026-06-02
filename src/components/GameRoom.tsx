@@ -424,10 +424,9 @@ export default function GameRoom({
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
-      // Force no scroll
-      window.scrollTo(0, 0);
-
+      // Only reset scroll when keyboard is dismissed, to avoid disrupting keyboard popup animation on Chrome/Brave/Firefox
       if (!isKeyboardShowing) {
+        window.scrollTo(0, 0);
         setTimeout(() => {
           window.scrollTo(0, 0);
         }, 100);
@@ -448,17 +447,6 @@ export default function GameRoom({
       }
     };
 
-    const handleScroll = () => {
-      if (
-        document.activeElement?.tagName === "INPUT" ||
-        document.activeElement?.tagName === "TEXTAREA"
-      ) {
-        window.scrollTo(0, 0);
-      }
-    };
-
-    window.addEventListener("scroll", handleScroll);
-
     if (window.visualViewport) {
       setLockedHeight(window.visualViewport.height);
       setViewportOffsetTop(window.visualViewport.offsetTop || 0);
@@ -467,7 +455,6 @@ export default function GameRoom({
     }
 
     return () => {
-      window.removeEventListener("scroll", handleScroll);
       window.visualViewport?.removeEventListener("resize", handleResize);
       window.visualViewport?.removeEventListener("scroll", handleResize);
     };
