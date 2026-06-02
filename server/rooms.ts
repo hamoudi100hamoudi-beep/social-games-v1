@@ -404,8 +404,11 @@ class RoomManager {
     const room = this.rooms.get(roomId);
     if (!room || room.gameState.status !== 'DRAWING') return;
 
+    const player = this.players.get(socketId);
+    const pId = player ? (player.persistentId || player.id) : socketId;
+
     // Only drawer can request hints
-    if (room.gameState.currentDrawerId !== socketId) return;
+    if (room.gameState.currentDrawerId !== pId) return;
 
     const word = room.gameState.currentWord || '';
     const charCount = word.replace(/\s/g, '').length;
