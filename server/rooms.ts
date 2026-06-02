@@ -112,6 +112,27 @@ class RoomManager {
     room.gameState.drawHistory = [];
     room.gameState.timeLeft = 15;
     this.clearDrawHistoryForRoomAndClient(room);
+
+    // إرسال تنبيه باختيار الكلمة للراسم الجديد
+    const drawerPlayer = room.players.find(p => (p.persistentId || p.id) === nextDrawerId);
+    if (drawerPlayer) {
+      const turnMsgText = `دور اللاعب ${drawerPlayer.name} لاختيار كلمة (turn)`;
+      this.broadcastGuess(room, {
+        id: 'sys-choosing-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+        text: turnMsgText,
+        type: 'system',
+        subType: 'turn',
+        sender: 'System',
+        senderId: 'system'
+      });
+      this.broadcastMessage(room, {
+        id: 'sys-choosing-chat-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+        text: turnMsgText,
+        sender: 'System',
+        senderId: 'system',
+        type: 'system'
+      });
+    }
     
     this.broadcastState(room);
   }
@@ -131,6 +152,48 @@ class RoomManager {
     room.gameState.roundEndWord = room.gameState.currentWord || undefined;
     room.gameState.timeLeft = 5;
 
+    // بث التنبيهات الكاشفة عن الكلمة والمنهية للمرحلة
+    let text = `Time's up! The answer was: ${room.gameState.currentWord || ''}`;
+    let textAr = `انتهى الوقت! الكلمة كانت: ${room.gameState.currentWord || ''}`;
+    let subType = 'lost_turn';
+
+    if (reason === 'skipped') {
+      text = `Drawer skipped turn! The answer was: ${room.gameState.currentWord || ''}`;
+      textAr = `تم تخطي الدور! الكلمة كانت: ${room.gameState.currentWord || ''}`;
+      subType = 'lost_turn';
+    } else if (reason === 'all_guessed') {
+      text = `Everybody guessed correctly! The word was: ${room.gameState.currentWord || ''}`;
+      textAr = `خمن الجميع الكلمة بنجاح! الكلمة كانت: ${room.gameState.currentWord || ''}`;
+      subType = 'all_guessed';
+    } else if (reason === 'drawer_left') {
+      text = `The drawer left! The word was: ${room.gameState.currentWord || ''}`;
+      textAr = `غادر الراسم الغرفة! الكلمة كانت: ${room.gameState.currentWord || ''}`;
+      subType = 'lost_turn';
+    } else if (reason === 'turn_lost') {
+      text = `Turn lost!`;
+      textAr = `فُقد الدور!`;
+      subType = 'lost_turn';
+    }
+
+    const finalMsgText = `${textAr} (${text})`;
+
+    this.broadcastGuess(room, {
+      id: 'sys-end-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+      text: finalMsgText,
+      type: 'system',
+      subType: subType,
+      sender: 'System',
+      senderId: 'system'
+    });
+
+    this.broadcastMessage(room, {
+      id: 'sys-end-chat-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+      text: finalMsgText,
+      sender: 'System',
+      senderId: 'system',
+      type: 'system'
+    });
+
     this.clearDrawHistoryForRoomAndClient(room);
     this.broadcastState(room);
   }
@@ -146,6 +209,25 @@ class RoomManager {
     room.gameState.status = 'DRAWING';
     room.gameState.wordOptions = [];
     room.gameState.timeLeft = 80;
+
+    // تنبيه بأن اللعبة بدأت الرسم
+    const startMsgText = `بدأ اللاعب ${player?.name || 'الراسم'} الرسم! (Start drawing - turn)`;
+    this.broadcastGuess(room, {
+      id: 'sys-start-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+      text: startMsgText,
+      type: 'system',
+      subType: 'turn',
+      sender: 'System',
+      senderId: 'system'
+    });
+    this.broadcastMessage(room, {
+      id: 'sys-start-chat-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+      text: startMsgText,
+      sender: 'System',
+      senderId: 'system',
+      type: 'system'
+    });
+
     this.broadcastState(room);
   }
 
@@ -178,15 +260,48 @@ class RoomManager {
         return p && !p.isOffline;
       }).length;
 
+      // بث رسالة التخمين الصحيح لخانة التخمين
+      const correctMsg = {
+        id: 'guess-correct-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+        text: `${player.name} guessed the word!`,
+        sender: player.name,
+        senderId: socketId,
+        type: 'system',
+        subType: 'hit',
+        word: currentWord
+      };
+      
+      this.broadcastGuess(room, correctMsg);
+      this.broadcastMessage(room, {
+        id: 'sys-correct-chat-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+        text: `أصاب ${player.name} الكلمة الصحيحة!`,
+        sender: 'System',
+        senderId: 'system',
+        type: 'system'
+      });
+
       if (activeGuessersCount > 0 && onlineCorrectGuessersCount >= activeGuessersCount) {
         this.transitionToRoundEnd(room, 'all_guessed');
       } else {
         this.broadcastState(room);
       }
     } else {
+      // بث التخمين الخاطئ لخانة التخمين
+      this.broadcastGuess(room, {
+        id: 'guess-incorrect-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+        text: guess,
+        sender: player.name,
+        senderId: socketId,
+        type: 'message'
+      });
+
+      // لإبقاء التخمينات تظهر في الشات العام أيضاً
       this.broadcastMessage(room, {
-        id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
-        text: guess, sender: player.name, senderId: socketId, type: 'message'
+        id: 'guess-chat-' + Date.now().toString() + Math.random().toString(36).substring(2, 5),
+        text: guess,
+        sender: player.name,
+        senderId: socketId,
+        type: 'message'
       });
     }
   }
@@ -246,6 +361,19 @@ class RoomManager {
   public broadcastMessage(room: Room, msg: any) {
     this.saveChatMessage(room.id, msg);
     if (this.io) this.io.to(room.id).emit('receive_message', msg);
+  }
+
+  public saveGuessMessage(roomId: string, message: any) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    if (!room.guessMessages) room.guessMessages = [];
+    room.guessMessages.push(message);
+    if (room.guessMessages.length > 40) room.guessMessages.shift();
+  }
+
+  public broadcastGuess(room: Room, msg: any) {
+    this.saveGuessMessage(room.id, msg);
+    if (this.io) this.io.to(room.id).emit('receive_guess', msg);
   }
 
   public clearDrawHistoryForRoomAndClient(room: Room) {
