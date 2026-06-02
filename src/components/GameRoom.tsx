@@ -417,7 +417,11 @@ export default function GameRoom({
 
       const currentHeight = window.visualViewport.height;
       setLockedHeight(currentHeight);
-      setViewportOffsetTop(window.visualViewport.offsetTop || 0);
+      
+      // Force scroll reset immediately to prevent room/chat from sliding off-screen or shifting up
+      window.scrollTo(0, 0);
+      if (document.body) document.body.scrollTop = 0;
+      setViewportOffsetTop(0);
 
       if (currentHeight > currentMax) {
         currentMax = currentHeight;
@@ -428,13 +432,8 @@ export default function GameRoom({
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
-      // Only reset scroll when keyboard is dismissed, to avoid disrupting keyboard popup animation on Chrome/Brave/Firefox
-      if (!isKeyboardShowing) {
-        window.scrollTo(0, 0);
-        setTimeout(() => {
-          window.scrollTo(0, 0);
-        }, 100);
-      }
+      // Always ensure layout is at origin (0, 0)
+      window.scrollTo(0, 0);
 
       if (isKeyboardShowing) {
         // Clear any scheduled delayed blurs if keyboard is actively showing
@@ -463,7 +462,7 @@ export default function GameRoom({
 
     if (window.visualViewport) {
       setLockedHeight(window.visualViewport.height);
-      setViewportOffsetTop(window.visualViewport.offsetTop || 0);
+      setViewportOffsetTop(0);
       window.visualViewport.addEventListener("resize", handleResize);
       window.visualViewport.addEventListener("scroll", handleResize);
     }
