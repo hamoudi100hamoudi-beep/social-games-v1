@@ -3,7 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
-import { roomManager } from './rooms.js';
+import { roomManager } from './server/rooms.js';
 
 async function startServer() {
   const app = express();

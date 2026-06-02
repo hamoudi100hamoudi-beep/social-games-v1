@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useSocket } from './components/SocketProvider';
-import { GameRoom } from './components/GameRoom';
+import GameRoom from './components/GameRoom';
 import Lobby from './components/Lobby';
 
 export default function App() {
-  const { socket, isConnected } = useSocket();
+  const { isConnected } = useSocket();
   
   const [playerInfo, setPlayerInfo] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -48,23 +48,17 @@ export default function App() {
     setGameState('lobby');
   };
 
-  if (!socket) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
-        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-xs font-medium text-slate-500 mt-4">جاري الاتصال...</p>
-      </div>
-    );
-  }
-
   return (
     <>
       {gameState === 'lobby' ? (
         <Lobby onPlay={handlePlay} />
       ) : (
         <GameRoom 
-          socket={socket} 
-          roomId={playerInfo.room || "1"} 
+          nickname={playerInfo.nickname} 
+          room={playerInfo.room} 
+          avatar={playerInfo.avatar} 
+          justJoined={justJoined}
+          onLeave={handleLeaveRoom} 
         />
       )}
     </>

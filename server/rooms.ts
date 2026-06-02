@@ -203,7 +203,7 @@ class RoomManager {
       // المقص الذكي: حماية رام الهاتف باقتطاع آخر 200 حركة فقط
       const safeDrawHistory = room.gameState?.drawHistory ? room.gameState.drawHistory.slice(-200) : [];
 
-      this.io.to(p.id).emit('room_update', {
+      this.io.to(p.id).emit('room_state_update', {
         roomId: room.id,
         players: room.players || [],
         gameState: {
@@ -218,7 +218,7 @@ class RoomManager {
     }
   }
 
-  public broadcastState(room: Room) {
+  private broadcastState(room: Room) {
     if (this.io) {
       room.players.forEach(p => this.sendStateToPlayer(room, p));
     }
@@ -253,7 +253,6 @@ class RoomManager {
       room.gameState.drawHistory = [];
       if (this.io) {
         this.io.to(room.id).emit('draw_clear', { instanceId: 'server-sweeper' });
-        this.io.to(room.id).emit('clear_canvas');
         const clearBuf = Buffer.alloc(8);
         clearBuf.writeUInt8(5, 0);
         this.io.to(room.id).emit('draw_binary', clearBuf);
@@ -278,33 +277,7 @@ class RoomManager {
     if (room && room.gameState.drawHistory) room.gameState.drawHistory = [];
   }
 
-  undoLastDrawing(roomId: string) {
-    const room = this.rooms.get(roomId);
-    if (!room || !room.gameState.drawHistory || room.gameState.drawHistory.length === 0) return;
-
-    let lastType1Index = -1;
-    for (let i = room.gameState.drawHistory.length - 1; i >= 0; i--) {
-      const cmd = room.gameState.drawHistory[i];
-      if (cmd.event === 'draw_binary' && cmd.data) {
-        const type = cmd.data[0];
-        if (type === 1) {
-          lastType1Index = i;
-          break;
-        }
-      }
-    }
-
-    if (lastType1Index !== -1) {
-      room.gameState.drawHistory = room.gameState.drawHistory.slice(0, lastType1Index);
-    } else {
-      room.gameState.drawHistory = [];
-    }
-
-    if (this.io) {
-      this.io.to(room.id).emit('draw_clear', { instanceId: 'server-sweeper' });
-      this.io.to(room.id).emit('draw_history_sync', room.gameState.drawHistory);
-    }
-  }
+  undoLastDrawing(roomId: string) {}
   redoDrawing(roomId: string) {}
 
   addPlayerToRoom(roomId: string, player: Player): Room {
