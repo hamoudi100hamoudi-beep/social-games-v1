@@ -413,8 +413,14 @@ export default function GameRoom({
       if (!window.visualViewport) return;
 
       const currentHeight = window.visualViewport.height;
+      const offsetTop = window.visualViewport.offsetTop || 0;
+      
       setLockedHeight(currentHeight);
-      setViewportOffsetTop(window.visualViewport.offsetTop || 0);
+      setViewportOffsetTop(offsetTop);
+
+      // DOM direct update to bypass React state timing lag
+      document.documentElement.style.setProperty("--vv-height", `${currentHeight}px`);
+      document.documentElement.style.setProperty("--vv-offset-top", `${offsetTop}px`);
 
       if (currentHeight > currentMax) {
         currentMax = currentHeight;
@@ -425,7 +431,7 @@ export default function GameRoom({
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
-      // Only reset scroll when keyboard is dismissed, to avoid disrupting keyboard popup animation on Chrome/Brave/Firefox
+      // Only reset scroll when keyboard is dismissed, to avoid disrupting keyboard popup animation
       if (!isKeyboardShowing) {
         window.scrollTo(0, 0);
         setTimeout(() => {
@@ -437,7 +443,6 @@ export default function GameRoom({
         wasKeyboardOpenRef.current = true;
       } else {
         // Keyboard is not showing. If it was active/open previously, let's blur the active input.
-        // This prevents the instant-blur issue when visual viewport events fire while keyboard is still animating open.
         if (wasKeyboardOpenRef.current) {
           const activeEl = document.activeElement;
           if (activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA") {
@@ -449,6 +454,9 @@ export default function GameRoom({
     };
 
     if (window.visualViewport) {
+      document.documentElement.style.setProperty("--vv-height", `${window.visualViewport.height}px`);
+      document.documentElement.style.setProperty("--vv-offset-top", `${window.visualViewport.offsetTop || 0}px`);
+      
       setLockedHeight(window.visualViewport.height);
       setViewportOffsetTop(window.visualViewport.offsetTop || 0);
       window.visualViewport.addEventListener("resize", handleResize);
@@ -538,6 +546,9 @@ export default function GameRoom({
 
     socket?.emit("submit_guess", { guess: guessInput.trim() });
     setGuessInput("");
+    if (guessInputRef.current) {
+      guessInputRef.current.blur();
+    }
   };
 
   const handleChatSubmit = (e: React.FormEvent) => {
@@ -552,6 +563,7 @@ export default function GameRoom({
     ) as HTMLTextAreaElement;
     if (textarea) {
       textarea.style.height = "40px";
+      textarea.blur();
     }
   };
 
@@ -695,13 +707,12 @@ export default function GameRoom({
       <div
         className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden overscroll-none touch-none"
         style={{
+          top: "var(--vv-offset-top, 0px)",
           height: isChatOpen
             ? maxViewportHeight
               ? `${maxViewportHeight}px`
               : "100dvh"
-            : lockedHeight
-              ? `${lockedHeight}px`
-              : "100dvh",
+            : `var(--vv-height, ${lockedHeight ? lockedHeight + 'px' : '100dvh'})`,
           gridTemplateColumns: "minmax(0, 35%) minmax(0, 65%)",
           gridTemplateRows: "auto minmax(0, 1fr)",
         }}
