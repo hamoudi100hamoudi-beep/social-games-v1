@@ -135,10 +135,6 @@ export default function GameRoom({
 }: GameRoomProps) {
   const { socket, isConnected, socketId } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const isChatOpenRef = React.useRef(isChatOpen);
-  React.useEffect(() => {
-    isChatOpenRef.current = isChatOpen;
-  }, [isChatOpen]);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
   const wasKeyboardOpenRef = React.useRef(false);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
@@ -429,17 +425,12 @@ export default function GameRoom({
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
-      // Scroll lock behavior - strictly lock scroll to (0, 0) during chat to keep background static and prevent bouncing
-      if (isChatOpenRef.current) {
+      // Only reset scroll when keyboard is dismissed, to avoid disrupting keyboard popup animation on Chrome/Brave/Firefox
+      if (!isKeyboardShowing) {
         window.scrollTo(0, 0);
-      } else {
-        // Only reset scroll when keyboard is dismissed, to avoid disrupting keyboard popup animation on Chrome/Brave/Firefox
-        if (!isKeyboardShowing) {
+        setTimeout(() => {
           window.scrollTo(0, 0);
-          setTimeout(() => {
-            window.scrollTo(0, 0);
-          }, 100);
-        }
+        }, 100);
       }
 
       if (isKeyboardShowing) {
@@ -473,15 +464,21 @@ export default function GameRoom({
   useEffect(() => {
     if (isChatOpen) {
       const originalBodyOverflow = document.body.style.overflow;
+      const originalBodyPosition = document.body.style.position;
+      const originalBodyWidth = document.body.style.width;
       const originalBodyHeight = document.body.style.height;
 
       const originalHtmlOverflow = document.documentElement.style.overflow;
+      const originalHtmlPosition = document.documentElement.style.position;
       const originalHtmlHeight = document.documentElement.style.height;
 
       document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.width = "100vw";
       document.body.style.height = "100%";
 
       document.documentElement.style.overflow = "hidden";
+      document.documentElement.style.position = "fixed";
       document.documentElement.style.height = "100%";
 
       window.scrollTo(0, 0);
@@ -493,17 +490,18 @@ export default function GameRoom({
         }
       };
       window.addEventListener("scroll", handleScrollLock, { passive: true });
-      window.addEventListener("touchmove", handleScrollLock, { passive: true });
 
       return () => {
         document.body.style.overflow = originalBodyOverflow;
+        document.body.style.position = originalBodyPosition;
+        document.body.style.width = originalBodyWidth;
         document.body.style.height = originalBodyHeight;
 
         document.documentElement.style.overflow = originalHtmlOverflow;
+        document.documentElement.style.position = originalHtmlPosition;
         document.documentElement.style.height = originalHtmlHeight;
 
         window.removeEventListener("scroll", handleScrollLock);
-        window.removeEventListener("touchmove", handleScrollLock);
 
         setTimeout(() => {
           window.scrollTo(0, 0);
