@@ -135,6 +135,10 @@ export default function GameRoom({
 }: GameRoomProps) {
   const { socket, isConnected, socketId } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const isChatOpenRef = React.useRef(isChatOpen);
+  React.useEffect(() => {
+    isChatOpenRef.current = isChatOpen;
+  }, [isChatOpen]);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
   const wasKeyboardOpenRef = React.useRef(false);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
@@ -413,14 +417,8 @@ export default function GameRoom({
       if (!window.visualViewport) return;
 
       const currentHeight = window.visualViewport.height;
-      const offsetTop = window.visualViewport.offsetTop || 0;
-      
       setLockedHeight(currentHeight);
-      setViewportOffsetTop(offsetTop);
-
-      // DOM direct update to bypass React state timing lag
-      document.documentElement.style.setProperty("--vv-height", `${currentHeight}px`);
-      document.documentElement.style.setProperty("--vv-offset-top", `${offsetTop}px`);
+      setViewportOffsetTop(window.visualViewport.offsetTop || 0);
 
       if (currentHeight > currentMax) {
         currentMax = currentHeight;
@@ -431,18 +429,24 @@ export default function GameRoom({
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
-      // Only reset scroll when keyboard is dismissed, to avoid disrupting keyboard popup animation
-      if (!isKeyboardShowing) {
+      // Scroll lock behavior - strictly lock scroll to (0, 0) during chat to keep background static and prevent bouncing
+      if (isChatOpenRef.current) {
         window.scrollTo(0, 0);
-        setTimeout(() => {
+      } else {
+        // Only reset scroll when keyboard is dismissed, to avoid disrupting keyboard popup animation on Chrome/Brave/Firefox
+        if (!isKeyboardShowing) {
           window.scrollTo(0, 0);
-        }, 100);
+          setTimeout(() => {
+            window.scrollTo(0, 0);
+          }, 100);
+        }
       }
 
       if (isKeyboardShowing) {
         wasKeyboardOpenRef.current = true;
       } else {
         // Keyboard is not showing. If it was active/open previously, let's blur the active input.
+        // This prevents the instant-blur issue when visual viewport events fire while keyboard is still animating open.
         if (wasKeyboardOpenRef.current) {
           const activeEl = document.activeElement;
           if (activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA") {
@@ -454,9 +458,6 @@ export default function GameRoom({
     };
 
     if (window.visualViewport) {
-      document.documentElement.style.setProperty("--vv-height", `${window.visualViewport.height}px`);
-      document.documentElement.style.setProperty("--vv-offset-top", `${window.visualViewport.offsetTop || 0}px`);
-      
       setLockedHeight(window.visualViewport.height);
       setViewportOffsetTop(window.visualViewport.offsetTop || 0);
       window.visualViewport.addEventListener("resize", handleResize);
@@ -472,21 +473,15 @@ export default function GameRoom({
   useEffect(() => {
     if (isChatOpen) {
       const originalBodyOverflow = document.body.style.overflow;
-      const originalBodyPosition = document.body.style.position;
-      const originalBodyWidth = document.body.style.width;
       const originalBodyHeight = document.body.style.height;
 
       const originalHtmlOverflow = document.documentElement.style.overflow;
-      const originalHtmlPosition = document.documentElement.style.position;
       const originalHtmlHeight = document.documentElement.style.height;
 
       document.body.style.overflow = "hidden";
-      document.body.style.position = "fixed";
-      document.body.style.width = "100vw";
       document.body.style.height = "100%";
 
       document.documentElement.style.overflow = "hidden";
-      document.documentElement.style.position = "fixed";
       document.documentElement.style.height = "100%";
 
       window.scrollTo(0, 0);
@@ -498,18 +493,17 @@ export default function GameRoom({
         }
       };
       window.addEventListener("scroll", handleScrollLock, { passive: true });
+      window.addEventListener("touchmove", handleScrollLock, { passive: true });
 
       return () => {
         document.body.style.overflow = originalBodyOverflow;
-        document.body.style.position = originalBodyPosition;
-        document.body.style.width = originalBodyWidth;
         document.body.style.height = originalBodyHeight;
 
         document.documentElement.style.overflow = originalHtmlOverflow;
-        document.documentElement.style.position = originalHtmlPosition;
         document.documentElement.style.height = originalHtmlHeight;
 
         window.removeEventListener("scroll", handleScrollLock);
+        window.removeEventListener("touchmove", handleScrollLock);
 
         setTimeout(() => {
           window.scrollTo(0, 0);
@@ -546,9 +540,6 @@ export default function GameRoom({
 
     socket?.emit("submit_guess", { guess: guessInput.trim() });
     setGuessInput("");
-    if (guessInputRef.current) {
-      guessInputRef.current.blur();
-    }
   };
 
   const handleChatSubmit = (e: React.FormEvent) => {
@@ -563,7 +554,6 @@ export default function GameRoom({
     ) as HTMLTextAreaElement;
     if (textarea) {
       textarea.style.height = "40px";
-      textarea.blur();
     }
   };
 
@@ -707,12 +697,13 @@ export default function GameRoom({
       <div
         className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden overscroll-none touch-none"
         style={{
-          top: "var(--vv-offset-top, 0px)",
           height: isChatOpen
             ? maxViewportHeight
               ? `${maxViewportHeight}px`
               : "100dvh"
-            : `var(--vv-height, ${lockedHeight ? lockedHeight + 'px' : '100dvh'})`,
+            : lockedHeight
+              ? `${lockedHeight}px`
+              : "100dvh",
           gridTemplateColumns: "minmax(0, 35%) minmax(0, 65%)",
           gridTemplateRows: "auto minmax(0, 1fr)",
         }}

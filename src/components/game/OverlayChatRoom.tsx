@@ -239,8 +239,8 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
     <div 
       className="fixed left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none animate-in fade-in duration-200"
       style={{ 
-        top: `var(--vv-offset-top, ${viewportOffsetTop}px)`,
-        height: `var(--vv-height, ${lockedHeight ? lockedHeight + 'px' : '100dvh'})`
+        top: `${viewportOffsetTop}px`,
+        height: lockedHeight ? `${lockedHeight}px` : '100dvh' 
       }}
     >
        <div className="w-full h-full flex flex-col">
@@ -309,6 +309,14 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                  </button>
                  <textarea
                    id="chat-textarea"
+                    onFocus={() => {
+                      window.scrollTo(0, 0);
+                      document.body.scrollTop = 0;
+                      setTimeout(() => {
+                        window.scrollTo(0, 0);
+                        document.body.scrollTop = 0;
+                      }, 20);
+                    }}
                    onBlur={() => {
                      setTimeout(() => {
                        window.scrollTo(0, 0);
