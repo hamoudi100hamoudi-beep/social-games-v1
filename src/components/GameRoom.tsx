@@ -4,6 +4,7 @@ import { Send, MessageSquare, AlertTriangle, Volume2, Info, X, User as UserIcon,
 import { useSocket } from './SocketProvider';
 import { motion, AnimatePresence } from 'motion/react';
 import { PlayersSidebar } from './game/PlayersSidebar';
+import { OverlayChatRoom, ChatMessage } from './game/OverlayChatRoom';
 
 interface GameRoomProps {
   nickname: string;
@@ -30,197 +31,6 @@ interface HitNotification {
   id: string;
   name: string;
 }
-
-const getSenderColor = (name: string) => {
-  const colors = [
-    'text-red-400', 
-    'text-green-400', 
-    'text-yellow-400', 
-    'text-pink-400', 
-    'text-indigo-400',
-    'text-orange-400',
-    'text-lime-400'
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-};
-
-const ChatMessageItem: React.FC<{ 
-  msg: Message, 
-  activeCopyId: string | null, 
-  onSetActiveCopy: (id: string | null) => void,
-  mySocketId?: string
-}> = ({ 
-  msg, 
-  activeCopyId, 
-  onSetActiveCopy,
-  mySocketId
-}) => {
-  const showCopy = activeCopyId === msg.id;
-
-  const startY = React.useRef<number>(0);
-  const startX = React.useRef<number>(0);
-  const hasScrolled = React.useRef<boolean>(false);
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    // Unconditionally prevent default on pointerdown to stop focus loss (keep keyboard open)
-    // This does NOT break touch scrolling on modern mobile browsers.
-    e.preventDefault();
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    hasScrolled.current = false;
-    startY.current = e.touches[0].clientY;
-    startX.current = e.touches[0].clientX;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    const deltaY = Math.abs(e.touches[0].clientY - startY.current);
-    const deltaX = Math.abs(e.touches[0].clientX - startX.current);
-    if (deltaY > 10 || deltaX > 10) {
-      hasScrolled.current = true;
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!hasScrolled.current) {
-      if (e.cancelable) e.preventDefault();
-      toggleCopy();
-    }
-  };
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    toggleCopy();
-  };
-
-  const toggleCopy = () => {
-    if (showCopy) {
-      onSetActiveCopy(null);
-    } else {
-      onSetActiveCopy(msg.id);
-    }
-  };
-
-  const copyToClipboard = (e: React.MouseEvent | React.TouchEvent | React.PointerEvent) => {
-    e.stopPropagation();
-    if (e.cancelable) e.preventDefault();
-    try {
-      navigator.clipboard.writeText(msg.text);
-    } catch (err) {}
-    onSetActiveCopy(null);
-  };
-
-  if (msg.type === 'system') {
-    const text = msg.text || '';
-    const isJoin = text.includes('انضم للغرفة') || text.toLowerCase().includes('joined');
-    const isLeave = text.includes('غادر الغرفة') || text.toLowerCase().includes('left');
-
-    if (!isJoin && !isLeave) {
-      return null;
-    }
-
-    const isTargetingSelf = msg.senderId === mySocketId;
-    let displayText = text;
-    if (isTargetingSelf && text.includes('lost the turn')) {
-        displayText = "You've lost your turn";
-    } else if (isTargetingSelf && text.includes('skipped the turn')) {
-        displayText = "You've skipped the turn";
-    }
-
-    return (
-      <div className="flex justify-center mb-2">
-        <div 
-          className="bg-[#00D9FF]/20 text-[#00D9FF] px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-md"
-          dir="auto"
-          style={{ unicodeBidi: 'plaintext' }}
-        >
-          {displayText}
-        </div>
-      </div>
-    );
-  }
-
-  if (msg.isSelf) {
-    return (
-      <div className="flex justify-end items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none">
-        <div 
-          className="flex flex-col items-end max-w-[80%] relative"
-          onPointerDown={handlePointerDown}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          onClick={handleClick}
-          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
-        >
-          <span className="text-[15px] text-[#00D9FF] font-bold mb-1 mr-1">{msg.sender}</span>
-          <div 
-            className="bg-[#7C4DFF] px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-[#6A3DE8]"
-            dir="auto"
-            style={{ unicodeBidi: 'plaintext', textAlign: 'start' }}
-          >
-            {msg.text}
-          </div>
-          {showCopy && (
-            <button 
-              onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
-              onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
-              className="absolute -top-3 left-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
-            >
-              <Copy size={10} />
-              Copy
-            </button>
-          )}
-        </div>
-        <div className="w-16 h-16 rounded-full bg-[#1A103C] border-[3px] border-[#00D9FF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
-          <span className="text-4xl translate-y-[1px]">{msg.avatar}</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex justify-start items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none">
-      <div className="w-16 h-16 rounded-full bg-[#24174D] border-[3px] border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
-        <span className="text-4xl translate-y-[1px]">{msg.avatar || '?'}</span>
-      </div>
-      <div 
-        className="flex flex-col items-start max-w-[80%] relative"
-        onPointerDown={handlePointerDown}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={handleClick}
-        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-        style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
-      >
-        <span className={`text-[15px] font-bold mb-1 ml-1 ${getSenderColor(msg.sender)}`}>{msg.sender}</span>
-        <div 
-          className="bg-[#24174D] px-4 py-2.5 rounded-2xl rounded-tl-sm text-white text-[15px] font-medium shadow-md break-words border border-white/10"
-          dir="auto"
-          style={{ unicodeBidi: 'plaintext', textAlign: 'start' }}
-        >
-          {msg.text}
-        </div>
-        {showCopy && (
-          <button 
-            onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
-            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
-            className="absolute -top-3 right-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
-          >
-            <Copy size={10} /> 
-            Copy
-          </button>
-        )}
-      </div>
-    </div>
-  );
-};
 
 const SmoothTimer = ({ gameState, maxTime, isFullScreen = false }: { gameState: { status: string, timeLeft: number, currentWord?: string | null }, maxTime: number, isFullScreen?: boolean }) => {
   const barRef = React.useRef<HTMLDivElement>(null);
@@ -285,14 +95,12 @@ const SmoothTimer = ({ gameState, maxTime, isFullScreen = false }: { gameState: 
 export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }: GameRoomProps) {
   const { socket, isConnected, socketId } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const bgTouchStartTime = React.useRef<number>(0);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
   const [viewportOffsetTop, setViewportOffsetTop] = useState<number>(0);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
   const hasEmittedJoin = React.useRef(false);
 
   const persistentPlayerId = React.useMemo(() => {
@@ -325,7 +133,6 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
 
   const closeChat = () => {
     setIsChatOpen(false);
-    setActiveCopyId(null);
     const textarea = document.getElementById('chat-textarea');
     if (textarea) {
       textarea.blur();
@@ -1320,108 +1127,17 @@ export default function GameRoom({ nickname, room, avatar, onLeave, justJoined }
       </div>
 
       {/* Chat Overlay */}
-      {isChatOpen && (
-         <div 
-           className="fixed left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none"
-           style={{ 
-             top: `${viewportOffsetTop}px`,
-             height: lockedHeight ? `${lockedHeight}px` : '100dvh' 
-           }}
-         >
-            
-            <div className="w-full h-full flex flex-col">
-                {/* Header (Invisible but usable to close if clicking top area) */}
-                <div 
-                  className="w-full shrink-0 h-16 cursor-pointer" 
-                  onClick={closeChat}
-                />
-
-                {/* Actual Chat Container */}
-                <div 
-                  className="w-full flex-1 bg-transparent flex flex-col min-h-0 select-none" 
-                  style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none' }}
-                  onContextMenu={(e) => e.preventDefault()}
-                  onTouchStart={() => { bgTouchStartTime.current = Date.now(); }}
-                  onMouseDown={() => { bgTouchStartTime.current = Date.now(); }}
-                  onClick={() => {
-                    setActiveCopyId(null);
-                    
-                    const duration = Date.now() - bgTouchStartTime.current;
-                    if (bgTouchStartTime.current > 0 && duration > 300) {
-                      bgTouchStartTime.current = 0;
-                      return; // It was a long press, do nothing!
-                    }
-                    bgTouchStartTime.current = 0;
-
-                    const act = document.activeElement;
-                    if (act?.tagName === 'INPUT' || act?.tagName === 'TEXTAREA') {
-                      (act as HTMLElement).blur();
-                    }
-                  }}
-                >
-                  
-                  {/* Messages Area */}
-                  <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-4 flex flex-col-reverse min-h-0">
-                    <div className="flex flex-col-reverse gap-4 max-w-2xl mx-auto w-full">
-                     {[...chatMessages].reverse().map(msg => (
-                       <ChatMessageItem 
-                         key={msg.id} 
-                         msg={msg} 
-                         activeCopyId={activeCopyId}
-                         onSetActiveCopy={setActiveCopyId}
-                         mySocketId={socketId}
-                       />
-                     ))}
-                    </div>
-                  </div>
-
-                  {/* Input Area */}
-                  <div 
-                    onClick={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onContextMenu={(e) => e.stopPropagation()}
-                    className="p-3 bg-[#24174D]/90 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full select-auto"
-                    style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'auto', userSelect: 'auto' }}
-                  >
-                    <form onSubmit={handleChatSubmit} className="relative max-w-2xl mx-auto flex gap-2 items-end">
-                      <button 
-                        type="button"
-                        onClick={closeChat}
-                        className="w-10 h-10 shrink-0 flex items-center justify-center border-2 border-white/10 bg-black/20 text-white rounded-xl hover:bg-white/10 transition-colors"
-                      >
-                        <X size={18} />
-                      </button>
-                      <textarea
-                        id="chat-textarea"
-                        value={chatInput}
-                        onChange={(e) => {
-                          setChatInput(e.target.value);
-                          e.target.style.height = 'auto'; 
-                          e.target.style.height = `${Math.max(40, e.target.scrollHeight)}px`; 
-                        }}
-                        dir="auto"
-                        rows={1}
-                        placeholder="Type your message here..."
-                        className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-[#7C4DFF] outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text"
-                        style={{ height: '40px', WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
-                      />
-                      <button 
-                        type="submit"
-                        onPointerDown={(e) => e.preventDefault()}
-                        disabled={!chatInput.trim()} 
-                        className="w-10 h-10 shrink-0 flex items-center justify-center text-white disabled:bg-[#7C4DFF]/50 bg-[#7C4DFF] rounded-xl hover:bg-[#6A3DE8] transition-colors shadow-md active:scale-95"
-                      >
-                        <Send size={16} />
-                      </button>
-                    </form>
-                  </div>
-
-                </div>
-            </div>
-         </div>
-      )}
+      <OverlayChatRoom
+        isChatOpen={isChatOpen}
+        viewportOffsetTop={viewportOffsetTop}
+        lockedHeight={lockedHeight}
+        closeChat={closeChat}
+        chatMessages={chatMessages}
+        socketId={socketId}
+        chatInput={chatInput}
+        setChatInput={setChatInput}
+        handleChatSubmit={handleChatSubmit}
+      />
 
     {/* Skip Confirm Modal */}
     {showSkipConfirm && (
