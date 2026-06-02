@@ -309,6 +309,12 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                  </button>
                  <textarea
                    id="chat-textarea"
+                    onFocus={() => {
+                      setTimeout(() => {
+                        window.scrollTo(0, 0);
+                        document.body.scrollTop = 0;
+                      }, 50);
+                    }}
                    onBlur={() => {
                      setTimeout(() => {
                        window.scrollTo(0, 0);

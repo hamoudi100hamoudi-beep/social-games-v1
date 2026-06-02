@@ -136,7 +136,6 @@ export default function GameRoom({
   const { socket, isConnected, socketId } = useSocket();
   const [isChatOpen, setIsChatOpen] = useState(false);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
-  const wasKeyboardOpenRef = React.useRef(false);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
   const [viewportOffsetTop, setViewportOffsetTop] = useState<number>(0);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(
@@ -373,6 +372,9 @@ export default function GameRoom({
 
       if (msg.subType === "hit") {
         if (msg.senderId === socket.id) {
+          if (guessInputRef.current) {
+            guessInputRef.current.blur();
+          }
           setShowCorrectAnimation(true);
           setTimeout(() => setShowCorrectAnimation(false), 1200);
         }
@@ -404,6 +406,7 @@ export default function GameRoom({
 
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const delayedBlurTimeoutRef = React.useRef<any>(null);
 
   useEffect(() => {
     let currentMax = window.visualViewport?.height || window.innerHeight;
@@ -434,16 +437,26 @@ export default function GameRoom({
       }
 
       if (isKeyboardShowing) {
-        wasKeyboardOpenRef.current = true;
+        // Clear any scheduled delayed blurs if keyboard is actively showing
+        if (delayedBlurTimeoutRef.current) {
+          clearTimeout(delayedBlurTimeoutRef.current);
+          delayedBlurTimeoutRef.current = null;
+        }
       } else {
-        // Keyboard is not showing. If it was active/open previously, let's blur the active input.
-        // This prevents the instant-blur issue when visual viewport events fire while keyboard is still animating open.
-        if (wasKeyboardOpenRef.current) {
-          const activeEl = document.activeElement;
-          if (activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA") {
-            (activeEl as HTMLElement).blur();
+        // Keyboard is closed/dismissed
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
+          if (!delayedBlurTimeoutRef.current) {
+            delayedBlurTimeoutRef.current = setTimeout(() => {
+              const currentHeightNow = window.visualViewport?.height || window.innerHeight;
+              const isKeyboardShowingNow = currentHeightNow < currentMax - 150;
+              const activeTagNow = document.activeElement?.tagName;
+              if (!isKeyboardShowingNow && (activeTagNow === "INPUT" || activeTagNow === "TEXTAREA")) {
+                (document.activeElement as HTMLElement).blur();
+              }
+              delayedBlurTimeoutRef.current = null;
+            }, 1000);
           }
-          wasKeyboardOpenRef.current = false;
         }
       }
     };
@@ -483,14 +496,6 @@ export default function GameRoom({
 
       window.scrollTo(0, 0);
 
-      // Lock layout scroll to (0,0) while chat is open to keep background room perfectly static and unshifted
-      const handleScrollLock = () => {
-        if (window.scrollY !== 0 || window.scrollX !== 0) {
-          window.scrollTo(0, 0);
-        }
-      };
-      window.addEventListener("scroll", handleScrollLock, { passive: true });
-
       return () => {
         document.body.style.overflow = originalBodyOverflow;
         document.body.style.position = originalBodyPosition;
@@ -501,14 +506,32 @@ export default function GameRoom({
         document.documentElement.style.position = originalHtmlPosition;
         document.documentElement.style.height = originalHtmlHeight;
 
-        window.removeEventListener("scroll", handleScrollLock);
-
         setTimeout(() => {
           window.scrollTo(0, 0);
         }, 50);
       };
     }
   }, [isChatOpen]);
+
+  // Prevent any browser automatic layout scrolling when chat is open or keyboard is showing
+  useEffect(() => {
+    const preventAutoScroll = () => {
+      if (typeof window !== "undefined" && (isChatOpen || isKeyboardOpen)) {
+        if (window.scrollY !== 0 || window.scrollX !== 0) {
+          window.scrollTo(0, 0);
+        }
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("scroll", preventAutoScroll, { passive: true });
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("scroll", preventAutoScroll);
+      }
+    };
+  }, [isChatOpen, isKeyboardOpen]);
 
   const isInputDisabled =
     gameState.status === "WAITING" ||
@@ -520,10 +543,10 @@ export default function GameRoom({
 
   useEffect(() => {
     if (isInputDisabled) {
-      setIsInputFocused(false);
       if (guessInputRef.current) {
         guessInputRef.current.blur();
       }
+      setIsInputFocused(false);
     }
   }, [isInputDisabled]);
 
@@ -696,9 +719,7 @@ export default function GameRoom({
         className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden overscroll-none touch-none"
         style={{
           height: isChatOpen
-            ? maxViewportHeight
-              ? `${maxViewportHeight}px`
-              : "100dvh"
+            ? "100vh"
             : lockedHeight
               ? `${lockedHeight}px`
               : "100dvh",
@@ -1516,18 +1537,23 @@ export default function GameRoom({
                 <input
                   ref={guessInputRef}
                   type="text"
-                  readOnly={isInputDisabled}
+                  disabled={isInputDisabled && !isInputFocused}
                   value={isInputDisabled ? "" : guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
                   onFocus={() => {
-                    if (isInputDisabled) {
-                      guessInputRef.current?.blur();
-                      return;
-                    }
                     setIsInputFocused(true);
+                    setIsKeyboardOpen(true);
+                    if (delayedBlurTimeoutRef.current) {
+                      clearTimeout(delayedBlurTimeoutRef.current);
+                      delayedBlurTimeoutRef.current = null;
+                    }
+                    setTimeout(() => {
+                      window.scrollTo(0, 0);
+                    }, 50);
                   }}
-                  onBlur={() => setIsInputFocused(false)}
-                  style={{ pointerEvents: isInputDisabled ? "none" : "auto" }}
+                  onBlur={() => {
+                    setIsInputFocused(false);
+                  }}
                   placeholder={
                     gameState.status === "WAITING"
                       ? "Waiting..."
