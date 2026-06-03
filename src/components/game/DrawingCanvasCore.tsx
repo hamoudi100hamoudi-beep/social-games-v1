@@ -244,6 +244,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const startYRef = useRef(0);
   const currentPathRef = useRef<{ x: number; y: number }[]>([]);
   const remotePathRef = useRef<{ x: number; y: number }[]>([]);
+  const activeSessionsRef = useRef<Record<string, { tool: ToolType; color: string; width: number; opacity: number }>>({});
 
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
@@ -403,6 +404,35 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeCtx.restore();
   };
 
+  const drawSmoothSegment = (
+    activeCtx: CanvasRenderingContext2D,
+    x0: number, y0: number,     // Start midpoint
+    cpX: number, cpY: number,   // Control point
+    x1: number, y1: number,     // End midpoint
+    drawTool: ToolType,
+    drawColor: string,
+    drawWidth: number,
+    drawOpacity: number
+  ) => {
+    activeCtx.save();
+    activeCtx.lineWidth = drawWidth;
+    activeCtx.lineCap = 'round';
+    activeCtx.lineJoin = 'round';
+    activeCtx.globalAlpha = drawOpacity;
+
+    if (drawTool === 'eraser') {
+      activeCtx.strokeStyle = '#ffffff';
+    } else {
+      activeCtx.strokeStyle = drawColor;
+    }
+
+    activeCtx.beginPath();
+    activeCtx.moveTo(x0, y0);
+    activeCtx.quadraticCurveTo(cpX, cpY, x1, y1);
+    activeCtx.stroke();
+    activeCtx.restore();
+  };
+
   const drawMicroDot = (
     activeCtx: CanvasRenderingContext2D,
     x: number, y: number,
@@ -543,8 +573,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     historyRef.current = [];
     saveSnapshot(); // Base empty state
 
-    let lastActiveX = 0;
-    let lastActiveY = 0;
+    const replayPaths: Record<string, { x: number; y: number }[]> = {};
+    const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
     commands.forEach((cmdObj) => {
       const decoded = decodeBinaryDrawMessage(cmdObj.data);
@@ -552,40 +582,88 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const { event, data } = decoded;
       if (!data) return;
 
+      const instId = data.instanceId || 'default';
       const cmdTool = data.tool || 'pencil';
       const cmdColor = data.color || '#000000';
       const cmdWidth = data.width || 5;
       const cmdOpacity = data.opacity !== undefined ? data.opacity : 1;
 
+      if (!replayPaths[instId]) {
+        replayPaths[instId] = [];
+      }
+      const path = replayPaths[instId];
+
       if (event === 'draw_start') {
-        lastActiveX = data.x * LOGICAL_WIDTH;
-        lastActiveY = data.y * LOGICAL_HEIGHT;
-        drawMicroDot(ctx, lastActiveX, lastActiveY, cmdTool, cmdColor, cmdWidth, cmdOpacity);
+        replaySessions[instId] = {
+          tool: cmdTool,
+          color: cmdColor,
+          width: cmdWidth,
+          opacity: cmdOpacity
+        };
+        const rx = data.x * LOGICAL_WIDTH;
+        const ry = data.y * LOGICAL_HEIGHT;
+        path.length = 0;
+        path.push({ x: rx, y: ry });
+        drawMicroDot(ctx, rx, ry, cmdTool, cmdColor, cmdWidth, cmdOpacity);
       } else if (event === 'draw_move') {
+        const session = replaySessions[instId] || {
+          tool: 'pencil',
+          color: '#000000',
+          width: 5,
+          opacity: 1
+        };
+        const handleMovePoint = (mx: number, my: number) => {
+          path.push({ x: mx, y: my });
+          const len = path.length;
+          if (len === 2) {
+            const midX = (path[0].x + path[1].x) / 2;
+            const midY = (path[0].y + path[1].y) / 2;
+            drawLineSegment(ctx, path[0].x, path[0].y, midX, midY, session.tool, session.color, session.width, session.opacity);
+          } else if (len > 2) {
+            const p2 = path[len - 1];
+            const p1 = path[len - 2];
+            const p0 = path[len - 3];
+            const mid1X = (p0.x + p1.x) / 2;
+            const mid1Y = (p0.y + p1.y) / 2;
+            const mid2X = (p1.x + p2.x) / 2;
+            const mid2Y = (p1.y + p2.y) / 2;
+            drawSmoothSegment(ctx, mid1X, mid1Y, p1.x, p1.y, mid2X, mid2Y, session.tool, session.color, session.width, session.opacity);
+          }
+        };
+
         if (data.moves && Array.isArray(data.moves)) {
           data.moves.forEach((m: any) => {
-            const mx = m.x * LOGICAL_WIDTH;
-            const my = m.y * LOGICAL_HEIGHT;
-            drawLineSegment(ctx, lastActiveX, lastActiveY, mx, my, cmdTool, cmdColor, cmdWidth, cmdOpacity);
-            lastActiveX = mx;
-            lastActiveY = my;
+            handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT);
           });
         } else if (data.x !== undefined && data.y !== undefined) {
-          const mx = data.x * LOGICAL_WIDTH;
-          const my = data.y * LOGICAL_HEIGHT;
-          drawLineSegment(ctx, lastActiveX, lastActiveY, mx, my, cmdTool, cmdColor, cmdWidth, cmdOpacity);
-          lastActiveX = mx;
-          lastActiveY = my;
+          handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT);
         }
       } else if (event === 'draw_end') {
-        const isShape = cmdTool !== 'pencil' && cmdTool !== 'eraser';
+        const session = replaySessions[instId] || {
+          tool: 'pencil',
+          color: '#000000',
+          width: 5,
+          opacity: 1
+        };
+        const len = path.length;
+        if (len > 1) {
+          const lastPt = path[len - 1];
+          const p0 = path[len - 2];
+          const midX = (p0.x + lastPt.x) / 2;
+          const midY = (p0.y + lastPt.y) / 2;
+          drawLineSegment(ctx, midX, midY, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+        }
+
+        const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
         if (isShape && data.startX !== undefined && data.startY !== undefined) {
           const sX = data.startX * LOGICAL_WIDTH;
           const sY = data.startY * LOGICAL_HEIGHT;
           const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
           const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
-          drawShape(ctx, sX, sY, eX, eY, cmdTool, cmdColor, cmdWidth, cmdOpacity);
+          drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity);
         }
+        path.length = 0;
+        delete replaySessions[instId];
         saveSnapshot();
       } else if (event === 'draw_clear') {
         ctx.fillStyle = '#ffffff';
@@ -627,38 +705,74 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const rx = data.x * LOGICAL_WIDTH;
         const ry = data.y * LOGICAL_HEIGHT;
         remotePathRef.current = [{ x: rx, y: ry }];
+        activeSessionsRef.current[data.instanceId] = {
+          tool: remoteTool,
+          color: remoteColor,
+          width: remoteWidth,
+          opacity: remoteOpacity
+        };
         drawMicroDot(ctx, rx, ry, remoteTool, remoteColor, remoteWidth, remoteOpacity);
       } else if (event === 'draw_move') {
+        const session = activeSessionsRef.current[data.instanceId] || {
+          tool: 'pencil',
+          color: '#000000',
+          width: 5,
+          opacity: 1
+        };
         const path = remotePathRef.current;
+        const handleMovePoint = (mx: number, my: number) => {
+          path.push({ x: mx, y: my });
+          const len = path.length;
+          if (len === 2) {
+            const midX = (path[0].x + path[1].x) / 2;
+            const midY = (path[0].y + path[1].y) / 2;
+            drawLineSegment(ctx, path[0].x, path[0].y, midX, midY, session.tool, session.color, session.width, session.opacity);
+          } else if (len > 2) {
+            const p2 = path[len - 1];
+            const p1 = path[len - 2];
+            const p0 = path[len - 3];
+            const mid1X = (p0.x + p1.x) / 2;
+            const mid1Y = (p0.y + p1.y) / 2;
+            const mid2X = (p1.x + p2.x) / 2;
+            const mid2Y = (p1.y + p2.y) / 2;
+            drawSmoothSegment(ctx, mid1X, mid1Y, p1.x, p1.y, mid2X, mid2Y, session.tool, session.color, session.width, session.opacity);
+          }
+        };
+
         if (data.moves && Array.isArray(data.moves)) {
           data.moves.forEach((m: any) => {
-            const mx = m.x * LOGICAL_WIDTH;
-            const my = m.y * LOGICAL_HEIGHT;
-            if (path.length > 0) {
-              const lastPt = path[path.length - 1];
-              drawLineSegment(ctx, lastPt.x, lastPt.y, mx, my, remoteTool, remoteColor, remoteWidth, remoteOpacity);
-            }
-            path.push({ x: mx, y: my });
+            handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT);
           });
         } else if (data.x !== undefined && data.y !== undefined) {
-          const mx = data.x * LOGICAL_WIDTH;
-          const my = data.y * LOGICAL_HEIGHT;
-          if (path.length > 0) {
-            const lastPt = path[path.length - 1];
-            drawLineSegment(ctx, lastPt.x, lastPt.y, mx, my, remoteTool, remoteColor, remoteWidth, remoteOpacity);
-          }
-          path.push({ x: mx, y: my });
+          handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT);
         }
       } else if (event === 'draw_end') {
-        const isShape = remoteTool !== 'pencil' && remoteTool !== 'eraser';
+        const session = activeSessionsRef.current[data.instanceId] || {
+          tool: 'pencil',
+          color: '#000000',
+          width: 5,
+          opacity: 1
+        };
+        const path = remotePathRef.current;
+        const len = path.length;
+        if (len > 1) {
+          const lastPt = path[len - 1];
+          const p0 = path[len - 2];
+          const midX = (p0.x + lastPt.x) / 2;
+          const midY = (p0.y + lastPt.y) / 2;
+          drawLineSegment(ctx, midX, midY, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+        }
+
+        const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
         if (isShape && data.startX !== undefined && data.startY !== undefined) {
           const sX = data.startX * LOGICAL_WIDTH;
           const sY = data.startY * LOGICAL_HEIGHT;
           const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
           const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
-          drawShape(ctx, sX, sY, eX, eY, remoteTool, remoteColor, remoteWidth, remoteOpacity);
+          drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity);
         }
         remotePathRef.current = [];
+        delete activeSessionsRef.current[data.instanceId];
         saveSnapshot();
       } else if (event === 'draw_clear') {
         executeClear(false);
@@ -849,11 +963,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
       const path = currentPathRef.current;
-      if (path.length > 0) {
-        const lastPt = path[path.length - 1];
-        drawLineSegment(ctx, lastPt.x, lastPt.y, x, y, activeTool, activeColor, activeWidth, activeOpacity);
-      }
       path.push({ x, y });
+
+      const len = path.length;
+      if (len === 2) {
+        const midX = (path[0].x + path[1].x) / 2;
+        const midY = (path[0].y + path[1].y) / 2;
+        drawLineSegment(ctx, path[0].x, path[0].y, midX, midY, activeTool, activeColor, activeWidth, activeOpacity);
+      } else if (len > 2) {
+        const p2 = path[len - 1];
+        const p1 = path[len - 2];
+        const p0 = path[len - 3];
+        const mid1X = (p0.x + p1.x) / 2;
+        const mid1Y = (p0.y + p1.y) / 2;
+        const mid2X = (p1.x + p2.x) / 2;
+        const mid2Y = (p1.y + p2.y) / 2;
+        drawSmoothSegment(ctx, mid1X, mid1Y, p1.x, p1.y, mid2X, mid2Y, activeTool, activeColor, activeWidth, activeOpacity);
+      }
 
       const normX = x / LOGICAL_WIDTH;
       const normY = y / LOGICAL_HEIGHT;
@@ -923,6 +1049,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           moves: moveBatchRef.current
         });
         moveBatchRef.current = [];
+      }
+
+      const path = currentPathRef.current;
+      const len = path.length;
+      if (len > 1) {
+        const lastPt = path[len - 1];
+        const p0 = path[len - 2];
+        const midX = (p0.x + lastPt.x) / 2;
+        const midY = (p0.y + lastPt.y) / 2;
+        drawLineSegment(ctx, midX, midY, lastPt.x, lastPt.y, activeTool, activeColor, activeWidth, activeOpacity);
       }
 
       emitDrawCommand('draw_end', {
