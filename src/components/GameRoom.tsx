@@ -407,6 +407,7 @@ export default function GameRoom({
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const delayedBlurTimeoutRef = React.useRef<any>(null);
+  const wasKeyboardShowingRef = React.useRef<boolean>(false);
 
   useEffect(() => {
     let currentMax = window.visualViewport?.height || window.innerHeight;
@@ -436,6 +437,7 @@ export default function GameRoom({
       window.scrollTo(0, 0);
 
       if (isKeyboardShowing) {
+        wasKeyboardShowingRef.current = true;
         // Clear any scheduled delayed blurs if keyboard is actively showing
         if (delayedBlurTimeoutRef.current) {
           clearTimeout(delayedBlurTimeoutRef.current);
@@ -445,16 +447,21 @@ export default function GameRoom({
         // Keyboard is closed/dismissed
         const activeEl = document.activeElement;
         if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
-          if (!delayedBlurTimeoutRef.current) {
-            delayedBlurTimeoutRef.current = setTimeout(() => {
-              const currentHeightNow = window.visualViewport?.height || window.innerHeight;
-              const isKeyboardShowingNow = currentHeightNow < currentMax - 150;
-              const activeTagNow = document.activeElement?.tagName;
-              if (!isKeyboardShowingNow && (activeTagNow === "INPUT" || activeTagNow === "TEXTAREA")) {
-                (document.activeElement as HTMLElement).blur();
-              }
-              delayedBlurTimeoutRef.current = null;
-            }, 1000);
+          if (wasKeyboardShowingRef.current) {
+            (activeEl as HTMLElement).blur();
+            wasKeyboardShowingRef.current = false;
+          } else {
+            if (!delayedBlurTimeoutRef.current) {
+              delayedBlurTimeoutRef.current = setTimeout(() => {
+                const currentHeightNow = window.visualViewport?.height || window.innerHeight;
+                const isKeyboardShowingNow = currentHeightNow < currentMax - 150;
+                const activeTagNow = document.activeElement?.tagName;
+                if (!isKeyboardShowingNow && (activeTagNow === "INPUT" || activeTagNow === "TEXTAREA")) {
+                  (document.activeElement as HTMLElement).blur();
+                }
+                delayedBlurTimeoutRef.current = null;
+              }, 50);
+            }
           }
         }
       }
@@ -1280,22 +1287,19 @@ export default function GameRoom({
         </div>
 
         {/* Left: Players Sidebar */}
-        {!isChatOpen && (
-          <PlayersSidebar
-            slots={slots}
-            gameState={gameState}
-            morphMode={morphMode}
-            socketId={socketId}
-          />
-        )}
+        <PlayersSidebar
+          slots={slots}
+          gameState={gameState}
+          morphMode={morphMode}
+          socketId={socketId}
+        />
 
         {/* Right: Actions & Guess Input */}
-        {!isChatOpen && (
-          <div
-            className={`flex flex-col bg-[#1A103C] relative overflow-hidden
-                        ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
-                       `}
-          >
+        <div
+          className={`flex flex-col bg-[#1A103C] relative overflow-hidden
+                      ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
+                     `}
+        >
             {/* Actions Bar */}
             <div
               className={`grid transition-all duration-150 ease-in-out shrink-0 bg-[#24174D]
@@ -1587,7 +1591,6 @@ export default function GameRoom({
               </form>
             </div>
           </div>
-        )}
       </div>
 
       {/* Chat Overlay */}

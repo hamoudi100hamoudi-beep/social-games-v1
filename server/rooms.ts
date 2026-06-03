@@ -461,7 +461,7 @@ class RoomManager {
       | "turn_lost"
       | "skipped" = "timeout",
   ) {
-    const winner = room.players.find((p) => p.score >= 100);
+    const winner = room.players.find((p) => p.score >= 40);
     if (winner) {
       return this.transitionToPodium(room);
     }
