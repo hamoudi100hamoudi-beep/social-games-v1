@@ -256,11 +256,63 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // Buffering history syncing before ref ready
   const bufferedSyncRef = useRef<any[] | null>(null);
 
+  // Layout scale tracking for responsive full viewport fitting
+  const containerRef = useRef<HTMLDivElement>(null);
+  const transformWrapperRef = useRef<HTMLDivElement>(null);
+  const transformRef = useRef({ scale: 1, x: 0, y: 0 });
+  const [baseScale, setBaseScale] = useState(1);
+  const hasInitializedTransform = useRef(false);
+
   // Dynamic references to read props values directly in listeners without re-binding
   const propsRef = useRef({ tool, color, thickness, opacity, readOnly });
   useEffect(() => {
     propsRef.current = { tool, color, thickness, opacity, readOnly };
   }, [tool, color, thickness, opacity, readOnly]);
+
+  const applyTransform = (overrideBaseScale?: number) => {
+    if (transformWrapperRef.current) {
+      const { x, y, scale } = transformRef.current;
+      const currentBaseScale = overrideBaseScale !== undefined ? overrideBaseScale : baseScale;
+      transformWrapperRef.current.style.transform = `translate(${x}px, ${y}px) scale(${currentBaseScale * scale})`;
+    }
+  };
+
+  useEffect(() => {
+    applyTransform();
+  }, [baseScale]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const obs = new ResizeObserver((entries) => {
+      for (let entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width === 0 || height === 0) continue;
+        
+        let targetScale;
+        if (readOnly) {
+          targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
+        } else {
+          targetScale = height / LOGICAL_HEIGHT;
+        }
+        
+        setBaseScale(targetScale);
+        
+        if (!hasInitializedTransform.current || readOnly) {
+          const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
+          const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
+          const initialX = (width - canvasDisplayWidth) / 2;
+          const initialY = (height - canvasDisplayHeight) / 2; 
+          
+          transformRef.current = { scale: 1, x: initialX, y: initialY };
+          applyTransform(targetScale);
+          if (!readOnly) hasInitializedTransform.current = true;
+        }
+      }
+    });
+    obs.observe(container);
+    return () => obs.disconnect();
+  }, [readOnly]);
 
   // Expose handles to Parent Component
   useImperativeHandle(ref, () => ({
@@ -526,11 +578,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           lastActiveY = my;
         }
       } else if (event === 'draw_end') {
-        if (data.isShape && data.startX !== undefined && data.startY !== undefined) {
+        const isShape = cmdTool !== 'pencil' && cmdTool !== 'eraser';
+        if (isShape && data.startX !== undefined && data.startY !== undefined) {
           const sX = data.startX * LOGICAL_WIDTH;
           const sY = data.startY * LOGICAL_HEIGHT;
-          const eX = data.endX * LOGICAL_WIDTH;
-          const eY = data.endY * LOGICAL_HEIGHT;
+          const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
+          const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
           drawShape(ctx, sX, sY, eX, eY, cmdTool, cmdColor, cmdWidth, cmdOpacity);
         }
         saveSnapshot();
@@ -597,11 +650,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           path.push({ x: mx, y: my });
         }
       } else if (event === 'draw_end') {
-        if (data.isShape && data.startX !== undefined && data.startY !== undefined) {
+        const isShape = remoteTool !== 'pencil' && remoteTool !== 'eraser';
+        if (isShape && data.startX !== undefined && data.startY !== undefined) {
           const sX = data.startX * LOGICAL_WIDTH;
           const sY = data.startY * LOGICAL_HEIGHT;
-          const eX = data.endX * LOGICAL_WIDTH;
-          const eY = data.endY * LOGICAL_HEIGHT;
+          const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
+          const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
           drawShape(ctx, sX, sY, eX, eY, remoteTool, remoteColor, remoteWidth, remoteOpacity);
         }
         remotePathRef.current = [];
@@ -892,7 +946,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         startX: startXRef.current / LOGICAL_WIDTH,
         startY: startYRef.current / LOGICAL_HEIGHT,
         endX: x / LOGICAL_WIDTH,
-        endY: y / LOGICAL_HEIGHT
+        endY: y / LOGICAL_HEIGHT,
+        x: x / LOGICAL_WIDTH,
+        y: y / LOGICAL_HEIGHT
       });
     }
 
@@ -902,8 +958,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   return (
     <div
+      ref={containerRef}
       role="presentation"
-      className="absolute inset-0 select-none overflow-hidden touch-none flex items-center justify-center bg-slate-900"
+      className="absolute inset-0 select-none overflow-hidden touch-none bg-slate-900"
       style={{
         width: '100%',
         height: '100%',
@@ -911,20 +968,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     >
       {/* 
         This is the dynamic high-performance rendering stage. 
-        Aspect-ratio tracking is forced via CSS scaling to preserve absolute logical pixels mapping 
+        Aspect-ratio tracking is responsive to fit fully inside viewport or zoom/drag 
       */}
       <div
-        className="relative bg-white shadow-xl overflow-hidden select-none touch-none aspect-[4/3] w-full max-w-full"
+        ref={transformWrapperRef}
+        className="absolute left-0 top-0 transform-gpu bg-white shadow-xl overflow-hidden select-none touch-none"
         style={{
-          width: '100%',
-          maxHeight: '100%',
+          width: LOGICAL_WIDTH,
+          height: LOGICAL_HEIGHT,
+          transformOrigin: '0 0',
+          willChange: 'transform'
         }}
       >
         {/* Double-buffered interactive canvas slots (Opaque Primary Layer + Transparent Shape Preview) */}
         <canvas
           id="drawing-board-layer-primary"
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full block bg-white touch-none pointer-events-auto"
+          className="absolute inset-0 w-full h-full block bg-white touch-none pointer-events-auto cursor-crosshair"
           style={{
             zIndex: 10,
             imageRendering: 'auto'

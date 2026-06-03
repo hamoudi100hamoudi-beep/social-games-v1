@@ -1,7 +1,7 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
-import './index.css';
+import './components/index.css';
 import { SocketProvider } from './components/SocketProvider.tsx';
 
 // Register Service Worker for PWA (Browser Installability)
