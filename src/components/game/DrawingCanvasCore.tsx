@@ -6,6 +6,7 @@ import React, {
   useImperativeHandle,
   forwardRef
 } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useSocket } from '../SocketProvider';
 import { ToolType } from '../../types/draw';
 import {
@@ -199,6 +200,7 @@ export interface DrawingCanvasCoreRef {
   undo: () => void;
   redo: () => void;
   clear: () => void;
+  resetState: () => void;
   getCanvasSnapshot: () => string | null;
 }
 
@@ -210,6 +212,8 @@ interface DrawingCanvasCoreProps {
   opacity: number;
   onHistoryStateChange?: (index: number, length: number) => void;
   onPipetteColorPicked?: (hex: string) => void;
+  currentDrawerId?: string;
+  status?: string;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -220,7 +224,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     thickness,
     opacity,
     onHistoryStateChange,
-    onPipetteColorPicked
+    onPipetteColorPicked,
+    currentDrawerId,
+    status
   },
   ref
 ) => {
@@ -237,6 +243,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // States
   const [isDrawing, setIsDrawing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Local drawing track refs
   const isDrawingRef = useRef(false);
@@ -326,6 +334,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     undo: () => executeUndo(true),
     redo: () => executeRedo(true),
     clear: () => executeClear(true),
+    resetState: () => executeResetState(),
     getCanvasSnapshot: () => {
       if (canvasRef.current) {
         return canvasRef.current.toDataURL('image/png');
@@ -602,6 +611,43 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // --- Handlers & Commands Replays ---
 
+  const executeResetState = () => {
+    console.log("[DrawingCanvasCore] Hard-resetting drawing state...");
+    const ctx = ctxRef.current;
+    const tempCtx = tempCtxRef.current;
+    if (ctx && tempCtx) {
+      // Clear visual layers
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    }
+
+    // Reset local/remote paths & sessions
+    isDrawingRef.current = false;
+    currentPathRef.current = [];
+    remotePathRef.current = [];
+    activeSessionsRef.current = {};
+    moveBatchRef.current = [];
+
+    // Clear throttle timeout
+    if (throttleTimeoutRef.current) {
+      clearTimeout(throttleTimeoutRef.current);
+      throttleTimeoutRef.current = null;
+    }
+
+    // Reinitialize Undo / Redo stacks
+    historyRef.current = [];
+    historyIndexRef.current = -1;
+    bufferedSyncRef.current = null;
+
+    if (ctx && tempCtx) {
+      saveSnapshot(); 
+    }
+
+    // Callback to update Parent Component history buttons
+    onHistoryStateChange?.(-1, 0);
+  };
+
   const executeClear = (emit: boolean = true) => {
     const ctx = ctxRef.current;
     const tempCtx = tempCtxRef.current;
@@ -835,6 +881,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         // Buffering the sync until refs are fully ready
         bufferedSyncRef.current = commands;
       }
+      setIsSyncing(false);
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = null;
+      }
     };
 
     socket.on('draw_binary', onDrawBinary);
@@ -846,13 +897,29 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
   }, [socket, instanceId]);
 
+  const startSyncFlow = () => {
+    setIsSyncing(true);
+    console.log("[DrawingCanvasCore] Activating loading state, requesting round sync...");
+
+    // Setup 4 seconds safety timeout to prevent getting stuck under network latency
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+    syncTimeoutRef.current = setTimeout(() => {
+      console.log("[DrawingCanvasCore] Sync safety timeout reached (4s). Overriding loading screen.");
+      setIsSyncing(false);
+    }, 4000);
+
+    socket?.emit('request_round_sync');
+  };
+
   // --- Network Connection Recovery Engine ---
   useEffect(() => {
     if (!socket) return;
 
     const handleConnect = () => {
       console.log("[DrawingCanvasCore] System connection established. Recovering state history...");
-      socket.emit('request_round_sync');
+      startSyncFlow();
     };
 
     socket.on('connect', handleConnect);
@@ -860,13 +927,27 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     // Explicit trigger upon mounting
     if (socket.connected) {
       console.log("[DrawingCanvasCore] Initialized with healthy connection. Instantly fetching sync history...");
-      socket.emit('request_round_sync');
+      startSyncFlow();
     }
 
     return () => {
       socket.off('connect', handleConnect);
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = null;
+      }
     };
   }, [socket]);
+
+  // Automated Clean Reset State on turn / drawer change
+  const previousStateRef = useRef({ currentDrawerId, status });
+  useEffect(() => {
+    if (previousStateRef.current.currentDrawerId !== currentDrawerId || previousStateRef.current.status !== status) {
+      console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
+      executeResetState();
+    }
+    previousStateRef.current = { currentDrawerId, status };
+  }, [currentDrawerId, status]);
 
   // --- HTML Canvas Initialization ---
   useEffect(() => {
@@ -1162,6 +1243,30 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }}
         />
       </div>
+
+      <AnimatePresence>
+        {isSyncing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: 'easeInOut' }}
+            className="absolute inset-0 bg-[#0c061d]/90 backdrop-blur-md flex flex-col items-center justify-center z-[100] cursor-not-allowed select-none touch-none"
+            style={{ pointerEvents: 'auto' }}
+          >
+            <div className="flex flex-col items-center space-y-4">
+              <div className="relative w-12 h-12">
+                <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
+                <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
+              </div>
+              <div className="text-center">
+                <p className="text-white font-medium text-lg font-sans tracking-tight">جاري مزامنة اللوح...</p>
+                <p className="text-violet-300 text-xs mt-1 selection:hidden animate-pulse">يرجى الانتظار ثانية واحدة لمزامنة الخطوط الفائتة</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 });

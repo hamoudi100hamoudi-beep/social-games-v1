@@ -870,11 +870,6 @@ class RoomManager {
     if (!room.gameState.redoStack) room.gameState.redoStack = [];
     room.gameState.drawHistory.push({ event, data });
 
-    // Safely limit history length to 500 to protect mobile clients from RAM/CPU bloat
-    if (room.gameState.drawHistory.length > 500) {
-      room.gameState.drawHistory = room.gameState.drawHistory.slice(-500);
-    }
-
     // Any new drawing action clears the redo stack
     //@ts-ignore
     room.gameState.redoStack = [];
@@ -1103,6 +1098,17 @@ class RoomManager {
     console.error(
       `[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Old Socket ID: ${oldSocketId}, New Socket ID: ${newSocketId}`,
     );
+
+    // --- Ghost Socket Shield ---
+    // If we have a new socket ID, forcefully disconnect the stale ghost socket connection
+    // to prevent listeners from leaking, ghost states, or chat freeze.
+    if (oldSocketId && oldSocketId !== newSocketId && this.io) {
+      const oldSocket = this.io.sockets.sockets.get(oldSocketId);
+      if (oldSocket) {
+        console.log(`[Ghost Socket Shield] Force-disconnecting leaking ghost socket: ${oldSocketId}`);
+        oldSocket.disconnect(true);
+      }
+    }
 
     // Update Player ID mapping
     existingPlayer.id = newSocketId;

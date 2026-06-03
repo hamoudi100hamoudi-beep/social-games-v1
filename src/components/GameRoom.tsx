@@ -832,7 +832,9 @@ export default function GameRoom({
         >
           {renderWordOverlay(true)}
           <DrawingBoard
-            key={`drawer-full-board-${gameState.currentDrawerId || ""}-${gameState.status || ""}`}
+            key={`drawer-full-board-${room || ""}`}
+            currentDrawerId={gameState.currentDrawerId}
+            status={gameState.status}
             readOnly={false}
             onSkipTurn={
               gameState.status === "DRAWING"
@@ -909,7 +911,9 @@ export default function GameRoom({
             {renderWordOverlay()}
 
             <DrawingBoard
-              key={`view-inline-board-${gameState.currentDrawerId || ""}-${amIDrawer ? "drawer" : "viewer"}-${gameState.status || ""}`}
+              key={`view-inline-board-${room || ""}`}
+              currentDrawerId={gameState.currentDrawerId}
+              status={gameState.status}
               readOnly={!amIDrawer}
               timerPercentage={timerPercentage}
             />

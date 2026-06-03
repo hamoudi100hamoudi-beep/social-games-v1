@@ -22,7 +22,9 @@ export default function DrawingBoard({
   onSkipTurn,
   onRequestHint,
   hintsRemaining = 0,
-  timerBarNode
+  timerBarNode,
+  currentDrawerId,
+  status
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -30,6 +32,8 @@ export default function DrawingBoard({
   hintsRemaining?: number;
   timerPercentage?: number;
   timerBarNode?: React.ReactNode;
+  currentDrawerId?: string;
+  status?: string;
   key?: any;
 }) {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
@@ -165,6 +169,8 @@ export default function DrawingBoard({
           color={color}
           thickness={currentWidth}
           opacity={currentOpacity}
+          currentDrawerId={currentDrawerId}
+          status={status}
           onHistoryStateChange={(idx, len) => setHistoryState({ index: idx, length: len })}
           onPipetteColorPicked={(hex) => {
             setColor(hex);
