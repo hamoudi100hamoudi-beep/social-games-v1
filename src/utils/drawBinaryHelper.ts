@@ -282,96 +282,101 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     return null;
   }
   
-  const view = new DataView(buffer);
-  if (view.byteLength < 8) {
-    console.warn("[decodeBinaryDrawMessage] DataView byteLength is too small:", view.byteLength);
+  try {
+    const view = new DataView(buffer);
+    if (view.byteLength < 8) {
+      console.warn("[decodeBinaryDrawMessage] DataView byteLength is too small:", view.byteLength);
+      return null;
+    }
+    
+    const type = view.getUint8(0);
+    const instId = readString7(view, 1);
+    
+    if (type === MSG_DRAW_START) {
+      const tool = getToolName(view.getUint8(8));
+      const r = view.getUint8(9);
+      const g = view.getUint8(10);
+      const b = view.getUint8(11);
+      const color = formatRGBToHex(r, g, b);
+      const width = view.getUint8(12);
+      const opacity = view.getUint8(13) / 100;
+      const x = view.getUint16(14, true) / 10000;
+      const y = view.getUint16(16, true) / 10000;
+      
+      return {
+        event: 'draw_start',
+        data: { instanceId: instId, tool, color, width, opacity, x, y }
+      };
+    }
+    
+    if (type === MSG_DRAW_MOVE) {
+      const movesLength = view.getUint16(8, true);
+      const moves = [];
+      for (let i = 0; i < movesLength; i++) {
+        const x = view.getUint16(10 + i * 4, true) / 10000;
+        const y = view.getUint16(12 + i * 4, true) / 10000;
+        moves.push({ x, y });
+      }
+      
+      if (movesLength === 1) {
+        return {
+          event: 'draw_move',
+          data: { instanceId: instId, x: moves[0].x, y: moves[0].y }
+        };
+      } else {
+        return {
+          event: 'draw_move',
+          data: { instanceId: instId, moves }
+        };
+      }
+    }
+    
+    if (type === MSG_DRAW_END) {
+      const tool = getToolName(view.getUint8(8));
+      const r = view.getUint8(9);
+      const g = view.getUint8(10);
+      const b = view.getUint8(11);
+      const color = formatRGBToHex(r, g, b);
+      const width = view.getUint8(12);
+      const opacity = view.getUint8(13) / 100;
+      const startX = view.getUint16(14, true) / 10000;
+      const startY = view.getUint16(16, true) / 10000;
+      const x = view.getUint16(18, true) / 10000;
+      const y = view.getUint16(20, true) / 10000;
+      
+      return {
+        event: 'draw_end',
+        data: { instanceId: instId, tool, color, width, opacity, startX, startY, x, y }
+      };
+    }
+    
+    if (type === MSG_DRAW_ACTION) {
+      const tool = getToolName(view.getUint8(8));
+      const r = view.getUint8(9);
+      const g = view.getUint8(10);
+      const b = view.getUint8(11);
+      const color = formatRGBToHex(r, g, b);
+      const opacity = view.getUint8(12) / 100;
+      const x = view.getUint16(13, true) / 10000;
+      const y = view.getUint16(15, true) / 10000;
+      
+      return {
+        event: 'draw_action',
+        data: { instanceId: instId, tool, color, opacity, x, y }
+      };
+    }
+    
+    let eventName = 'draw_clear';
+    if (type === MSG_DRAW_CANCEL) eventName = 'draw_cancel';
+    else if (type === MSG_DRAW_UNDO) eventName = 'draw_undo';
+    else if (type === MSG_DRAW_REDO) eventName = 'draw_redo';
+    
+    return {
+      event: eventName,
+      data: { instanceId: instId }
+    };
+  } catch (parseError) {
+    console.error("[decodeBinaryDrawMessage] RangeError or Parsing Exception:", parseError, input);
     return null;
   }
-  
-  const type = view.getUint8(0);
-  const instId = readString7(view, 1);
-  
-  if (type === MSG_DRAW_START) {
-    const tool = getToolName(view.getUint8(8));
-    const r = view.getUint8(9);
-    const g = view.getUint8(10);
-    const b = view.getUint8(11);
-    const color = formatRGBToHex(r, g, b);
-    const width = view.getUint8(12);
-    const opacity = view.getUint8(13) / 100;
-    const x = view.getUint16(14, true) / 10000;
-    const y = view.getUint16(16, true) / 10000;
-    
-    return {
-      event: 'draw_start',
-      data: { instanceId: instId, tool, color, width, opacity, x, y }
-    };
-  }
-  
-  if (type === MSG_DRAW_MOVE) {
-    const movesLength = view.getUint16(8, true);
-    const moves = [];
-    for (let i = 0; i < movesLength; i++) {
-      const x = view.getUint16(10 + i * 4, true) / 10000;
-      const y = view.getUint16(12 + i * 4, true) / 10000;
-      moves.push({ x, y });
-    }
-    
-    if (movesLength === 1) {
-      return {
-        event: 'draw_move',
-        data: { instanceId: instId, x: moves[0].x, y: moves[0].y }
-      };
-    } else {
-      return {
-        event: 'draw_move',
-        data: { instanceId: instId, moves }
-      };
-    }
-  }
-  
-  if (type === MSG_DRAW_END) {
-    const tool = getToolName(view.getUint8(8));
-    const r = view.getUint8(9);
-    const g = view.getUint8(10);
-    const b = view.getUint8(11);
-    const color = formatRGBToHex(r, g, b);
-    const width = view.getUint8(12);
-    const opacity = view.getUint8(13) / 100;
-    const startX = view.getUint16(14, true) / 10000;
-    const startY = view.getUint16(16, true) / 10000;
-    const x = view.getUint16(18, true) / 10000;
-    const y = view.getUint16(20, true) / 10000;
-    
-    return {
-      event: 'draw_end',
-      data: { instanceId: instId, tool, color, width, opacity, startX, startY, x, y }
-    };
-  }
-  
-  if (type === MSG_DRAW_ACTION) {
-    const tool = getToolName(view.getUint8(8));
-    const r = view.getUint8(9);
-    const g = view.getUint8(10);
-    const b = view.getUint8(11);
-    const color = formatRGBToHex(r, g, b);
-    const opacity = view.getUint8(12) / 100;
-    const x = view.getUint16(13, true) / 10000;
-    const y = view.getUint16(15, true) / 10000;
-    
-    return {
-      event: 'draw_action',
-      data: { instanceId: instId, tool, color, opacity, x, y }
-    };
-  }
-  
-  let eventName = 'draw_clear';
-  if (type === MSG_DRAW_CANCEL) eventName = 'draw_cancel';
-  else if (type === MSG_DRAW_UNDO) eventName = 'draw_undo';
-  else if (type === MSG_DRAW_REDO) eventName = 'draw_redo';
-  
-  return {
-    event: eventName,
-    data: { instanceId: instId }
-  };
 };

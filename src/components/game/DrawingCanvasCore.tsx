@@ -699,113 +699,126 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Replay of full history from reconnect/new joiner sync event
   const applySyncedHistory = (commands: any[]) => {
-    const ctx = ctxRef.current;
-    const tempCtx = tempCtxRef.current;
-    if (!ctx || !tempCtx) return;
+    try {
+      const ctx = ctxRef.current;
+      const tempCtx = tempCtxRef.current;
+      if (!ctx || !tempCtx) return;
 
-    console.log("[DrawingCanvasCore] Instantly rebuilding room drawing history...", commands.length);
+      console.log("[DrawingCanvasCore] Instantly rebuilding room drawing history...", commands.length);
 
-    // Initial clear
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      // Initial clear
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
-    // Reset history stacks
-    historyRef.current = [];
-    historyIndexRef.current = -1;
+      // Reset history stacks
+      historyRef.current = [];
+      historyIndexRef.current = -1;
+      saveSnapshot(); // Base empty state in history stack
 
-    const replayPaths: Record<string, { x: number; y: number }[]> = {};
-    const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
+      const replayPaths: Record<string, { x: number; y: number }[]> = {};
+      const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
-    commands.forEach((cmdObj) => {
-      const decoded = decodeBinaryDrawMessage(cmdObj.data);
-      if (!decoded) return;
-      const { event, data } = decoded;
-      if (!data) return;
+      commands.forEach((cmdObj) => {
+        try {
+          const decoded = decodeBinaryDrawMessage(cmdObj.data);
+          if (!decoded) return;
+          const { event, data } = decoded;
+          if (!data) return;
 
-      const instId = data.instanceId || 'default';
-      const cmdTool = data.tool || 'pencil';
-      const cmdColor = data.color || '#000000';
-      const cmdWidth = data.width || 5;
-      const cmdOpacity = data.opacity !== undefined ? data.opacity : 1;
+          const instId = data.instanceId || 'default';
+          const cmdTool = data.tool || 'pencil';
+          const cmdColor = data.color || '#000000';
+          const cmdWidth = data.width || 5;
+          const cmdOpacity = data.opacity !== undefined ? data.opacity : 1;
 
-      if (!replayPaths[instId]) {
-        replayPaths[instId] = [];
-      }
-      const path = replayPaths[instId];
+          if (!replayPaths[instId]) {
+            replayPaths[instId] = [];
+          }
+          const path = replayPaths[instId];
 
-      if (event === 'draw_start') {
-        replaySessions[instId] = {
-          tool: cmdTool,
-          color: cmdColor,
-          width: cmdWidth,
-          opacity: cmdOpacity
-        };
-        const rx = data.x * LOGICAL_WIDTH;
-        const ry = data.y * LOGICAL_HEIGHT;
-        path.length = 0;
-        path.push({ x: rx, y: ry });
-      } else if (event === 'draw_move') {
-        const handleMovePoint = (mx: number, my: number) => {
-          path.push({ x: mx, y: my });
-        };
+          if (event === 'draw_start') {
+            replaySessions[instId] = {
+              tool: cmdTool,
+              color: cmdColor,
+              width: cmdWidth,
+              opacity: cmdOpacity
+            };
+            const rx = data.x * LOGICAL_WIDTH;
+            const ry = data.y * LOGICAL_HEIGHT;
+            path.length = 0;
+            path.push({ x: rx, y: ry });
+          } else if (event === 'draw_move') {
+            const handleMovePoint = (mx: number, my: number) => {
+              path.push({ x: mx, y: my });
+            };
 
-        if (data.moves && Array.isArray(data.moves)) {
-          data.moves.forEach((m: any) => {
-            handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT);
-          });
-        } else if (data.x !== undefined && data.y !== undefined) {
-          handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT);
+            if (data.moves && Array.isArray(data.moves)) {
+              data.moves.forEach((m: any) => {
+                handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT);
+              });
+            } else if (data.x !== undefined && data.y !== undefined) {
+              handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT);
+            }
+          } else if (event === 'draw_end') {
+            const session = replaySessions[instId] || {
+              tool: 'pencil',
+              color: '#000000',
+              width: 5,
+              opacity: 1
+            };
+            if (path.length > 0) {
+              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+            }
+
+            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+            if (isShape && data.startX !== undefined && data.startY !== undefined) {
+              const sX = data.startX * LOGICAL_WIDTH;
+              const sY = data.startY * LOGICAL_HEIGHT;
+              const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
+              const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
+              drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity);
+            }
+            path.length = 0;
+            delete replaySessions[instId];
+            saveSnapshot(); // Save snapshot on canvas modifications to maintain functional undo/redo history
+          } else if (event === 'draw_clear') {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+            saveSnapshot();
+          } else if (event === 'draw_action') {
+            if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
+              floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity);
+              saveSnapshot();
+            }
+          } else if (event === 'draw_undo') {
+            executeUndo(false);
+          } else if (event === 'draw_redo') {
+            executeRedo(false);
+          }
+        } catch (itemErr) {
+          console.error("[DrawingCanvasCore] Ref using error under sync command loop: ", itemErr);
         }
-      } else if (event === 'draw_end') {
-        const session = replaySessions[instId] || {
-          tool: 'pencil',
-          color: '#000000',
-          width: 5,
-          opacity: 1
-        };
-        if (path.length > 0) {
-          drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+      });
+
+      // Render any leftover paths (e.g. drawer disconnected mid-stroke)
+      Object.keys(replaySessions).forEach((instId) => {
+        try {
+          const session = replaySessions[instId];
+          const path = replayPaths[instId];
+          if (session && path && path.length > 0) {
+            drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+          }
+        } catch (itemErr) {
+          console.error("[DrawingCanvasCore] Leftover stroke parsing error: ", itemErr);
         }
+      });
 
-        const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-        if (isShape && data.startX !== undefined && data.startY !== undefined) {
-          const sX = data.startX * LOGICAL_WIDTH;
-          const sY = data.startY * LOGICAL_HEIGHT;
-          const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
-          const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
-          drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity);
-        }
-        path.length = 0;
-        delete replaySessions[instId];
-      } else if (event === 'draw_clear') {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-      } else if (event === 'draw_action') {
-        if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity);
-        }
-      } else if (event === 'draw_undo') {
-        executeUndo(false);
-      } else if (event === 'draw_redo') {
-        executeRedo(false);
-      }
-    });
-
-    // Render any leftover paths (e.g. drawer disconnected mid-stroke)
-    Object.keys(replaySessions).forEach((instId) => {
-      const session = replaySessions[instId];
-      const path = replayPaths[instId];
-      if (session && path && path.length > 0) {
-        drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
-      }
-    });
-
-    // Clean up local temp active sessions cache to clear residual lines
-    activeSessionsRef.current = {};
-
-    // Final white clean baseline snapshot inside undo/redo stack
-    saveSnapshot();
+      // Clean up local temp active sessions cache to clear residual lines
+      activeSessionsRef.current = {};
+    } catch (totalSyncErr) {
+      console.error("[DrawingCanvasCore] Failed to reconstruct whole history accurately: ", totalSyncErr);
+    }
   };
 
   // --- Real-time Socket Event Receivers ---

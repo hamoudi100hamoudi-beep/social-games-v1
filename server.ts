@@ -51,10 +51,6 @@ async function startServer() {
 
                 // Always emit draw_history_sync to guarantee the client's loader disappears instantly
                 socket.emit('draw_history_sync', reconnectedRoom.gameState.drawHistory || []);
-
-                if (reconnectedRoom.chatMessages && reconnectedRoom.chatMessages.length > 0) {
-                  reconnectedRoom.chatMessages.forEach((msg) => socket.emit('receive_message', msg));
-                }
               }
             } catch (syncErr) {
               console.error("[Socket] Error during direct sync in rejoin:", syncErr);
@@ -94,10 +90,6 @@ async function startServer() {
 
             // Always emit draw_history_sync to guarantee the client's loader disappears instantly
             socket.emit('draw_history_sync', room.gameState.drawHistory || []);
-
-            if (room.chatMessages && room.chatMessages.length > 0) {
-              room.chatMessages.forEach((msg) => socket.emit('receive_message', msg));
-            }
           }
         } catch (syncErr) {
           console.error("[Socket] Error during direct sync in join:", syncErr);
