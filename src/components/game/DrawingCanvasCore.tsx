@@ -231,7 +231,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   ref
 ) => {
   const instanceId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
-  const { socket } = useSocket();
+  const { socket, isConnected } = useSocket();
 
   // Primary visual and interactive layers
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -244,6 +244,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // States
   const [isDrawing, setIsDrawing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Local drawing track refs
@@ -882,6 +883,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         bufferedSyncRef.current = commands;
       }
       setIsSyncing(false);
+      setHasSyncedOnce(true);
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
         syncTimeoutRef.current = null;
@@ -908,6 +910,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     syncTimeoutRef.current = setTimeout(() => {
       console.log("[DrawingCanvasCore] Sync safety timeout reached (4s). Overriding loading screen.");
       setIsSyncing(false);
+      setHasSyncedOnce(true);
     }, 4000);
 
     socket?.emit('request_round_sync');
@@ -1245,23 +1248,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       </div>
 
       <AnimatePresence>
-        {isSyncing && (
+        {(isSyncing || !isConnected) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35, ease: 'easeInOut' }}
-            className="absolute inset-0 bg-[#0c061d]/90 backdrop-blur-md flex flex-col items-center justify-center z-[100] cursor-not-allowed select-none touch-none"
+            className={`fixed inset-0 flex flex-col items-center justify-center z-[999999] cursor-not-allowed select-none touch-none ${
+              hasSyncedOnce
+                ? "bg-[#0c061d]/60 backdrop-blur-md"
+                : "bg-[#0c061d]"
+            }`}
             style={{ pointerEvents: 'auto' }}
           >
-            <div className="flex flex-col items-center space-y-4">
-              <div className="relative w-12 h-12">
+            <div className="flex flex-col items-center">
+              <div className="relative w-14 h-14">
                 <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
                 <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
-              </div>
-              <div className="text-center">
-                <p className="text-white font-medium text-lg font-sans tracking-tight">جاري مزامنة اللوح...</p>
-                <p className="text-violet-300 text-xs mt-1 selection:hidden animate-pulse">يرجى الانتظار ثانية واحدة لمزامنة الخطوط الفائتة</p>
               </div>
             </div>
           </motion.div>
