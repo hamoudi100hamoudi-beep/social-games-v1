@@ -5,6 +5,18 @@ import { Server } from 'socket.io';
 import path from 'path';
 import { roomManager } from './server/rooms.js';
 
+const getJsonSafeHistory = (history: any[]) => {
+  return (history || []).map(cmd => {
+    if (cmd && cmd.data && Buffer.isBuffer(cmd.data)) {
+      return {
+        event: cmd.event,
+        data: Array.from(cmd.data)
+      };
+    }
+    return cmd;
+  });
+};
+
 async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -50,7 +62,7 @@ async function startServer() {
                 roomManager.sendStateToPlayer(reconnectedRoom, player);
 
                 // Always emit draw_history_sync to guarantee the client's loader disappears instantly
-                socket.emit('draw_history_sync', reconnectedRoom.gameState.drawHistory || []);
+                socket.emit('draw_history_sync', getJsonSafeHistory(reconnectedRoom.gameState.drawHistory || []));
               }
             } catch (syncErr) {
               console.error("[Socket] Error during direct sync in rejoin:", syncErr);
@@ -89,7 +101,7 @@ async function startServer() {
             roomManager.sendStateToPlayer(room, player);
 
             // Always emit draw_history_sync to guarantee the client's loader disappears instantly
-            socket.emit('draw_history_sync', room.gameState.drawHistory || []);
+            socket.emit('draw_history_sync', getJsonSafeHistory(room.gameState.drawHistory || []));
           }
         } catch (syncErr) {
           console.error("[Socket] Error during direct sync in join:", syncErr);
@@ -116,7 +128,7 @@ async function startServer() {
           if (room) {
             roomManager.sendStateToPlayer(room, player);
             // Always emit draw_history_sync to guarantee the client's loader disappears instantly
-            socket.emit('draw_history_sync', room.gameState.drawHistory || []);
+            socket.emit('draw_history_sync', getJsonSafeHistory(room.gameState.drawHistory || []));
           }
         }
       } catch (e) {

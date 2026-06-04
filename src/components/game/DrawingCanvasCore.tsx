@@ -285,6 +285,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Buffering history syncing before ref ready
   const bufferedSyncRef = useRef<any[] | null>(null);
+  const lastSyncRequestTimeRef = useRef<number>(0);
 
   // Layout scale tracking for responsive full viewport fitting
   const containerRef = useRef<HTMLDivElement>(null);
@@ -947,6 +948,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [socket, instanceId]);
 
   const startSyncFlow = () => {
+    const now = Date.now();
+    // 1000ms cooldown window prevents dual request emissions on double layout mount or network flutters
+    if (now - lastSyncRequestTimeRef.current < 1000) {
+      console.log("[DrawingCanvasCore] Suppressing duplicate sync request within 1000ms cooldown window.");
+      return;
+    }
+    lastSyncRequestTimeRef.current = now;
+
     setIsSyncing(true);
     console.log("[DrawingCanvasCore] Activating loading state, requesting round sync...");
 
