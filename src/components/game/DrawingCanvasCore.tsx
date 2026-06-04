@@ -51,6 +51,18 @@ const IS_LOW_END = PERF_TIER === 3;
 
 const getAdaptiveDPR = () => {
   if (typeof window === 'undefined') return 2;
+  
+  // Smart detection for Mobile/Tablet user-agent or touch interfaces
+  const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i.test(navigator.userAgent) || 
+    ('ontouchstart' in window) || 
+    (navigator.maxTouchPoints > 0);
+
+  if (isMobileOrTablet) {
+    if (PERF_TIER === 3) return 1.0;
+    if (PERF_TIER === 2) return 1.2;
+    return Math.min(1.5, window.devicePixelRatio || 1);
+  }
+
   if (PERF_TIER === 3) return 1.0;
   if (PERF_TIER === 2) return 1.2;
   return Math.min(2, window.devicePixelRatio || 1);
@@ -269,6 +281,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // Undo / Redo Snapshot Cache
   const historyRef = useRef<ImageData[]>([]);
   const historyIndexRef = useRef(-1);
+  const isReplayingRef = useRef(false);
 
   // Buffering history syncing before ref ready
   const bufferedSyncRef = useRef<any[] | null>(null);
@@ -359,6 +372,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // --- Snapshot Management ---
   const saveSnapshot = () => {
+    if (isReplayingRef.current) return;
     const canvas = canvasRef.current;
     const ctx = ctxRef.current;
     if (!canvas || !ctx) return;
@@ -716,6 +730,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       historyIndexRef.current = -1;
       saveSnapshot(); // Base empty state in history stack
 
+      // Enable replaying flag to prevent intermediate image generation snapshots inside the loops
+      isReplayingRef.current = true;
+
       const replayPaths: Record<string, { x: number; y: number }[]> = {};
       const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
@@ -818,6 +835,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       activeSessionsRef.current = {};
     } catch (totalSyncErr) {
       console.error("[DrawingCanvasCore] Failed to reconstruct whole history accurately: ", totalSyncErr);
+    } finally {
+      // Deactivate replaying and save the final integrated snapshot
+      isReplayingRef.current = false;
+      saveSnapshot();
     }
   };
 
