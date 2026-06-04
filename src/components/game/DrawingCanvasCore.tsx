@@ -6,6 +6,7 @@ import React, {
   useImperativeHandle,
   forwardRef
 } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSocket } from '../SocketProvider';
 import { ToolType } from '../../types/draw';
@@ -711,7 +712,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // Reset history stacks
     historyRef.current = [];
-    saveSnapshot(); // Base empty state
+    historyIndexRef.current = -1;
 
     const replayPaths: Record<string, { x: number; y: number }[]> = {};
     const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
@@ -777,15 +778,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
         path.length = 0;
         delete replaySessions[instId];
-        saveSnapshot();
       } else if (event === 'draw_clear') {
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-        saveSnapshot();
       } else if (event === 'draw_action') {
         if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
           floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity);
-          saveSnapshot();
         }
       } else if (event === 'draw_undo') {
         executeUndo(false);
@@ -793,6 +791,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         executeRedo(false);
       }
     });
+
+    // Render any leftover paths (e.g. drawer disconnected mid-stroke)
+    Object.keys(replaySessions).forEach((instId) => {
+      const session = replaySessions[instId];
+      const path = replayPaths[instId];
+      if (session && path && path.length > 0) {
+        drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+      }
+    });
+
+    // Clean up local temp active sessions cache to clear residual lines
+    activeSessionsRef.current = {};
+
+    // Final white clean baseline snapshot inside undo/redo stack
+    saveSnapshot();
   };
 
   // --- Real-time Socket Event Receivers ---
@@ -1247,29 +1260,32 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         />
       </div>
 
-      <AnimatePresence>
-        {(isSyncing || !isConnected) && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.35, ease: 'easeInOut' }}
-            className={`fixed inset-0 flex flex-col items-center justify-center z-[999999] cursor-not-allowed select-none touch-none ${
-              hasSyncedOnce
-                ? "bg-[#0c061d]/60 backdrop-blur-md"
-                : "bg-[#0c061d]"
-            }`}
-            style={{ pointerEvents: 'auto' }}
-          >
-            <div className="flex flex-col items-center">
-              <div className="relative w-14 h-14">
-                <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
-                <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {(isSyncing || !isConnected) && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35, ease: 'easeInOut' }}
+              className={`fixed inset-0 flex flex-col items-center justify-center z-[999999] cursor-not-allowed select-none touch-none ${
+                hasSyncedOnce
+                  ? "bg-[#0c061d]/95 backdrop-blur-md"
+                  : "bg-[#0c061d]"
+              }`}
+              style={{ pointerEvents: 'auto' }}
+            >
+              <div className="flex flex-col items-center">
+                <div className="relative w-14 h-14">
+                  <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
+                  <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
+                </div>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 });

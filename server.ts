@@ -49,9 +49,8 @@ async function startServer() {
                 player.isOffline = false;
                 roomManager.sendStateToPlayer(reconnectedRoom, player);
 
-                if (reconnectedRoom.gameState.drawHistory && reconnectedRoom.gameState.drawHistory.length > 0) {
-                  socket.emit('draw_history_sync', reconnectedRoom.gameState.drawHistory);
-                }
+                // Always emit draw_history_sync to guarantee the client's loader disappears instantly
+                socket.emit('draw_history_sync', reconnectedRoom.gameState.drawHistory || []);
 
                 if (reconnectedRoom.chatMessages && reconnectedRoom.chatMessages.length > 0) {
                   reconnectedRoom.chatMessages.forEach((msg) => socket.emit('receive_message', msg));
@@ -93,9 +92,8 @@ async function startServer() {
           if (player) {
             roomManager.sendStateToPlayer(room, player);
 
-            if (room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {
-              socket.emit('draw_history_sync', room.gameState.drawHistory);
-            }
+            // Always emit draw_history_sync to guarantee the client's loader disappears instantly
+            socket.emit('draw_history_sync', room.gameState.drawHistory || []);
 
             if (room.chatMessages && room.chatMessages.length > 0) {
               room.chatMessages.forEach((msg) => socket.emit('receive_message', msg));
@@ -125,9 +123,8 @@ async function startServer() {
           const room = roomManager.getRoom(player.roomId);
           if (room) {
             roomManager.sendStateToPlayer(room, player);
-            if (room.gameState.drawHistory && room.gameState.drawHistory.length > 0) {
-              socket.emit('draw_history_sync', room.gameState.drawHistory);
-            }
+            // Always emit draw_history_sync to guarantee the client's loader disappears instantly
+            socket.emit('draw_history_sync', room.gameState.drawHistory || []);
           }
         }
       } catch (e) {
