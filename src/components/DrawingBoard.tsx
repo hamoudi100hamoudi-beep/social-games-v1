@@ -6,7 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   Pencil, Eraser, Undo2, Redo2, FileX, RefreshCcw, 
-  Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette 
+  Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2
 } from 'lucide-react';
 import { ToolType } from '../types/draw';
 import {
@@ -54,6 +54,26 @@ export default function DrawingBoard({
   const [previewSize, setPreviewSize] = useState<number | null>(null);
   const [historyState, setHistoryState] = useState({ index: 0, length: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Persistent Zoom & Pan preference
+  const [zoomEnabled, setZoomEnabled] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gartic_zoom_enabled') === 'true';
+    }
+    return false;
+  });
+
+  const toggleZoom = () => {
+    const nextVal = !zoomEnabled;
+    setZoomEnabled(nextVal);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('gartic_zoom_enabled', nextVal ? 'true' : 'false');
+    }
+  };
+
+  const handleResetZoom = () => {
+    canvasCoreRef.current?.resetZoom?.();
+  };
 
   // References
   const previousTool = useRef<ToolType>('pencil');
@@ -171,6 +191,7 @@ export default function DrawingBoard({
           opacity={currentOpacity}
           currentDrawerId={currentDrawerId}
           status={status}
+          isZoomEnabled={zoomEnabled}
           onHistoryStateChange={(idx, len) => setHistoryState({ index: idx, length: len })}
           onPipetteColorPicked={(hex) => {
             setColor(hex);
@@ -209,25 +230,56 @@ export default function DrawingBoard({
           </div>
         )}
 
-        {/* Floating Action Buttons (Undo/Redo) - Upper-Left */}
+        {/* Floating Action Buttons (Undo/Redo / Reset Zoom / Toggle Zoom) - Upper-Left */}
         {!readOnly && (
-          <div className="absolute top-3 left-3 flex gap-1.5 z-30 pointer-events-auto">
-            <button 
-              type="button"
-              onClick={undo} 
-              disabled={historyState.index <= 0}
-              className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all ${historyState.index <= 0 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
-            >
-              <Undo2 size={16} strokeWidth={2.5} />
-            </button>
-            <button 
-              type="button"
-              onClick={redo} 
-              disabled={historyState.index >= historyState.length - 1}
-              className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all ${historyState.index >= historyState.length - 1 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
-            >
-              <Redo2 size={16} strokeWidth={2.5} />
-            </button>
+          <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-30 pointer-events-auto" dir="ltr">
+            <div className="flex gap-1.5">
+              <button 
+                type="button"
+                onClick={undo} 
+                disabled={historyState.index <= 0}
+                title="تراجع"
+                className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all ${historyState.index <= 0 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
+              >
+                <Undo2 size={16} strokeWidth={2.5} />
+              </button>
+              <button 
+                type="button"
+                onClick={redo} 
+                disabled={historyState.index >= historyState.length - 1}
+                title="إعادة"
+                className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all ${historyState.index >= historyState.length - 1 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
+              >
+                <Redo2 size={16} strokeWidth={2.5} />
+              </button>
+            </div>
+
+            <div className="flex gap-1.5">
+              {/* Toggle Zoom Mode */}
+              <button 
+                type="button"
+                onClick={toggleZoom} 
+                title={zoomEnabled ? "تعطيل وضع التكبير والتنقل" : "تفعيل وضع التكبير والتنقل (بإصبعين)"}
+                className={`h-[32px] px-2 rounded-lg flex items-center justify-center border shadow-[0_2px_6px_rgba(0,0,0,0.15)] text-[10px] font-black tracking-wider transition-all select-none hover:scale-105 active:scale-95
+                  ${zoomEnabled 
+                    ? 'bg-amber-500 text-white border-amber-400' 
+                    : 'bg-white text-slate-700 border-slate-300/40'}`}
+              >
+                ZOOM {zoomEnabled ? "ON" : "OFF"}
+              </button>
+
+              {/* Reset Zoom helper */}
+              {zoomEnabled && (
+                <button 
+                  type="button"
+                  onClick={handleResetZoom} 
+                  title="توسيط وإعادة تعيين اللوحة"
+                  className="w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all hover:bg-slate-100 hover:scale-105 active:scale-95 text-xs font-bold"
+                >
+                  <Maximize2 size={13} strokeWidth={3} />
+                </button>
+              )}
+            </div>
           </div>
         )}
 

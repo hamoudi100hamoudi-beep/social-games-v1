@@ -215,6 +215,7 @@ export interface DrawingCanvasCoreRef {
   clear: () => void;
   resetState: () => void;
   getCanvasSnapshot: () => string | null;
+  resetZoom?: () => void;
 }
 
 interface DrawingCanvasCoreProps {
@@ -227,6 +228,7 @@ interface DrawingCanvasCoreProps {
   onPipetteColorPicked?: (hex: string) => void;
   currentDrawerId?: string;
   status?: string;
+  isZoomEnabled?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -239,7 +241,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     onHistoryStateChange,
     onPipetteColorPicked,
     currentDrawerId,
-    status
+    status,
+    isZoomEnabled = false
   },
   ref
 ) => {
@@ -294,6 +297,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const [baseScale, setBaseScale] = useState(1);
   const hasInitializedTransform = useRef(false);
 
+  // Force re-centering instantly when user drawing status / role updates
+  useEffect(() => {
+    hasInitializedTransform.current = false;
+  }, [readOnly]);
+
   // Dynamic references to read props values directly in listeners without re-binding
   const propsRef = useRef({ tool, color, thickness, opacity, readOnly });
   useEffect(() => {
@@ -329,12 +337,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         
         setBaseScale(targetScale);
         
-        if (!hasInitializedTransform.current || readOnly) {
-          const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
-          const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
-          const initialX = (width - canvasDisplayWidth) / 2;
-          const initialY = (height - canvasDisplayHeight) / 2; 
-          
+        // Exact responsive centered coordinates
+        const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
+        const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
+        const initialX = (width - canvasDisplayWidth) / 2;
+        const initialY = (height - canvasDisplayHeight) / 2;
+
+        const isCurrentlyZoomedOrPanned = transformRef.current.scale !== 1 || 
+                                          Math.abs(transformRef.current.x - initialX) > 2 ||
+                                          Math.abs(transformRef.current.y - initialY) > 2;
+
+        // Auto-center on layout update/transition unless the player already Zoomed or Panned
+        if (!hasInitializedTransform.current || readOnly || !isCurrentlyZoomedOrPanned) {
           transformRef.current = { scale: 1, x: initialX, y: initialY };
           applyTransform(targetScale);
           if (!readOnly) hasInitializedTransform.current = true;
@@ -344,6 +358,236 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     obs.observe(container);
     return () => obs.disconnect();
   }, [readOnly]);
+
+  // --- Multi-touch Mobile Pinch to Zoom and Pan ---
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let touchStartDist = 0;
+    let touchStartScale = 1;
+    let touchStartCenterX = 0;
+    let touchStartCenterY = 0;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let isPinching = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (!isZoomEnabled || propsRef.current.readOnly) return;
+
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        isPinching = true;
+
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+
+        touchStartDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        touchStartScale = transformRef.current.scale;
+        
+        const clientMidX = (t1.clientX + t2.clientX) / 2;
+        const clientMidY = (t1.clientY + t2.clientY) / 2;
+
+        const rect = container.getBoundingClientRect();
+        touchStartCenterX = clientMidX - rect.left;
+        touchStartCenterY = clientMidY - rect.top;
+
+        touchStartX = transformRef.current.x;
+        touchStartY = transformRef.current.y;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isZoomEnabled || propsRef.current.readOnly || !isPinching) return;
+
+      if (e.touches.length === 2) {
+        e.preventDefault();
+
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        if (touchStartDist > 0) {
+          let scaleFactor = dist / touchStartDist;
+          let nextScale = Math.max(0.8, Math.min(4.0, touchStartScale * scaleFactor));
+
+          const clientMidX = (t1.clientX + t2.clientX) / 2;
+          const clientMidY = (t1.clientY + t2.clientY) / 2;
+          const rect = container.getBoundingClientRect();
+          const currentCenterX = clientMidX - rect.left;
+          const currentCenterY = clientMidY - rect.top;
+
+          let nextX = currentCenterX - ((touchStartCenterX - touchStartX) / touchStartScale) * nextScale;
+          let nextY = currentCenterY - ((touchStartCenterY - touchStartY) / touchStartScale) * nextScale;
+
+          // Apply boundary buffers to prevent the canvas from getting lost offscreen
+          const dispW = LOGICAL_WIDTH * baseScale * nextScale;
+          const dispH = LOGICAL_HEIGHT * baseScale * nextScale;
+          const containerW = rect.width;
+          const containerH = rect.height;
+
+          const minX = -dispW + 100;
+          const maxX = containerW - 100;
+          const minY = -dispH + 100;
+          const maxY = containerH - 100;
+
+          nextX = Math.max(minX, Math.min(maxX, nextX));
+          nextY = Math.max(minY, Math.min(maxY, nextY));
+
+          transformRef.current = { scale: nextScale, x: nextX, y: nextY };
+          applyTransform();
+        }
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (isPinching) {
+        isPinching = false;
+        touchStartDist = 0;
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchEnd);
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [isZoomEnabled, baseScale]);
+
+  // --- Desktop Wheel / Pinch Zoom ---
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (!isZoomEnabled || propsRef.current.readOnly) return;
+
+      e.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      let factor = e.deltaY < 0 ? 1.15 : 0.85;
+      const nextScale = Math.max(0.8, Math.min(4.0, transformRef.current.scale * factor));
+      const scaleRatio = nextScale / transformRef.current.scale;
+
+      let nextX = mx - (mx - transformRef.current.x) * scaleRatio;
+      let nextY = my - (my - transformRef.current.y) * scaleRatio;
+
+      // Apply boundary buffers
+      const dispW = LOGICAL_WIDTH * baseScale * nextScale;
+      const dispH = LOGICAL_HEIGHT * baseScale * nextScale;
+      const containerW = rect.width;
+      const containerH = rect.height;
+
+      const minX = -dispW + 100;
+      const maxX = containerW - 100;
+      const minY = -dispH + 100;
+      const maxY = containerH - 100;
+
+      nextX = Math.max(minX, Math.min(maxX, nextX));
+      nextY = Math.max(minY, Math.min(maxY, nextY));
+
+      transformRef.current = { scale: nextScale, x: nextX, y: nextY };
+      applyTransform();
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [isZoomEnabled, baseScale]);
+
+  // --- Desktop Click-Drag To Pan (Right Click / Middle Click-Drag) ---
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let initialX = 0;
+    let initialY = 0;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!isZoomEnabled || propsRef.current.readOnly) return;
+
+      if (e.button === 2 || e.button === 1) {
+        e.preventDefault();
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        initialX = transformRef.current.x;
+        initialY = transformRef.current.y;
+        container.setPointerCapture(e.pointerId);
+      }
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!isDragging) return;
+      e.preventDefault();
+
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+
+      let nextX = initialX + dx;
+      let nextY = initialY + dy;
+
+      const rect = container.getBoundingClientRect();
+      const dispW = LOGICAL_WIDTH * baseScale * transformRef.current.scale;
+      const dispH = LOGICAL_HEIGHT * baseScale * transformRef.current.scale;
+      const containerW = rect.width;
+      const containerH = rect.height;
+
+      const minX = -dispW + 100;
+      const maxX = containerW - 100;
+      const minY = -dispH + 100;
+      const maxY = containerH - 100;
+
+      nextX = Math.max(minX, Math.min(maxX, nextX));
+      nextY = Math.max(minY, Math.min(maxY, nextY));
+
+      transformRef.current = {
+        ...transformRef.current,
+        x: nextX,
+        y: nextY
+      };
+      applyTransform();
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      if (isDragging) {
+        isDragging = false;
+        container.releasePointerCapture(e.pointerId);
+      }
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      if (isZoomEnabled && !propsRef.current.readOnly) {
+        e.preventDefault();
+      }
+    };
+
+    container.addEventListener('pointerdown', handlePointerDown);
+    container.addEventListener('pointermove', handlePointerMove);
+    container.addEventListener('pointerup', handlePointerUp);
+    container.addEventListener('pointercancel', handlePointerUp);
+    container.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      container.removeEventListener('pointerdown', handlePointerDown);
+      container.removeEventListener('pointermove', handlePointerMove);
+      container.removeEventListener('pointerup', handlePointerUp);
+      container.removeEventListener('pointercancel', handlePointerUp);
+      container.removeEventListener('contextmenu', handleContextMenu);
+    };
+  }, [isZoomEnabled, baseScale]);
 
   // Expose handles to Parent Component
   useImperativeHandle(ref, () => ({
@@ -356,6 +600,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         return canvasRef.current.toDataURL('image/png');
       }
       return null;
+    },
+    resetZoom: () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const targetScale = propsRef.current.readOnly
+        ? Math.min(rect.width / LOGICAL_WIDTH, rect.height / LOGICAL_HEIGHT)
+        : rect.height / LOGICAL_HEIGHT;
+
+      const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
+      const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
+      const initialX = (rect.width - canvasDisplayWidth) / 2;
+      const initialY = (rect.height - canvasDisplayHeight) / 2;
+
+      transformRef.current = { scale: 1, x: initialX, y: initialY };
+      applyTransform(targetScale);
     }
   }));
 

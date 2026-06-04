@@ -49,6 +49,23 @@ export default function Lobby({ onPlay }: LobbyProps) {
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [afkWarning, setAfkWarning] = useState(false);
 
+  // Home screen settings modal states
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [localZoomEnabled, setLocalZoomEnabled] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gartic_zoom_enabled') === 'true';
+    }
+    return false;
+  });
+
+  const toggleLocalZoom = () => {
+    const nextVal = !localZoomEnabled;
+    setLocalZoomEnabled(nextVal);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('gartic_zoom_enabled', nextVal ? 'true' : 'false');
+    }
+  };
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       if (localStorage.getItem('gartic_afk_kicked') === 'true') {
@@ -132,6 +149,17 @@ export default function Lobby({ onPlay }: LobbyProps) {
   return (
     <div className="w-full h-full min-h-screen bg-gradient-to-br from-[#3b2082] via-[#5c36cc] to-[#7C4DFF] text-white font-sans flex flex-col relative overflow-hidden">
       
+      {/* Settings gear in top corner */}
+      {screen === 'home' && (
+        <button 
+          onClick={() => setShowSettingsModal(true)}
+          className="absolute top-4 right-4 z-40 w-11 h-11 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 text-white backdrop-blur-md"
+          title="الإعدادات"
+        >
+          <Settings size={22} />
+        </button>
+      )}
+
       {/* Home Screen */}
       {screen === 'home' && (
         <div className="flex-1 flex flex-col items-center justify-center p-6 z-10">
@@ -340,6 +368,56 @@ export default function Lobby({ onPlay }: LobbyProps) {
               >
                 <Play size={24} fill="currentColor" />
                 <span>PLAY</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white rounded-[32px] p-6 shadow-2xl max-w-sm w-[90%] text-slate-800 relative animate-in zoom-in-95 duration-200" dir="rtl">
+            <button 
+              onClick={() => setShowSettingsModal(false)}
+              className="absolute top-4 right-4 w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 active:scale-95 transition-transform"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex flex-col items-center mt-2">
+              <div className="w-16 h-16 rounded-full bg-violet-100 flex items-center justify-center mb-4">
+                <Settings size={32} className="text-[#7C4DFF]" strokeWidth={2.5} />
+              </div>
+              
+              <h2 className="text-xl font-black mb-4 text-center text-slate-800">إعدادات اللعبة الرسمية</h2>
+              
+              <div className="w-full space-y-4 mb-6">
+                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-700">وضع التكبير والسحب (Zoom & Pan)</span>
+                    <button 
+                      onClick={toggleLocalZoom}
+                      className={`w-12 h-7.5 rounded-full p-1 transition-colors duration-200 outline-none focus:outline-none flex items-center ${localZoomEnabled ? 'bg-[#10B981] justify-end' : 'bg-slate-300 justify-start'}`}
+                    >
+                      <div className="w-5 h-5 bg-white rounded-full shadow-md" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed font-semibold">
+                    يتيح لك استخدام <span className="font-bold text-slate-700">إصبعين</span> على الهواتف لتكبير وتحريك ساحة الرسم لتفاصيل أدق، أو استخدام <span className="font-bold text-slate-700">الزر الأيمن للفأرة</span> على الكمبيوتر.
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-violet-50/50 border border-violet-100 text-violet-800 text-xs text-center font-bold leading-relaxed">
+                  ⚡ ميزة ذكية: إذا تم تعطيل هذا الوضع، فلن يتم استهلاك أي طاقة أو موارد من المعالج والمستشعرات لضمان أداء سلس بنسبة 100% للأجهزة الضعيفة.
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                className="w-full h-12 bg-[#7C4DFF] hover:bg-[#6c3fe6] text-white rounded-xl font-bold flex items-center justify-center transition-all active:scale-95 text-sm"
+              >
+                حفظ وإغلاق
               </button>
             </div>
           </div>
