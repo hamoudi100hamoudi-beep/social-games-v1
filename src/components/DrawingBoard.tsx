@@ -57,10 +57,14 @@ export default function DrawingBoard({
   const [historyState, setHistoryState] = useState({ index: 0, length: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // Track readOnly transitions to reset tools/colors instantly when the user starts drawing
+  // Track readOnly and status transitions to reset tools/colors instantly when the user starts drawing
   const prevReadOnlyRef = useRef(true);
+  const prevStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (prevReadOnlyRef.current === true && readOnly === false) {
+    const becameDrawer = prevReadOnlyRef.current === true && readOnly === false;
+    const drawingStartedAsArtist = status === 'DRAWING' && prevStatusRef.current !== 'DRAWING' && !readOnly;
+
+    if (becameDrawer || drawingStartedAsArtist) {
       setTool('pencil');
       setColor('#000000');
       setPenWidth(5);
@@ -71,7 +75,8 @@ export default function DrawingBoard({
       setActiveMenu(null);
     }
     prevReadOnlyRef.current = readOnly;
-  }, [readOnly]);
+    prevStatusRef.current = status;
+  }, [readOnly, status]);
 
   // Persistent Zoom & Pan preference
   const [zoomEnabled, setZoomEnabled] = useState(() => {

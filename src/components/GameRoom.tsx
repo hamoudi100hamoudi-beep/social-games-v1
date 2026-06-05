@@ -1723,28 +1723,25 @@ export default function GameRoom({
       )}
 
       {/* Dynamic Non-Intrusive Connection Status removed to allow silent background connection */}
-      {typeof document !== "undefined" && createPortal(
-        <AnimatePresence>
-          {isInitialLoadingRoom && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.35, ease: "easeInOut" }}
-              className="fixed inset-0 flex flex-col items-center justify-center bg-[#0c061d] z-[999999] cursor-not-allowed select-none touch-none"
-              style={{ pointerEvents: "auto" }}
-            >
-              <div className="flex flex-col items-center">
-                <div className="relative w-14 h-14">
-                  <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
-                  <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
-                </div>
+      <AnimatePresence>
+        {isInitialLoadingRoom && (
+          <motion.div
+            initial={false}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: "easeInOut" }}
+            className="fixed inset-0 flex flex-col items-center justify-center bg-[#0c061d] z-[999999] cursor-not-allowed select-none touch-none"
+            style={{ pointerEvents: "auto" }}
+          >
+            <div className="flex flex-col items-center">
+              <div className="relative w-14 h-14">
+                <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
+                <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
