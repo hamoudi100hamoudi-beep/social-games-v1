@@ -296,10 +296,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const transformRef = useRef({ scale: 1, x: 0, y: 0 });
   const [baseScale, setBaseScale] = useState(1);
   const hasInitializedTransform = useRef(false);
+  const hasManuallyZoomedOrPanned = useRef(false);
+  const activeTouchCountRef = useRef(0);
+  const isZoomPinchingRef = useRef(false);
 
   // Force re-centering instantly when user drawing status / role updates
   useEffect(() => {
     hasInitializedTransform.current = false;
+    hasManuallyZoomedOrPanned.current = false;
   }, [readOnly]);
 
   // Dynamic references to read props values directly in listeners without re-binding
@@ -343,12 +347,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const initialX = (width - canvasDisplayWidth) / 2;
         const initialY = (height - canvasDisplayHeight) / 2;
 
-        const isCurrentlyZoomedOrPanned = transformRef.current.scale !== 1 || 
-                                          Math.abs(transformRef.current.x - initialX) > 2 ||
-                                          Math.abs(transformRef.current.y - initialY) > 2;
-
-        // Auto-center on layout update/transition unless the player already Zoomed or Panned
-        if (!hasInitializedTransform.current || readOnly || !isCurrentlyZoomedOrPanned) {
+        // Auto-center on layout update/transition unless the player already Zoomed or Panned manually
+        if (!hasInitializedTransform.current || readOnly || !hasManuallyZoomedOrPanned.current) {
           transformRef.current = { scale: 1, x: initialX, y: initialY };
           applyTransform(targetScale);
           if (!readOnly) hasInitializedTransform.current = true;
@@ -373,11 +373,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     let isPinching = false;
 
     const handleTouchStart = (e: TouchEvent) => {
+      // Track actual active touch count on container
+      activeTouchCountRef.current = e.touches.length;
+
       if (!isZoomEnabled || propsRef.current.readOnly) return;
 
       if (e.touches.length === 2) {
         e.preventDefault();
         isPinching = true;
+        isZoomPinchingRef.current = true;
 
         const t1 = e.touches[0];
         const t2 = e.touches[1];
@@ -398,6 +402,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
 
     const handleTouchMove = (e: TouchEvent) => {
+      activeTouchCountRef.current = e.touches.length;
+
       if (!isZoomEnabled || propsRef.current.readOnly || !isPinching) return;
 
       if (e.touches.length === 2) {
@@ -408,12 +414,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         if (touchStartDist > 0) {
+          const rect = container.getBoundingClientRect();
+          const containerW = rect.width;
+          const containerH = rect.height;
+
+          // Dynamically compute perfect fit scale so mobile user can see full drawing stage
+          const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScale);
+          const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScale);
+          const perfectFitScale = Math.min(fitWidthScale, fitHeightScale);
+          const minScaleLimit = Math.max(0.3, Math.min(1.0, perfectFitScale * 0.9));
+
           let scaleFactor = dist / touchStartDist;
-          let nextScale = Math.max(0.8, Math.min(4.0, touchStartScale * scaleFactor));
+          let nextScale = Math.max(minScaleLimit, Math.min(4.0, touchStartScale * scaleFactor));
 
           const clientMidX = (t1.clientX + t2.clientX) / 2;
           const clientMidY = (t1.clientY + t2.clientY) / 2;
-          const rect = container.getBoundingClientRect();
           const currentCenterX = clientMidX - rect.left;
           const currentCenterY = clientMidY - rect.top;
 
@@ -423,8 +438,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           // Apply boundary buffers to prevent the canvas from getting lost offscreen
           const dispW = LOGICAL_WIDTH * baseScale * nextScale;
           const dispH = LOGICAL_HEIGHT * baseScale * nextScale;
-          const containerW = rect.width;
-          const containerH = rect.height;
 
           const minX = -dispW + 100;
           const maxX = containerW - 100;
@@ -435,15 +448,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           nextY = Math.max(minY, Math.min(maxY, nextY));
 
           transformRef.current = { scale: nextScale, x: nextX, y: nextY };
+          hasManuallyZoomedOrPanned.current = true;
           applyTransform();
         }
       }
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
+      activeTouchCountRef.current = e.touches.length;
+
       if (isPinching) {
         isPinching = false;
         touchStartDist = 0;
+        // Keep zoom-is-pinching true for 100ms path stabilization after pinch ends
+        setTimeout(() => {
+          isZoomPinchingRef.current = false;
+        }, 100);
       }
     };
 
@@ -470,11 +490,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       e.preventDefault();
       const rect = container.getBoundingClientRect();
+      const containerW = rect.width;
+      const containerH = rect.height;
+
+      // Dynamically compute perfect fit scale so user can zoom out enough to see full canvas
+      const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScale);
+      const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScale);
+      const perfectFitScale = Math.min(fitWidthScale, fitHeightScale);
+      const minScaleLimit = Math.max(0.3, Math.min(1.0, perfectFitScale * 0.9));
+
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
 
       let factor = e.deltaY < 0 ? 1.15 : 0.85;
-      const nextScale = Math.max(0.8, Math.min(4.0, transformRef.current.scale * factor));
+      const nextScale = Math.max(minScaleLimit, Math.min(4.0, transformRef.current.scale * factor));
       const scaleRatio = nextScale / transformRef.current.scale;
 
       let nextX = mx - (mx - transformRef.current.x) * scaleRatio;
@@ -483,8 +512,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // Apply boundary buffers
       const dispW = LOGICAL_WIDTH * baseScale * nextScale;
       const dispH = LOGICAL_HEIGHT * baseScale * nextScale;
-      const containerW = rect.width;
-      const containerH = rect.height;
 
       const minX = -dispW + 100;
       const maxX = containerW - 100;
@@ -495,6 +522,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       nextY = Math.max(minY, Math.min(maxY, nextY));
 
       transformRef.current = { scale: nextScale, x: nextX, y: nextY };
+      hasManuallyZoomedOrPanned.current = true;
       applyTransform();
     };
 
@@ -558,6 +586,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         x: nextX,
         y: nextY
       };
+      hasManuallyZoomedOrPanned.current = true;
       applyTransform();
     };
 
@@ -615,6 +644,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const initialY = (rect.height - canvasDisplayHeight) / 2;
 
       transformRef.current = { scale: 1, x: initialX, y: initialY };
+      hasManuallyZoomedOrPanned.current = false;
       applyTransform(targetScale);
     }
   }));
@@ -1313,6 +1343,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (propsRef.current.readOnly) return;
+    if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
     
     const canvas = canvasRef.current;
     const tempCanvas = tempCanvasRef.current;
@@ -1393,6 +1424,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const ctx = ctxRef.current;
     const tempCtx = tempCtxRef.current;
     if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
+
+    if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
+      // Abort drawing instantly without committing
+      isDrawingRef.current = false;
+      setIsDrawing(false);
+      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      moveBatchRef.current = [];
+      emitDrawCommand('draw_end', {
+        tool: propsRef.current.tool,
+        color: propsRef.current.color,
+        width: propsRef.current.thickness,
+        opacity: propsRef.current.opacity,
+        isShape: false
+      });
+      return;
+    }
 
     const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas);
     const activeTool = propsRef.current.tool;
