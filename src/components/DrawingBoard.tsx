@@ -24,7 +24,8 @@ export default function DrawingBoard({
   hintsRemaining = 0,
   timerBarNode,
   currentDrawerId,
-  status
+  status,
+  onSyncStateChange
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -35,6 +36,7 @@ export default function DrawingBoard({
   currentDrawerId?: string;
   status?: string;
   key?: any;
+  onSyncStateChange?: (syncing: boolean) => void;
 }) {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
 
@@ -54,6 +56,22 @@ export default function DrawingBoard({
   const [previewSize, setPreviewSize] = useState<number | null>(null);
   const [historyState, setHistoryState] = useState({ index: 0, length: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Track readOnly transitions to reset tools/colors instantly when the user starts drawing
+  const prevReadOnlyRef = useRef(true);
+  useEffect(() => {
+    if (prevReadOnlyRef.current === true && readOnly === false) {
+      setTool('pencil');
+      setColor('#000000');
+      setPenWidth(5);
+      setPenOpacity(1);
+      setEraserWidth(40);
+      setEraserOpacity(1);
+      setBucketOpacity(1);
+      setActiveMenu(null);
+    }
+    prevReadOnlyRef.current = readOnly;
+  }, [readOnly]);
 
   // Persistent Zoom & Pan preference
   const [zoomEnabled, setZoomEnabled] = useState(() => {
@@ -199,6 +217,7 @@ export default function DrawingBoard({
               changeTool(previousTool.current);
             }
           }}
+          onSyncStateChange={onSyncStateChange}
         />
 
         {/* Brush Size Preview Bubble */}

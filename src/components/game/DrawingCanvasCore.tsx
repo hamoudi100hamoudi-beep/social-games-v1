@@ -229,6 +229,7 @@ interface DrawingCanvasCoreProps {
   currentDrawerId?: string;
   status?: string;
   isZoomEnabled?: boolean;
+  onSyncStateChange?: (syncing: boolean) => void;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -242,7 +243,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     onPipetteColorPicked,
     currentDrawerId,
     status,
-    isZoomEnabled = false
+    isZoomEnabled = false,
+    onSyncStateChange
   },
   ref
 ) => {
@@ -314,6 +316,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     hasInitializedTransform.current = false;
     hasManuallyZoomedOrPanned.current = false;
   }, [readOnly]);
+
+  useEffect(() => {
+    onSyncStateChange?.(isSyncing);
+  }, [isSyncing, onSyncStateChange]);
 
   // Dynamic references to read props values directly in listeners without re-binding
   const propsRef = useRef({ tool, color, thickness, opacity, readOnly });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import DrawingBoard from "./DrawingBoard";
 import {
   Send,
@@ -134,6 +135,8 @@ export default function GameRoom({
   justJoined,
 }: GameRoomProps) {
   const { socket, isConnected, socketId } = useSocket();
+  const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
+  const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(justJoined || false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
@@ -192,6 +195,16 @@ export default function GameRoom({
   const [guesses, setGuesses] = useState<Message[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
+
+  // Auto-dismiss the room loading screen once player state and canvas draw-history have finished syncing
+  useEffect(() => {
+    if (currentPlayers.length > 0 && !isCanvasSyncing) {
+      const timer = setTimeout(() => {
+        setIsInitialLoadingRoom(false);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [currentPlayers.length, isCanvasSyncing]);
 
   const amIDrawer = React.useMemo(() => {
     if (!gameState.currentDrawerId) return false;
@@ -849,6 +862,7 @@ export default function GameRoom({
                 currentDrawerId={gameState.currentDrawerId}
                 status={gameState.status}
                 readOnly={isDrawingMode ? false : !amIDrawer}
+                onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
                 onSkipTurn={
                   isDrawingMode && gameState.status === "DRAWING"
                     ? () => setShowSkipConfirm(true)
@@ -1709,6 +1723,28 @@ export default function GameRoom({
       )}
 
       {/* Dynamic Non-Intrusive Connection Status removed to allow silent background connection */}
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {isInitialLoadingRoom && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35, ease: "easeInOut" }}
+              className="fixed inset-0 flex flex-col items-center justify-center bg-[#0c061d] z-[999999] cursor-not-allowed select-none touch-none"
+              style={{ pointerEvents: "auto" }}
+            >
+              <div className="flex flex-col items-center">
+                <div className="relative w-14 h-14">
+                  <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
+                  <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </>
   );
 }
