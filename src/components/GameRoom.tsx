@@ -864,12 +864,12 @@ export default function GameRoom({
                 readOnly={isDrawingMode ? false : !amIDrawer}
                 onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
                 onSkipTurn={
-                  isDrawingMode && gameState.status === "DRAWING"
+                  isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
                     ? () => setShowSkipConfirm(true)
                     : undefined
                 }
                 onRequestHint={
-                  isDrawingMode && gameState.status === "DRAWING"
+                  isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
                     ? () => socket?.emit("request_hint")
                     : undefined
                 }
