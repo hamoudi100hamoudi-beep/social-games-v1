@@ -17,7 +17,7 @@ import {
 
 // --- Constants ---
 const LOGICAL_WIDTH = 800;
-const LOGICAL_HEIGHT = 600;
+const LOGICAL_HEIGHT = 450;
 
 // --- Performance and DPR Tiering ---
 const getPerformanceTier = () => {
@@ -1413,8 +1413,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         color: propsRef.current.color,
         width: propsRef.current.thickness,
         opacity: propsRef.current.opacity,
-        isShape: false
+        isShape: false,
+        isCancelled: true
       });
+      emitDrawCommand('draw_cancel', {});
       return;
     }
 
