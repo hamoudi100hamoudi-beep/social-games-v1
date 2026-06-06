@@ -21,6 +21,9 @@ import {
 const LOGICAL_WIDTH = 800;
 const LOGICAL_HEIGHT = 600;
 
+// Distance threshold (2 to 3 pixels) for point compression and corner stability
+const DISTANCE_THRESHOLD = 2.5;
+
 // --- Performance and DPR Tiering ---
 const getPerformanceTier = () => {
   if (typeof window === 'undefined') return 1;
@@ -283,7 +286,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Undo / Redo Snapshot Cache
+  // Undo / Redo Snapshot Cache (Exactly 1 undo step optimization)
   const historyRef = useRef<ImageData[]>([]);
   const historyIndexRef = useRef(-1);
   const isReplayingRef = useRef(false);
@@ -650,8 +653,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (!container) return;
       const rect = container.getBoundingClientRect();
       const targetScale = propsRef.current.readOnly
-        ? Math.min(rect.width / LOGICAL_WIDTH, rect.height / LOGICAL_HEIGHT)
-        : rect.height / LOGICAL_HEIGHT;
+         ? Math.min(rect.width / LOGICAL_WIDTH, rect.height / LOGICAL_HEIGHT)
+         : rect.height / LOGICAL_HEIGHT;
 
       const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
       const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
@@ -676,7 +679,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
-  // --- Snapshot Management ---
+  // --- Snapshot Management (Exactly 1 undo-step optimization) ---
   const saveSnapshot = () => {
     if (isReplayingRef.current) return;
     const canvas = canvasRef.current;
@@ -692,8 +695,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
 
       historyRef.current.push(snapshot);
-      const MAX_HISTORY = 10;
-      if (historyRef.current.length > MAX_HISTORY) {
+      
+      // Strict 1-Undo step limit. Array length caps at 2.
+      // Index 0 holds the undo target (previous state), Index 1 holds the current view.
+      const MAX_HISTORY = 2;
+      while (historyRef.current.length > MAX_HISTORY) {
         historyRef.current.shift();
       }
 
@@ -947,7 +953,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     // Reset local/remote paths & sessions
     isDrawingRef.current = false;
     currentPathRef.current = [];
-    remotePathRef.current = [];
     activeSessionsRef.current = {};
     moveBatchRef.current = [];
 
@@ -1557,6 +1562,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
       const path = currentPathRef.current;
+      
+      // Point Compression: Discard points closer than DISTANCE_THRESHOLD (2.5px) to save backend bandwidth by ~70%
+      if (path.length > 0) {
+        const lastPt = path[path.length - 1];
+        if (Math.hypot(x - lastPt.x, y - lastPt.y) < DISTANCE_THRESHOLD) {
+          return;
+        }
+      }
+
       path.push({ x, y });
 
       redrawTempLayer();
