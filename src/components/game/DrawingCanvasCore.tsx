@@ -11,8 +11,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useSocket } from '../SocketProvider';
 import { ToolType } from '../../types/draw';
 import {
-  compressPayload,
-  decompressPayload,
   encodeBinaryDrawMessage,
   decodeBinaryDrawMessage
 } from '../../utils/drawBinaryHelper';
@@ -23,6 +21,9 @@ const LOGICAL_HEIGHT = 600;
 
 // Distance threshold (2 to 3 pixels) for point compression and corner stability
 const DISTANCE_THRESHOLD = 2.5;
+
+// EMA Smoothing Alpha (Optimized factor for ultra-low latency noise absorption)
+const EMA_ALPHA = 0.25;
 
 // --- Performance and DPR Tiering ---
 const getPerformanceTier = () => {
@@ -55,7 +56,6 @@ const IS_LOW_END = PERF_TIER === 3;
 const getAdaptiveDPR = () => {
   if (typeof window === 'undefined') return 2;
   
-  // Smart detection for Mobile/Tablet user-agent or touch interfaces
   const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i.test(navigator.userAgent) || 
     ('ontouchstart' in window) || 
     (navigator.maxTouchPoints > 0);
@@ -273,7 +273,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const startXRef = useRef(0);
   const startYRef = useRef(0);
   const currentPathRef = useRef<{ x: number; y: number }[]>([]);
-  const remotePathRef = useRef<{ x: number; y: number }[]>([]);
   const activeSessionsRef = useRef<Record<string, {
     tool: ToolType;
     color: string;
@@ -281,6 +280,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     opacity: number;
     path: { x: number; y: number }[];
   }>>({});
+
+  // Exponential Moving Average filter tracking to smooth coordinate input
+  const lastEmaXRef = useRef<number | null>(null);
+  const lastEmaYRef = useRef<number | null>(null);
 
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
@@ -304,15 +307,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const hasManuallyZoomedOrPanned = useRef(false);
   const activeTouchCountRef = useRef(0);
   const isZoomPinchingRef = useRef(false);
-  const isTouchDeferredRef = useRef(false);
-  const deferredStartArgsRef = useRef<{
-    clientX: number;
-    clientY: number;
-    tool: ToolType;
-    color: string;
-    thickness: number;
-    opacity: number;
-  } | null>(null);
 
   // Force re-centering instantly when user drawing status / role updates
   useEffect(() => {
@@ -391,7 +385,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     let isPinching = false;
 
     const handleTouchStart = (e: TouchEvent) => {
-      // Track actual active touch count on container
       activeTouchCountRef.current = e.touches.length;
 
       if (!isZoomEnabled || propsRef.current.readOnly) return;
@@ -719,91 +712,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   // --- Dynamic Drawing Functions ---
-  const drawLineSegment = (
-    activeCtx: CanvasRenderingContext2D,
-    x0: number, y0: number,
-    x1: number, y1: number,
-    drawTool: ToolType,
-    drawColor: string,
-    drawWidth: number,
-    drawOpacity: number
-  ) => {
-    activeCtx.save();
-    activeCtx.lineWidth = drawWidth;
-    activeCtx.lineCap = 'round';
-    activeCtx.lineJoin = 'round';
-    activeCtx.globalAlpha = drawOpacity;
-
-    if (drawTool === 'eraser') {
-      activeCtx.strokeStyle = '#ffffff';
-    } else {
-      activeCtx.strokeStyle = drawColor;
-    }
-
-    activeCtx.beginPath();
-    activeCtx.moveTo(x0, y0);
-    activeCtx.lineTo(x1, y1);
-    activeCtx.stroke();
-    activeCtx.restore();
-  };
-
-  const drawSmoothSegment = (
-    activeCtx: CanvasRenderingContext2D,
-    x0: number, y0: number,     // Start midpoint
-    cpX: number, cpY: number,   // Control point
-    x1: number, y1: number,     // End midpoint
-    drawTool: ToolType,
-    drawColor: string,
-    drawWidth: number,
-    drawOpacity: number
-  ) => {
-    activeCtx.save();
-    activeCtx.lineWidth = drawWidth;
-    activeCtx.lineCap = 'round';
-    activeCtx.lineJoin = 'round';
-    activeCtx.globalAlpha = drawOpacity;
-
-    if (drawTool === 'eraser') {
-      activeCtx.strokeStyle = '#ffffff';
-    } else {
-      activeCtx.strokeStyle = drawColor;
-    }
-
-    activeCtx.beginPath();
-    activeCtx.moveTo(x0, y0);
-    activeCtx.quadraticCurveTo(cpX, cpY, x1, y1);
-    activeCtx.stroke();
-    activeCtx.restore();
-  };
-
-  const drawMicroDot = (
-    activeCtx: CanvasRenderingContext2D,
-    x: number, y: number,
-    drawTool: ToolType,
-    drawColor: string,
-    drawWidth: number,
-    drawOpacity: number
-  ) => {
-    activeCtx.save();
-    activeCtx.lineWidth = drawWidth;
-    activeCtx.lineCap = 'round';
-    activeCtx.lineJoin = 'round';
-    activeCtx.globalAlpha = drawOpacity;
-
-    if (drawTool === 'eraser') {
-      activeCtx.strokeStyle = '#ffffff';
-    } else {
-      activeCtx.strokeStyle = drawColor;
-    }
-
-    activeCtx.beginPath();
-    activeCtx.moveTo(x, y);
-    // 0.1 pixel micro-step ensures flawless anti-aliased circular points drawing without bloated dots distortion 
-    activeCtx.lineTo(x + 0.1, y);
-    activeCtx.stroke();
-    activeCtx.restore();
-  };
-
   const drawEntirePath = (
     activeCtx: CanvasRenderingContext2D,
     path: { x: number; y: number }[],
@@ -832,27 +740,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       activeCtx.beginPath();
       activeCtx.arc(path[0].x, path[0].y, drawWidth / 2, 0, Math.PI * 2);
       activeCtx.fill();
-    } else if (path.length === 2) {
-      activeCtx.beginPath();
-      activeCtx.moveTo(path[0].x, path[0].y);
-      activeCtx.lineTo(path[1].x, path[1].y);
-      activeCtx.stroke();
     } else {
+      // Clean, straight point-to-point drawing using only lineTo
       activeCtx.beginPath();
       activeCtx.moveTo(path[0].x, path[0].y);
-      const firstMidX = (path[0].x + path[1].x) / 2;
-      const firstMidY = (path[0].y + path[1].y) / 2;
-      activeCtx.lineTo(firstMidX, firstMidY);
-
-      for (let i = 1; i < path.length - 1; i++) {
-        const p1 = path[i];
-        const p2 = path[i + 1];
-        const midNextX = (p1.x + p2.x) / 2;
-        const midNextY = (p1.y + p2.y) / 2;
-        activeCtx.quadraticCurveTo(p1.x, p1.y, midNextX, midNextY);
+      for (let i = 1; i < path.length; i++) {
+        activeCtx.lineTo(path[i].x, path[i].y);
       }
-
-      activeCtx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
       activeCtx.stroke();
     }
 
@@ -955,6 +849,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     currentPathRef.current = [];
     activeSessionsRef.current = {};
     moveBatchRef.current = [];
+
+    lastEmaXRef.current = null;
+    lastEmaYRef.current = null;
 
     // Clear throttle timeout
     if (throttleTimeoutRef.current) {
@@ -1259,7 +1156,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const startSyncFlow = () => {
     const now = Date.now();
-    // 1000ms cooldown window prevents dual request emissions on double layout mount or network flutters
     if (now - lastSyncRequestTimeRef.current < 1000) {
       console.log("[DrawingCanvasCore] Suppressing duplicate sync request within 1000ms cooldown window.");
       return;
@@ -1269,7 +1165,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     setIsSyncing(true);
     console.log("[DrawingCanvasCore] Activating loading state, requesting round sync...");
 
-    // Setup 4 seconds safety timeout to prevent getting stuck under network latency
     if (syncTimeoutRef.current) {
       clearTimeout(syncTimeoutRef.current);
     }
@@ -1293,7 +1188,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     socket.on('connect', handleConnect);
     
-    // Explicit trigger upon mounting
     if (socket.connected) {
       console.log("[DrawingCanvasCore] Initialized with healthy connection. Instantly fetching sync history...");
       startSyncFlow();
@@ -1324,7 +1218,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCanvas = tempCanvasRef.current;
     if (!canvas || !tempCanvas) return;
 
-    // Strict non-fluctuating dimensional scale initialization
     canvas.width = LOGICAL_WIDTH * DPR;
     canvas.height = LOGICAL_HEIGHT * DPR;
     tempCanvas.width = LOGICAL_WIDTH * DPR;
@@ -1339,7 +1232,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       ctx.lineJoin = 'round';
       ctxRef.current = ctx;
 
-      // Draw initial white canvas background
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
@@ -1348,10 +1240,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.lineJoin = 'round';
       tempCtxRef.current = tempCtx;
 
-      // Save initial state snapshot
       saveSnapshot();
 
-      // Flush any buffered history states received pre-context load
       if (bufferedSyncRef.current) {
         applySyncedHistory(bufferedSyncRef.current);
         bufferedSyncRef.current = null;
@@ -1371,7 +1261,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCtx = tempCtxRef.current;
     if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
 
-    // Direct capture focusing pointer movements over the viewport boundaries
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 
     const activeTool = propsRef.current.tool;
@@ -1379,25 +1268,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
 
-    if (e.pointerType === 'touch') {
-      // Defer touch pointer downs to wait and confirm if they are a drawing stroke or a zoom/pinch gesture
-      isTouchDeferredRef.current = true;
-      deferredStartArgsRef.current = {
-        clientX: e.clientX,
-        clientY: e.clientY,
-        tool: activeTool,
-        color: activeColor,
-        thickness: activeWidth,
-        opacity: activeOpacity
-      };
-      return;
-    }
-
     const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas);
     startXRef.current = x;
     startYRef.current = y;
     isDrawingRef.current = true;
     setIsDrawing(true);
+
+    // Initialize EMA filter history with the exact start point
+    lastEmaXRef.current = x;
+    lastEmaYRef.current = y;
 
     if (activeTool === 'bucket') {
       floodFill(ctx, x, y, activeColor, activeOpacity);
@@ -1430,7 +1309,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       return;
     }
 
-    // Interactive path starting
     currentPathRef.current = [{ x, y }];
     emitDrawCommand('draw_start', {
       tool: activeTool,
@@ -1444,92 +1322,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (activeTool === 'pencil' || activeTool === 'eraser') {
       redrawTempLayer();
     } else {
-      // Clear temp layer
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       drawShape(tempCtx, x, y, x, y, activeTool, activeColor, activeWidth, activeOpacity);
     }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isTouchDeferredRef.current && deferredStartArgsRef.current) {
-      if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
-        isTouchDeferredRef.current = false;
-        deferredStartArgsRef.current = null;
-        return;
-      }
-
-      const args = deferredStartArgsRef.current;
-      const dist = Math.hypot(e.clientX - args.clientX, e.clientY - args.clientY);
-      // Wait for a small movement (3 logical pixels) to confirm drawing stroke vs. interactive zoom/pinch gesture
-      if (dist > 3) {
-        isTouchDeferredRef.current = false;
-
-        const canvas = canvasRef.current;
-        const tempCanvas = tempCanvasRef.current;
-        const ctx = ctxRef.current;
-        const tempCtx = tempCtxRef.current;
-        if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
-
-        const { x, y } = getLogicalCoords(args.clientX, args.clientY, canvas);
-        startXRef.current = x;
-        startYRef.current = y;
-        isDrawingRef.current = true;
-        setIsDrawing(true);
-
-        if (args.tool === 'bucket') {
-          floodFill(ctx, x, y, args.color, args.opacity);
-          emitDrawCommand('draw_action', {
-            tool: 'bucket',
-            color: args.color,
-            opacity: args.opacity,
-            x: x / LOGICAL_WIDTH,
-            y: y / LOGICAL_HEIGHT
-          });
-          saveSnapshot();
-          deferredStartArgsRef.current = null;
-          return;
-        }
-
-        if (args.tool === 'pipette') {
-          const offscreen = document.createElement('canvas');
-          offscreen.width = canvas.width;
-          offscreen.height = canvas.height;
-          const oCtx = offscreen.getContext('2d', { willReadFrequently: true });
-          if (oCtx) {
-            oCtx.drawImage(canvas, 0, 0);
-            const rx = Math.floor(x * DPR);
-            const ry = Math.floor(y * DPR);
-            const pixel = oCtx.getImageData(rx, ry, 1, 1).data;
-            const hex = "#" + ("000000" + ((pixel[0] << 16) | (pixel[1] << 8) | pixel[2]).toString(16)).slice(-6);
-            onPipetteColorPicked?.(hex);
-          }
-          isDrawingRef.current = false;
-          setIsDrawing(false);
-          deferredStartArgsRef.current = null;
-          return;
-        }
-
-        currentPathRef.current = [{ x, y }];
-        emitDrawCommand('draw_start', {
-          tool: args.tool,
-          color: args.color,
-          width: args.thickness,
-          opacity: args.opacity,
-          x: x / LOGICAL_WIDTH,
-          y: y / LOGICAL_HEIGHT
-        });
-
-        if (args.tool === 'pencil' || args.tool === 'eraser') {
-          redrawTempLayer();
-        } else {
-          tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-          drawShape(tempCtx, x, y, x, y, args.tool, args.color, args.thickness, args.opacity);
-        }
-
-        deferredStartArgsRef.current = null;
-      }
-    }
-
     if (!isDrawingRef.current) return;
 
     const canvas = canvasRef.current;
@@ -1539,7 +1337,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
 
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
-      // Abort drawing instantly without committing
       isDrawingRef.current = false;
       setIsDrawing(false);
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
@@ -1561,24 +1358,37 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeOpacity = propsRef.current.opacity;
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
+      let targetX = x;
+      let targetY = y;
+
+      // Apply Exponential Moving Average (EMA) noise-reduction formula
+      if (lastEmaXRef.current !== null && lastEmaYRef.current !== null) {
+        targetX = EMA_ALPHA * x + (1 - EMA_ALPHA) * lastEmaXRef.current;
+        targetY = EMA_ALPHA * y + (1 - EMA_ALPHA) * lastEmaYRef.current;
+      }
+      lastEmaXRef.current = targetX;
+      lastEmaYRef.current = targetY;
+
+      // Maintain exact 1 decimal place format to optimize performance
+      const roundedX = Math.round(targetX * 10) / 10;
+      const roundedY = Math.round(targetY * 10) / 10;
+
       const path = currentPathRef.current;
       
-      // Point Compression: Discard points closer than DISTANCE_THRESHOLD (2.5px) to save backend bandwidth by ~70%
+      // Point Compression: Discard points closer than DISTANCE_THRESHOLD to save backend bandwidth
       if (path.length > 0) {
         const lastPt = path[path.length - 1];
-        if (Math.hypot(x - lastPt.x, y - lastPt.y) < DISTANCE_THRESHOLD) {
+        if (Math.hypot(roundedX - lastPt.x, roundedY - lastPt.y) < DISTANCE_THRESHOLD) {
           return;
         }
       }
 
-      path.push({ x, y });
-
+      path.push({ x: roundedX, y: roundedY });
       redrawTempLayer();
 
-      const normX = x / LOGICAL_WIDTH;
-      const normY = y / LOGICAL_HEIGHT;
+      const normX = roundedX / LOGICAL_WIDTH;
+      const normY = roundedY / LOGICAL_HEIGHT;
 
-      // Safe compression batch dispatching matching active performance capabilities
       moveBatchRef.current.push({ x: normX, y: normY });
 
       const intervalMs = IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16);
@@ -1599,14 +1409,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }, intervalMs);
       }
     } else {
-      // Shape dragging previewing
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       drawShape(tempCtx, startXRef.current, startYRef.current, x, y, activeTool, activeColor, activeWidth, activeOpacity);
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    // Release direct Pointer Captures safely on ending
     e.currentTarget.releasePointerCapture(e.pointerId);
 
     const canvas = canvasRef.current;
@@ -1614,90 +1422,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const ctx = ctxRef.current;
     const tempCtx = tempCtxRef.current;
     if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
-
-    if (isTouchDeferredRef.current && deferredStartArgsRef.current) {
-      const args = deferredStartArgsRef.current;
-      isTouchDeferredRef.current = false;
-      deferredStartArgsRef.current = null;
-
-      if (!isZoomPinchingRef.current && activeTouchCountRef.current < 2) {
-        // Safe single tap dot execution:
-        const { x, y } = getLogicalCoords(args.clientX, args.clientY, canvas);
-        
-        if (args.tool === 'bucket') {
-          floodFill(ctx, x, y, args.color, args.opacity);
-          emitDrawCommand('draw_action', {
-            tool: 'bucket',
-            color: args.color,
-            opacity: args.opacity,
-            x: x / LOGICAL_WIDTH,
-            y: y / LOGICAL_HEIGHT
-          });
-          saveSnapshot();
-          return;
-        }
-
-        if (args.tool === 'pipette') {
-          const offscreen = document.createElement('canvas');
-          offscreen.width = canvas.width;
-          offscreen.height = canvas.height;
-          const oCtx = offscreen.getContext('2d', { willReadFrequently: true });
-          if (oCtx) {
-            oCtx.drawImage(canvas, 0, 0);
-            const rx = Math.floor(x * DPR);
-            const ry = Math.floor(y * DPR);
-            const pixel = oCtx.getImageData(rx, ry, 1, 1).data;
-            const hex = "#" + ("000000" + ((pixel[0] << 16) | (pixel[1] << 8) | pixel[2]).toString(16)).slice(-6);
-            onPipetteColorPicked?.(hex);
-          }
-          return;
-        }
-
-        // Emit draw_start for the tap point
-        emitDrawCommand('draw_start', {
-          tool: args.tool,
-          color: args.color,
-          width: args.thickness,
-          opacity: args.opacity,
-          x: x / LOGICAL_WIDTH,
-          y: y / LOGICAL_HEIGHT
-        });
-
-        // Execute drawing a simple dot locally on the primary canvas (or shape)
-        if (args.tool === 'pencil' || args.tool === 'eraser') {
-          ctx.lineCap = 'round';
-          ctx.lineJoin = 'round';
-          ctx.strokeStyle = args.tool === 'pencil' ? args.color : '#ffffff';
-          ctx.lineWidth = args.thickness;
-          ctx.globalAlpha = args.opacity;
-          ctx.beginPath();
-          ctx.moveTo(x, y);
-          ctx.lineTo(x, y);
-          ctx.stroke();
-          ctx.globalAlpha = 1.0; // Reset
-        } else {
-          // Single-click draws a tiny shape
-          drawShape(ctx, x, y, x, y, args.tool, args.color, args.thickness, args.opacity);
-        }
-
-        emitDrawCommand('draw_end', {
-          tool: args.tool,
-          color: args.color,
-          width: args.thickness,
-          opacity: args.opacity,
-          isShape: args.tool !== 'pencil' && args.tool !== 'eraser',
-          startX: x / LOGICAL_WIDTH,
-          startY: y / LOGICAL_HEIGHT,
-          endX: x / LOGICAL_WIDTH,
-          endY: y / LOGICAL_HEIGHT,
-          x: x / LOGICAL_WIDTH,
-          y: y / LOGICAL_HEIGHT
-        });
-
-        saveSnapshot();
-      }
-      return;
-    }
 
     if (!isDrawingRef.current) return;
 
@@ -1710,14 +1434,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     isDrawingRef.current = false;
     setIsDrawing(false);
 
-    // Cancel outstanding throttling timeouts
     if (throttleTimeoutRef.current) {
       clearTimeout(throttleTimeoutRef.current);
       throttleTimeoutRef.current = null;
     }
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
-      // Transfer final batch points
       if (moveBatchRef.current.length > 0) {
         emitDrawCommand('draw_move', {
           tool: activeTool,
@@ -1729,10 +1451,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         moveBatchRef.current = [];
       }
 
-      // Clear temp layer
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
-      // Commit full path directly onto the primary canvas context
       if (currentPathRef.current.length > 0) {
         drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
       }
@@ -1745,7 +1465,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         isShape: false
       });
     } else {
-      // Commit shape directly onto the primary canvas context
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       drawShape(ctx, startXRef.current, startYRef.current, x, y, activeTool, activeColor, activeWidth, activeOpacity);
 
@@ -1765,6 +1484,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     currentPathRef.current = [];
+    lastEmaXRef.current = null;
+    lastEmaYRef.current = null;
     saveSnapshot();
   };
 
@@ -1778,10 +1499,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         height: '100%',
       }}
     >
-      {/* 
-        This is the dynamic high-performance rendering stage. 
-        Aspect-ratio tracking is responsive to fit fully inside viewport or zoom/drag 
-      */}
       <div
         ref={transformWrapperRef}
         className="absolute left-0 top-0 transform-gpu bg-white shadow-xl overflow-hidden select-none touch-none"
@@ -1792,7 +1509,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           willChange: 'transform'
         }}
       >
-        {/* Double-buffered interactive canvas slots (Opaque Primary Layer + Transparent Shape Preview) */}
         <canvas
           id="drawing-board-layer-primary"
           ref={canvasRef}
