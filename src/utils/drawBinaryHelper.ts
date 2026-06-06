@@ -188,7 +188,7 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
   }
   
   if (event === 'draw_end') {
-    const buffer = new ArrayBuffer(22);
+    const buffer = new ArrayBuffer(23);
     const view = new DataView(buffer);
     view.setUint8(0, MSG_DRAW_END);
     writeString7(view, 1, instId);
@@ -214,6 +214,8 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     const scaledY = Math.min(10000, Math.max(0, Math.round((data.y || 0) * 10000)));
     view.setUint16(18, scaledX, true);
     view.setUint16(20, scaledY, true);
+    
+    view.setUint8(22, data.isCancelled ? 1 : 0);
     
     return buffer;
   }
@@ -344,9 +346,11 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       const x = view.getUint16(18, true) / 10000;
       const y = view.getUint16(20, true) / 10000;
       
+      const isCancelled = view.byteLength >= 23 ? (view.getUint8(22) === 1) : false;
+      
       return {
         event: 'draw_end',
-        data: { instanceId: instId, tool, color, width, opacity, startX, startY, x, y }
+        data: { instanceId: instId, tool, color, width, opacity, startX, startY, x, y, isCancelled }
       };
     }
     

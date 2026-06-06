@@ -393,6 +393,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           isShape: false,
           isCancelled: true
         });
+        emitDrawCommand('draw_cancel', {});
       }
 
       if (!isZoomEnabled || propsRef.current.readOnly) return;
@@ -749,11 +750,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       activeCtx.arc(path[0].x, path[0].y, drawWidth / 2, 0, Math.PI * 2);
       activeCtx.fill();
     } else {
-      // Clean, straight point-to-point drawing using only lineTo
+      // Smooth midpoint quadratic curve drawing to eliminate polygonal sharp corners
       activeCtx.beginPath();
       activeCtx.moveTo(path[0].x, path[0].y);
-      for (let i = 1; i < path.length; i++) {
-        activeCtx.lineTo(path[i].x, path[i].y);
+      if (path.length === 2) {
+        activeCtx.lineTo(path[1].x, path[1].y);
+      } else {
+        let i = 1;
+        for (i = 1; i < path.length - 1; i++) {
+          const xc = (path[i].x + path[i + 1].x) / 2;
+          const yc = (path[i].y + path[i + 1].y) / 2;
+          activeCtx.quadraticCurveTo(path[i].x, path[i].y, xc, yc);
+        }
+        activeCtx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
       }
       activeCtx.stroke();
     }
@@ -1012,6 +1021,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             path.length = 0;
             delete replaySessions[instId];
             saveSnapshot(); // Save snapshot on canvas modifications to maintain functional undo/redo history
+          } else if (event === 'draw_cancel') {
+            path.length = 0;
+            delete replaySessions[instId];
           } else if (event === 'draw_clear') {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
@@ -1120,6 +1132,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
         redrawTempLayer();
         saveSnapshot();
+      } else if (event === 'draw_cancel') {
+        delete activeSessionsRef.current[data.instanceId];
+        redrawTempLayer();
       } else if (event === 'draw_clear') {
         executeClear(false);
       } else if (event === 'draw_action') {
@@ -1258,6 +1273,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (propsRef.current.readOnly) return;
+    if (isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
     
     const canvas = canvasRef.current;
