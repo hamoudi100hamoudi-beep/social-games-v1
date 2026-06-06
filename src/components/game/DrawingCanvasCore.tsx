@@ -19,12 +19,6 @@ import {
 const LOGICAL_WIDTH = 800;
 const LOGICAL_HEIGHT = 600;
 
-// Distance threshold (2 to 3 pixels) for point compression and corner stability
-const DISTANCE_THRESHOLD = 2.5;
-
-// EMA Smoothing Alpha (Optimized factor for ultra-low latency noise absorption)
-const EMA_ALPHA = 0.25;
-
 // --- Performance and DPR Tiering ---
 const getPerformanceTier = () => {
   if (typeof window === 'undefined') return 1;
@@ -280,10 +274,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     opacity: number;
     path: { x: number; y: number }[];
   }>>({});
-
-  // Exponential Moving Average filter tracking to smooth coordinate input
-  const lastEmaXRef = useRef<number | null>(null);
-  const lastEmaYRef = useRef<number | null>(null);
 
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
@@ -850,9 +840,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeSessionsRef.current = {};
     moveBatchRef.current = [];
 
-    lastEmaXRef.current = null;
-    lastEmaYRef.current = null;
-
     // Clear throttle timeout
     if (throttleTimeoutRef.current) {
       clearTimeout(throttleTimeoutRef.current);
@@ -1274,10 +1261,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     isDrawingRef.current = true;
     setIsDrawing(true);
 
-    // Initialize EMA filter history with the exact start point
-    lastEmaXRef.current = x;
-    lastEmaYRef.current = y;
-
     if (activeTool === 'bucket') {
       floodFill(ctx, x, y, activeColor, activeOpacity);
       emitDrawCommand('draw_action', {
@@ -1358,27 +1341,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeOpacity = propsRef.current.opacity;
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
-      let targetX = x;
-      let targetY = y;
-
-      // Apply Exponential Moving Average (EMA) noise-reduction formula
-      if (lastEmaXRef.current !== null && lastEmaYRef.current !== null) {
-        targetX = EMA_ALPHA * x + (1 - EMA_ALPHA) * lastEmaXRef.current;
-        targetY = EMA_ALPHA * y + (1 - EMA_ALPHA) * lastEmaYRef.current;
-      }
-      lastEmaXRef.current = targetX;
-      lastEmaYRef.current = targetY;
-
       // Maintain exact 1 decimal place format to optimize performance
-      const roundedX = Math.round(targetX * 10) / 10;
-      const roundedY = Math.round(targetY * 10) / 10;
+      const roundedX = Math.round(x * 10) / 10;
+      const roundedY = Math.round(y * 10) / 10;
 
       const path = currentPathRef.current;
       
-      // Point Compression: Discard points closer than DISTANCE_THRESHOLD to save backend bandwidth
+      // Compute Dynamic Distance Threshold to protect socket bandwidth and match user resolution
+      const brushSize = activeWidth;
+      const currentThreshold = brushSize < 6 ? 0.5 : (brushSize > 10 ? 3.5 : 1.5);
+
+      // Point Compression: Discard points closer than currentThreshold
       if (path.length > 0) {
         const lastPt = path[path.length - 1];
-        if (Math.hypot(roundedX - lastPt.x, roundedY - lastPt.y) < DISTANCE_THRESHOLD) {
+        if (Math.hypot(roundedX - lastPt.x, roundedY - lastPt.y) < currentThreshold) {
           return;
         }
       }
@@ -1484,8 +1460,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     currentPathRef.current = [];
-    lastEmaXRef.current = null;
-    lastEmaYRef.current = null;
     saveSnapshot();
   };
 
