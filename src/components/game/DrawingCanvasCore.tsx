@@ -377,6 +377,24 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const handleTouchStart = (e: TouchEvent) => {
       activeTouchCountRef.current = e.touches.length;
 
+      // Immediately cancel any active solo-touch stroke if user introduces a second touch (pinch zoom start)
+      if (e.touches.length >= 2 && isDrawingRef.current) {
+        isDrawingRef.current = false;
+        setIsDrawing(false);
+        if (tempCtxRef.current) {
+          tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        }
+        moveBatchRef.current = [];
+        emitDrawCommand('draw_end', {
+          tool: propsRef.current.tool,
+          color: propsRef.current.color,
+          width: propsRef.current.thickness,
+          opacity: propsRef.current.opacity,
+          isShape: false,
+          isCancelled: true
+        });
+      }
+
       if (!isZoomEnabled || propsRef.current.readOnly) return;
 
       if (e.touches.length === 2) {
@@ -979,12 +997,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               width: 5,
               opacity: 1
             };
-            if (path.length > 0) {
+            if (!data.isCancelled && path.length > 0) {
               drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
             }
 
             const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-            if (isShape && data.startX !== undefined && data.startY !== undefined) {
+            if (!data.isCancelled && isShape && data.startX !== undefined && data.startY !== undefined) {
               const sX = data.startX * LOGICAL_WIDTH;
               const sY = data.startY * LOGICAL_HEIGHT;
               const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
@@ -1086,12 +1104,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else if (event === 'draw_end') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
-          if (session.path.length > 0) {
+          if (!data.isCancelled && session.path.length > 0) {
             drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
           }
 
           const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-          if (isShape && data.startX !== undefined && data.startY !== undefined) {
+          if (!data.isCancelled && isShape && data.startX !== undefined && data.startY !== undefined) {
             const sX = data.startX * LOGICAL_WIDTH;
             const sY = data.startY * LOGICAL_HEIGHT;
             const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
@@ -1351,11 +1369,28 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const brushSize = activeWidth;
       const currentThreshold = brushSize < 6 ? 0.5 : (brushSize > 10 ? 3.5 : 1.5);
 
-      // Point Compression: Discard points closer than currentThreshold
+      // Point Compression and Lightweight Micro-Linear Interpolation (Lerp) for fast movements
       if (path.length > 0) {
         const lastPt = path[path.length - 1];
-        if (Math.hypot(roundedX - lastPt.x, roundedY - lastPt.y) < currentThreshold) {
+        const dist = Math.hypot(roundedX - lastPt.x, roundedY - lastPt.y);
+        
+        if (dist < currentThreshold) {
           return;
+        }
+
+        // Lightweight interpolation if distance is greater than 8 pixels to smooth fast polygonal arcs
+        if (dist > 8) {
+          const stepSize = 6;
+          const stepsCount = Math.floor(dist / stepSize);
+          if (stepsCount > 1) {
+            for (let i = 1; i < stepsCount; i++) {
+              const t = i / stepsCount;
+              const lerpX = Math.round((lastPt.x + (roundedX - lastPt.x) * t) * 10) / 10;
+              const lerpY = Math.round((lastPt.y + (roundedY - lastPt.y) * t) * 10) / 10;
+              path.push({ x: lerpX, y: lerpY });
+              moveBatchRef.current.push({ x: lerpX / LOGICAL_WIDTH, y: lerpY / LOGICAL_HEIGHT });
+            }
+          }
         }
       }
 
