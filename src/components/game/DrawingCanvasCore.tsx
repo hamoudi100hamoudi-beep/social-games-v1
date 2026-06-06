@@ -278,6 +278,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const bucketTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const preventBucketRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (bucketTimeoutRef.current) {
+        clearTimeout(bucketTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Undo / Redo Snapshot Cache (Exactly 1 undo step optimization)
   const historyRef = useRef<ImageData[]>([]);
@@ -377,6 +387,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const handleTouchStart = (e: TouchEvent) => {
       activeTouchCountRef.current = e.touches.length;
 
+      if (e.touches.length >= 2) {
+        preventBucketRef.current = true;
+        if (bucketTimeoutRef.current) {
+          clearTimeout(bucketTimeoutRef.current);
+          bucketTimeoutRef.current = null;
+        }
+      }
+
       // Immediately cancel any active solo-touch stroke if user introduces a second touch (pinch zoom start)
       if (e.touches.length >= 2 && isDrawingRef.current) {
         isDrawingRef.current = false;
@@ -423,6 +441,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const handleTouchMove = (e: TouchEvent) => {
       activeTouchCountRef.current = e.touches.length;
+
+      if (e.touches.length >= 2) {
+        preventBucketRef.current = true;
+        if (bucketTimeoutRef.current) {
+          clearTimeout(bucketTimeoutRef.current);
+          bucketTimeoutRef.current = null;
+        }
+      }
 
       if (!isZoomEnabled || propsRef.current.readOnly || !isPinching) return;
 
@@ -476,6 +502,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const handleTouchEnd = (e: TouchEvent) => {
       activeTouchCountRef.current = e.touches.length;
+
+      if (e.touches.length === 0) {
+        preventBucketRef.current = false;
+      }
 
       if (isPinching) {
         isPinching = false;
@@ -867,11 +897,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeSessionsRef.current = {};
     moveBatchRef.current = [];
 
-    // Clear throttle timeout
+    // Clear throttle timeout and bucket timeout
     if (throttleTimeoutRef.current) {
       clearTimeout(throttleTimeoutRef.current);
       throttleTimeoutRef.current = null;
     }
+    if (bucketTimeoutRef.current) {
+      clearTimeout(bucketTimeoutRef.current);
+      bucketTimeoutRef.current = null;
+    }
+    preventBucketRef.current = false;
 
     // Reinitialize Undo / Redo stacks
     historyRef.current = [];
@@ -1292,21 +1327,36 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas);
     startXRef.current = x;
     startYRef.current = y;
-    isDrawingRef.current = true;
-    setIsDrawing(true);
 
     if (activeTool === 'bucket') {
-      floodFill(ctx, x, y, activeColor, activeOpacity);
-      emitDrawCommand('draw_action', {
-        tool: 'bucket',
-        color: activeColor,
-        opacity: activeOpacity,
-        x: x / LOGICAL_WIDTH,
-        y: y / LOGICAL_HEIGHT
-      });
-      saveSnapshot();
+      const runBucket = () => {
+        floodFill(ctx, x, y, activeColor, activeOpacity);
+        emitDrawCommand('draw_action', {
+          tool: 'bucket',
+          color: activeColor,
+          opacity: activeOpacity,
+          x: x / LOGICAL_WIDTH,
+          y: y / LOGICAL_HEIGHT
+        });
+        saveSnapshot();
+      };
+
+      if (e.pointerType === 'touch') {
+        preventBucketRef.current = false;
+        if (bucketTimeoutRef.current) clearTimeout(bucketTimeoutRef.current);
+        bucketTimeoutRef.current = setTimeout(() => {
+          if (!preventBucketRef.current && activeTouchCountRef.current < 2 && !isZoomPinchingRef.current) {
+            runBucket();
+          }
+        }, 70);
+      } else {
+        runBucket();
+      }
       return;
     }
+
+    isDrawingRef.current = true;
+    setIsDrawing(true);
 
     if (activeTool === 'pipette') {
       const offscreen = document.createElement('canvas');
