@@ -742,7 +742,7 @@ export default function GameRoom({
             : lockedHeight
               ? `${lockedHeight}px`
               : "100dvh",
-          gridTemplateColumns: "minmax(0, 24%) minmax(0, 76%)",
+          gridTemplateColumns: "minmax(0, 32%) minmax(0, 68%)",
           gridTemplateRows: "auto minmax(0, 1fr)",
         }}
       >
@@ -840,11 +840,9 @@ export default function GameRoom({
 
         {/* Top Area (Drawing / Waiting) */}
         <div
-          className={`relative flex flex-col shrink-0 overflow-hidden bg-[#1A103C]
-                      ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2" : "col-start-1 col-end-3 row-start-1 row-end-2"}
-                     `}
+          className="relative flex flex-col shrink overflow-hidden bg-[#1A103C] col-start-2 col-end-3 row-start-1 row-end-2"
         >
-          <div className="w-full aspect-[16/9] bg-white shrink-0 flex flex-col items-center justify-center overflow-hidden relative">
+          <div className="w-full aspect-[740/430] max-h-[42vh] sm:max-h-[45vh] bg-white shrink flex flex-col items-center justify-center overflow-hidden relative object-contain">
             {/* Hint/Word Overlay Overlay for spectator view */}
             {!isDrawingMode && renderWordOverlay()}
 
@@ -1317,9 +1315,7 @@ export default function GameRoom({
 
         {/* Right: Actions & Guess Input */}
         <div
-          className={`flex flex-col bg-[#1A103C] relative overflow-hidden
-                      ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
-                     `}
+          className="flex-1 flex flex-col bg-[#1A103C] relative overflow-hidden col-start-2 col-end-3 row-start-2 row-end-3 h-0 min-h-0"
         >
             {/* Actions Bar */}
             <div

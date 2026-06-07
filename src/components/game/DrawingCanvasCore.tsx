@@ -16,8 +16,8 @@ import {
 } from '../../utils/drawBinaryHelper';
 
 // --- Constants ---
-const LOGICAL_WIDTH = 800;
-const LOGICAL_HEIGHT = 450;
+const LOGICAL_WIDTH = 740;
+const LOGICAL_HEIGHT = 430;
 
 // --- Performance and DPR Tiering ---
 const getPerformanceTier = () => {

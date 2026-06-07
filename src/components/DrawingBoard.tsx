@@ -15,7 +15,7 @@ import {
 } from '../utils/drawBinaryHelper';
 import DrawingCanvasCore, { DrawingCanvasCoreRef } from './game/DrawingCanvasCore';
 
-const LOGICAL_HEIGHT = 450;
+const LOGICAL_HEIGHT = 430;
 
 export default function DrawingBoard({ 
   readOnly = false,
