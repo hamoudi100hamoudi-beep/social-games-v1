@@ -16,6 +16,7 @@ import {
 import DrawingCanvasCore, { DrawingCanvasCoreRef } from './game/DrawingCanvasCore';
 
 const LOGICAL_HEIGHT = 430;
+const LOGICAL_WIDTH = 740;
 
 export default function DrawingBoard({ 
   readOnly = false,
@@ -147,9 +148,9 @@ export default function DrawingBoard({
     if (!container) return;
     const obs = new ResizeObserver((entries) => {
       for (let entry of entries) {
-        const { height } = entry.contentRect;
-        if (height === 0) continue;
-        const targetScale = height / LOGICAL_HEIGHT;
+        const { width, height } = entry.contentRect;
+        if (width === 0 || height === 0) continue;
+        const targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
         setBaseScale(targetScale || 1);
       }
     });
@@ -202,7 +203,7 @@ export default function DrawingBoard({
       )}
 
       {/* Canvas Container Area */}
-      <div ref={containerRef} dir="ltr" className="flex-1 relative bg-slate-100 overflow-hidden w-full h-full cursor-crosshair">
+      <div ref={containerRef} dir="ltr" className="flex-1 relative bg-[#D4D4D8] overflow-hidden w-full h-full cursor-crosshair">
         
         {/* Core isolated draw canvas layer */}
         <DrawingCanvasCore
