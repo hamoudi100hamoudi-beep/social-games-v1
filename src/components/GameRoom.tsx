@@ -840,7 +840,9 @@ export default function GameRoom({
 
         {/* Top Area (Drawing / Waiting) */}
         <div
-          className="relative flex flex-col shrink overflow-hidden bg-[#1A103C] col-start-2 col-end-3 row-start-1 row-end-2"
+          className={`relative flex flex-col shrink-0 overflow-hidden bg-[#1A103C]
+                      ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2" : "col-start-1 col-end-3 row-start-1 row-end-2"}
+                     `}
         >
           <div className="w-full aspect-[740/430] max-h-[42vh] sm:max-h-[45vh] bg-white shrink flex flex-col items-center justify-center overflow-hidden relative object-contain">
             {/* Hint/Word Overlay Overlay for spectator view */}
