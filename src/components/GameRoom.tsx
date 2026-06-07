@@ -742,7 +742,7 @@ export default function GameRoom({
             : lockedHeight
               ? `${lockedHeight}px`
               : "100dvh",
-          gridTemplateColumns: "minmax(0, 35%) minmax(0, 65%)",
+          gridTemplateColumns: "minmax(0, 24%) minmax(0, 76%)",
           gridTemplateRows: "auto minmax(0, 1fr)",
         }}
       >
@@ -844,7 +844,7 @@ export default function GameRoom({
                       ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2" : "col-start-1 col-end-3 row-start-1 row-end-2"}
                      `}
         >
-          <div className="w-full aspect-[4/3] bg-white shrink-0 flex flex-col items-center justify-center overflow-hidden relative">
+          <div className="w-full aspect-[16/9] bg-white shrink-0 flex flex-col items-center justify-center overflow-hidden relative">
             {/* Hint/Word Overlay Overlay for spectator view */}
             {!isDrawingMode && renderWordOverlay()}
 
