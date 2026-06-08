@@ -303,6 +303,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const transformWrapperRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef({ scale: 1, x: 0, y: 0 });
   const [baseScale, setBaseScale] = useState(1);
+  const debounceStateTimeoutRef = useRef<any>(null);
   const hasInitializedTransform = useRef(false);
   const hasManuallyZoomedOrPanned = useRef(false);
   const activeTouchCountRef = useRef(0);
@@ -346,24 +347,37 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         
         const targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
         
-        setBaseScale(targetScale);
-        
-        // Exact responsive centered coordinates
+        // Dynamic centering calculations based on current container rectangle
         const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
         const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
         const initialX = (width - canvasDisplayWidth) / 2;
         const initialY = (height - canvasDisplayHeight) / 2;
 
-        // Auto-center on layout update/transition unless the player already Zoomed or Panned manually
+        // Instantly position and scale the canvas via direct DOM styles for butter-smooth animation during resize
         if (!hasInitializedTransform.current || readOnly || !hasManuallyZoomedOrPanned.current) {
           transformRef.current = { scale: 1, x: initialX, y: initialY };
-          applyTransform(targetScale);
-          if (!readOnly) hasInitializedTransform.current = true;
+          if (transformWrapperRef.current) {
+            transformWrapperRef.current.style.transform = `translate(${initialX}px, ${initialY}px) scale(${targetScale})`;
+          }
         }
+
+        // Debounce the heavy React component state-update cycle to prevent browser design hiccups/shaking
+        if (debounceStateTimeoutRef.current) {
+          clearTimeout(debounceStateTimeoutRef.current);
+        }
+        debounceStateTimeoutRef.current = setTimeout(() => {
+          setBaseScale(targetScale);
+          if (!readOnly) hasInitializedTransform.current = true;
+        }, 85);
       }
     });
     obs.observe(container);
-    return () => obs.disconnect();
+    return () => {
+      obs.disconnect();
+      if (debounceStateTimeoutRef.current) {
+        clearTimeout(debounceStateTimeoutRef.current);
+      }
+    };
   }, [readOnly]);
 
   // --- Multi-touch Mobile Pinch to Zoom and Pan ---
@@ -1565,7 +1579,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     <div
       ref={containerRef}
       role="presentation"
-      className="absolute inset-0 select-none overflow-hidden touch-none bg-[#D4D4D8]"
+      className="absolute inset-0 select-none overflow-hidden touch-none bg-white"
       style={{
         width: '100%',
         height: '100%',
@@ -1573,7 +1587,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     >
       <div
         ref={transformWrapperRef}
-        className="absolute left-0 top-0 transform-gpu bg-white overflow-hidden select-none touch-none"
+        className="absolute left-0 top-0 transform-gpu bg-white shadow-xl overflow-hidden select-none touch-none"
         style={{
           width: LOGICAL_WIDTH,
           height: LOGICAL_HEIGHT,

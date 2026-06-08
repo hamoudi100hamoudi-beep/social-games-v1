@@ -16,7 +16,6 @@ import {
 import DrawingCanvasCore, { DrawingCanvasCoreRef } from './game/DrawingCanvasCore';
 
 const LOGICAL_HEIGHT = 430;
-const LOGICAL_WIDTH = 740;
 
 export default function DrawingBoard({ 
   readOnly = false,
@@ -143,6 +142,7 @@ export default function DrawingBoard({
   }, []);
 
   // Update layout scale on resize to correctly align the pen thickness circles preview
+  const debounceBoardScaleRef = useRef<any>(null);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -150,12 +150,19 @@ export default function DrawingBoard({
       for (let entry of entries) {
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
-        const targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
-        setBaseScale(targetScale || 1);
+        const targetScale = Math.min(width / 740, height / 430);
+        
+        if (debounceBoardScaleRef.current) clearTimeout(debounceBoardScaleRef.current);
+        debounceBoardScaleRef.current = setTimeout(() => {
+          setBaseScale(targetScale || 1);
+        }, 85);
       }
     });
     obs.observe(container);
-    return () => obs.disconnect();
+    return () => {
+      obs.disconnect();
+      if (debounceBoardScaleRef.current) clearTimeout(debounceBoardScaleRef.current);
+    };
   }, []);
 
   const changeTool = (newTool: ToolType) => {
@@ -203,7 +210,7 @@ export default function DrawingBoard({
       )}
 
       {/* Canvas Container Area */}
-      <div ref={containerRef} dir="ltr" className="flex-1 relative bg-[#D4D4D8] overflow-hidden w-full h-full cursor-crosshair">
+      <div ref={containerRef} dir="ltr" className="flex-1 relative bg-white overflow-hidden w-full h-full cursor-crosshair">
         
         {/* Core isolated draw canvas layer */}
         <DrawingCanvasCore
