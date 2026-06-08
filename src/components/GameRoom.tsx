@@ -120,7 +120,7 @@ const SmoothTimer = ({
       className={
         isFullScreen
           ? "w-full px-2 sm:px-3 py-1 shrink-0 flex items-center justify-center bg-transparent"
-          : "flex-1 w-full flex items-center justify-center bg-[#1A103C] px-0 py-0"
+          : "w-full h-3 sm:h-4 shrink-0 flex items-stretch justify-start bg-[#1A103C] px-0 py-0"
       }
       dir="ltr"
     >
@@ -128,7 +128,7 @@ const SmoothTimer = ({
         className={
           isFullScreen
             ? "w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner flex justify-start"
-            : "w-full h-4 sm:h-5 bg-[#24174D] overflow-hidden flex justify-start"
+            : "w-full h-full bg-[#24174D] overflow-hidden flex justify-start"
         }
       >
         <div ref={barRef} className={`h-full bg-[#3b82f6] ${isFullScreen ? "rounded-full" : ""}`} />
@@ -850,11 +850,9 @@ export default function GameRoom({
 
         {/* Top Area (Drawing / Waiting) */}
         <div
-          className={`relative flex flex-col shrink-0 overflow-hidden bg-[#1A103C] items-stretch justify-start
-                      ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2 max-h-[35dvh]" : "col-start-1 col-end-3 row-start-1 row-end-2 max-h-[48dvh] md:max-h-[55dvh]"}
-                     `}
+          className="relative flex flex-col shrink-0 overflow-hidden bg-white items-stretch justify-start col-start-2 col-end-3 row-start-1 row-end-2 max-h-[38dvh] sm:max-h-[45dvh] md:max-h-[50dvh]"
         >
-          <div className="w-full max-w-full h-full max-h-full aspect-[740/430] bg-white shrink-0 flex flex-col items-center justify-center overflow-hidden relative">
+          <div className="w-full max-w-full h-full max-h-[calc(100%-12px)] sm:max-h-[calc(100%-16px)] aspect-[740/430] bg-white shrink-0 flex flex-col items-center justify-center overflow-hidden relative">
             {/* Hint/Word Overlay Overlay for spectator view */}
             {!isDrawingMode && renderWordOverlay()}
 
