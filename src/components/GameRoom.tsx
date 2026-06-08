@@ -850,11 +850,11 @@ export default function GameRoom({
 
         {/* Top Area (Drawing / Waiting) */}
         <div
-          className={`relative flex flex-col shrink-0 overflow-hidden bg-[#1A103C] items-stretch justify-start transition-all duration-300
-                      ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2 max-h-[35dvh]" : "col-start-1 col-end-3 row-start-1 row-end-2 max-h-[48dvh] md:max-h-[55dvh]"}
+          className={`relative flex flex-col shrink-0 overflow-hidden bg-[#1A103C] items-stretch justify-start
+                      ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2 h-[35dvh] max-h-[35dvh]" : "col-start-1 col-end-3 row-start-1 row-end-2 h-[48dvh] md:h-[55dvh] max-h-[48dvh] md:max-h-[55dvh]"}
                      `}
         >
-          <div className="w-full max-w-full h-full max-h-full aspect-[740/430] bg-white shrink-0 flex flex-col items-stretch justify-start overflow-hidden relative">
+          <div className="w-full max-w-full h-full max-h-full bg-white shrink-0 flex flex-col items-stretch justify-start overflow-hidden relative">
             {/* Hint/Word Overlay Overlay for spectator view */}
             {!isDrawingMode && renderWordOverlay()}
 
@@ -863,7 +863,7 @@ export default function GameRoom({
               className={
                 isDrawingMode
                   ? "fixed inset-0 z-[100] bg-gray-300 flex flex-col items-center justify-center overflow-hidden transition-all duration-300 opacity-100"
-                  : "flex-1 min-h-0 relative flex flex-col"
+                  : "flex-1 min-h-0 relative flex flex-col h-full w-full"
               }
             >
               {isDrawingMode && renderWordOverlay(true)}

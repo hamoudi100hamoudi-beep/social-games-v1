@@ -202,7 +202,7 @@ export default function DrawingBoard({
       )}
 
       {/* Canvas Container Area */}
-      <div ref={containerRef} dir="ltr" className="flex-1 relative bg-gray-300 overflow-hidden w-full h-full cursor-crosshair">
+      <div ref={containerRef} dir="ltr" className="flex-1 relative bg-white overflow-hidden w-full h-full cursor-crosshair">
         
         {/* Core isolated draw canvas layer */}
         <DrawingCanvasCore
