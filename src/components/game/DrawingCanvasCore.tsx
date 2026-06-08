@@ -344,7 +344,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
         
-        const targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
+        let targetScale;
+        if (readOnly) {
+          targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
+        } else {
+          targetScale = height / LOGICAL_HEIGHT;
+        }
         
         setBaseScale(targetScale);
         
@@ -1565,7 +1570,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     <div
       ref={containerRef}
       role="presentation"
-      className="absolute inset-0 select-none overflow-hidden touch-none bg-white"
+      className="absolute inset-0 select-none overflow-hidden touch-none bg-gray-300"
       style={{
         width: '100%',
         height: '100%',
