@@ -303,7 +303,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const transformWrapperRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef({ scale: 1, x: 0, y: 0 });
   const [baseScale, setBaseScale] = useState(1);
-  const debounceStateTimeoutRef = useRef<any>(null);
   const hasInitializedTransform = useRef(false);
   const hasManuallyZoomedOrPanned = useRef(false);
   const activeTouchCountRef = useRef(0);
@@ -345,39 +344,31 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
         
-        const targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
+        let targetScale;
+        if (readOnly) {
+          targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
+        } else {
+          targetScale = height / LOGICAL_HEIGHT;
+        }
         
-        // Dynamic centering calculations based on current container rectangle
+        setBaseScale(targetScale);
+        
+        // Exact responsive centered coordinates
         const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
         const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
         const initialX = (width - canvasDisplayWidth) / 2;
         const initialY = (height - canvasDisplayHeight) / 2;
 
-        // Instantly position and scale the canvas via direct DOM styles for butter-smooth animation during resize
+        // Auto-center on layout update/transition unless the player already Zoomed or Panned manually
         if (!hasInitializedTransform.current || readOnly || !hasManuallyZoomedOrPanned.current) {
           transformRef.current = { scale: 1, x: initialX, y: initialY };
-          if (transformWrapperRef.current) {
-            transformWrapperRef.current.style.transform = `translate(${initialX}px, ${initialY}px) scale(${targetScale})`;
-          }
-        }
-
-        // Debounce the heavy React component state-update cycle to prevent browser design hiccups/shaking
-        if (debounceStateTimeoutRef.current) {
-          clearTimeout(debounceStateTimeoutRef.current);
-        }
-        debounceStateTimeoutRef.current = setTimeout(() => {
-          setBaseScale(targetScale);
+          applyTransform(targetScale);
           if (!readOnly) hasInitializedTransform.current = true;
-        }, 85);
+        }
       }
     });
     obs.observe(container);
-    return () => {
-      obs.disconnect();
-      if (debounceStateTimeoutRef.current) {
-        clearTimeout(debounceStateTimeoutRef.current);
-      }
-    };
+    return () => obs.disconnect();
   }, [readOnly]);
 
   // --- Multi-touch Mobile Pinch to Zoom and Pan ---
@@ -1579,7 +1570,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     <div
       ref={containerRef}
       role="presentation"
-      className="absolute inset-0 select-none overflow-hidden touch-none bg-white"
+      className="absolute inset-0 select-none overflow-hidden touch-none bg-slate-900"
       style={{
         width: '100%',
         height: '100%',
