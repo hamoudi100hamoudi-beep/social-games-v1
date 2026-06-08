@@ -742,7 +742,7 @@ export default function GameRoom({
             : lockedHeight
               ? `${lockedHeight}px`
               : "100dvh",
-          gridTemplateColumns: "minmax(0, 30%) minmax(0, 70%)",
+          gridTemplateColumns: "minmax(0, 32%) minmax(0, 68%)",
           gridTemplateRows: "auto minmax(0, 1fr)",
         }}
       >
