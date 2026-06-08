@@ -32,7 +32,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
 }) => {
   return (
     <div className={`flex flex-col border-r border-[#00D9FF]/20 bg-[#24174D] overflow-y-auto overscroll-contain touch-pan-y
-                    col-start-1 col-end-2 row-start-1 row-end-3
+                    ${morphMode ? 'col-start-1 col-end-2 row-start-1 row-end-3' : 'col-start-1 col-end-2 row-start-2 row-end-3'}
                    `}>
         {slots.map((slot) => {
           const isDrawer = slot.isCurrent;
