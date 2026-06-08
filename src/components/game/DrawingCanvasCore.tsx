@@ -1570,7 +1570,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     <div
       ref={containerRef}
       role="presentation"
-      className="absolute inset-0 select-none overflow-hidden touch-none bg-slate-900"
+      className="absolute inset-0 select-none overflow-hidden touch-none bg-gray-300"
       style={{
         width: '100%',
         height: '100%',
@@ -1578,7 +1578,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     >
       <div
         ref={transformWrapperRef}
-        className="absolute left-0 top-0 transform-gpu bg-white shadow-xl overflow-hidden select-none touch-none"
+        className="absolute left-0 top-0 transform-gpu bg-white overflow-hidden select-none touch-none"
         style={{
           width: LOGICAL_WIDTH,
           height: LOGICAL_HEIGHT,
