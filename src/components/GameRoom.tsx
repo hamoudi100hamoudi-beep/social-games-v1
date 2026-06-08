@@ -106,7 +106,7 @@ const SmoothTimer = ({
               "bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]";
           }
         }
-        barRef.current.className = `h-full rounded-full ${timerColorClass}`;
+        barRef.current.className = `h-full ${isFullScreen ? "rounded-full" : ""} ${timerColorClass}`;
       }
 
       requestId = requestAnimationFrame(updateTimer);
@@ -117,11 +117,21 @@ const SmoothTimer = ({
 
   return (
     <div
-      className={`w-full px-2 sm:px-3 py-1 shrink-0 flex items-center justify-center ${isFullScreen ? "bg-transparent" : "bg-[#1A103C]"}`}
+      className={
+        isFullScreen
+          ? "w-full px-2 sm:px-3 py-1 shrink-0 flex items-center justify-center bg-transparent"
+          : "flex-1 w-full flex items-center justify-center bg-[#1A103C] px-0 py-0"
+      }
       dir="ltr"
     >
-      <div className="w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner flex justify-start">
-        <div ref={barRef} className="h-full rounded-full bg-[#3b82f6]" />
+      <div
+        className={
+          isFullScreen
+            ? "w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner flex justify-start"
+            : "w-full h-4 sm:h-5 bg-[#24174D] overflow-hidden flex justify-start"
+        }
+      >
+        <div ref={barRef} className={`h-full bg-[#3b82f6] ${isFullScreen ? "rounded-full" : ""}`} />
       </div>
     </div>
   );
@@ -840,7 +850,7 @@ export default function GameRoom({
 
         {/* Top Area (Drawing / Waiting) */}
         <div
-          className={`relative flex flex-col shrink-0 overflow-hidden bg-[#1A103C] items-center justify-center
+          className={`relative flex flex-col shrink-0 overflow-hidden bg-[#1A103C] items-stretch justify-start
                       ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2 max-h-[35dvh]" : "col-start-1 col-end-3 row-start-1 row-end-2 max-h-[48dvh] md:max-h-[55dvh]"}
                      `}
         >
