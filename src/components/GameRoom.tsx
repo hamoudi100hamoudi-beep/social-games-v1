@@ -839,6 +839,11 @@ export default function GameRoom({
         </AnimatePresence>
 
         {/* Top Area (Drawing / Waiting) */}
+        {/* 
+            ⚠️ CRITICAL ARCHITECTURE RULE: DO NOT CHANGE THE ASPECT RATIO (1.72) OF THE CANVAS. 
+            GameRoom uses aspect-[740/430]. Any internal canvas resizing must preserve 
+            this exact aspect ratio to prevent spectator layout squishing or grey gaps. 
+        */}
         <div
           className={`relative flex flex-col overflow-hidden bg-[#1A103C] items-center justify-center
                       ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2" : "col-start-1 col-end-3 row-start-1 row-end-2"}

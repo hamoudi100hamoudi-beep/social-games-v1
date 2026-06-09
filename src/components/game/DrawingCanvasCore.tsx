@@ -16,8 +16,16 @@ import {
 } from '../../utils/drawBinaryHelper';
 
 // --- Constants ---
-const LOGICAL_WIDTH = 740;
-const LOGICAL_HEIGHT = 430;
+/* 
+  ⚠️ CRITICAL ARCHITECTURE RULE: DO NOT CHANGE THE ASPECT RATIO (1.72) OF THE CANVAS.
+  GameRoom uses aspect-[740/430]. Any internal canvas resizing must preserve
+  this exact aspect ratio to prevent spectator layout squishing or grey gaps. 
+*/
+export const CANVAS_WIDTH = 666;
+export const CANVAS_HEIGHT = 387;
+
+const LOGICAL_WIDTH = CANVAS_WIDTH;
+const LOGICAL_HEIGHT = CANVAS_HEIGHT;
 
 // --- Performance and DPR Tiering ---
 const getPerformanceTier = () => {
