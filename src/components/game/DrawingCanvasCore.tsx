@@ -1595,7 +1595,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         <canvas
           id="drawing-board-layer-primary"
           ref={canvasRef}
-          className={`absolute inset-0 w-full h-full block bg-white touch-none ${readOnly ? 'object-fill pointer-events-none' : 'pointer-events-auto cursor-crosshair'}`}
+          className={`absolute inset-0 w-full h-full block bg-white touch-none ${readOnly ? 'object-contain pointer-events-none' : 'pointer-events-auto cursor-crosshair'}`}
           style={{
             zIndex: 10,
             imageRendering: 'auto'
@@ -1608,7 +1608,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         <canvas
           id="drawing-board-layer-shapes-preview"
           ref={tempCanvasRef}
-          className={`absolute inset-0 w-full h-full block pointer-events-none touch-none bg-transparent ${readOnly ? 'object-fill' : ''}`}
+          className={`absolute inset-0 w-full h-full block pointer-events-none touch-none bg-transparent ${readOnly ? 'object-contain' : ''}`}
           style={{
             zIndex: 20
           }}

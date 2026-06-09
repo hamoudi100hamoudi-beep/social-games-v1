@@ -840,11 +840,11 @@ export default function GameRoom({
 
         {/* Top Area (Drawing / Waiting) */}
         <div
-          className={`relative flex-1 min-h-[25dvh] flex flex-col overflow-hidden bg-[#1A103C] items-center justify-center
-                      ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2 max-h-[35dvh]" : "col-start-1 col-end-3 row-start-1 row-end-2 max-h-[48dvh] md:max-h-[55dvh]"}
+          className={`relative flex flex-col overflow-hidden bg-[#1A103C] items-center justify-center
+                      ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2" : "col-start-1 col-end-3 row-start-1 row-end-2"}
                      `}
         >
-          <div className={`w-full max-w-full h-full max-h-full ${isDrawingMode ? "aspect-[740/430] shrink-0" : "flex-1"} bg-white flex flex-col items-center justify-center overflow-hidden relative`}>
+          <div className="w-full max-w-full h-auto max-h-full aspect-[740/430] shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative">
             {/* Hint/Word Overlay Overlay for spectator view */}
             {!isDrawingMode && renderWordOverlay()}
 
