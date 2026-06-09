@@ -990,16 +990,16 @@ export default function GameRoom({
             {gameState.status === "WAITING" && (
               <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
                 <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
-                  <div className="mb-4">
-                    <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                  <div className="mb-2">
+                    <span className="text-[#0B2E5C] text-xl sm:text-2xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
                       WAITING
                     </span>
                   </div>
-                  <div className="relative w-24 h-24 sm:w-28 sm:h-28 mb-5 mx-auto bg-sky-100 rounded-full flex items-center justify-center border-4 border-[#0B2E5C]/10 shadow-inner">
-                    <span className="text-5xl sm:text-6xl animate-pulse">
+                  <div className="relative w-16 h-16 sm:w-20 sm:h-20 mb-2 mx-auto bg-sky-100 rounded-full flex items-center justify-center border-4 border-[#0B2E5C]/10 shadow-inner">
+                    <span className="text-4xl sm:text-5xl animate-pulse">
                       ⏳
                     </span>
-                    <span className="absolute -top-1 -right-1 text-2.5xl animate-bounce">
+                    <span className="absolute -top-1 -right-1 text-xl animate-bounce">
                       ⏰
                     </span>
                   </div>
@@ -1014,15 +1014,15 @@ export default function GameRoom({
             {gameState.status === "CHOOSING" && !amIDrawer && (
               <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
                 <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
-                  <div className="mb-4">
-                    <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                  <div className="mb-2">
+                    <span className="text-[#0B2E5C] text-xl sm:text-2xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
                       NEW TURN!
                     </span>
                   </div>
 
                   {/* Avatar element */}
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-[#F8FAFC] border-[5px] border-[#0A2540] rounded-full flex items-center justify-center shadow-lg mb-4 relative overflow-visible">
-                    <span className="text-4xl sm:text-5xl">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto bg-[#F8FAFC] border-[5px] border-[#0A2540] rounded-full flex items-center justify-center shadow-lg mb-2 relative overflow-visible">
+                    <span className="text-3xl sm:text-4xl">
                       {
                         currentPlayers.find(
                           (p) =>
@@ -1036,10 +1036,10 @@ export default function GameRoom({
                     </div>
                   </div>
 
-                  <p className="text-[#728299] text-sm sm:text-base font-extrabold mb-0.5">
+                  <p className="text-[#728299] text-sm font-extrabold mb-0.5">
                     It's the turn of
                   </p>
-                  <h3 className="text-[#0B2E5C] font-black text-xl sm:text-2xl tracking-wide">
+                  <h3 className="text-[#0B2E5C] font-black text-lg sm:text-xl tracking-wide">
                     {getCurrentDrawerName()}
                   </h3>
                 </div>
@@ -1061,23 +1061,23 @@ export default function GameRoom({
                   return (
                     <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
                       <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
-                        <div className="mb-4">
-                          <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                        <div className="mb-2">
+                          <span className="text-[#0B2E5C] text-xl sm:text-2xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
                             SKIPPED!
                           </span>
                         </div>
 
-                        <div className="relative w-24 h-24 sm:w-28 sm:h-28 mb-5 mx-auto bg-green-50 rounded-full flex items-center justify-center border-4 border-green-100 shadow-sm">
-                          <span className="text-5xl sm:text-6xl animate-bounce">
+                        <div className="relative w-16 h-16 sm:w-20 sm:h-20 mb-2 mx-auto bg-green-50 rounded-full flex items-center justify-center border-4 border-green-100 shadow-sm">
+                          <span className="text-4xl sm:text-5xl animate-bounce">
                             ✏️
                           </span>
-                          <span className="absolute -bottom-1 -right-1 text-2xl animate-spin">
+                          <span className="absolute -bottom-1 -right-1 text-xl animate-spin">
                             💫
                           </span>
                         </div>
 
                         <h3
-                          className="text-[#0A2540] font-black text-lg sm:text-xl tracking-wide mb-1"
+                          className="text-[#0A2540] font-black text-base sm:text-lg tracking-wide mb-1"
                           dir="auto"
                         >
                           {isDrawer
@@ -1094,23 +1094,23 @@ export default function GameRoom({
                   return (
                     <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
                       <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
-                        <div className="mb-4">
-                          <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                        <div className="mb-2">
+                          <span className="text-[#0B2E5C] text-xl sm:text-2xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
                             INACTIVE
                           </span>
                         </div>
 
-                        <div className="relative w-24 h-24 sm:w-28 sm:h-28 mb-5 mx-auto bg-amber-50 rounded-full flex items-center justify-center border-4 border-amber-100 shadow-sm">
-                          <span className="text-5xl sm:text-6xl animate-pulse">
+                        <div className="relative w-16 h-16 sm:w-20 sm:h-20 mb-2 mx-auto bg-amber-50 rounded-full flex items-center justify-center border-4 border-amber-100 shadow-sm">
+                          <span className="text-4xl sm:text-5xl animate-pulse">
                             💤
                           </span>
-                          <span className="absolute -bottom-1 -right-1 text-2.5xl">
+                          <span className="absolute -bottom-1 -right-1 text-xl">
                             ⏰
                           </span>
                         </div>
 
                         <h3
-                          className="text-[#0A2540] font-black text-lg sm:text-xl tracking-wide mb-1"
+                          className="text-[#0A2540] font-black text-base sm:text-lg tracking-wide mb-1"
                           dir="auto"
                         >
                           {isDrawer
@@ -1137,24 +1137,24 @@ export default function GameRoom({
                 return (
                   <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans">
                     <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
-                      <div className="mb-3">
-                        <span className="text-[#0B2E5C] text-2xl sm:text-4xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                      <div className="mb-2">
+                        <span className="text-[#0B2E5C] text-xl sm:text-2xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
                           {topHeader}
                         </span>
                       </div>
 
                       <p
-                        className="text-[#728299] text-sm sm:text-base font-extrabold mb-4"
+                        className="text-[#728299] text-sm font-extrabold mb-2"
                         dir="auto"
                       >
                         {statusMessage}
                       </p>
 
-                      <div className="relative w-24 h-24 sm:w-28 sm:h-28 mb-4 mx-auto bg-sky-50 rounded-full flex items-center justify-center border-4 border-sky-150 shadow-sm">
-                        <span className="text-5xl sm:text-6xl animate-bounce">
+                      <div className="relative w-16 h-16 sm:w-20 sm:h-20 mb-2 mx-auto bg-sky-50 rounded-full flex items-center justify-center border-4 border-sky-150 shadow-sm">
+                        <span className="text-4xl sm:text-5xl animate-bounce">
                           🎨
                         </span>
-                        <span className="absolute -top-1 -right-1 text-2.5xl">
+                        <span className="absolute -top-1 -right-1 text-xl">
                           ✨
                         </span>
                       </div>
@@ -1204,24 +1204,24 @@ export default function GameRoom({
                    }
                  `}</style>
                     {/* Title: GAME OVER */}
-                    <div className="w-full flex justify-center mt-0 mb-2">
-                      <h1 className="text-2xl sm:text-4xl font-black text-[#0B2E5C] tracking-wide uppercase drop-shadow-[0_2px_0_rgba(251,191,36,1)]">
+                    <div className="w-full flex justify-center mt-0 mb-1">
+                      <h1 className="text-xl sm:text-2xl font-black text-[#0B2E5C] tracking-wide uppercase drop-shadow-[0_2px_0_rgba(251,191,36,1)]">
                         GAME OVER
                       </h1>
                     </div>
 
                     {/* Winners Podium alignments - elevated closer to top */}
-                    <div className="flex-1 flex flex-col items-center justify-start pt-2 sm:pt-6">
-                      <div className="flex items-end justify-center gap-6 sm:gap-16 w-full max-w-lg pb-4">
+                    <div className="flex-1 flex flex-col items-center justify-start pt-1 sm:pt-4">
+                      <div className="flex items-end justify-center gap-4 sm:gap-10 w-full max-w-lg pb-2">
                         {/* Second Place */}
                         {second ? (
                           <div
                             id="podium-second"
-                            className="flex flex-col items-center animate-in slide-in-from-bottom-8 duration-700 relative w-14 sm:w-20 mt-4"
+                            className="flex flex-col items-center animate-in slide-in-from-bottom-8 duration-700 relative w-12 sm:w-16 mt-2"
                           >
                             <div className="relative">
                               <div className="relative p-1 bg-gradient-to-r from-slate-400 via-slate-100 to-slate-400 rounded-full shadow-[0_8px_20px_rgba(148,163,184,0.4)] border border-slate-500 overflow-hidden">
-                                <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-slate-50 to-slate-200 flex items-center justify-center text-slate-700 font-extrabold text-xl sm:text-3xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
+                                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-slate-50 to-slate-200 flex items-center justify-center text-slate-700 font-extrabold text-lg sm:text-2xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
                                   <span className="drop-shadow-sm">
                                     {second.avatar}
                                   </span>
@@ -1229,28 +1229,28 @@ export default function GameRoom({
                                 <div className="absolute inset-0 bg-white/40 w-[200%] h-full animate-medal-shine z-10" />
                               </div>
                               {/* Silver Medal Badge (3D look) */}
-                              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 border-[3px] border-slate-700 flex items-center justify-center shadow-[0_4px_8px_rgba(100,116,139,0.35)] text-white font-black text-sm z-20 overflow-hidden">
-                                3
+                              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 border-[3px] border-slate-700 flex items-center justify-center shadow-[0_4px_8px_rgba(100,116,139,0.35)] text-white font-black text-xs z-20 overflow-hidden">
+                                2
                                 <div className="absolute inset-0 bg-white/40 animate-medal-shine z-10" />
                               </div>
                             </div>
-                            <span className="text-[#0A2540] font-black text-[13px] sm:text-[16px] mt-4 truncate w-full text-center tracking-wide block">
+                            <span className="text-[#0A2540] font-black text-[12px] sm:text-[14px] mt-4 truncate w-full text-center tracking-wide block">
                               {second.name}
                             </span>
                           </div>
                         ) : (
-                          <div className="w-14 sm:w-20" />
+                          <div className="w-12 sm:w-16" />
                         )}
 
                         {/* First Place */}
                         {first && (
                           <div
                             id="podium-first"
-                            className="flex flex-col items-center animate-in slide-in-from-bottom-12 duration-1000 relative w-16 sm:w-24 z-10"
+                            className="flex flex-col items-center animate-in slide-in-from-bottom-12 duration-1000 relative w-16 sm:w-20 z-10"
                           >
                             <div className="relative overflow-visible">
                               <div className="relative p-1 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 rounded-full shadow-[0_12px_28px_rgba(245,158,11,0.5)] border border-amber-600 overflow-hidden">
-                                <div className="w-16 h-16 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-yellow-50 to-amber-100 flex items-center justify-center text-amber-900 font-extrabold text-2xl sm:text-4xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
+                                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-yellow-50 to-amber-100 flex items-center justify-center text-amber-900 font-extrabold text-xl sm:text-3xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
                                   <span className="drop-shadow-sm">
                                     {first.avatar}
                                   </span>
@@ -1258,12 +1258,12 @@ export default function GameRoom({
                                 <div className="absolute inset-0 bg-white/50 w-[200%] h-full animate-medal-shine z-10" />
                               </div>
                               {/* Gold Medal Badge (3D look) */}
-                              <div className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 border-[3.5px] border-amber-800 flex items-center justify-center shadow-[0_5px_12px_rgba(217,119,6,0.45)] text-white font-black text-sm sm:text-lg z-20 overflow-hidden">
+                              <div className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 border-[3.5px] border-amber-800 flex items-center justify-center shadow-[0_5px_12px_rgba(217,119,6,0.45)] text-white font-black text-sm z-20 overflow-hidden">
                                 1
                                 <div className="absolute inset-0 bg-white/50 animate-medal-shine z-10" />
                               </div>
                             </div>
-                            <span className="text-[#0B2E5C] font-black text-[15px] sm:text-[18px] mt-5 truncate w-full text-center tracking-wide block">
+                            <span className="text-[#0B2E5C] font-black text-[14px] sm:text-[16px] mt-5 truncate w-full text-center tracking-wide block">
                               {first.name}
                             </span>
                           </div>
@@ -1273,11 +1273,11 @@ export default function GameRoom({
                         {third ? (
                           <div
                             id="podium-third"
-                            className="flex flex-col items-center animate-in slide-in-from-bottom-6 duration-500 relative w-14 sm:w-20 mt-4"
+                            className="flex flex-col items-center animate-in slide-in-from-bottom-6 duration-500 relative w-12 sm:w-16 mt-2"
                           >
                             <div className="relative">
                               <div className="relative p-1 bg-gradient-to-r from-orange-700 via-orange-500 to-orange-800 rounded-full shadow-[0_8px_20px_rgba(194,65,12,0.35)] border border-orange-900 overflow-hidden">
-                                <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center text-orange-950 font-extrabold text-xl sm:text-3xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
+                                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center text-orange-950 font-extrabold text-lg sm:text-2xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
                                   <span className="drop-shadow-sm">
                                     {third.avatar}
                                   </span>
@@ -1285,17 +1285,17 @@ export default function GameRoom({
                                 <div className="absolute inset-0 bg-white/30 w-[200%] h-full animate-medal-shine z-10" />
                               </div>
                               {/* Bronze Medal Badge (3D look) */}
-                              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-orange-300 via-orange-600 to-orange-800 border-[3px] border-orange-950 flex items-center justify-center shadow-[0_4px_8px_rgba(154,52,18,0.35)] text-white font-black text-sm z-20 overflow-hidden">
+                              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-b from-orange-300 via-orange-600 to-orange-800 border-[3px] border-orange-950 flex items-center justify-center shadow-[0_4px_8px_rgba(154,52,18,0.35)] text-white font-black text-xs z-20 overflow-hidden">
                                 3
                                 <div className="absolute inset-0 bg-white/30 animate-medal-shine z-10" />
                               </div>
                             </div>
-                            <span className="text-[#0A2540] font-black text-[13px] sm:text-[16px] mt-4 truncate w-full text-center tracking-wide block">
+                            <span className="text-[#0A2540] font-black text-[12px] sm:text-[14px] mt-4 truncate w-full text-center tracking-wide block">
                               {third.name}
                             </span>
                           </div>
                         ) : (
-                          <div className="w-14 sm:w-20" />
+                          <div className="w-12 sm:w-16" />
                         )}
                       </div>
                     </div>
