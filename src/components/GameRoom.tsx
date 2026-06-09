@@ -750,7 +750,7 @@ export default function GameRoom({
         {!isChatOpen && (
           <button
             onClick={() => setShowExitConfirm(true)}
-            className="absolute top-4 right-4 z-[120] text-gray-800 hover:text-gray-950 transition-colors bg-transparent outline-none"
+            className="absolute top-1 right-1 z-[120] text-gray-800 hover:text-gray-950 transition-colors bg-transparent outline-none"
             title="الخروج من الغرفة"
           >
             <X size={32} strokeWidth={3} />
@@ -840,11 +840,11 @@ export default function GameRoom({
 
         {/* Top Area (Drawing / Waiting) */}
         <div
-          className={`relative flex flex-col shrink-0 overflow-hidden bg-[#1A103C] items-center justify-center
+          className={`relative flex-1 min-h-[25dvh] flex flex-col overflow-hidden bg-[#1A103C] items-center justify-center
                       ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2 max-h-[35dvh]" : "col-start-1 col-end-3 row-start-1 row-end-2 max-h-[48dvh] md:max-h-[55dvh]"}
                      `}
         >
-          <div className="w-full max-w-full h-full max-h-full aspect-[740/430] bg-white shrink-0 flex flex-col items-center justify-center overflow-hidden relative">
+          <div className={`w-full max-w-full h-full max-h-full ${isDrawingMode ? "aspect-[740/430] shrink-0" : "flex-1"} bg-white flex flex-col items-center justify-center overflow-hidden relative`}>
             {/* Hint/Word Overlay Overlay for spectator view */}
             {!isDrawingMode && renderWordOverlay()}
 

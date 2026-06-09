@@ -326,6 +326,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const applyTransform = (overrideBaseScale?: number) => {
     if (transformWrapperRef.current) {
+      if (readOnly) {
+        transformWrapperRef.current.style.transform = 'none';
+        return;
+      }
       const { x, y, scale } = transformRef.current;
       const currentBaseScale = overrideBaseScale !== undefined ? overrideBaseScale : baseScale;
       transformWrapperRef.current.style.transform = `translate(${x}px, ${y}px) scale(${currentBaseScale * scale})`;
@@ -344,12 +348,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
         
-        let targetScale;
-        if (readOnly) {
-          targetScale = Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT);
-        } else {
-          targetScale = height / LOGICAL_HEIGHT;
-        }
+        const targetScale = readOnly
+          ? Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT)
+          : height / LOGICAL_HEIGHT;
         
         setBaseScale(targetScale);
         
@@ -1579,7 +1580,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       <div
         ref={transformWrapperRef}
         className="absolute left-0 top-0 transform-gpu bg-white overflow-hidden select-none touch-none"
-        style={{
+        style={readOnly ? {
+          width: '100%',
+          height: '100%',
+          transformOrigin: '0 0',
+          willChange: 'transform'
+        } : {
           width: LOGICAL_WIDTH,
           height: LOGICAL_HEIGHT,
           transformOrigin: '0 0',
@@ -1589,7 +1595,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         <canvas
           id="drawing-board-layer-primary"
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full block bg-white touch-none pointer-events-auto cursor-crosshair"
+          className={`absolute inset-0 w-full h-full block bg-white touch-none ${readOnly ? 'object-fill pointer-events-none' : 'pointer-events-auto cursor-crosshair'}`}
           style={{
             zIndex: 10,
             imageRendering: 'auto'
@@ -1602,7 +1608,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         <canvas
           id="drawing-board-layer-shapes-preview"
           ref={tempCanvasRef}
-          className="absolute inset-0 w-full h-full block pointer-events-none touch-none bg-transparent"
+          className={`absolute inset-0 w-full h-full block pointer-events-none touch-none bg-transparent ${readOnly ? 'object-fill' : ''}`}
           style={{
             zIndex: 20
           }}
