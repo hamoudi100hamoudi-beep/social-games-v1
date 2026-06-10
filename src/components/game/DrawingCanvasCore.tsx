@@ -297,8 +297,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
   }, []);
 
-  // Undo / Redo Snapshot Cache (Exactly 1 undo step optimization)
-  const historyRef = useRef<ImageData[]>([]);
+  // Refined Undo / Redo Snapshot Cache with dynamic memory optimizer (VRAM protection)
+  const historyRef = useRef<{ canvasBuffer: HTMLCanvasElement }[]>([]);
   const historyIndexRef = useRef(-1);
   const isReplayingRef = useRef(false);
 
@@ -720,28 +720,41 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
-  // --- Snapshot Management (Exactly 1 undo-step optimization) ---
-  const saveSnapshot = () => {
-    if (isReplayingRef.current) return;
+  // --- Snapshot Management (Adaptive Multi-Step VRAM Memory & CPU Optimizer) ---
+  const saveSnapshot = (force = false) => {
+    if (isReplayingRef.current && !force) return;
     const canvas = canvasRef.current;
     const ctx = ctxRef.current;
     if (!canvas || !ctx) return;
 
     try {
-      const snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      
+      // Create a compact GPU-accelerated offscreen canvas backup
+      const buffer = document.createElement('canvas');
+      buffer.width = canvas.width;
+      buffer.height = canvas.height;
+      const bCtx = buffer.getContext('2d');
+      if (bCtx) {
+        bCtx.drawImage(canvas, 0, 0);
+      }
+
       // If we made custom edits, dump obsolete redo points
       if (historyIndexRef.current < historyRef.current.length - 1) {
         historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
       }
 
-      historyRef.current.push(snapshot);
+      historyRef.current.push({ canvasBuffer: buffer });
       
-      // Strict 1-Undo step limit. Array length caps at 2.
-      // Index 0 holds the undo target (previous state), Index 1 holds the current view.
-      const MAX_HISTORY = 2;
+      // Dynamic scaling of history capacity to safeguard weaker hardware
+      // Low-End: 4 undo steps, Medium-End: 8 undo steps, High-End: 15 undo steps
+      const MAX_HISTORY = PERF_TIER === 3 ? 4 : (PERF_TIER === 2 ? 8 : 15);
+      
       while (historyRef.current.length > MAX_HISTORY) {
-        historyRef.current.shift();
+        // Garbage collect discarded heap elements eagerly by resetting their dimensions
+        const discarded = historyRef.current.shift();
+        if (discarded && discarded.canvasBuffer) {
+          discarded.canvasBuffer.width = 0;
+          discarded.canvasBuffer.height = 0;
+        }
       }
 
       historyIndexRef.current = historyRef.current.length - 1;
@@ -836,7 +849,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     Object.keys(activeSessionsRef.current).forEach((instId) => {
       const session = activeSessionsRef.current[instId];
       if (session && session.path && session.path.length > 0) {
-        drawEntirePath(tempCtx, session.path, session.tool, session.color, session.width, session.opacity);
+        const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+        if (isShape) {
+          const startPt = session.path[0];
+          const lastPt = session.path[session.path.length - 1];
+          drawShape(tempCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+        } else {
+          drawEntirePath(tempCtx, session.path, session.tool, session.color, session.width, session.opacity);
+        }
       }
     });
   };
@@ -949,9 +969,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (historyIndexRef.current > 0) {
       historyIndexRef.current--;
       const ctx = ctxRef.current;
-      const snapshot = historyRef.current[historyIndexRef.current];
-      if (ctx && snapshot) {
-        ctx.putImageData(snapshot, 0, 0);
+      const canvas = canvasRef.current;
+      const step = historyRef.current[historyIndexRef.current];
+      if (ctx && canvas && step && step.canvasBuffer) {
+        ctx.save();
+        // Reset scale matrices temporarily to paint the backing Store directly without blurring
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(step.canvasBuffer, 0, 0);
+        ctx.restore();
       }
       onHistoryStateChange?.(historyIndexRef.current, historyRef.current.length);
 
@@ -965,9 +991,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (historyIndexRef.current < historyRef.current.length - 1) {
       historyIndexRef.current++;
       const ctx = ctxRef.current;
-      const snapshot = historyRef.current[historyIndexRef.current];
-      if (ctx && snapshot) {
-        ctx.putImageData(snapshot, 0, 0);
+      const canvas = canvasRef.current;
+      const step = historyRef.current[historyIndexRef.current];
+      if (ctx && canvas && step && step.canvasBuffer) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(step.canvasBuffer, 0, 0);
+        ctx.restore();
       }
       onHistoryStateChange?.(historyIndexRef.current, historyRef.current.length);
 
@@ -1050,11 +1081,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               width: 5,
               opacity: 1
             };
-            if (!data.isCancelled && path.length > 0) {
+            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+            if (!data.isCancelled && path.length > 0 && !isShape) {
               drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
             }
 
-            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
             if (!data.isCancelled && isShape && data.startX !== undefined && data.startY !== undefined) {
               const sX = data.startX * LOGICAL_WIDTH;
               const sY = data.startY * LOGICAL_HEIGHT;
@@ -1064,18 +1095,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             }
             path.length = 0;
             delete replaySessions[instId];
-            saveSnapshot(); // Save snapshot on canvas modifications to maintain functional undo/redo history
+            saveSnapshot(true); // Save snapshot on canvas modifications forcing bypass of isReplayingRef
           } else if (event === 'draw_cancel') {
             path.length = 0;
             delete replaySessions[instId];
           } else if (event === 'draw_clear') {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-            saveSnapshot();
+            saveSnapshot(true);
           } else if (event === 'draw_action') {
             if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
               floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity);
-              saveSnapshot();
+              saveSnapshot(true);
             }
           } else if (event === 'draw_undo') {
             executeUndo(false);
@@ -1093,7 +1124,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           const session = replaySessions[instId];
           const path = replayPaths[instId];
           if (session && path && path.length > 0) {
-            drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+            if (isShape) {
+              const startPt = path[0];
+              const lastPt = path[path.length - 1];
+              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+            } else {
+              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+            }
           }
         } catch (itemErr) {
           console.error("[DrawingCanvasCore] Leftover stroke parsing error: ", itemErr);
@@ -1160,11 +1198,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else if (event === 'draw_end') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
-          if (!data.isCancelled && session.path.length > 0) {
+          const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+          if (!data.isCancelled && session.path.length > 0 && !isShape) {
             drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
           }
 
-          const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
           if (!data.isCancelled && isShape && data.startX !== undefined && data.startY !== undefined) {
             const sX = data.startX * LOGICAL_WIDTH;
             const sY = data.startY * LOGICAL_HEIGHT;

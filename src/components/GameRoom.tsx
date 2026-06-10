@@ -117,10 +117,10 @@ const SmoothTimer = ({
 
   return (
     <div
-      className={`w-full px-2 sm:px-3 py-1 shrink-0 flex items-center justify-center ${isFullScreen ? "bg-transparent" : "bg-[#1A103C]"}`}
+      className={`w-full px-2 sm:px-3 py-1.5 shrink-0 flex items-center justify-center ${isFullScreen ? "bg-transparent" : "bg-[#2D1B69]"}`}
       dir="ltr"
     >
-      <div className="w-full h-1.5 sm:h-2 bg-[#24174D] rounded-full overflow-hidden shadow-inner flex justify-start">
+      <div className="w-full h-1.5 sm:h-2 bg-black/40 rounded-full overflow-hidden shadow-inner flex justify-start">
         <div ref={barRef} className="h-full rounded-full bg-[#3b82f6]" />
       </div>
     </div>
@@ -1712,17 +1712,6 @@ export default function GameRoom({
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Timer Bar for Drawer Choosing Screen */}
-          <div className="absolute bottom-10 left-0 right-0 w-full px-6 max-w-md mx-auto">
-            {
-              <SmoothTimer
-                gameState={gameState}
-                maxTime={getMaxTime()}
-                isFullScreen={true}
-              />
-            }
           </div>
         </div>
       )}
