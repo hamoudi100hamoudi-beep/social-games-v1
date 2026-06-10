@@ -613,7 +613,10 @@ export default function GameRoom({
     if (gameState.status !== "DRAWING") return null;
     if (amIDrawer && !isFullScreenMode) return null;
     return (
-      <div className="absolute top-1 sm:top-2 left-0 right-0 flex items-center justify-center z-[150] pointer-events-none drop-shadow-md">
+      <div 
+        className="absolute left-0 right-0 flex items-center justify-center z-[150] pointer-events-none drop-shadow-md"
+        style={{ top: 'clamp(6px, 1.6cqw, 12px)' }}
+      >
         {(() => {
           const isDrawer = amIDrawer;
           const hintsUsed = gameState.hintsUsed || 0;
@@ -624,29 +627,43 @@ export default function GameRoom({
 
             return (
               <div
-                className="flex gap-1 sm:gap-1.5 items-end mt-1 sm:mt-2"
-                style={{ flexDirection: isRTL ? "row-reverse" : "row" }}
+                className="flex items-center"
+                style={{ 
+                  flexDirection: isRTL ? "row-reverse" : "row",
+                  gap: 'clamp(4px, 1.6cqw, 12px)'
+                }}
               >
                 {gameState.currentWord
                   .split("")
                   .map((char: string, i: number) => {
                     if (char === " ")
-                      return <span key={`space-${i}`} className="w-3" />;
+                      return (
+                        <span 
+                          key={`space-${i}`} 
+                          style={{ width: 'clamp(10px, 3.2cqw, 24px)' }} 
+                        />
+                      );
                     const isRevealed = (
                       gameState.revealedIndices || []
                     ).includes(i);
                     return (
                       <div
                         key={`char-${i}`}
-                        className="relative flex flex-col items-center justify-end h-6 sm:h-8"
+                        className="flex flex-col items-center justify-between"
+                        style={{ height: 'clamp(22px, 5.2cqw, 42px)' }}
                       >
                         <span
-                          className={`text-lg sm:text-2xl leading-none font-black absolute bottom-1.5 ${isRevealed ? "text-[#FBBF24] drop-shadow-md" : "text-slate-400/40"}`}
+                          className={`leading-none font-black ${isRevealed ? "text-[#FBBF24] drop-shadow-md" : "text-slate-400/40"}`}
+                          style={{ fontSize: 'clamp(14px, 3.2cqw, 24px)' }}
                         >
                           {char}
                         </span>
                         <div
-                          className={`w-3 sm:w-5 h-[3px] rounded-full mt-auto ${hintsUsed >= 1 ? "bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]" : "bg-slate-300/80 shadow-sm"}`}
+                          className={`rounded-full mt-auto ${hintsUsed >= 1 ? "bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]" : "bg-slate-300/80 shadow-sm"}`}
+                          style={{
+                            width: 'clamp(7px, 1.9cqw, 14px)',
+                            height: 'clamp(2.5px, 0.4cqw, 3px)'
+                          }}
                         />
                       </div>
                     );
@@ -664,22 +681,38 @@ export default function GameRoom({
 
             return (
               <div
-                className="flex gap-1 sm:gap-1.5 items-end mt-1 sm:mt-2"
-                style={{ flexDirection: isRTL ? "row-reverse" : "row" }}
+                className="flex items-center"
+                style={{ 
+                  flexDirection: isRTL ? "row-reverse" : "row",
+                  gap: 'clamp(4px, 1.6cqw, 12px)'
+                }}
               >
                 {maskedArray.map((item: any, i: number) => {
                   if (item.isSpace)
-                    return <span key={`space-${i}`} className="w-3" />;
+                    return (
+                      <span 
+                        key={`space-${i}`} 
+                        style={{ width: 'clamp(10px, 3.2cqw, 24px)' }} 
+                      />
+                    );
                   return (
                     <div
                       key={`char-${i}`}
-                      className="relative flex flex-col items-center justify-end h-6 sm:h-8"
+                      className="flex flex-col items-center justify-between"
+                      style={{ height: 'clamp(22px, 5.2cqw, 42px)' }}
                     >
-                      <span className="text-lg sm:text-2xl leading-none font-black absolute bottom-1.5 text-[#FBBF24] drop-shadow-md">
+                      <span 
+                        className="leading-none font-black text-[#FBBF24] drop-shadow-md"
+                        style={{ fontSize: 'clamp(14px, 3.2cqw, 24px)' }}
+                      >
                         {item.char || ""}
                       </span>
                       <div
-                        className={`w-3 sm:w-5 h-[3px] rounded-full mt-auto ${hintsUsed >= 1 ? "bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]" : "bg-slate-300/80 shadow-sm"}`}
+                        className={`rounded-full mt-auto ${hintsUsed >= 1 ? "bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]" : "bg-slate-300/80 shadow-sm"}`}
+                        style={{
+                          width: 'clamp(7px, 1.9cqw, 14px)',
+                          height: 'clamp(2.5px, 0.4cqw, 3px)'
+                        }}
                       />
                     </div>
                   );
@@ -849,7 +882,10 @@ export default function GameRoom({
                       ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2" : "col-start-1 col-end-3 row-start-1 row-end-2"}
                      `}
         >
-          <div className="w-full max-w-full h-auto max-h-full aspect-[740/430] shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative">
+          <div 
+            className="w-full max-w-full h-auto max-h-full aspect-[740/430] shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative"
+            style={{ containerType: 'inline-size' }}
+          >
             {/* Hint/Word Overlay Overlay for spectator view */}
             {!isDrawingMode && renderWordOverlay()}
 
@@ -860,6 +896,7 @@ export default function GameRoom({
                   ? "fixed inset-0 z-[100] bg-gray-300 flex flex-col items-center justify-center overflow-hidden transition-all duration-300 opacity-100"
                   : "w-full h-full relative flex flex-col"
               }
+              style={{ containerType: 'inline-size' }}
             >
               {isDrawingMode && renderWordOverlay(true)}
               <DrawingBoard

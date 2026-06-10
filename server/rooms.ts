@@ -639,7 +639,7 @@ class RoomManager {
         color: "#10B981", // emerald-500
       });
 
-      // Deduct time dynamically based on active (online, non-drawer) guessers
+      // Deduct time based on Gartic.io-style mechanics (10 seconds per correct guess, locking of remaining time below 20 seconds)
       const activeGuessersCount = room.players.filter(
         (p) =>
           (p.persistentId || p.id) !== room.gameState.currentDrawerId &&
@@ -654,15 +654,15 @@ class RoomManager {
         },
       ).length;
 
-      if (activeGuessersCount > 0) {
-        const timeReduction = Math.floor(
-          room.gameState.timeLeft /
-            (activeGuessersCount - onlineCorrectGuessersCount + 1),
-        );
-        room.gameState.timeLeft = Math.max(
-          1,
-          room.gameState.timeLeft - timeReduction,
-        );
+      const CRITICAL_GRACE_PERIOD = 20; // safe zone (20 seconds)
+      const TIME_DEDUCTION = 10;        // 10 seconds deducted per correct guess
+
+      if (room.gameState.timeLeft > CRITICAL_GRACE_PERIOD) {
+        let newTime = room.gameState.timeLeft - TIME_DEDUCTION;
+        if (newTime < CRITICAL_GRACE_PERIOD) {
+          newTime = CRITICAL_GRACE_PERIOD;
+        }
+        room.gameState.timeLeft = newTime;
       }
 
       if (

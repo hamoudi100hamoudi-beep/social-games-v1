@@ -744,9 +744,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       historyRef.current.push({ canvasBuffer: buffer });
       
-      // Dynamic scaling of history capacity to safeguard weaker hardware
-      // Low-End: 4 undo steps, Medium-End: 8 undo steps, High-End: 15 undo steps
-      const MAX_HISTORY = PERF_TIER === 3 ? 4 : (PERF_TIER === 2 ? 8 : 15);
+      // Strict 1-Undo step limit (MAX_HISTORY = 2) across all devices matching Gartic.io competitive pace.
+      const MAX_HISTORY = 2;
       
       while (historyRef.current.length > MAX_HISTORY) {
         // Garbage collect discarded heap elements eagerly by resetting their dimensions
@@ -870,6 +869,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     drawWidth: number,
     drawOpacity: number
   ) => {
+    const isZeroLength = Math.abs(x1 - x0) < 0.5 && Math.abs(y1 - y0) < 0.5;
+    if (isZeroLength) {
+      return;
+    }
+
     activeCtx.save();
     activeCtx.lineWidth = drawWidth;
     activeCtx.lineCap = 'round';
@@ -895,12 +899,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     } else if (drawTool === 'fillRect') {
       activeCtx.fillRect(x0, y0, x1 - x0, y1 - y0);
     } else if (drawTool === 'strokeCircle') {
-      const radius = Math.hypot(x1 - x0, y1 - y0);
-      activeCtx.arc(x0, y0, radius, 0, Math.PI * 2);
+      const centerX = (x0 + x1) / 2;
+      const centerY = (y0 + y1) / 2;
+      const radiusX = Math.abs(x1 - x0) / 2;
+      const radiusY = Math.abs(y1 - y0) / 2;
+      activeCtx.ellipse(centerX, centerY, Math.max(0.1, radiusX), Math.max(0.1, radiusY), 0, 0, Math.PI * 2);
       activeCtx.stroke();
     } else if (drawTool === 'fillCircle') {
-      const radius = Math.hypot(x1 - x0, y1 - y0);
-      activeCtx.arc(x0, y0, radius, 0, Math.PI * 2);
+      const centerX = (x0 + x1) / 2;
+      const centerY = (y0 + y1) / 2;
+      const radiusX = Math.abs(x1 - x0) / 2;
+      const radiusY = Math.abs(y1 - y0) / 2;
+      activeCtx.ellipse(centerX, centerY, Math.max(0.1, radiusX), Math.max(0.1, radiusY), 0, 0, Math.PI * 2);
       activeCtx.fill();
     }
 
