@@ -1105,7 +1105,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             }
             path.length = 0;
             delete replaySessions[instId];
-            saveSnapshot(true); // Save snapshot on canvas modifications forcing bypass of isReplayingRef
+            if (!data.isCancelled) {
+              saveSnapshot(true); // Save snapshot on canvas modifications forcing bypass of isReplayingRef
+            }
           } else if (event === 'draw_cancel') {
             path.length = 0;
             delete replaySessions[instId];
@@ -1223,7 +1225,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           delete activeSessionsRef.current[data.instanceId];
         }
         redrawTempLayer();
-        saveSnapshot();
+        if (!data.isCancelled) {
+          saveSnapshot();
+        }
       } else if (event === 'draw_cancel') {
         delete activeSessionsRef.current[data.instanceId];
         redrawTempLayer();

@@ -31,7 +31,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   socketId
 }) => {
   return (
-    <div className={`flex flex-col border-r border-[#00D9FF]/20 bg-[#24174D] overflow-y-auto overscroll-contain touch-pan-y
+    <div className={`flex flex-col border-r border-primary-brand/20 bg-bg-panel-brand overflow-y-auto overscroll-contain touch-pan-y
                     ${morphMode ? 'col-start-1 col-end-2 row-start-1 row-end-3' : 'col-start-1 col-end-2 row-start-2 row-end-3'}
                    `}>
         {slots.map((slot) => {
@@ -41,13 +41,13 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
           let bgClass = '';
           let borderClass = 'border-[#94A3B8]'; // Slate-400 for good visibility default
           let nameClass = 'text-white';
-          let ptsClass = 'text-[#7C4DFF]';
+          let ptsClass = 'text-primary-brand';
 
           if (isDrawer) {
-             bgClass = 'bg-[#00D9FF]/10'; // Cyan bg
-             borderClass = 'border-[#00D9FF]'; // Cyan border
-             nameClass = 'text-[#00D9FF]';
-             ptsClass = 'text-[#00D9FF]';
+             bgClass = 'bg-primary-brand/10'; // Brand sky blue bg
+             borderClass = 'border-primary-brand'; // Brand sky blue border
+             nameClass = 'text-primary-brand';
+             ptsClass = 'text-primary-brand';
           } else if (isCorrectGuesser) {
              bgClass = 'bg-[#10B981]/15'; // Greenish bg
              borderClass = 'border-[#10B981]'; // Green border
@@ -62,12 +62,12 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
               layout="position" // Only animate positional changes (reordering) to avoid height morphing delay
               transition={{ type: "tween", duration: 0.15 }}
               key={slot.id} 
-              className={`flex items-center p-2 sm:p-4 border-b border-[#00D9FF]/10 h-[65px] sm:h-[80px] shrink-0 transition-colors duration-200 ${bgClass}`}
+              className={`flex items-center p-2 sm:p-4 border-b border-primary-brand/10 h-[65px] sm:h-[80px] shrink-0 transition-colors duration-200 ${bgClass}`}
             >
               {/* Avatar */}
               <div className="relative shrink-0 mr-2 sm:mr-3">
                  <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-[3px] transition-colors duration-200
-                   ${slot.isEmpty ? 'bg-black/20 border-white/10' : `bg-[#1A103C] ${borderClass}`}`}>
+                   ${slot.isEmpty ? 'bg-black/20 border-white/10' : `bg-bg-dark-brand ${borderClass}`}`}>
                    {slot.isEmpty ? (
                      <UserIcon size={20} className="text-white/30" />
                    ) : (
@@ -77,13 +77,13 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                  
                  {/* Role/Status Icon */}
                  {!slot.isEmpty && isCorrectGuesser && (
-                   <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#10B981] rounded-full border-2 border-[#1A103C] flex items-center justify-center shadow-sm z-10 transition-transform scale-in animate-scale-in">
+                   <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#10B981] rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-10 transition-transform scale-in animate-scale-in">
                       <Check size={10} strokeWidth={4} className="text-white" />
                    </div>
                  )}
                  {!slot.isEmpty && isDrawer && !isCorrectGuesser && (
-                   <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#00D9FF] rounded-full border-2 border-[#1A103C] flex items-center justify-center shadow-sm z-10">
-                      <Pencil size={10} strokeWidth={3} className="text-[#1A103C]" />
+                   <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-primary-brand rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-10">
+                      <Pencil size={10} strokeWidth={3} className="text-bg-dark-brand" />
                    </div>
                  )}
               </div>

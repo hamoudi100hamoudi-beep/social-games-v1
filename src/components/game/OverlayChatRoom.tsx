@@ -118,7 +118,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
     return (
       <div className="flex justify-center mb-2">
         <div 
-          className="bg-[#00D9FF]/20 text-[#00D9FF] px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-md"
+          className="bg-primary-brand/20 text-primary-brand px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-md"
           dir="auto"
           style={{ unicodeBidi: 'plaintext' }}
         >
@@ -141,9 +141,9 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
           onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
           style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
         >
-          <span className="text-[15px] text-[#00D9FF] font-bold mb-1 mr-1">{msg.sender}</span>
+          <span className="text-[15px] text-primary-brand font-bold mb-1 mr-1">{msg.sender}</span>
           <div 
-            className="bg-[#7C4DFF] px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-[#6A3DE8]"
+            className="bg-primary-brand px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-primary-brand-dark"
             dir="auto"
             style={{ unicodeBidi: 'plaintext', textAlign: 'start' }}
           >
@@ -161,7 +161,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
             </button>
           )}
         </div>
-        <div className="w-16 h-16 rounded-full bg-[#1A103C] border-[3px] border-[#00D9FF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
+        <div className="w-16 h-16 rounded-full bg-bg-dark-brand border-[3px] border-primary-brand flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
           <span className="text-4xl translate-y-[1px]">{msg.avatar}</span>
         </div>
       </div>
@@ -170,7 +170,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 
   return (
     <div className="flex justify-start items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none">
-      <div className="w-16 h-16 rounded-full bg-[#24174D] border-[3px] border-[#7C4DFF] flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
+      <div className="w-16 h-16 rounded-full bg-bg-panel-brand border-[3px] border-accent-brand flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
         <span className="text-4xl translate-y-[1px]">{msg.avatar || '?'}</span>
       </div>
       <div 
@@ -296,7 +296,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                onMouseDown={(e) => e.stopPropagation()}
                onPointerDown={(e) => e.stopPropagation()}
                onContextMenu={(e) => e.stopPropagation()}
-               className="p-3 bg-[#24174D]/90 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full select-auto"
+               className="p-3 bg-game-primary-blue/95 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full select-auto"
                style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'auto', userSelect: 'auto' }}
              >
                <form onSubmit={handleChatSubmit} className="relative max-w-2xl mx-auto flex gap-2 items-end">
@@ -338,14 +338,14 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                    dir="auto"
                    rows={1}
                    placeholder="Type your message here..."
-                   className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-[#7C4DFF] outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text"
+                   className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-primary-brand outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text"
                    style={{ height: '40px', WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                  />
                  <button 
                    type="submit"
                    onPointerDown={(e) => e.preventDefault()}
                    disabled={!chatInput.trim()} 
-                   className="w-10 h-10 shrink-0 flex items-center justify-center text-white disabled:bg-[#7C4DFF]/50 bg-[#7C4DFF] rounded-xl hover:bg-[#6A3DE8] transition-colors shadow-md active:scale-95"
+                   className="w-10 h-10 shrink-0 flex items-center justify-center text-white disabled:bg-primary-brand/50 bg-primary-brand rounded-xl hover:bg-primary-brand-dark transition-colors shadow-md active:scale-95"
                  >
                    <Send size={16} />
                  </button>

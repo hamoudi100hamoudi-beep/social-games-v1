@@ -315,7 +315,7 @@ export default function DrawingBoard({
             <div className="flex-1 relative flex items-center h-4 max-w-[45%] group pointer-events-auto" dir="ltr">
                <div className="absolute inset-x-0 top-1/2 -mt-[2px] h-[4px] rounded-full bg-slate-200 pointer-events-none shadow-sm" />
                <div 
-                  className="absolute left-0 top-1/2 -mt-[2px] h-[4px] rounded-l-full bg-[#1a56db] pointer-events-none" 
+                  className="absolute left-0 top-1/2 -mt-[2px] h-[4px] rounded-l-full bg-primary-brand pointer-events-none"
                   style={{ width: `${((currentWidth - 1) / ((tool === 'eraser' ? (typeof window !== 'undefined' ? window.innerWidth / 2 : 200) : 40) - 1)) * 100}%` }} 
                />
                <input 
@@ -356,7 +356,7 @@ export default function DrawingBoard({
       
       {/* Bottom Toolbar with integrated timer and controls */}
       {!readOnly && (
-        <div className="bg-[#1a56db] flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30" dir="ltr">
+        <div className="bg-game-primary-blue flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30" dir="ltr">
           {timerBarNode && (
             <div className="w-full">
               {timerBarNode}
@@ -392,7 +392,7 @@ export default function DrawingBoard({
                 } 
                 active={activeMenu === 'tools' || (tool !== 'eraser' && !activeMenu)} 
                 onClick={() => setActiveMenu(m => m === 'tools' ? null : 'tools')} 
-                className="!bg-white !text-[#1a56db] !border-transparent !rounded-lg"
+                className="!bg-white !text-primary-brand !border-transparent !rounded-lg"
               />
 
               {/* 3. Yellow hint bulb with Red Badge */}
@@ -403,7 +403,7 @@ export default function DrawingBoard({
                     onClick={onRequestHint} 
                     className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-lg flex" 
                   />
-                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4.5 h-4.5 flex items-center justify-center rounded-full border border-[#1a56db]">
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4.5 h-4.5 flex items-center justify-center rounded-full border border-primary-brand">
                     {hintsRemaining}
                   </span>
                 </div>
@@ -455,8 +455,8 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
       onClick={onClick}
       className={`w-[38px] h-[38px] flex items-center justify-center rounded-lg transition-all shadow-sm focus:outline-none select-none
         ${active 
-          ? 'bg-white text-[#1a56db] scale-105 shadow-md' 
-          : 'bg-[#ffcc00] text-[#1a56db] hover:bg-white hover:scale-105 active:scale-95'
+          ? 'bg-white text-primary-brand scale-105 shadow-md' 
+          : 'bg-accent-brand text-bg-dark-brand hover:bg-white hover:scale-105 active:scale-95'
         } ${className}`}
     >
       {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { size: 19, strokeWidth: 2.5 }) : icon}

@@ -1,5 +1,24 @@
 @import "tailwindcss";
 
+@theme {
+  /* =========================================================
+     👑 لوحة التحكم في الألوان الرئيسية (Centralized Theming System)
+     يمكنك تعديل هذه القيم بسهولة لتنعكس مباشرة في كل أجزاء اللعبة
+     ========================================================= */
+  --color-game-primary-blue: #002E63;       /* اللون المعتمد لصفحة الدخول، قسم اللاعبين، شريط أدوات الرسم، والدردشة وشريط الوقت */
+  --color-game-guessing-bg: #052044;        /* لون خلفية صفحة التخمين واللعب - تم تخفيف عتمته ليصبح مريحاً */
+
+  /* ربط المتغيرات لتسهيل الصيانة والتوافق التلقائي */
+  --color-bg-panel-brand: var(--color-game-primary-blue);
+  --color-bg-dark-brand: var(--color-game-guessing-bg);
+
+  --color-primary-brand: #0075FF;
+  --color-primary-brand-dark: #005BC6;
+  --color-secondary-brand: #E6F0FF;
+  --color-accent-brand: #FBBF24;
+  --color-accent-brand-dark: #F59E0B;
+}
+
 @layer utilities {
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);
@@ -7,7 +26,7 @@
 }
 
 html, body, #root {
-  background-color: #1A103C;
+  background-color: var(--color-bg-dark-brand);
   overscroll-behavior-y: none;
   margin: 0;
   padding: 0;

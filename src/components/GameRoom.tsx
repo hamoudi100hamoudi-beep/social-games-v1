@@ -117,7 +117,7 @@ const SmoothTimer = ({
 
   return (
     <div
-      className={`w-full px-2 sm:px-3 py-1.5 shrink-0 flex items-center justify-center ${isFullScreen ? "bg-transparent" : "bg-[#2D1B69]"}`}
+      className={`w-full px-2 sm:px-3 py-1.5 shrink-0 flex items-center justify-center ${isFullScreen ? "bg-transparent" : "bg-game-primary-blue"}`}
       dir="ltr"
     >
       <div className="w-full h-1.5 sm:h-2 bg-black/40 rounded-full overflow-hidden shadow-inner flex justify-start">
@@ -768,7 +768,7 @@ export default function GameRoom({
   return (
     <>
       <div
-        className="fixed top-0 left-0 right-0 grid w-full bg-[#1A103C] font-sans overflow-hidden overscroll-none touch-none"
+        className="fixed top-0 left-0 right-0 grid w-full bg-bg-dark-brand font-sans overflow-hidden overscroll-none touch-none"
         style={{
           height: isChatOpen
             ? "100vh"
@@ -878,7 +878,7 @@ export default function GameRoom({
             this exact aspect ratio to prevent spectator layout squishing or grey gaps. 
         */}
         <div
-          className={`relative flex flex-col overflow-hidden bg-[#1A103C] items-center justify-center
+          className={`relative flex flex-col overflow-hidden bg-bg-dark-brand items-center justify-center
                       ${morphMode ? "col-start-2 col-end-3 row-start-1 row-end-2" : "col-start-1 col-end-3 row-start-1 row-end-2"}
                      `}
         >
@@ -1359,14 +1359,14 @@ export default function GameRoom({
 
         {/* Right: Actions & Guess Input */}
         <div
-          className={`flex flex-col bg-[#1A103C] relative overflow-hidden
+          className={`flex flex-col bg-bg-dark-brand relative overflow-hidden
                       ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
                      `}
         >
             {/* Actions Bar */}
             <div
-              className={`grid transition-all duration-150 ease-in-out shrink-0 bg-[#24174D]
-                          ${isInputFocused ? "grid-rows-[0fr] opacity-0 border-none" : "grid-rows-[1fr] opacity-100 border-b border-[#00D9FF]/10"}`}
+              className={`grid transition-all duration-150 ease-in-out shrink-0 bg-bg-panel-brand
+                          ${isInputFocused ? "grid-rows-[0fr] opacity-0 border-none" : "grid-rows-[1fr] opacity-100 border-b border-primary-brand/10"}`}
             >
               <div className="overflow-hidden">
                 <div className="flex gap-2 sm:gap-4 p-2 sm:p-3 bg-[#1AAACC]/10 justify-around">
@@ -1381,7 +1381,7 @@ export default function GameRoom({
                   </button>
                   <button
                     onClick={openChat}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-[#1A103C] font-bold transition-all shadow-md relative"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all shadow-md relative"
                   >
                     <MessageSquare size={16} />
                     {unreadCount > 0 && (
@@ -1569,7 +1569,7 @@ export default function GameRoom({
                       <div className="flex items-start gap-1">
                         <Pencil
                           size={10}
-                          className="text-[#00D9FF]/40 shrink-0 mt-1"
+                          className="text-primary-brand/40 shrink-0 mt-1"
                         />
                         <span className="font-bold text-white/50">
                           {msg.sender}:
@@ -1585,7 +1585,7 @@ export default function GameRoom({
                     </div>
                   );
                 })}
-                <div className="flex items-center gap-1.5 text-[#00D9FF] font-medium text-[11px] sm:text-[13px]">
+                <div className="flex items-center gap-1.5 text-primary-brand font-medium text-[11px] sm:text-[13px]">
                   <Info size={12} />
                   Waiting for players
                 </div>
@@ -1593,7 +1593,7 @@ export default function GameRoom({
             </div>
 
             {/* Guess Input Area */}
-            <div className="p-1.5 shrink-0 mt-auto bg-[#1A103C] border-t border-white/5">
+            <div className="p-1.5 shrink-0 mt-auto bg-bg-dark-brand border-t border-white/5">
               <form onSubmit={handleGuessSubmit} className="relative">
                 <div
                   className={`absolute left-2.5 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
@@ -1641,13 +1641,13 @@ export default function GameRoom({
                                 ? "You've found the answer!"
                                 : "Answer here..."
                   }
-                  className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${isInputDisabled ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-[#00D9FF] placeholder:text-white/45"}`}
+                  className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${isInputDisabled ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-primary-brand placeholder:text-white/45"}`}
                 />
                 <button
                   type="submit"
                   onPointerDown={(e) => e.preventDefault()}
                   disabled={!guessInput.trim() || isInputDisabled}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-[#1A103C] disabled:opacity-0 bg-[#00D9FF] rounded-md hover:bg-white transition-opacity"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-bg-dark-brand disabled:opacity-0 bg-primary-brand rounded-md hover:bg-white transition-opacity"
                 >
                   <Send size={12} className="-ml-0.5" />
                 </button>
@@ -1717,7 +1717,7 @@ export default function GameRoom({
                   </span>
                   <button
                     onClick={() => handleWordSelect(gameState.wordOptions[0])}
-                    className="w-[85%] max-w-xs bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1A103C] font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl"
+                    className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl"
                   >
                     <Pencil fill="currentColor" size={24} />
                     DRAW
@@ -1741,7 +1741,7 @@ export default function GameRoom({
                   </span>
                   <button
                     onClick={() => handleWordSelect(gameState.wordOptions[1])}
-                    className="w-[85%] max-w-xs bg-[#FBBF24] hover:bg-[#F59E0B] text-[#1A103C] font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl"
+                    className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl"
                   >
                     <Pencil fill="currentColor" size={24} />
                     DRAW
@@ -1761,7 +1761,7 @@ export default function GameRoom({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35, ease: "easeInOut" }}
-            className="fixed inset-0 flex flex-col items-center justify-center bg-[#0c061d] z-[999999] cursor-not-allowed select-none touch-none"
+            className="fixed inset-0 flex flex-col items-center justify-center bg-[#061220] z-[999999] cursor-not-allowed select-none touch-none"
             style={{ pointerEvents: "auto" }}
           >
             <div className="flex flex-col items-center">

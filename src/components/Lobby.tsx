@@ -147,7 +147,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
   };
 
   return (
-    <div className="w-full h-full min-h-screen bg-gradient-to-br from-[#3b2082] via-[#5c36cc] to-[#7C4DFF] text-white font-sans flex flex-col relative overflow-hidden">
+    <div className="w-full h-full min-h-screen bg-game-primary-blue text-white font-sans flex flex-col relative overflow-hidden">
       
       {/* Settings gear in top corner */}
       {screen === 'home' && (
@@ -166,7 +166,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
           <div className="w-full max-w-sm space-y-8 flex flex-col items-center">
             
             <div className="text-5xl font-black tracking-tight mb-4 drop-shadow-lg text-white">
-              DRAW<span className="text-[#00D9FF]">.</span>IO
+              DRAW<span className="text-accent-brand">.</span>IO
             </div>
             
             {/* Avatar Selector */}
@@ -183,14 +183,14 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   </button>
                   
                   <div className="relative group cursor-pointer" onClick={() => setShowAvatarGrid(true)}>
-                    <div className="w-28 h-28 rounded-full bg-white/20 border-4 border-[#00D9FF] flex items-center justify-center shadow-[0_0_20px_rgba(0,217,255,0.4)] transition-transform select-none overflow-hidden">
+                    <div className="w-28 h-28 rounded-full bg-white/20 border-4 border-primary-brand flex items-center justify-center shadow-[0_0_20px_rgba(0,182,240,0.4)] transition-transform select-none overflow-hidden">
                       <span className="text-[72px] translate-y-1">{AVATARS[avatarIndex]}</span>
                       <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                          <LayoutGrid className="text-white" size={32} />
                       </div>
                     </div>
                     {/* Small grid badge */}
-                    <div className="absolute -bottom-1 -right-1 bg-[#00D9FF] p-2 rounded-full border-2 border-[#1A103C] text-[#1A103C] hover:bg-white shadow-lg transition-transform hover:scale-110 active:scale-95">
+                    <div className="absolute -bottom-1 -right-1 bg-primary-brand p-2 rounded-full border-2 border-bg-dark-brand text-bg-dark-brand hover:bg-white shadow-lg transition-transform hover:scale-110 active:scale-95">
                       <LayoutGrid size={18} />
                     </div>
                   </div>
@@ -205,7 +205,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
               ) : (
                 <div className="w-full max-w-sm bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 relative animate-in zoom-in-95 duration-200">
                   <div className="flex justify-between items-center mb-3">
-                    <span className="text-xs font-bold text-[#00D9FF]">ALL AVATARS</span>
+                    <span className="text-xs font-bold text-primary-brand">ALL AVATARS</span>
                     <button onClick={() => setShowAvatarGrid(false)} className="text-white/50 hover:text-white bg-black/20 p-1 rounded-full transition-colors active:scale-95">
                       <X size={16} />
                     </button>
@@ -241,7 +241,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   value={nickname}
                   onChange={(e) => { setNickname(e.target.value); setNicknameError(false); setJoinError(null); }}
                   placeholder="Enter your name..."
-                  className={`w-full h-14 bg-white/10 backdrop-blur-md text-white placeholder-white/50 border-2 rounded-2xl px-6 font-bold text-lg outline-none transition-all focus:bg-white/20 ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-white/20 focus:border-[#00D9FF]'}`}
+                  className={`w-full h-14 bg-white/10 backdrop-blur-md text-white placeholder-white/50 border-2 rounded-2xl px-6 font-bold text-lg outline-none transition-all focus:bg-white/20 ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-white/20 focus:border-primary-brand'}`}
                 />
               </div>
               {joinError && (
@@ -253,7 +253,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
             <button 
               onClick={handleGoToRooms}
-              className="w-full h-14 bg-[#7C4DFF] text-white rounded-2xl font-bold text-xl shadow-[0_4px_20px_rgba(124,77,255,0.5)] hover:shadow-[0_6px_25px_rgba(124,77,255,0.7)] hover:-translate-y-1 transition-all active:translate-y-0 active:shadow-[0_2px_10px_rgba(124,77,255,0.4)] flex items-center justify-center gap-2"
+              className="w-full h-14 bg-accent-brand text-bg-dark-brand rounded-2xl font-bold text-xl shadow-[0_4px_20px_rgba(251,191,36,0.4)] hover:shadow-[0_6px_25px_rgba(251,191,36,0.6)] hover:-translate-y-1 transition-all active:translate-y-0 active:shadow-[0_2px_10px_rgba(251,191,36,0.3)] flex items-center justify-center gap-2"
             >
               <span>ROOMS</span>
             </button>
@@ -297,12 +297,12 @@ export default function Lobby({ onPlay }: LobbyProps) {
               {/* Dummy Room Item */}
               <button 
                 onClick={() => handleRoomClick('General #Test')}
-                className="w-full bg-white border-2 border-slate-100 p-4 rounded-3xl flex items-center justify-between active:border-[#00D9FF] active:bg-[#00D9FF]/5 transition-colors"
+                className="w-full bg-white border-2 border-slate-100 p-4 rounded-3xl flex items-center justify-between active:border-primary-brand active:bg-primary-brand/5 transition-colors"
               >
                 <div className="flex flex-col items-start">
                   <span className="font-bold text-lg text-slate-800">General <span className="text-slate-400 font-medium">#Test</span></span>
                 </div>
-                <div className="flex items-center gap-2 text-[#00D9FF] font-black text-lg bg-[#00D9FF]/10 px-4 py-2 rounded-2xl">
+                <div className="flex items-center gap-2 text-primary-brand font-black text-lg bg-primary-brand/10 px-4 py-2 rounded-2xl">
                   <Users size={20} strokeWidth={3} />
                   <span>{testRoomCount}/5</span>
                 </div>
@@ -335,8 +335,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
             </button>
 
             <div className="flex flex-col items-center mt-4">
-              <div className="w-24 h-24 rounded-full bg-[#00D9FF]/10 flex items-center justify-center mb-6">
-                <Settings size={48} className="text-[#00D9FF]" strokeWidth={2.5} />
+              <div className="w-24 h-24 rounded-full bg-primary-brand/10 flex items-center justify-center mb-6">
+                <Settings size={48} className="text-primary-brand" strokeWidth={2.5} />
               </div>
               
               <h2 className="text-2xl font-black mb-8 text-center">{selectedRoom}</h2>
@@ -344,7 +344,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
               <div className="grid grid-cols-3 gap-2.5 w-full mb-8">
                 <div className="text-center bg-slate-50 p-2.5 rounded-2xl flex flex-col justify-center">
                   <div className="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">Players</div>
-                  <div className="text-[#00D9FF] font-black text-base">{roomCount}/5</div>
+                  <div className="text-primary-brand font-black text-base">{roomCount}/5</div>
                 </div>
                 <div className="text-center bg-slate-50 p-2.5 rounded-2xl flex flex-col justify-center">
                   <div className="text-slate-400 text-[10px] font-black uppercase tracking-wider mb-1">Theme</div>
@@ -364,7 +364,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
               <button 
                 onClick={handlePlay}
-                className="w-full h-14 bg-[#7C4DFF] text-white rounded-2xl font-bold text-xl shadow-[0_4px_20px_rgba(124,77,255,0.4)] flex items-center justify-center gap-3 active:scale-95 transition-all"
+                className="w-full h-14 bg-accent-brand text-bg-dark-brand rounded-2xl font-bold text-xl shadow-[0_4px_20px_rgba(251,191,36,0.4)] flex items-center justify-center gap-3 active:scale-95 transition-all"
               >
                 <Play size={24} fill="currentColor" />
                 <span>PLAY</span>
@@ -408,14 +408,14 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   </p>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-violet-50/50 border border-violet-100 text-violet-800 text-xs text-center font-bold leading-relaxed">
+                <div className="p-3.5 rounded-2xl bg-primary-brand/5 border border-primary-brand/10 text-primary-brand font-bold text-xs text-center leading-relaxed">
                   ⚡ ميزة ذكية: إذا تم تعطيل هذا الوضع، فلن يتم استهلاك أي طاقة أو موارد من المعالج والمستشعرات لضمان أداء سلس بنسبة 100% للأجهزة الضعيفة.
                 </div>
               </div>
 
               <button 
                 onClick={() => setShowSettingsModal(false)}
-                className="w-full h-12 bg-[#7C4DFF] hover:bg-[#6c3fe6] text-white rounded-xl font-bold flex items-center justify-center transition-all active:scale-95 text-sm"
+                className="w-full h-12 bg-primary-brand hover:bg-primary-brand-dark text-white rounded-xl font-bold flex items-center justify-center transition-all active:scale-95 text-sm"
               >
                 حفظ وإغلاق
               </button>
@@ -425,8 +425,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
       )}
 
       {/* Background decoration */}
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#00D9FF] rounded-full mix-blend-overlay filter blur-[100px] opacity-20 pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-[#7C4DFF] rounded-full mix-blend-overlay filter blur-[100px] opacity-50 pointer-events-none" />
+      <div className="absolute -top-40 -left-40 w-96 h-96 bg-primary-brand rounded-full mix-blend-overlay filter blur-[100px] opacity-20 pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-accent-brand rounded-full mix-blend-overlay filter blur-[100px] opacity-20 pointer-events-none" />
     </div>
   );
 }
