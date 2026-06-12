@@ -217,6 +217,13 @@ async function startServer() {
       }
     });
 
+    socket.on('report_draw', () => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        roomManager.reportDrawing(player.roomId, socket.id);
+      }
+    });
+
     socket.on('send_message', (data) => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {

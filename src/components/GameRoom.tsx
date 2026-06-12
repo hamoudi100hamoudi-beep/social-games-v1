@@ -255,6 +255,21 @@ export default function GameRoom({
 
   const isDrawingMode = gameState.status === "DRAWING" && amIDrawer;
 
+  const hasAlreadyReported = React.useMemo(() => {
+    if (!gameState.reports) return false;
+    return (
+      gameState.reports.includes(persistentPlayerId) ||
+      (socket?.id ? gameState.reports.includes(socket.id) : false)
+    );
+  }, [gameState.reports, persistentPlayerId, socket?.id]);
+
+  const canReport = gameState.status === "DRAWING" && !amIDrawer && !hasAlreadyReported;
+
+  const handleReport = () => {
+    if (!canReport) return;
+    socket?.emit("report_draw");
+  };
+
   // --- Block 1: Handle Room Join & Rejoin based on (Re)connection status ---
   useEffect(() => {
     if (!socket) return;
@@ -476,6 +491,18 @@ export default function GameRoom({
 
         setTimeout(() => {
           setHitNotifications((prev) => prev.filter((n) => n.id !== hitId));
+        }, 4500);
+      }
+
+      if (msg.subType === "report") {
+        const reportId = Date.now().toString() + Math.random().toString();
+        setHitNotifications((prev) => {
+          const next = [...prev, { id: reportId, name: msg.sender, isReport: true }];
+          return next.slice(-20);
+        });
+
+        setTimeout(() => {
+          setHitNotifications((prev) => prev.filter((n) => n.id !== reportId));
         }, 4500);
       }
     };
@@ -1028,36 +1055,71 @@ export default function GameRoom({
               {isDrawingMode && (
                 <div className="absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full">
                   <AnimatePresence>
-                    {hitNotifications.map((hit) => (
-                      <motion.div
-                        layout
-                        key={hit.id}
-                        initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{
-                          opacity: 0,
-                          scale: 0.6,
-                          y: -10,
-                          transition: { duration: 0.3 },
-                        }}
-                        transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
-                        style={{
-                          textShadow:
-                            "1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(255,255,255,0.8)",
-                        }}
-                        className="flex items-center justify-center gap-1.5 text-[#10B981] font-bold text-[15px] whitespace-nowrap bg-transparent"
-                        dir="ltr"
-                      >
-                        <Check size={16} strokeWidth={4} />
-                        <span
-                          className="truncate max-w-[150px] sm:max-w-[200px] text-center"
+                    {hitNotifications.map((hit) => {
+                      if (hit.isReport) {
+                        return (
+                          <motion.div
+                            layout
+                            key={hit.id}
+                            initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{
+                              opacity: 0,
+                              scale: 0.6,
+                              y: -10,
+                              transition: { duration: 0.3 },
+                            }}
+                            transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
+                            style={{
+                              textShadow:
+                                "1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(255,100,100,0.4)",
+                            }}
+                            className="flex items-center justify-center gap-1.5 text-red-500 font-bold text-[15px] whitespace-nowrap bg-transparent"
+                            dir="ltr"
+                          >
+                            <AlertTriangle size={16} className="text-red-500 shrink-0" />
+                            <span
+                              className="truncate max-w-[150px] sm:max-w-[200px] text-center"
+                              dir="ltr"
+                            >
+                              {hit.name}
+                            </span>
+                            <span>reported!</span>
+                          </motion.div>
+                        );
+                      }
+
+                      return (
+                        <motion.div
+                          layout
+                          key={hit.id}
+                          initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{
+                            opacity: 0,
+                            scale: 0.6,
+                            y: -10,
+                            transition: { duration: 0.3 },
+                          }}
+                          transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
+                          style={{
+                            textShadow:
+                              "1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(255,255,255,0.8)",
+                          }}
+                          className="flex items-center justify-center gap-1.5 text-[#10B981] font-bold text-[15px] whitespace-nowrap bg-transparent"
                           dir="ltr"
                         >
-                          {hit.name}
-                        </span>
-                        <span>hit!</span>
-                      </motion.div>
-                    ))}
+                          <Check size={16} strokeWidth={4} />
+                          <span
+                            className="truncate max-w-[150px] sm:max-w-[200px] text-center"
+                            dir="ltr"
+                          >
+                            {hit.name}
+                          </span>
+                          <span>hit!</span>
+                        </motion.div>
+                      );
+                    })}
                   </AnimatePresence>
                 </div>
               )}
@@ -1240,6 +1302,77 @@ export default function GameRoom({
                             ? "You've lost your turn :("
                             : `${drawerName} has lost the turn`}
                         </h3>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // 2.5. CANCELED STATE (Reported Draw Turn Cancellation)
+                if (reason === "canceled") {
+                  return (
+                    <div className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans border-2 border-red-500 rounded-3xl overflow-hidden shadow-2xl">
+                      <div className="text-center animate-in fade-in zoom-in-95 duration-300 w-full max-w-sm">
+                        <div className="mb-3">
+                          <span className="text-[#0B2E5C] text-xl sm:text-3xl font-black tracking-wide uppercase drop-shadow-[0_2px_0_rgb(251,191,36)] px-5 py-2">
+                            CANCELED TURN
+                          </span>
+                        </div>
+
+                        {/* Sad/angry Gartic Blue Character */}
+                        <div className="relative w-24 h-28 mb-4 mx-auto flex flex-col items-center justify-end">
+                          <div className="w-20 h-20 bg-[#14A5CE] rounded-2xl border-4 border-[#0F3957] relative shadow-md flex flex-col overflow-hidden">
+                            {/* Stylized hair/top brick pattern */}
+                            <div className="w-full h-5 bg-[#C52B3C] border-b-4 border-[#0F3957] flex">
+                              <div className="w-1/3 h-full border-r-4 border-[#0F3957]"></div>
+                              <div className="w-1/3 h-full border-r-4 border-[#0F3957]"></div>
+                            </div>
+                            
+                            {/* Angry Eyebrows & Eyes */}
+                            <div className="absolute top-6 left-1/2 -translate-x-1/2 flex gap-2">
+                              {/* Left Eye with angry brow */}
+                              <div className="relative w-5 h-4">
+                                <div className="absolute top-0 left-0 w-6 h-1.5 bg-[#0F3957] rotate-[15deg] origin-left"></div>
+                                <div className="absolute bottom-0 left-1 w-3 h-3 bg-white border-2 border-[#0F3957] rounded-sm flex items-center justify-center">
+                                  <div className="w-1.5 h-1.5 bg-[#0F3957] rounded-full"></div>
+                                </div>
+                              </div>
+                              {/* Right Eye with angry brow */}
+                              <div className="relative w-5 h-4">
+                                <div className="absolute top-0 right-0 w-6 h-1.5 bg-[#0F3957] -rotate-[15deg] origin-right"></div>
+                                <div className="absolute bottom-0 right-1 w-3 h-3 bg-white border-2 border-[#0F3957] rounded-sm flex items-center justify-center">
+                                  <div className="w-1.5 h-1.5 bg-[#0F3957] rounded-full"></div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Frowny Mouth */}
+                            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-4 h-2 border-t-4 border-[#0F3957] rounded-full"></div>
+                          </div>
+
+                          {/* Legs */}
+                          <div className="flex gap-4 justify-center w-full mt-1.5 h-3 relative z-[1]">
+                            <div className="w-2 h-3 bg-[#14A5CE] border-l-4 border-r-4 border-[#0F3957] rounded-b-md"></div>
+                            <div className="w-2 h-3 bg-[#14A5CE] border-l-4 border-r-4 border-[#0F3957] rounded-b-md"></div>
+                          </div>
+
+                          {/* Floating red Alert triangle side badge */}
+                          <div className="absolute bottom-6 right-1 bg-white rounded-full p-0.5 shadow-sm border border-red-200">
+                            <AlertTriangle size={18} className="text-red-500 fill-red-100 animate-pulse" />
+                          </div>
+                        </div>
+
+                        <p
+                          className="text-[#728299] text-sm sm:text-base font-bold mb-1"
+                          dir="auto"
+                        >
+                          Users score has been canceled
+                        </p>
+                        <p
+                          className="text-[#728299]/70 text-xs font-bold"
+                          dir="auto"
+                        >
+                          لقد تم إلغاء نقاط ربع الدور
+                        </p>
                       </div>
                     </div>
                   );
@@ -1456,7 +1589,19 @@ export default function GameRoom({
             >
               <div className="overflow-hidden">
                 <div className="flex gap-2 sm:gap-4 p-2 sm:p-3 bg-[#1AAACC]/10 justify-around">
-                  <button className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-orange-400 hover:bg-orange-500 active:scale-95 flex items-center justify-center text-white transition-all shadow-md">
+                  <button
+                    id="report-draw-btn"
+                    disabled={!canReport}
+                    onClick={handleReport}
+                    title={hasAlreadyReported ? "You reported this draw" : "Report drawing"}
+                    className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white transition-all shadow-md active:scale-95 cursor-pointer
+                      ${hasAlreadyReported 
+                        ? "bg-red-600 border border-red-500 opacity-90 cursor-not-allowed" 
+                        : canReport 
+                          ? "bg-orange-400 hover:bg-orange-500 cursor-pointer" 
+                          : "bg-slate-500/40 opacity-40 cursor-not-allowed"
+                      }`}
+                  >
                     <AlertTriangle size={16} />
                   </button>
                   <button className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-white transition-all shadow-md">
@@ -1488,6 +1633,41 @@ export default function GameRoom({
                   if (isSystem) {
                     const subType = (msg as any).subType || "";
                     const text = msg.text;
+
+                    // Drawing report warning log
+                    if (subType === "report") {
+                      return (
+                        <div
+                          key={msg.id}
+                          className="flex items-center gap-2 text-[#EF4444] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                        >
+                          <AlertTriangle
+                            size={14}
+                            className="text-[#EF4444] shrink-0 font-extrabold"
+                          />
+                          <span dir="auto" className="flex items-center gap-1">
+                            <span className="text-orange-400 font-extrabold">{msg.sender}</span>
+                            <span className="text-red-500 font-bold">reported!</span>
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    // Drawing canceled turn log
+                    if (subType === "canceled") {
+                      return (
+                        <div
+                          key={msg.id}
+                          className="flex items-center gap-2 text-[#EF4444] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                        >
+                          <AlertTriangle
+                            size={14}
+                            className="text-[#EF4444] shrink-0 font-extrabold"
+                          />
+                          <span dir="auto" className="text-red-500 font-extrabold">Canceled turn</span>
+                        </div>
+                      );
+                    }
 
                     // Hit / guessed correctly
                     if (subType === "hit") {

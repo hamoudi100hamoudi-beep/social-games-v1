@@ -452,6 +452,14 @@ class RoomManager {
     //@ts-ignore
     room.gameState.redoStack = [];
     room.gameState.timeLeft = 100;
+    room.gameState.reports = [];
+
+    // Snapshot scores to enable rollback if the round gets reported/canceled
+    room.turnStartScores = {};
+    room.players.forEach((p) => {
+      const uniqueId = p.persistentId || p.id;
+      room.turnStartScores![uniqueId] = p.score;
+    });
 
     this.clearDrawHistoryForRoomAndClient(room);
     const drawer = room.players.find(
@@ -496,10 +504,16 @@ class RoomManager {
       | "all_guessed"
       | "drawer_left"
       | "turn_lost"
-      | "skipped" = "timeout",
+      | "skipped"
+      | "canceled" = "timeout",
   ) {
+    // Standard validation: don't transition more than once if already round end
+    if (room.gameState.status === "ROUND_END" && reason !== "canceled") {
+      return;
+    }
+
     const winner = room.players.find((p) => p.score >= 40);
-    if (winner) {
+    if (winner && reason !== "canceled") {
       return this.transitionToPodium(room);
     }
 
@@ -516,7 +530,24 @@ class RoomManager {
     // Wiping drawHistory to guard server memory from RAM Bloat
     this.clearDrawHistoryForRoomAndClient(room);
 
-    if (reason === "all_guessed") {
+    if (reason === "canceled") {
+      // Rollback scores to the snapshot of turnStartScores
+      if (room.turnStartScores) {
+        room.players.forEach((p) => {
+          const uniqueId = p.persistentId || p.id;
+          if (room.turnStartScores && room.turnStartScores[uniqueId] !== undefined) {
+            p.score = room.turnStartScores[uniqueId];
+          }
+        });
+      }
+      this.broadcastGuess(room, {
+        id: "sys-" + Date.now() + "-canceled",
+        text: `Canceled turn`,
+        type: "system",
+        subType: "canceled",
+        color: "#EF4444",
+      });
+    } else if (reason === "all_guessed") {
       this.broadcastGuess(room, {
         id: "sys-" + Date.now() + "-all-guessed",
         text: `Everybody hit the answer!`,
@@ -763,6 +794,63 @@ class RoomManager {
     }
 
     this.broadcastState(room);
+  }
+
+  public reportDrawing(roomId: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+
+    if (room.gameState.status !== "DRAWING") return;
+
+    const player = this.players.get(socketId);
+    if (!player) return;
+
+    const pId = player.persistentId || player.id;
+
+    // The drawer cannot report their own drawing!
+    if (room.gameState.currentDrawerId === pId) return;
+
+    if (!room.gameState.reports) {
+      room.gameState.reports = [];
+    }
+
+    // Prevent double reporting
+    if (room.gameState.reports.includes(pId)) return;
+
+    room.gameState.reports.push(pId);
+
+    // Broadcast report message to the guess/info logs feed exactly as shown: "⚠️ [PlayerName] reported!"
+    this.broadcastGuess(room, {
+      id: "sys-" + Date.now() + "-report-" + pId,
+      text: `${player.name} reported!`,
+      type: "system",
+      subType: "report",
+      sender: player.name,
+      color: "#EF4444",
+    });
+
+    const activePlayersCount = room.players.filter((p) => !p.isOffline).length;
+    let requiredReports = 2; // Default for <=5 players
+    if (activePlayersCount <= 4) {
+      requiredReports = Math.max(2, Math.ceil(activePlayersCount / 2));
+    } else if (activePlayersCount === 5) {
+      requiredReports = 2;
+    } else if (activePlayersCount === 6) {
+      requiredReports = 3;
+    } else if (activePlayersCount === 7) {
+      requiredReports = 4;
+    } else if (activePlayersCount === 8) {
+      requiredReports = 4;
+    } else {
+      requiredReports = Math.floor(activePlayersCount / 2);
+    }
+
+    if (room.gameState.reports.length >= requiredReports) {
+      console.log(`[Report Engine] Cancel threshold reached (${room.gameState.reports.length}/${requiredReports}). Triggering CANCELED TURN.`);
+      this.transitionToRoundEnd(room, "canceled");
+    } else {
+      this.broadcastState(room);
+    }
   }
 
   public sendStateToPlayer(room: Room, p: Player) {
