@@ -251,6 +251,7 @@ class RoomManager {
     try {
       this.rooms.forEach((room) => {
         try {
+          this.kickIdlePlayers(room);
           this.processRoomTick(room);
         } catch (e) {
           console.error(`Error processing room tick for ${room.id}:`, e);
@@ -259,6 +260,42 @@ class RoomManager {
     } catch (e) {
       console.error("Error in global tick loop:", e);
     }
+  }
+
+  private kickIdlePlayers(room: Room) {
+    const idleTimeout = 4 * 60 * 1000; // 4 minutes
+    const now = Date.now();
+    const playersToKick: Player[] = [];
+
+    room.players.forEach((p) => {
+      // If player is already offline, the 10-second grace period eviction handles them,
+      // so we only actively kick online idle players to keep rooms healthy.
+      if (!p.isOffline) {
+        const lastAct = p.lastActivity || now;
+        if (now - lastAct > idleTimeout) {
+          playersToKick.push(p);
+        }
+      }
+    });
+
+    playersToKick.forEach((p) => {
+      console.warn(`[AFK KICK] Player ${p.name} (${p.id}) is idle for > 4m. Removing.`);
+      
+      const socket = this.io?.sockets.sockets.get(p.id);
+      if (socket) {
+        socket.emit('session_expired', { reason: 'afk' });
+        socket.disconnect(true);
+      }
+
+      this.removePlayerFromRoom(room.id, p.id);
+      this.players.delete(p.id);
+
+      this.broadcastMessage(room, {
+        id: "sys-afk-" + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        text: `تم طرد ${p.name} بسبب عدم النشاط (AFK)`,
+        type: "system",
+      });
+    });
   }
 
   private processRoomTick(room: Room) {
@@ -983,6 +1020,7 @@ class RoomManager {
     }
 
     player.roomId = roomId;
+    player.lastActivity = Date.now();
     this.players.set(player.id, player);
 
     // Add to new room if not already in it
@@ -1090,6 +1128,7 @@ class RoomManager {
         `[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Socket ID unchanged: ${newSocketId}`,
       );
       existingPlayer.isOffline = false;
+      existingPlayer.lastActivity = Date.now();
       delete existingPlayer.offlineSince;
       this.broadcastState(room);
       return room;
@@ -1113,6 +1152,7 @@ class RoomManager {
     // Update Player ID mapping
     existingPlayer.id = newSocketId;
     existingPlayer.isOffline = false;
+    existingPlayer.lastActivity = Date.now();
     delete existingPlayer.offlineSince;
 
     // Update RoomManager players map

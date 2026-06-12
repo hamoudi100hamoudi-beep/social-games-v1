@@ -23,6 +23,7 @@ export interface Player {
   isOffline?: boolean;
   offlineSince?: number;
   persistentId?: string;
+  lastActivity?: number;
 }
 
 export interface Room {

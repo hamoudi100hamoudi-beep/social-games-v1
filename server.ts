@@ -37,6 +37,15 @@ async function startServer() {
 
   io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
+
+    socket.onAny((eventName) => {
+      try {
+        const player = roomManager.getPlayer(socket.id);
+        if (player) {
+          player.lastActivity = Date.now();
+        }
+      } catch (err) {}
+    });
     
     socket.on('get_room_info', (roomId, callback) => {
       try {
@@ -221,6 +230,44 @@ async function startServer() {
         };
         roomManager.saveChatMessage(player.roomId, msg);
         io.to(player.roomId).emit('receive_message', msg);
+      }
+    });
+
+    socket.on('request_kick', ({ roomId, nickname, playerId }, callback) => {
+      try {
+        console.warn(`[REQUEST KICK/AFK] Player ${nickname} (${playerId}) requested kick from room ${roomId}`);
+        const player = roomManager.getPlayer(socket.id);
+        if (player && player.roomId) {
+          const rId = player.roomId;
+          const room = roomManager.getRoom(rId);
+          if (room) {
+            roomManager.removePlayerFromRoom(rId, socket.id);
+            
+            const leaveMsg = {
+              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+              text: `تم طرد ${nickname} بسبب عدم النشاط (AFK)`,
+              type: 'system'
+            };
+            roomManager.saveChatMessage(rId, leaveMsg);
+            io.to(rId).emit('receive_message', leaveMsg);
+          }
+          roomManager.removePlayer(socket.id);
+        }
+        if (callback) callback({ success: true });
+      } catch (e) {
+        console.error("Error in request_kick event:", e);
+        if (callback) callback({ error: e instanceof Error ? e.message : String(e) });
+      }
+    });
+
+    socket.on('ping_activity', () => {
+      try {
+        const player = roomManager.getPlayer(socket.id);
+        if (player) {
+          player.lastActivity = Date.now();
+        }
+      } catch (e) {
+        console.error("Error in ping_activity event:", e);
       }
     });
 

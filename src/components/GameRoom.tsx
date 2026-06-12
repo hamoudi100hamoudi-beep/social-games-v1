@@ -148,6 +148,17 @@ export default function GameRoom({
   const [unreadCount, setUnreadCount] = useState(0);
   const hasEmittedJoin = React.useRef(false);
 
+  const [isAfkPopupOpen, setIsAfkPopupOpen] = useState(false);
+  const [afkCountdown, setAfkCountdown] = useState(90);
+  const lastActiveRef = React.useRef(Date.now());
+  const afkCountdownIntervalRef = React.useRef<any>(null);
+
+  const handleIHaveReturned = () => {
+    setIsAfkPopupOpen(false);
+    lastActiveRef.current = Date.now();
+    socket?.emit("ping_activity");
+  };
+
   const persistentPlayerId = React.useMemo(() => {
     if (typeof window === "undefined") return "";
     let id = localStorage.getItem("gartic_player_id");
@@ -249,7 +260,7 @@ export default function GameRoom({
     if (!socket) return;
 
     const handleJoin = () => {
-      const reconnectOnly = hasEmittedJoin.current;
+      const reconnectOnly = hasEmittedJoin.current || !justJoined;
       console.log(
         "[GameRoom] Sending join_room:",
         room,
@@ -300,6 +311,71 @@ export default function GameRoom({
       socket.off("connect", handleJoin);
     };
   }, [socket]);
+
+  // --- Local AFK & Activity Monitoring Engine ---
+  useEffect(() => {
+    const updateActivity = () => {
+      lastActiveRef.current = Date.now();
+    };
+
+    window.addEventListener("pointerdown", updateActivity, { passive: true });
+    window.addEventListener("keydown", updateActivity, { passive: true });
+    window.addEventListener("touchstart", updateActivity, { passive: true });
+
+    // Periodical checker - check every 5 seconds for inactivity (2.5 minutes = 150 seconds = 150,000 ms)
+    const checkInterval = setInterval(() => {
+      const now = Date.now();
+      if (!isAfkPopupOpen && (now - lastActiveRef.current > 150000)) {
+        console.warn("[AFK Engine] Inactivity detected (2.5 mins). Displaying safety warning popup.");
+        setIsAfkPopupOpen(true);
+        setAfkCountdown(90);
+      }
+    }, 5000);
+
+    return () => {
+      window.removeEventListener("pointerdown", updateActivity);
+      window.removeEventListener("keydown", updateActivity);
+      window.removeEventListener("touchstart", updateActivity);
+      clearInterval(checkInterval);
+    };
+  }, [isAfkPopupOpen]);
+
+  useEffect(() => {
+    if (isAfkPopupOpen) {
+      afkCountdownIntervalRef.current = setInterval(() => {
+        setAfkCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(afkCountdownIntervalRef.current);
+            console.warn("[AFK Engine] Grace period expired. Requesting kick from room.");
+            
+            // Emit request_kick to server
+            socket?.emit("request_kick", {
+              roomId: room,
+              nickname,
+              playerId: persistentPlayerId,
+            });
+
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("gartic_player_room");
+            }
+            onLeave?.();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (afkCountdownIntervalRef.current) {
+        clearInterval(afkCountdownIntervalRef.current);
+      }
+    }
+
+    return () => {
+      if (afkCountdownIntervalRef.current) {
+        clearInterval(afkCountdownIntervalRef.current);
+      }
+    };
+  }, [isAfkPopupOpen, socket, room, nickname, persistentPlayerId, onLeave]);
 
   // --- Block 2: Register Persistent Socket Listeners ---
   useEffect(() => {
@@ -404,16 +480,26 @@ export default function GameRoom({
       }
     };
 
+    const onSessionExpired = (data: any) => {
+      console.warn("[GameRoom] Session expired (AFK/Evicted). Returning to lobby.");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("gartic_player_room");
+      }
+      onLeave?.();
+    };
+
     socket.on("room_state_update", onRoomStateUpdate);
     socket.on("receive_message", onReceiveMessage);
     socket.on("receive_guess", onReceiveGuess);
     socket.on("timer_tick", onTimerTick);
+    socket.on("session_expired", onSessionExpired);
 
     return () => {
       socket.off("room_state_update", onRoomStateUpdate);
       socket.off("receive_message", onReceiveMessage);
       socket.off("receive_guess", onReceiveGuess);
       socket.off("timer_tick", onTimerTick);
+      socket.off("session_expired", onSessionExpired);
     };
   }, [socket]);
 
@@ -1691,6 +1777,30 @@ export default function GameRoom({
                 Yes
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* AFK Popup Modal */}
+      {isAfkPopupOpen && (
+        <div id="afk-popup-overlay" className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div id="afk-popup-card" className="bg-[#052044] border-2 border-primary-brand text-white p-6 rounded-3xl max-w-sm w-full shadow-[0_0_50px_rgba(0,117,255,0.3)] text-center relative overflow-hidden animate-zoom-in">
+            <div className="w-20 h-20 rounded-full border-4 border-dashed border-red-500 flex items-center justify-center text-2xl font-bold mx-auto mb-4 text-red-500">
+              <span className="font-mono">{afkCountdown}</span>
+            </div>
+            
+            <h3 id="afk-title" className="text-xl font-bold mb-2 tracking-tight text-white">هل أنت هنا؟</h3>
+            <p id="afk-description" className="text-white/80 text-sm mb-6 leading-relaxed">
+              لقد تم اكتشاف خمولك في اللعبة. لتجنب طردك التلقائي والحفاظ على متعة اللعب، يرجى الضغط على الزر أدناه لتأكيد وجودك.
+            </p>
+            
+            <button
+              id="afk-return-btn"
+              onClick={handleIHaveReturned}
+              className="w-full py-3 px-6 bg-primary-brand hover:bg-primary-brand-dark active:scale-[0.98] transition-all text-white font-bold rounded-2xl shadow-lg hover:shadow-primary-brand/30 hover:scale-[1.02] cursor-pointer"
+            >
+              أنا هنا!
+            </button>
           </div>
         </div>
       )}
