@@ -38,25 +38,6 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
 }) => {
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
-  const [isWindowResizing, setIsWindowResizing] = React.useState(false);
-
-  // Detect window resizing (e.g., keyboard slide on mobile, screen scale on desktop)
-  // to avoid layout physics calculations jittering during layout resizing
-  React.useEffect(() => {
-    let timeout: any;
-    const handleResize = () => {
-      setIsWindowResizing(true);
-      clearTimeout(timeout);
-      timeout = setTimeout(() => {
-        setIsWindowResizing(false);
-      }, 400); // 400ms buffer after keyboard resize finishes
-    };
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      clearTimeout(timeout);
-    };
-  }, []);
 
   // Detect score changes and trigger floating indicator
   React.useEffect(() => {
@@ -86,7 +67,39 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     <div className={`flex flex-col border-r border-primary-brand/20 bg-bg-panel-brand overflow-y-auto overscroll-contain touch-pan-y
                     ${morphMode ? 'col-start-1 col-end-2 row-start-1 row-end-3' : 'col-start-1 col-end-2 row-start-2 row-end-3'}
                    `}>
-        {slots.map((slot) => {
+      <style>{`
+        .sidebar-container {
+          --row-height: 65px;
+          position: relative;
+          width: 100%;
+        }
+        @media (min-width: 640px) {
+          .sidebar-container {
+            --row-height: 80px;
+          }
+        }
+      `}</style>
+      
+      <div 
+        className="sidebar-container w-full shrink-0" 
+        style={{ height: `calc(var(--row-height) * ${slots.length})` }}
+      >
+        {/* Background lines representing fixed boundary lines */}
+        <div className="absolute inset-0 pointer-events-none select-none z-0">
+          {slots.map((_, i) => (
+            <div 
+              key={`grid-line-${i}`}
+              style={{
+                height: 'var(--row-height)',
+                top: `calc(var(--row-height) * ${i})`,
+              }}
+              className="absolute inset-x-0 border-b border-primary-brand/10"
+            />
+          ))}
+        </div>
+
+        {/* Real-time moving active and empty cards */}
+        {slots.map((slot, index) => {
           const isDrawer = slot.isCurrent;
           const isCorrectGuesser =
             !slot.isEmpty &&
@@ -114,14 +127,16 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
           }
 
           const slotPopups = activePopups.filter((p) => p.playerId === slot.id);
-          const shouldAnimateLayout = !morphMode && !isWindowResizing;
 
           return (
-            <motion.div 
-              layout={shouldAnimateLayout ? "position" : false}
-              transition={shouldAnimateLayout ? { type: "spring", stiffness: 220, damping: 26, mass: 1 } : undefined}
+            <div 
               key={slot.id} 
-              className={`flex items-center p-2 sm:p-4 border-b border-primary-brand/10 h-[65px] sm:h-[80px] shrink-0 transition-all duration-200 relative overflow-visible ${bgClass}`}
+              style={{
+                top: `calc(var(--row-height) * ${index})`,
+                height: 'var(--row-height)',
+                transition: 'top 0.45s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, border-color 0.2s ease',
+              }}
+              className={`absolute inset-x-0 flex items-center p-2 sm:p-4 overflow-visible z-10 ${bgClass}`}
             >
               {/* Avatar */}
               <div className="relative shrink-0 mr-2 sm:mr-3">
@@ -136,12 +151,12 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                  
                  {/* Status/Role Icon badge */}
                  {!slot.isEmpty && isCorrectGuesser && (
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#00E540] rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-10 transition-all scale-in animate-scale-in">
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#00E540] rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-15 transition-all scale-in animate-scale-in">
                        <Check size={10} strokeWidth={4} className="text-black font-extrabold" />
                     </div>
                  )}
                  {!slot.isEmpty && isDrawer && !isCorrectGuesser && (
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-primary-brand rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-10">
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-primary-brand rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-15">
                        <Pencil size={10} strokeWidth={3} className="text-bg-dark-brand" />
                     </div>
                   )}
@@ -188,9 +203,10 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                    </motion.div>
                  ))}
                </AnimatePresence>
-            </motion.div>
+            </div>
           );
         })}
+      </div>
     </div>
   );
 };
