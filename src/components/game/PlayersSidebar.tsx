@@ -134,7 +134,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
               style={{
                 top: `calc(var(--row-height) * ${index})`,
                 height: 'var(--row-height)',
-                transition: 'top 0.45s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, border-color 0.2s ease',
+                transition: 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease',
               }}
               className={`absolute inset-x-0 flex items-center p-2 sm:p-4 overflow-visible z-10 ${bgClass}`}
             >
