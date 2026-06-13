@@ -149,6 +149,7 @@ export default function GameRoom({
   const hasEmittedJoin = React.useRef(false);
 
   const [isAfkPopupOpen, setIsAfkPopupOpen] = useState(false);
+  const [showReportConfirm, setShowReportConfirm] = useState(false);
   const [afkCountdown, setAfkCountdown] = useState(90);
   const lastActiveRef = React.useRef(Date.now());
   const afkCountdownIntervalRef = React.useRef<any>(null);
@@ -267,7 +268,7 @@ export default function GameRoom({
 
   const handleReport = () => {
     if (!canReport) return;
-    socket?.emit("report_draw");
+    setShowReportConfirm(true);
   };
 
   // --- Block 1: Handle Room Join & Rejoin based on (Re)connection status ---
@@ -1981,6 +1982,57 @@ export default function GameRoom({
             >
               أنا هنا!
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Report Confirmation Modal */}
+      {showReportConfirm && (
+        <div id="report-confirm-overlay" className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div id="report-confirm-card" className="bg-white border-4 border-[#0F3957] text-[#0F3957] p-8 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.4)] text-center relative overflow-visible animate-zoom-in">
+            
+            {/* Header Ribbon / CONFIRM Banner */}
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#1C96FF] border-4 border-[#0F3957] text-white px-8 py-1.5 rounded-2xl shadow-md rotate-[-1.5deg] flex items-center justify-center min-w-[180px] z-10 select-none">
+              <span className="font-mono text-xl sm:text-2xl font-black italic tracking-wider text-white drop-shadow-[0_2px_0_#0F3957] uppercase">
+                CONFIRM
+              </span>
+            </div>
+
+            {/* Big Alert Circle */}
+            <div className="w-24 h-24 rounded-full bg-[#FFC502] border-4 border-[#0F3957] flex items-center justify-center mx-auto mb-5 mt-4 shadow-md relative">
+              <AlertTriangle className="w-14 h-14 text-[#0F3957] fill-[#0F3957]/5 stroke-[3.5]" />
+              {/* Highlight shine on golden coin edge */}
+              <div className="absolute top-1.5 right-2 w-3.5 h-3.5 bg-white/40 rounded-full"></div>
+            </div>
+
+            {/* Content Text */}
+            <h3 id="report-confirm-title" className="text-lg sm:text-xl font-extrabold text-[#0D3855] leading-snug tracking-tight mb-2">
+              Are you sure you wanna report this drawing?
+            </h3>
+            <p id="report-confirm-description-ar" className="text-[#728299] text-xs font-bold mb-6">
+              هل أنت متأكد أنك تريد الإبلاغ عن هذه الرسمة؟
+            </p>
+
+            {/* Confirmation Buttons (NO and YES) styled exactly as requested without icons */}
+            <div className="flex gap-4 w-full">
+              <button
+                id="report-confirm-no-btn"
+                onClick={() => setShowReportConfirm(false)}
+                className="flex-1 py-3 px-6 bg-[#1AAACC] hover:bg-[#1691ae] active:scale-95 transition-all text-white font-extrabold text-lg rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] cursor-pointer flex items-center justify-center uppercase tracking-wide"
+              >
+                NO
+              </button>
+              <button
+                id="report-confirm-yes-btn"
+                onClick={() => {
+                  setShowReportConfirm(false);
+                  socket?.emit("report_draw");
+                }}
+                className="flex-1 py-3 px-6 bg-[#FFC502] hover:bg-[#e2af02] active:scale-95 transition-all text-[#0F3957] font-extrabold text-lg rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] cursor-pointer flex items-center justify-center uppercase tracking-wide"
+              >
+                YES
+              </button>
+            </div>
           </div>
         </div>
       )}

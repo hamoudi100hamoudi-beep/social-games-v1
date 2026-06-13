@@ -36,7 +36,11 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                    `}>
         {slots.map((slot) => {
           const isDrawer = slot.isCurrent;
-          const isCorrectGuesser = !slot.isEmpty && gameState.status === 'DRAWING' && gameState.correctGuessers?.includes(slot.id);
+          const isCorrectGuesser =
+            !slot.isEmpty &&
+            gameState.status === 'DRAWING' &&
+            (gameState.correctGuessers?.includes(slot.id) ||
+             (slot.persistentId ? gameState.correctGuessers?.includes(slot.persistentId) : false));
           
           let bgClass = '';
           let borderClass = 'border-[#94A3B8]'; // Slate-400 for good visibility default
