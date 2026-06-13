@@ -38,6 +38,25 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
 }) => {
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
+  const [isWindowResizing, setIsWindowResizing] = React.useState(false);
+
+  // Detect window resizing (e.g., keyboard slide on mobile, screen scale on desktop)
+  // to avoid layout physics calculations jittering during layout resizing
+  React.useEffect(() => {
+    let timeout: any;
+    const handleResize = () => {
+      setIsWindowResizing(true);
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        setIsWindowResizing(false);
+      }, 400); // 400ms buffer after keyboard resize finishes
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(timeout);
+    };
+  }, []);
 
   // Detect score changes and trigger floating indicator
   React.useEffect(() => {
@@ -95,9 +114,12 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
           }
 
           const slotPopups = activePopups.filter((p) => p.playerId === slot.id);
+          const shouldAnimateLayout = !morphMode && !isWindowResizing;
 
           return (
-            <div 
+            <motion.div 
+              layout={shouldAnimateLayout ? "position" : false}
+              transition={shouldAnimateLayout ? { type: "spring", stiffness: 220, damping: 26, mass: 1 } : undefined}
               key={slot.id} 
               className={`flex items-center p-2 sm:p-4 border-b border-primary-brand/10 h-[65px] sm:h-[80px] shrink-0 transition-all duration-200 relative overflow-visible ${bgClass}`}
             >
@@ -166,7 +188,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                    </motion.div>
                  ))}
                </AnimatePresence>
-            </div>
+            </motion.div>
           );
         })}
     </div>
