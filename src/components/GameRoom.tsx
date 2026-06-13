@@ -1105,9 +1105,9 @@ export default function GameRoom({
                           transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
                           style={{
                             textShadow:
-                              "1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(255,255,255,0.8)",
+                              "1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(0,229,64,0.4)",
                           }}
-                          className="flex items-center justify-center gap-1.5 text-[#10B981] font-bold text-[15px] whitespace-nowrap bg-transparent"
+                          className="flex items-center justify-center gap-1.5 text-[#00E540] font-bold text-[15px] whitespace-nowrap bg-transparent"
                           dir="ltr"
                         >
                           <Check size={16} strokeWidth={4} />
@@ -1143,7 +1143,7 @@ export default function GameRoom({
                       "easeIn",
                     ],
                   }}
-                  className="w-32 h-32 sm:w-40 sm:h-40 bg-[#10B981] rounded-full border-[5px] border-white flex items-center justify-center shadow-[0_10px_40px_rgba(16,185,129,0.5)]"
+                  className="w-32 h-32 sm:w-40 sm:h-40 bg-[#00E540] rounded-full border-[5px] border-white flex items-center justify-center shadow-[0_10px_40px_rgba(0,229,64,0.6)]"
                 >
                   <motion.svg
                     viewBox="0 0 50 50"
@@ -1635,6 +1635,23 @@ export default function GameRoom({
                     const subType = (msg as any).subType || "";
                     const text = msg.text;
 
+                    // Close guess warning
+                    if (subType === "close") {
+                      const displayWord = (msg as any).word || "";
+                      return (
+                        <div
+                          key={msg.id}
+                          className="flex items-center gap-2 text-amber-500 font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                        >
+                          <span className="text-amber-500 font-black shrink-0">⚡</span>
+                          <span dir="auto" className="flex items-center gap-1">
+                            <span className="text-amber-500 font-extrabold">{displayWord}</span>
+                            <span className="text-amber-500/90 font-bold">is close!</span>
+                          </span>
+                        </div>
+                      );
+                    }
+
                     // Drawing report warning log
                     if (subType === "report") {
                       return (
@@ -1681,11 +1698,11 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#10B981] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#00E540] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Check
                             size={14}
-                            className="stroke-[3.5] text-[#10B981] shrink-0"
+                            className="stroke-[3.5] text-[#00E540] shrink-0"
                           />
                           <span dir="auto">{displayText}</span>
                         </div>
@@ -1745,11 +1762,11 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#10B981] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#00E540] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Check
                             size={14}
-                            className="stroke-[3.5] text-[#10B981] shrink-0"
+                            className="stroke-[3.5] text-[#00E540] shrink-0"
                           />
                           <span>Everybody hit the answer!</span>
                         </div>
@@ -1794,10 +1811,10 @@ export default function GameRoom({
                       iconNode = (
                         <Check
                           size={14}
-                          className="stroke-[3.5] text-[#10B981] shrink-0"
+                          className="stroke-[3.5] text-[#00E540] shrink-0"
                         />
                       );
-                      textColor = "#10B981";
+                      textColor = "#00E540";
                     } else if (text.toLowerCase().includes("turn")) {
                       iconNode = (
                         <Pencil size={12} className="shrink-0 text-[#60A5FA]" />

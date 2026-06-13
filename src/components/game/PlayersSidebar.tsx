@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { User as UserIcon, Check, Pencil } from 'lucide-react';
 
 export interface PlayerSlot {
@@ -24,12 +24,45 @@ interface PlayersSidebarProps {
   socketId: string | null;
 }
 
+interface FloatingPoints {
+  id: string;
+  playerId: string;
+  amount: number;
+}
+
 export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   slots,
   gameState,
   morphMode,
   socketId
 }) => {
+  const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
+  const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
+
+  // Detect score changes and trigger floating indicator
+  React.useEffect(() => {
+    slots.forEach((slot) => {
+      if (slot.isEmpty) return;
+      const key = slot.id; // Unique slot visual ID
+      const currentPts = slot.points;
+      const prevPts = prevPointsRef.current[key];
+
+      if (prevPts !== undefined && prevPts !== null && currentPts !== null && currentPts > prevPts) {
+        const diff = currentPts - prevPts;
+        const popupId = `${key}-${Date.now()}-${Math.random()}`;
+
+        setActivePopups((prev) => [...prev, { id: popupId, playerId: key, amount: diff }]);
+
+        setTimeout(() => {
+          setActivePopups((prev) => prev.filter((p) => p.id !== popupId));
+        }, 1500);
+      }
+
+      // Record current score
+      prevPointsRef.current[key] = currentPts;
+    });
+  }, [slots]);
+
   return (
     <div className={`flex flex-col border-r border-primary-brand/20 bg-bg-panel-brand overflow-y-auto overscroll-contain touch-pan-y
                     ${morphMode ? 'col-start-1 col-end-2 row-start-1 row-end-3' : 'col-start-1 col-end-2 row-start-2 row-end-3'}
@@ -43,7 +76,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
              (slot.persistentId ? gameState.correctGuessers?.includes(slot.persistentId) : false));
           
           let bgClass = '';
-          let borderClass = 'border-[#94A3B8]'; // Slate-400 for good visibility default
+          let borderClass = 'border-[#94A3B8]'; // Slate-400 default
           let nameClass = 'text-white';
           let ptsClass = 'text-primary-brand';
 
@@ -53,20 +86,20 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
              nameClass = 'text-primary-brand';
              ptsClass = 'text-primary-brand';
           } else if (isCorrectGuesser) {
-             bgClass = 'bg-[#10B981]/15'; // Greenish bg
-             borderClass = 'border-[#10B981]'; // Green border
-             nameClass = 'text-[#34D399]';
-             ptsClass = 'text-[#34D399]';
+             bgClass = 'bg-[#00E540]/12 border-l-[4px] border-[#00E540]'; // Vibrant Gartic green accent and bg
+             borderClass = 'border-[#00E540]'; 
+             nameClass = 'text-[#00E540]';
+             ptsClass = 'text-[#00E540] font-black';
           } else if (!slot.isEmpty) {
              borderClass = 'border-[#94A3B8]'; // Slate 400 default
           }
 
+          const slotPopups = activePopups.filter((p) => p.playerId === slot.id);
+
           return (
-            <motion.div 
-              layout="position" // Only animate positional changes (reordering) to avoid height morphing delay
-              transition={{ type: "tween", duration: 0.15 }}
+            <div 
               key={slot.id} 
-              className={`flex items-center p-2 sm:p-4 border-b border-primary-brand/10 h-[65px] sm:h-[80px] shrink-0 transition-colors duration-200 ${bgClass}`}
+              className={`flex items-center p-2 sm:p-4 border-b border-primary-brand/10 h-[65px] sm:h-[80px] shrink-0 transition-all duration-200 relative overflow-visible ${bgClass}`}
             >
               {/* Avatar */}
               <div className="relative shrink-0 mr-2 sm:mr-3">
@@ -79,33 +112,61 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                    )}
                  </div>
                  
-                 {/* Role/Status Icon */}
+                 {/* Status/Role Icon badge */}
                  {!slot.isEmpty && isCorrectGuesser && (
-                   <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#10B981] rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-10 transition-transform scale-in animate-scale-in">
-                      <Check size={10} strokeWidth={4} className="text-white" />
-                   </div>
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#00E540] rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-10 transition-all scale-in animate-scale-in">
+                       <Check size={10} strokeWidth={4} className="text-black font-extrabold" />
+                    </div>
                  )}
                  {!slot.isEmpty && isDrawer && !isCorrectGuesser && (
-                   <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-primary-brand rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-10">
-                      <Pencil size={10} strokeWidth={3} className="text-bg-dark-brand" />
-                   </div>
-                 )}
-              </div>
-              
-              {/* Info */}
-              <div className="flex flex-col justify-center overflow-hidden">
-                 <span className={`font-bold flex items-center gap-1 text-[12px] sm:text-[15px] truncate max-w-full transition-colors duration-200
-                   ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
-                   <span className="truncate">{slot.name}</span>
-                   {(slot.wins ?? 0) > 0 && (
-                     <span className="text-yellow-500 scale-110 shrink-0" title={`${slot.wins} Wins`}>🏆 {slot.wins}</span>
-                   )}
-                 </span>
-                 {!slot.isEmpty && (
-                   <span className={`text-[11px] sm:text-[13px] font-bold transition-colors duration-200 ${ptsClass}`}>{slot.points} pts</span>
-                 )}
-              </div>
-            </motion.div>
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-primary-brand rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-10">
+                       <Pencil size={10} strokeWidth={3} className="text-bg-dark-brand" />
+                    </div>
+                  )}
+               </div>
+               
+               {/* Info */}
+               <div className="flex flex-col justify-center overflow-hidden mr-auto pr-8">
+                  <span className={`font-bold flex items-center gap-1 text-[12px] sm:text-[15px] truncate max-w-full transition-colors duration-200
+                    ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
+                    <span className="truncate">{slot.name}</span>
+                    {(slot.wins ?? 0) > 0 && (
+                      <span className="text-yellow-500 scale-110 shrink-0" title={`${slot.wins} Wins`}>🏆 {slot.wins}</span>
+                    )}
+                  </span>
+                  {!slot.isEmpty && (
+                    <span className={`text-[11px] sm:text-[13px] font-bold transition-colors duration-200 ${ptsClass}`}>{slot.points} pts</span>
+                  )}
+               </div>
+
+               {/* Bouncy floating score popups */}
+               <AnimatePresence>
+                 {slotPopups.map((popup) => (
+                   <motion.div
+                     key={popup.id}
+                     initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                     animate={{ opacity: 1, scale: 1.05, y: -10 }}
+                     exit={{ opacity: 0, scale: 0.8, y: -22 }}
+                     transition={{
+                       duration: 1.2,
+                       ease: [0.175, 0.885, 0.32, 1.255]
+                     }}
+                     style={{
+                       textShadow: `
+                         1px 1px 0px #000, 
+                         -1px -1px 0px #000, 
+                         1px -1px 0px #000, 
+                         -1px 1px 0px #000,
+                         0px 2px 4px rgba(0, 229, 64, 0.5)
+                       `
+                     }}
+                     className="absolute right-4 text-[#00E540] font-black italic text-xs sm:text-sm select-none pointer-events-none z-20"
+                   >
+                     <span>+{popup.amount}</span>
+                   </motion.div>
+                 ))}
+               </AnimatePresence>
+            </div>
           );
         })}
     </div>
