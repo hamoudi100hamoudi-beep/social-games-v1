@@ -38,6 +38,19 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
 }) => {
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
+  const prevRanksRef = React.useRef<{ [key: string]: number }>({});
+
+  // Create a stable-sorted copy for rendering so DOM elements never re-order or mount/unmount mid-transition
+  const stableSlots = React.useMemo(() => {
+    return [...slots].sort((a, b) => a.id.localeCompare(b.id));
+  }, [slots]);
+
+  // Record previous ranks after rendering
+  React.useEffect(() => {
+    slots.forEach((slot, index) => {
+      prevRanksRef.current[slot.id] = index;
+    });
+  }, [slots]);
 
   // Detect score changes and trigger floating indicator
   React.useEffect(() => {
@@ -99,7 +112,8 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
         </div>
 
         {/* Real-time moving active and empty cards */}
-        {slots.map((slot, index) => {
+        {stableSlots.map((slot) => {
+          const rankIndex = slots.findIndex((s) => s.id === slot.id);
           const isDrawer = slot.isCurrent;
           const isCorrectGuesser =
             !slot.isEmpty &&
@@ -128,15 +142,27 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
 
           const slotPopups = activePopups.filter((p) => p.playerId === slot.id);
 
+          // Get previous rank for z-index calculation (upward transitions overlap downward transitions)
+          const prevRank = prevRanksRef.current[slot.id];
+          let zIndex = 10;
+          if (prevRank !== undefined) {
+            if (rankIndex < prevRank) {
+              zIndex = 25; // Moving UP -> higher priority to stand out on top
+            } else if (rankIndex > prevRank) {
+              zIndex = 5;  // Moving DOWN -> lower priority to slide underneath the rising player
+            }
+          }
+
           return (
             <div 
               key={slot.id} 
               style={{
-                top: `calc(var(--row-height) * ${index})`,
+                top: `calc(var(--row-height) * ${rankIndex})`,
                 height: 'var(--row-height)',
                 transition: 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease',
+                zIndex: zIndex,
               }}
-              className={`absolute inset-x-0 flex items-center p-2 sm:p-4 overflow-visible z-10 ${bgClass}`}
+              className={`absolute inset-x-0 flex items-center p-2 sm:p-4 overflow-visible ${bgClass}`}
             >
               {/* Avatar */}
               <div className="relative shrink-0 mr-2 sm:mr-3">
