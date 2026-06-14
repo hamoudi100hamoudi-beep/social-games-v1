@@ -22,6 +22,7 @@ interface PlayersSidebarProps {
   };
   morphMode: boolean;
   socketId: string | null;
+  onPlayerClick?: (player: PlayerSlot) => void;
 }
 
 interface FloatingPoints {
@@ -34,7 +35,8 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   slots,
   gameState,
   morphMode,
-  socketId
+  socketId,
+  onPlayerClick
 }) => {
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
@@ -162,7 +164,12 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                 transition: 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease',
                 zIndex: zIndex,
               }}
-              className={`absolute inset-x-0 flex items-center p-2 sm:p-4 overflow-visible ${bgClass}`}
+              className={`absolute inset-x-0 flex items-center p-2 sm:p-4 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''}`}
+              onClick={() => {
+                if (!slot.isEmpty && onPlayerClick) {
+                  onPlayerClick(slot);
+                }
+              }}
             >
               {/* Avatar */}
               <div className="relative shrink-0 mr-2 sm:mr-3">

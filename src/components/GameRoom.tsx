@@ -14,6 +14,8 @@ import {
   Check,
   Clock,
   WifiOff,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { useSocket } from "./SocketProvider";
 import { motion, AnimatePresence } from "motion/react";
@@ -208,6 +210,74 @@ export default function GameRoom({
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
 
+  const [selectedProfilePlayer, setSelectedProfilePlayer] = useState<any>(null);
+  const [blockedUsers, setBlockedUsers] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem("gartic_blocked_users");
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("gartic_blocked_users", JSON.stringify(blockedUsers));
+    }
+  }, [blockedUsers]);
+
+  const [votekicks, setVotekicks] = useState<Record<string, string[]>>({});
+  const [isBanned, setIsBanned] = useState(false);
+  const [showCooldownWarning, setShowCooldownWarning] = useState(false);
+  const lastVoteKickTimeRef = React.useRef<number>(0);
+
+  const handleToggleVoteKick = () => {
+    if (!selectedProfilePlayer) return;
+    const targetPlayerId = selectedProfilePlayer.persistentId || selectedProfilePlayer.id;
+    const isRemove = (votekicks[targetPlayerId] || []).includes(persistentPlayerId);
+
+    if (!isRemove) {
+      const timeSinceLastVote = Date.now() - lastVoteKickTimeRef.current;
+      if (timeSinceLastVote < 60000) {
+        setShowCooldownWarning(true);
+        return;
+      }
+    }
+
+    socket?.emit("submit_vote_kick", { targetPlayerId }, (res: any) => {
+      if (res.success) {
+        if (!isRemove) {
+          lastVoteKickTimeRef.current = Date.now();
+        }
+      } else {
+        console.error("Votekick error:", res.error);
+      }
+    });
+  };
+
+  const handleToggleBlock = () => {
+    if (!selectedProfilePlayer) return;
+    const targetId = selectedProfilePlayer.persistentId || selectedProfilePlayer.id;
+    setBlockedUsers((prev) => {
+      if (prev.includes(targetId)) {
+        return prev.filter(id => id !== targetId);
+      } else {
+        return [...prev, targetId];
+      }
+    });
+  };
+
+  const filteredChatMessages = React.useMemo(() => {
+    return chatMessages.filter(msg => {
+      if (!msg.senderId) return true;
+      const senderPlayer = currentPlayers.find(p => p.id === msg.senderId);
+      const pId = senderPlayer?.persistentId;
+      const isBlocked = blockedUsers.includes(msg.senderId) || (pId && blockedUsers.includes(pId));
+      return !isBlocked;
+    });
+  }, [chatMessages, blockedUsers, currentPlayers]);
+
   // Auto-dismiss the room loading screen once player state and canvas draw-history have finished syncing
   useEffect(() => {
     if (currentPlayers.length > 0 && !isCanvasSyncing) {
@@ -400,8 +470,12 @@ export default function GameRoom({
     const onRoomStateUpdate = (state: {
       roomId: string;
       players: any[];
+      votekicks?: any;
       gameState: any;
     }) => {
+      if (state.votekicks) {
+        setVotekicks(state.votekicks);
+      }
       const isActiveRound =
         state.gameState?.status === "DRAWING" ||
         state.gameState?.status === "CHOOSING";
@@ -516,11 +590,17 @@ export default function GameRoom({
       onLeave?.();
     };
 
+    const onBannedFromRoom = () => {
+      console.warn("[GameRoom] You are banned/kicked from the room by other users.");
+      setIsBanned(true);
+    };
+
     socket.on("room_state_update", onRoomStateUpdate);
     socket.on("receive_message", onReceiveMessage);
     socket.on("receive_guess", onReceiveGuess);
     socket.on("timer_tick", onTimerTick);
     socket.on("session_expired", onSessionExpired);
+    socket.on("banned_from_room", onBannedFromRoom);
 
     return () => {
       socket.off("room_state_update", onRoomStateUpdate);
@@ -528,6 +608,7 @@ export default function GameRoom({
       socket.off("receive_guess", onReceiveGuess);
       socket.off("timer_tick", onTimerTick);
       socket.off("session_expired", onSessionExpired);
+      socket.off("banned_from_room", onBannedFromRoom);
     };
   }, [socket]);
 
@@ -1573,6 +1654,7 @@ export default function GameRoom({
           gameState={gameState}
           morphMode={morphMode}
           socketId={socketId}
+          onPlayerClick={setSelectedProfilePlayer}
         />
 
         {/* Right: Actions & Guess Input */}
@@ -1944,7 +2026,7 @@ export default function GameRoom({
         viewportOffsetTop={viewportOffsetTop}
         lockedHeight={lockedHeight}
         closeChat={closeChat}
-        chatMessages={chatMessages}
+        chatMessages={filteredChatMessages}
         socketId={socketId}
         chatInput={chatInput}
         setChatInput={setChatInput}
@@ -2130,6 +2212,178 @@ export default function GameRoom({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Profile Modal */}
+      {selectedProfilePlayer && (() => {
+        const isSelf = selectedProfilePlayer.persistentId === persistentPlayerId || selectedProfilePlayer.id === socket?.id;
+        const targetId = selectedProfilePlayer.persistentId || selectedProfilePlayer.id;
+        const votesList = votekicks[targetId] || [];
+        const alreadyVoted = votesList.includes(persistentPlayerId);
+        const isBlocked = blockedUsers.includes(targetId);
+
+        return (
+          <div id="profile-modal-overlay" className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+            <div id="profile-modal-card" className="bg-white border-4 border-[#0F3957] text-[#0F3957] p-8 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.4)] text-center relative overflow-visible animate-zoom-in">
+              
+              {/* Close Button */}
+              <button 
+                id="profile-modal-close-btn"
+                onClick={() => setSelectedProfilePlayer(null)} 
+                className="absolute top-4 right-4 text-[#728299] hover:text-[#0F3957] transition-all cursor-pointer active:scale-90"
+              >
+                <X className="w-6 h-6 stroke-[3]" />
+              </button>
+
+              {/* Header Ribbon / PROFILE Banner */}
+              <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#1C96FF] border-4 border-[#0F3957] text-white px-8 py-1.5 rounded-2xl shadow-md rotate-[-1.5deg] flex items-center justify-center min-w-[180px] z-10 select-none">
+                <span className="font-mono text-xl sm:text-2xl font-black italic tracking-wider text-white drop-shadow-[0_2px_0_#0F3957] uppercase">
+                  PROFILE
+                </span>
+              </div>
+
+              {/* Avatar Emoji Frame */}
+              <div className="w-24 h-24 rounded-full bg-[#E5EDF4] border-4 border-[#0F3957] flex items-center justify-center mx-auto mb-3 mt-4 shadow-md relative">
+                <span className="text-5xl">{selectedProfilePlayer.avatar || "👤"}</span>
+                <div className="absolute top-1.5 right-2 w-3.5 h-3.5 bg-white/40 rounded-full"></div>
+              </div>
+
+              {/* Player Name */}
+              <h3 id="profile-modal-name" className="text-xl sm:text-2xl font-extrabold text-[#0D3855] leading-snug tracking-tight mb-1">
+                {selectedProfilePlayer.name}
+              </h3>
+              
+              <p id="profile-modal-score" className="text-[#728299] text-xs font-bold mb-6 uppercase tracking-wider">
+                Score: {selectedProfilePlayer.points || 0} Points • Wins: {selectedProfilePlayer.wins || 0}
+              </p>
+
+              {isSelf ? (
+                <div className="py-3 px-4 bg-[#F2F6FA] rounded-2xl border-2 border-dashed border-[#CCD6E0] text-center text-[#728299] font-bold text-sm">
+                  هذا هو حسابك الشخصي
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3.5 w-full">
+                  {/* Votekick Action Button */}
+                  <button
+                    id="profile-modal-kick-btn"
+                    onClick={() => {
+                      handleToggleVoteKick();
+                      setSelectedProfilePlayer(null);
+                    }}
+                    className={`w-full py-3.5 px-6 text-[#0F3957] font-extrabold text-[#24174D] text-base rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2 ${
+                      alreadyVoted 
+                        ? "bg-[#FFC502] hover:bg-[#e2af02]" 
+                        : "bg-[#FF3E3E] text-white hover:brightness-95"
+                    }`}
+                  >
+                    <UserIcon className="w-4 h-4 stroke-[3]" />
+                    {alreadyVoted ? `REMOVE VOTE (${votesList.length})` : "VOTEKICK"}
+                  </button>
+
+                  {/* Block / Unblock Action Button */}
+                  <button
+                    id="profile-modal-block-btn"
+                    onClick={() => {
+                      handleToggleBlock();
+                      setSelectedProfilePlayer(null);
+                    }}
+                    className={`w-full py-3.5 px-6 text-white font-extrabold text-base rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2 ${
+                      isBlocked 
+                        ? "bg-[#1AAACC]" 
+                        : "bg-[#728299]"
+                    }`}
+                  >
+                    {isBlocked ? <Eye className="w-4 h-4 stroke-[3]" /> : <EyeOff className="w-4 h-4 stroke-[3]" />}
+                    {isBlocked ? "UNBLOCK CHAT" : "BLOCK CHAT"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Cooldown Warning Modal */}
+      {showCooldownWarning && (
+        <div id="cooldown-warning-overlay" className="fixed inset-0 z-[320] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div id="cooldown-warning-card" className="bg-white border-4 border-[#0F3957] text-[#0F3957] p-8 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.4)] text-center relative overflow-visible animate-zoom-in">
+            
+            {/* Header Ribbon / WARNING Banner */}
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#FFC502] border-4 border-[#0F3957] text-[#0F3957] px-8 py-1.5 rounded-2xl shadow-md rotate-[-1.5deg] flex items-center justify-center min-w-[180px] z-10 select-none">
+              <span className="font-mono text-xl sm:text-2xl font-black italic tracking-wider drop-shadow-[0_1.5px_0_white] uppercase">
+                SLOW DOWN
+              </span>
+            </div>
+
+            {/* Warning Icon */}
+            <div className="w-24 h-24 rounded-full bg-[#FF3E3E]/10 border-4 border-[#0F3957] flex items-center justify-center mx-auto mb-5 mt-4 shadow-md relative animate-pulse">
+              <AlertTriangle className="w-14 h-14 text-[#FF3E3E] stroke-[3.5]" />
+              <div className="absolute top-1.5 right-2 w-3.5 h-3.5 bg-white/40 rounded-full"></div>
+            </div>
+
+            {/* Alert Message */}
+            <h3 id="cooldown-warning-title" className="text-lg sm:text-xl font-extrabold text-[#0D3855] leading-snug tracking-tight mb-2">
+              You voted recently. Please, wait to votekick again
+            </h3>
+            <p id="cooldown-warning-ar" className="text-[#728299] text-xs font-bold mb-6">
+              لقد قمت بالتصويت مؤخراً. يرجى الانتظار للمحاولة مرة أخرى.
+            </p>
+
+            {/* OK Button */}
+            <button
+              id="cooldown-warning-ok-btn"
+              onClick={() => setShowCooldownWarning(false)}
+              className="w-full py-3 px-6 bg-[#1AAACC] hover:bg-[#1691ae] active:scale-95 transition-all text-white font-extrabold text-lg rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] cursor-pointer flex items-center justify-center uppercase tracking-wide"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Kicked Out / Hard Block Screen */}
+      {isBanned && (
+        <div id="kicked-out-overlay" className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-[#140C30] text-white select-none touch-none animate-fade-in">
+          <div id="kicked-out-card" className="bg-[#1C123F] border-4 border-[#FF3E3E] text-white p-8 sm:p-10 rounded-[40px] max-w-md w-full shadow-[0_20px_50px_rgba(0,0,0,0.6)] text-center relative overflow-visible flex flex flex-col items-center">
+            
+            {/* Header Red Ribbon */}
+            <div className="absolute -top-7 bg-[#FF3E3E] border-4 border-[#0F3957] text-white px-8 py-2 rounded-2xl shadow-lg rotate-[-1deg] flex items-center justify-center min-w-[200px] z-10">
+              <span className="font-mono text-2xl sm:text-3xl font-black italic tracking-wider text-white drop-shadow-[0_2px_0_#0F3957] uppercase">
+                KICKED OUT
+              </span>
+            </div>
+
+            {/* Massive Alert Circle */}
+            <div className="w-28 h-28 rounded-full bg-[#FF3E3E]/20 border-4 border-[#FF3E3E] flex items-center justify-center mb-6 mt-6 shadow-xl relative animate-bounce">
+              <AlertTriangle className="w-16 h-16 text-[#FF3E3E] stroke-[3]" />
+              <div className="absolute top-2.5 right-3.5 w-4 h-4 bg-white/30 rounded-full"></div>
+            </div>
+
+            <h2 id="kicked-out-title" className="text-2xl sm:text-3xl font-black tracking-tight mb-2 text-[#FFE6E6]">
+              YOU'VE BEEN KICKED OUT
+            </h2>
+            <p id="kicked-out-desc" className="text-white/70 text-sm font-medium mb-1">
+              You were kicked out of this room by other players' votes.
+            </p>
+            <p id="kicked-out-desc-ar" className="text-red-300 text-xs font-bold mb-8">
+              تم طردك من هذه الغرفة بناءً على تصويت اللاعبين الآخرين.
+            </p>
+
+            {/* Exit/OK Button */}
+            <button
+              id="kicked-out-exit-btn"
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  localStorage.removeItem("gartic_player_room");
+                }
+                onLeave?.();
+              }}
+              className="w-full py-4 px-8 bg-[#FFC502] hover:bg-[#e2af02] active:scale-95 transition-all text-[#0D3855] font-black text-xl rounded-full border-4 border-[#0D3855] shadow-[0_5px_0_#0D3855] cursor-pointer flex items-center justify-center uppercase tracking-wider"
+            >
+              EXIT ROOM
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

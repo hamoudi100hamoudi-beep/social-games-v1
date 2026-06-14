@@ -128,6 +128,20 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
     );
   }
 
+  if (msg.type === 'votekick_alert') {
+    return (
+      <div className="flex justify-center mb-2">
+        <div 
+          className="bg-red-500/15 text-red-500 border border-red-500/30 px-4 py-1.5 rounded-full text-xs font-bold shadow-md backdrop-blur-md animate-in fade-in zoom-in-95 duration-200"
+          dir="auto"
+          style={{ unicodeBidi: 'plaintext' }}
+        >
+          {msg.text}
+        </div>
+      </div>
+    );
+  }
+
   if (msg.isSelf) {
     return (
       <div className="flex justify-end items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none">

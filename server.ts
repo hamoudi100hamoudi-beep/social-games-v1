@@ -59,6 +59,13 @@ async function startServer() {
 
     socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly }, callback) => {
       try {
+        const checkRoom = roomManager.getRoom(roomId);
+        if (checkRoom && checkRoom.bannedUsers && playerId && checkRoom.bannedUsers.includes(playerId)) {
+          console.log(`[Ban Filter] Blocked join/reconnect for banned player ID: ${playerId} in room: ${roomId}`);
+          if (callback) callback({ error: 'banned', success: false });
+          return;
+        }
+
         const reconnectedRoom = roomManager.reconnectPlayer(roomId, playerId || '', nickname, socket.id);
         if (reconnectedRoom) {
             socket.join(roomId);
@@ -264,6 +271,141 @@ async function startServer() {
       } catch (e) {
         console.error("Error in request_kick event:", e);
         if (callback) callback({ error: e instanceof Error ? e.message : String(e) });
+      }
+    });
+
+    socket.on('submit_vote_kick', ({ targetPlayerId }, callback) => {
+      try {
+        const player = roomManager.getPlayer(socket.id);
+        if (!player || !player.roomId) {
+          if (callback) callback({ error: 'player_not_found' });
+          return;
+        }
+
+        const roomId = player.roomId;
+        const room = roomManager.getRoom(roomId);
+        if (!room) {
+          if (callback) callback({ error: 'room_not_found' });
+          return;
+        }
+
+        const targetPlayer = room.players.find(p => p.persistentId === targetPlayerId);
+        if (!targetPlayer) {
+          if (callback) callback({ error: 'target_not_found' });
+          return;
+        }
+
+        if (!room.votekicks) room.votekicks = {};
+        if (!room.bannedUsers) room.bannedUsers = [];
+
+        const voters = room.votekicks[targetPlayerId] || [];
+        const selfId = player.persistentId || player.id;
+        const alreadyVoted = voters.includes(selfId);
+
+        // Get total active (not offline) players in the room representing the room's quorum
+        const onlineCount = room.players.filter(p => !p.isOffline).length;
+
+        // VOTE KICK CRITERIA (Variable Room Quorum):
+        // - 5 players or less -> needs 2 votes.
+        // - 6 players -> needs 3 votes.
+        // - 7 or 8 players -> needs 4 votes.
+        // - 9 or 10 players -> needs 5 votes.
+        let requiredVotes = 2;
+        if (onlineCount <= 5) {
+          requiredVotes = 2;
+        } else if (onlineCount === 6) {
+          requiredVotes = 3;
+        } else if (onlineCount <= 8) {
+          requiredVotes = 4;
+        } else {
+          requiredVotes = 5;
+        }
+
+        if (alreadyVoted) {
+          // Remove vote action
+          const updatedVoters = voters.filter(vId => vId !== selfId);
+          room.votekicks[targetPlayerId] = updatedVoters;
+          const currentCount = updatedVoters.length;
+
+          if (callback) callback({ success: true, voted: false, count: currentCount, required: requiredVotes });
+
+          // Send system notification that vote was removed
+          const removeAnnounceMsg = {
+            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            text: `${player.name} ألغى تصويته ضد ${targetPlayer.name} (${currentCount}/${requiredVotes})`,
+            type: 'votekick_alert'
+          };
+          roomManager.saveChatMessage(roomId, removeAnnounceMsg);
+          io.to(roomId).emit('receive_message', removeAnnounceMsg);
+
+          // Update state visually
+          roomManager.sendStateToPlayer(room, player);
+          roomManager.sendStateToPlayer(room, targetPlayer);
+          // Broadcast to all
+          room.players.forEach(p => {
+            roomManager.sendStateToPlayer(room, p);
+          });
+          return;
+        }
+
+        // Add vote action
+        voters.push(selfId);
+        room.votekicks[targetPlayerId] = voters;
+        const currentCount = voters.length;
+
+        // Visual Chat alert styled dynamic
+        const announceMsg = {
+          id: 'votekick-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+          text: `${player.name} voted للـ kick ضد ${targetPlayer.name} (${currentCount}/${requiredVotes})`,
+          type: 'votekick_alert'
+        };
+        roomManager.saveChatMessage(roomId, announceMsg);
+        io.to(roomId).emit('receive_message', announceMsg);
+
+        if (currentCount >= requiredVotes) {
+          // BANDECISION REACHED! Add target user persistentId/playerId to banned list
+          const banId = targetPlayer.persistentId || targetPlayer.id;
+          if (!room.bannedUsers.includes(banId)) {
+            room.bannedUsers.push(banId);
+          }
+
+          // Emit banned to the target player so their client is locked out instantly
+          io.to(targetPlayer.id).emit('banned_from_room');
+
+          // Clean vote mapping for this target user
+          delete room.votekicks[targetPlayerId];
+
+          // Disconnect client socket
+          const socketToKick = io.sockets.sockets.get(targetPlayer.id);
+          if (socketToKick) {
+             socketToKick.leave(roomId);
+             socketToKick.emit('banned_from_room');
+          }
+
+          // Evict from room state
+          const kickedName = targetPlayer.name;
+          const targetSocketId = targetPlayer.id;
+          roomManager.removePlayerFromRoom(roomId, targetSocketId);
+          roomManager.removePlayer(targetSocketId);
+
+          const kickedAnnounce = {
+            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            text: `تم طرد ${kickedName} عن طريق التصويت!`,
+            type: 'system'
+          };
+          roomManager.saveChatMessage(roomId, kickedAnnounce);
+          io.to(roomId).emit('receive_message', kickedAnnounce);
+        }
+
+        // Update all players
+        room.players.forEach(p => {
+          roomManager.sendStateToPlayer(room, p);
+        });
+
+        if (callback) callback({ success: true, voted: true, count: currentCount, required: requiredVotes });
+      } catch (e) {
+        console.error("Error in submit_vote_kick event:", e);
+        if (callback) callback({ error: String(e) });
       }
     });
 

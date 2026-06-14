@@ -36,4 +36,6 @@ export interface Room {
   chatMessages?: any[];
   guessMessages?: any[];
   turnStartScores?: Record<string, number>; // Backup of scores to roll back on report/cancellation
+  bannedUsers?: string[];
+  votekicks?: Record<string, string[]>;
 }

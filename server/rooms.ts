@@ -962,6 +962,7 @@ class RoomManager {
       this.io.to(p.id).emit("room_state_update", {
         roomId: room.id,
         players: room.players,
+        votekicks: room.votekicks || {},
         gameState: {
           ...publicGameState,
           currentWord: isDrawer ? room.gameState.currentWord : null,
@@ -999,6 +1000,8 @@ class RoomManager {
         usedWords: [],
         chatMessages: [],
         guessMessages: [],
+        bannedUsers: [],
+        votekicks: {},
       });
     }
     return this.rooms.get(roomId)!;
