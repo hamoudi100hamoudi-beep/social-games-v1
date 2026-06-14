@@ -101,9 +101,10 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   if (msg.type === 'system') {
     const text = msg.text || '';
     const isJoin = text.includes('انضم للغرفة') || text.toLowerCase().includes('joined');
-    const isLeave = text.includes('غادر الغرفة') || text.toLowerCase().includes('left');
+    const isLeave = text.includes('غادر الغرفة') || text.toLowerCase().includes('left') || text.includes('خرج');
+    const isKick = text.includes('طرد') || text.toLowerCase().includes('kick') || text.toLowerCase().includes('banned');
 
-    if (!isJoin && !isLeave) {
+    if (!isJoin && !isLeave && !isKick) {
       return null;
     }
 
@@ -115,14 +116,30 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
         displayText = "You've skipped the turn";
     }
 
+    if (isKick) {
+      return (
+        <div className="flex justify-center mb-2">
+          <div 
+            className="bg-red-500/10 text-[#FF4D4D] border border-[#FF4D4D]/20 px-4 py-1.5 rounded-full text-xs font-semibold shadow-sm backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 flex items-center justify-center gap-1.5"
+            dir="auto"
+            style={{ unicodeBidi: 'plaintext' }}
+          >
+            <span>⚠</span>
+            <span>{displayText}</span>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex justify-center mb-2">
         <div 
-          className="bg-primary-brand/20 text-primary-brand px-4 py-1.5 rounded-full text-xs font-bold shadow-sm backdrop-blur-md"
+          className="bg-primary-brand/10 text-primary-brand border border-primary-brand/20 px-4 py-1.5 rounded-full text-xs font-semibold shadow-sm backdrop-blur-md flex items-center justify-center gap-1.5 animate-in fade-in duration-250"
           dir="auto"
           style={{ unicodeBidi: 'plaintext' }}
         >
-          {displayText}
+          <span>ⓘ</span>
+          <span>{displayText}</span>
         </div>
       </div>
     );
@@ -132,11 +149,12 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
     return (
       <div className="flex justify-center mb-2">
         <div 
-          className="bg-red-500/15 text-red-500 border border-red-500/30 px-4 py-1.5 rounded-full text-xs font-bold shadow-md backdrop-blur-md animate-in fade-in zoom-in-95 duration-200"
+          className="bg-red-500/10 text-[#FF4D4D] border border-[#FF4D4D]/20 px-4 py-1.5 rounded-full text-xs font-semibold shadow-sm backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 flex items-center justify-center gap-1.5"
           dir="auto"
           style={{ unicodeBidi: 'plaintext' }}
         >
-          {msg.text}
+          <span>⚠</span>
+          <span>{msg.text}</span>
         </div>
       </div>
     );

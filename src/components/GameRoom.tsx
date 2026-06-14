@@ -238,7 +238,9 @@ export default function GameRoom({
     const isRemove = (votekicks[targetPlayerId] || []).includes(persistentPlayerId);
 
     if (!isRemove) {
-      const timeSinceLastVote = Date.now() - lastVoteKickTimeRef.current;
+      const lastVoteStr = typeof window !== "undefined" ? localStorage.getItem("gartic_last_votekick_time") : null;
+      const lastVoteTime = lastVoteStr ? parseInt(lastVoteStr, 10) : 0;
+      const timeSinceLastVote = Date.now() - lastVoteTime;
       if (timeSinceLastVote < 60000) {
         setShowCooldownWarning(true);
         return;
@@ -248,7 +250,11 @@ export default function GameRoom({
     socket?.emit("submit_vote_kick", { targetPlayerId }, (res: any) => {
       if (res.success) {
         if (!isRemove) {
-          lastVoteKickTimeRef.current = Date.now();
+          if (typeof window !== "undefined") {
+            const now = Date.now();
+            localStorage.setItem("gartic_last_votekick_time", now.toString());
+            lastVoteKickTimeRef.current = now;
+          }
         }
       } else {
         console.error("Votekick error:", res.error);
@@ -382,6 +388,10 @@ export default function GameRoom({
               localStorage.removeItem("gartic_player_room");
             }
             onLeave?.();
+          } else if (res && res.error === "banned") {
+            console.warn("[GameRoom] Rejoin blocked: Player is banned from room.");
+            setIsBanned(true);
+            setIsInitialLoadingRoom(false);
           }
         },
       );
@@ -593,6 +603,7 @@ export default function GameRoom({
     const onBannedFromRoom = () => {
       console.warn("[GameRoom] You are banned/kicked from the room by other users.");
       setIsBanned(true);
+      setIsInitialLoadingRoom(false);
     };
 
     socket.on("room_state_update", onRoomStateUpdate);
@@ -2342,33 +2353,32 @@ export default function GameRoom({
 
       {/* Kicked Out / Hard Block Screen */}
       {isBanned && (
-        <div id="kicked-out-overlay" className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-[#140C30] text-white select-none touch-none animate-fade-in">
-          <div id="kicked-out-card" className="bg-[#1C123F] border-4 border-[#FF3E3E] text-white p-8 sm:p-10 rounded-[40px] max-w-md w-full shadow-[0_20px_50px_rgba(0,0,0,0.6)] text-center relative overflow-visible flex flex flex-col items-center">
+        <div id="kicked-out-overlay" className="fixed inset-0 z-[9999999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm select-none touch-none animate-fade-in" style={{ pointerEvents: "auto" }}>
+          <div id="kicked-out-card" className="bg-white border-[6px] border-[#0D3855] text-[#0D3855] p-8 sm:p-10 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.55)] text-center relative overflow-visible flex flex flex-col items-center animate-zoom-in">
             
-            {/* Header Red Ribbon */}
-            <div className="absolute -top-7 bg-[#FF3E3E] border-4 border-[#0F3957] text-white px-8 py-2 rounded-2xl shadow-lg rotate-[-1deg] flex items-center justify-center min-w-[200px] z-10">
-              <span className="font-mono text-2xl sm:text-3xl font-black italic tracking-wider text-white drop-shadow-[0_2px_0_#0F3957] uppercase">
+            {/* Header Ribbon / KICKED OUT Banner matching Gartic */}
+            <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#0084FF] border-[5px] border-[#0D3855] text-white px-8 py-2 rounded-2xl shadow-md rotate-[-1deg] flex items-center justify-center min-w-[210px] z-10 select-none">
+              <div className="absolute -left-3.5 top-2.5 w-3.5 h-6 bg-[#005EC0] border-t-[4px] border-b-[4px] border-l-[4px] border-[#0D3855] rounded-l-md -z-10" />
+              <div className="absolute -right-3.5 top-2.5 w-3.5 h-6 bg-[#005EC0] border-t-[4px] border-b-[4px] border-r-[4px] border-[#0D3855] rounded-r-md -z-10" />
+              <span className="font-mono text-2xl font-black tracking-wider text-white drop-shadow-[0_2px_0_#0D3855] uppercase italic font-black">
                 KICKED OUT
               </span>
             </div>
 
-            {/* Massive Alert Circle */}
-            <div className="w-28 h-28 rounded-full bg-[#FF3E3E]/20 border-4 border-[#FF3E3E] flex items-center justify-center mb-6 mt-6 shadow-xl relative animate-bounce">
-              <AlertTriangle className="w-16 h-16 text-[#FF3E3E] stroke-[3]" />
-              <div className="absolute top-2.5 right-3.5 w-4 h-4 bg-white/30 rounded-full"></div>
+            {/* Gartic Style Yellow Warning Circle */}
+            <div className="w-32 h-32 rounded-full bg-[#FFC502] border-[6px] border-[#0D3855] flex items-center justify-center mb-6 mt-6 shadow-md relative text-[#0D3855]">
+              <AlertTriangle className="w-16 h-16 text-[#0D3855] stroke-[3]" />
+              <div className="absolute top-2 right-2.5 w-4 h-4 bg-white/30 rounded-full"></div>
             </div>
 
-            <h2 id="kicked-out-title" className="text-2xl sm:text-3xl font-black tracking-tight mb-2 text-[#FFE6E6]">
-              YOU'VE BEEN KICKED OUT
-            </h2>
-            <p id="kicked-out-desc" className="text-white/70 text-sm font-medium mb-1">
-              You were kicked out of this room by other players' votes.
+            <p id="kicked-out-desc" className="text-[#728299] text-lg sm:text-xl font-black leading-snug mb-2 max-w-[280px]">
+              You were kicked out by voting
             </p>
-            <p id="kicked-out-desc-ar" className="text-red-300 text-xs font-bold mb-8">
+            <p id="kicked-out-desc-ar" className="text-[#A2B2C9] text-xs font-bold mb-8">
               تم طردك من هذه الغرفة بناءً على تصويت اللاعبين الآخرين.
             </p>
 
-            {/* Exit/OK Button */}
+            {/* Exit/OK Button with check symbol in badge */}
             <button
               id="kicked-out-exit-btn"
               onClick={() => {
@@ -2377,9 +2387,12 @@ export default function GameRoom({
                 }
                 onLeave?.();
               }}
-              className="w-full py-4 px-8 bg-[#FFC502] hover:bg-[#e2af02] active:scale-95 transition-all text-[#0D3855] font-black text-xl rounded-full border-4 border-[#0D3855] shadow-[0_5px_0_#0D3855] cursor-pointer flex items-center justify-center uppercase tracking-wider"
+              className="w-full max-w-[240px] py-2.5 px-6 bg-[#FFC502] hover:bg-[#e2af02] active:translate-y-1 active:shadow-none transition-all text-[#0D3855] font-black text-xl rounded-full border-[5px] border-[#0D3855] shadow-[0_4px_0_#0D3855] cursor-pointer flex items-center justify-center gap-2 uppercase tracking-wide"
             >
-              EXIT ROOM
+              <div className="bg-[#FFC502] border-2 border-[#0D3855] w-6 h-6 rounded-md flex items-center justify-center">
+                <Check className="w-4 h-4 stroke-[4] text-[#0D3855]" />
+              </div>
+              OK
             </button>
           </div>
         </div>

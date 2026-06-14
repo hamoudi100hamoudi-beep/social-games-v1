@@ -60,10 +60,16 @@ async function startServer() {
     socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly }, callback) => {
       try {
         const checkRoom = roomManager.getRoom(roomId);
-        if (checkRoom && checkRoom.bannedUsers && playerId && checkRoom.bannedUsers.includes(playerId)) {
-          console.log(`[Ban Filter] Blocked join/reconnect for banned player ID: ${playerId} in room: ${roomId}`);
-          if (callback) callback({ error: 'banned', success: false });
-          return;
+        if (checkRoom) {
+          if (!checkRoom.bannedUsers) checkRoom.bannedUsers = [];
+          if (!checkRoom.votekicks) checkRoom.votekicks = {};
+          
+          const isUserBanned = (playerId && checkRoom.bannedUsers.includes(playerId)) || checkRoom.bannedUsers.includes(socket.id);
+          if (isUserBanned) {
+            console.log(`[Ban Filter] Blocked join/reconnect for banned player ID: ${playerId || socket.id} in room: ${roomId}`);
+            if (callback) callback({ error: 'banned', success: false });
+            return;
+          }
         }
 
         const reconnectedRoom = roomManager.reconnectPlayer(roomId, playerId || '', nickname, socket.id);
@@ -329,15 +335,6 @@ async function startServer() {
 
           if (callback) callback({ success: true, voted: false, count: currentCount, required: requiredVotes });
 
-          // Send system notification that vote was removed
-          const removeAnnounceMsg = {
-            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-            text: `${player.name} ألغى تصويته ضد ${targetPlayer.name} (${currentCount}/${requiredVotes})`,
-            type: 'votekick_alert'
-          };
-          roomManager.saveChatMessage(roomId, removeAnnounceMsg);
-          io.to(roomId).emit('receive_message', removeAnnounceMsg);
-
           // Update state visually
           roomManager.sendStateToPlayer(room, player);
           roomManager.sendStateToPlayer(room, targetPlayer);
@@ -356,7 +353,7 @@ async function startServer() {
         // Visual Chat alert styled dynamic
         const announceMsg = {
           id: 'votekick-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-          text: `${player.name} voted للـ kick ضد ${targetPlayer.name} (${currentCount}/${requiredVotes})`,
+          text: `${player.name} voted to kick out ${targetPlayer.name}`,
           type: 'votekick_alert'
         };
         roomManager.saveChatMessage(roomId, announceMsg);
