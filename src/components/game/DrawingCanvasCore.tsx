@@ -266,7 +266,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // States
   const [isDrawing, setIsDrawing] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(true);
   const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -1298,35 +1298,59 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!socket) return;
 
     const handleConnect = () => {
-      console.log("[DrawingCanvasCore] System connection established. Recovering state history...");
-      startSyncFlow();
+      console.log("[DrawingCanvasCore] System connection established. Loader active until drawing sync finishes.");
+      setIsSyncing(true);
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+      syncTimeoutRef.current = setTimeout(() => {
+        console.log("[DrawingCanvasCore] Reconnect sync safety timeout reached. Overriding loading screen.");
+        setIsSyncing(false);
+        setHasSyncedOnce(true);
+      }, 4000);
+    };
+
+    const handleDisconnect = () => {
+      console.log("[DrawingCanvasCore] System connection lost.");
+      setIsSyncing(true);
     };
 
     socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
     
-    if (socket.connected) {
-      console.log("[DrawingCanvasCore] Initialized with healthy connection. Instantly fetching sync history...");
-      startSyncFlow();
+    // Initial mount safety loader
+    if (socket.connected && !hasSyncedOnce) {
+      setIsSyncing(true);
+      if (!syncTimeoutRef.current) {
+        syncTimeoutRef.current = setTimeout(() => {
+          console.log("[DrawingCanvasCore] Initial sync safety timeout. Overriding loading screen.");
+          setIsSyncing(false);
+          setHasSyncedOnce(true);
+        }, 4000);
+      }
     }
 
     return () => {
       socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
         syncTimeoutRef.current = null;
       }
     };
-  }, [socket]);
+  }, [socket, hasSyncedOnce]);
 
   // Automated Clean Reset State on turn / drawer change
   const previousStateRef = useRef({ currentDrawerId, status });
   useEffect(() => {
     if (previousStateRef.current.currentDrawerId !== currentDrawerId || previousStateRef.current.status !== status) {
-      console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
-      executeResetState();
+      if (hasSyncedOnce && !isSyncing) {
+        console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
+        executeResetState();
+      }
     }
     previousStateRef.current = { currentDrawerId, status };
-  }, [currentDrawerId, status]);
+  }, [currentDrawerId, status, hasSyncedOnce, isSyncing]);
 
   // --- HTML Canvas Initialization ---
   useEffect(() => {
