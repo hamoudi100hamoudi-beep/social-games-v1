@@ -330,6 +330,16 @@ export default function GameRoom({
     return drawerPlayer?.persistentId || gameState.currentDrawerId;
   }, [gameState.currentDrawerId, currentPlayers]);
 
+  // Clean-up and auto-dismiss of overlays when phase/turn changes
+  useEffect(() => {
+    if (gameState?.status !== "DRAWING") {
+      setShowReportConfirm(false);
+    }
+    if (gameState?.status === "CHOOSING" && amIDrawer) {
+      setSelectedProfilePlayer(null);
+    }
+  }, [gameState?.status, amIDrawer]);
+
   const isDrawingMode = gameState.status === "DRAWING" && amIDrawer;
 
   const hasAlreadyReported = React.useMemo(() => {
@@ -1805,11 +1815,11 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#60A5FA] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#1AD2FF] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Clock
                             size={14}
-                            className="text-[#60A5FA] shrink-0"
+                            className="text-[#1AD2FF] shrink-0"
                           />
                           <span>Interval...</span>
                         </div>
@@ -1821,11 +1831,11 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#60A5FA] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#1AD2FF] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Pencil
                             size={12}
-                            className="text-[#60A5FA] shrink-0"
+                            className="text-[#1AD2FF] shrink-0"
                           />
                           <span dir="auto">{text}</span>
                         </div>
@@ -1837,11 +1847,11 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-start gap-2 text-[#60A5FA] font-bold text-xs sm:text-sm py-1 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-start gap-2 text-[#1AD2FF] font-bold text-xs sm:text-sm py-1 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Info
                             size={14}
-                            className="text-[#60A5FA] shrink-0 mt-0.5"
+                            className="text-[#1AD2FF] shrink-0 mt-0.5"
                           />
                           <span dir="auto">{text}</span>
                         </div>
@@ -1889,15 +1899,18 @@ export default function GameRoom({
                     }
 
                     // Other reveals
+                    const isNobodyHit = text.toLowerCase().includes("nobody hit");
                     let iconNode = (
-                      <Info size={14} className="shrink-0 text-[#60A5FA]" />
+                      <Info size={14} className="shrink-0 text-[#1AD2FF]" />
                     );
-                    let textColor = "#60A5FA";
+                    let textColor = "#1AD2FF";
 
                     if (
-                      text.toLowerCase().includes("hit") ||
-                      text.toLowerCase().includes("guessed") ||
-                      text.toLowerCase().includes("guessed the word")
+                      !isNobodyHit && (
+                        text.toLowerCase().includes("hit") ||
+                        text.toLowerCase().includes("guessed") ||
+                        text.toLowerCase().includes("guessed the word")
+                      )
                     ) {
                       iconNode = (
                         <Check
@@ -1906,25 +1919,25 @@ export default function GameRoom({
                         />
                       );
                       textColor = "#00E540";
-                    } else if (text.toLowerCase().includes("turn")) {
+                    } else if (text.toLowerCase().includes("turn") || isNobodyHit) {
                       iconNode = (
-                        <Pencil size={12} className="shrink-0 text-[#60A5FA]" />
+                        <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
                       );
-                      textColor = "#60A5FA";
+                      textColor = "#1AD2FF";
                     } else if (text.toLowerCase().includes("interval")) {
                       iconNode = (
-                        <Clock size={14} className="shrink-0 text-[#60A5FA]" />
+                        <Clock size={14} className="shrink-0 text-[#1AD2FF]" />
                       );
-                      textColor = "#60A5FA";
+                      textColor = "#1AD2FF";
                     } else if (
                       text.toLowerCase().includes("timeout") ||
                       text.toLowerCase().includes("time's up") ||
                       text.toLowerCase().includes("answer was")
                     ) {
                       iconNode = (
-                        <Pencil size={12} className="shrink-0 text-[#60A5FA]" />
+                        <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
                       );
-                      textColor = "#60A5FA";
+                      textColor = "#1AD2FF";
                     }
 
                     return (
@@ -2114,12 +2127,9 @@ export default function GameRoom({
             </div>
 
             {/* Content Text */}
-            <h3 id="report-confirm-title" className="text-lg sm:text-xl font-extrabold text-[#0D3855] leading-snug tracking-tight mb-2">
+            <h3 id="report-confirm-title" className="text-lg sm:text-xl font-extrabold text-[#0D3855] leading-snug tracking-tight mb-6">
               Are you sure you wanna report this drawing?
             </h3>
-            <p id="report-confirm-description-ar" className="text-[#728299] text-xs font-bold mb-6">
-              هل أنت متأكد أنك تريد الإبلاغ عن هذه الرسمة؟
-            </p>
 
             {/* Confirmation Buttons (NO and YES) styled exactly as requested without icons */}
             <div className="flex gap-4 w-full">
@@ -2147,7 +2157,7 @@ export default function GameRoom({
 
       {/* Global Overlays for CHOOSING state */}
       {gameState.status === "CHOOSING" && amIDrawer && (
-        <div className="fixed inset-0 z-[150] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 touch-none">
+        <div className="fixed inset-0 z-[500] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 touch-none">
           <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
             <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 drop-shadow-md tracking-wide">
               IT'S YOUR TURN!
