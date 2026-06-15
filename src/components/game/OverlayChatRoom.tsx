@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Send, X, Copy } from 'lucide-react';
 
 export interface ChatMessage {
@@ -264,6 +264,13 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
 }) => {
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
   const bgTouchStartTime = useRef<number>(0);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isChatOpen && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+    }
+  }, [chatMessages, isChatOpen]);
 
   if (!isChatOpen) return null;
 
@@ -307,7 +314,10 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
            >
              
              {/* Messages Area */}
-             <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-4 flex flex-col-reverse min-h-0 animate-in slide-in-from-bottom-4 duration-300">
+             <div
+               ref={scrollContainerRef}
+               className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-4 flex flex-col-reverse min-h-0 animate-in slide-in-from-bottom-4 duration-300"
+             >
                <div className="flex flex-col-reverse gap-4 max-w-2xl mx-auto w-full">
                 {[...chatMessages].reverse().map(msg => (
                   <ChatMessageItem 

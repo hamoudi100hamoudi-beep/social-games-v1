@@ -126,7 +126,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
           let bgClass = '';
           let borderClass = 'border-[#94A3B8]'; // Slate-400 default
           let nameClass = 'text-white';
-          let ptsClass = 'text-primary-brand';
+          let ptsClass = 'text-white';
 
           if (isDrawer) {
              bgClass = 'bg-primary-brand/10'; // Brand sky blue bg

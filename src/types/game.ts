@@ -25,6 +25,7 @@ export interface Player {
   offlineSince?: number;
   persistentId?: string;
   lastActivity?: number;
+  afkWarningSent?: boolean;
 }
 
 export interface Room {

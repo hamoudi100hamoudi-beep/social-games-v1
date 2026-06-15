@@ -99,7 +99,7 @@ const SmoothTimer = ({
           "bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]";
         if (gameState.status !== "DRAWING" && gameState.status !== "CHOOSING") {
           timerColorClass =
-            "bg-[#3b82f6] shadow-[0_0_8px_rgba(59,130,246,0.5)]";
+            "bg-[#1AD2FF] shadow-[0_0_8px_rgba(26,210,255,0.5)]";
         } else {
           if (pct <= 20) {
             timerColorClass = "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]";
@@ -123,7 +123,7 @@ const SmoothTimer = ({
       dir="ltr"
     >
       <div className="w-full h-1.5 sm:h-2 bg-black/40 rounded-full overflow-hidden shadow-inner flex justify-start">
-        <div ref={barRef} className="h-full rounded-full bg-[#3b82f6]" />
+        <div ref={barRef} className="h-full rounded-full bg-[#1AD2FF]" />
       </div>
     </div>
   );
@@ -418,53 +418,14 @@ export default function GameRoom({
     };
   }, [socket]);
 
-  // --- Local AFK & Activity Monitoring Engine ---
-  useEffect(() => {
-    const updateActivity = () => {
-      lastActiveRef.current = Date.now();
-    };
-
-    window.addEventListener("pointerdown", updateActivity, { passive: true });
-    window.addEventListener("keydown", updateActivity, { passive: true });
-    window.addEventListener("touchstart", updateActivity, { passive: true });
-
-    // Periodical checker - check every 5 seconds for inactivity (2.5 minutes = 150 seconds = 150,000 ms)
-    const checkInterval = setInterval(() => {
-      const now = Date.now();
-      if (!isAfkPopupOpen && (now - lastActiveRef.current > 150000)) {
-        console.warn("[AFK Engine] Inactivity detected (2.5 mins). Displaying safety warning popup.");
-        setIsAfkPopupOpen(true);
-        setAfkCountdown(90);
-      }
-    }, 5000);
-
-    return () => {
-      window.removeEventListener("pointerdown", updateActivity);
-      window.removeEventListener("keydown", updateActivity);
-      window.removeEventListener("touchstart", updateActivity);
-      clearInterval(checkInterval);
-    };
-  }, [isAfkPopupOpen]);
-
+  // --- Local Visual Count Down for the AFK Warning Popup ---
   useEffect(() => {
     if (isAfkPopupOpen) {
       afkCountdownIntervalRef.current = setInterval(() => {
         setAfkCountdown((prev) => {
           if (prev <= 1) {
             clearInterval(afkCountdownIntervalRef.current);
-            console.warn("[AFK Engine] Grace period expired. Requesting kick from room.");
-            
-            // Emit request_kick to server
-            socket?.emit("request_kick", {
-              roomId: room,
-              nickname,
-              playerId: persistentPlayerId,
-            });
-
-            if (typeof window !== "undefined") {
-              localStorage.removeItem("gartic_player_room");
-            }
-            onLeave?.();
+            console.warn("[AFK Engine] Local countdown finished. Waiting for server to kick.");
             return 0;
           }
           return prev - 1;
@@ -481,7 +442,29 @@ export default function GameRoom({
         clearInterval(afkCountdownIntervalRef.current);
       }
     };
-  }, [isAfkPopupOpen, socket, room, nickname, persistentPlayerId, onLeave]);
+  }, [isAfkPopupOpen]);
+
+  // --- Smart Awaken Trigger (Page Visibility API) ---
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        console.log("[Visibility API] Tab awakened. Syncing with server...");
+        if (!socket.connected) {
+          console.log("[Visibility API] Socket disconnected. Reconnecting cleanly...");
+          socket.connect();
+        }
+        // Force an immediate activity ping to prevent false-positive AFK kick
+        socket.emit("ping_activity");
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [socket]);
 
   // --- Block 2: Register Persistent Socket Listeners ---
   useEffect(() => {
@@ -603,11 +586,20 @@ export default function GameRoom({
     };
 
     const onSessionExpired = (data: any) => {
-      console.warn("[GameRoom] Session expired (AFK/Evicted). Returning to lobby.");
+      console.warn("[GameRoom] Session expired (AFK/Evicted). Returning to lobby.", data);
       if (typeof window !== "undefined") {
         localStorage.removeItem("gartic_player_room");
+        if (data && data.reason === "afk_kicked") {
+          localStorage.setItem("gartic_afk_kicked", "true");
+        }
       }
       onLeave?.();
+    };
+
+    const onAfkWarning = (data: any) => {
+      console.warn("[AFK] Warning received from server. Seconds remaining:", data?.secondsLeft);
+      setIsAfkPopupOpen(true);
+      setAfkCountdown(data?.secondsLeft || 90);
     };
 
     const onBannedFromRoom = () => {
@@ -621,6 +613,7 @@ export default function GameRoom({
     socket.on("receive_guess", onReceiveGuess);
     socket.on("timer_tick", onTimerTick);
     socket.on("session_expired", onSessionExpired);
+    socket.on("afk_warning", onAfkWarning);
     socket.on("banned_from_room", onBannedFromRoom);
 
     return () => {
@@ -629,6 +622,7 @@ export default function GameRoom({
       socket.off("receive_guess", onReceiveGuess);
       socket.off("timer_tick", onTimerTick);
       socket.off("session_expired", onSessionExpired);
+      socket.off("afk_warning", onAfkWarning);
       socket.off("banned_from_room", onBannedFromRoom);
     };
   }, [socket]);
@@ -2086,22 +2080,53 @@ export default function GameRoom({
       {/* AFK Popup Modal */}
       {isAfkPopupOpen && (
         <div id="afk-popup-overlay" className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div id="afk-popup-card" className="bg-[#052044] border-2 border-primary-brand text-white p-6 rounded-3xl max-w-sm w-full shadow-[0_0_50px_rgba(0,117,255,0.3)] text-center relative overflow-hidden animate-zoom-in">
-            <div className="w-20 h-20 rounded-full border-4 border-dashed border-red-500 flex items-center justify-center text-2xl font-bold mx-auto mb-4 text-red-500">
-              <span className="font-mono">{afkCountdown}</span>
+          <div id="afk-popup-card" className="bg-white border-4 border-[#0F3957] text-[#0F3957] p-8 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.4)] text-center relative overflow-visible animate-zoom-in">
+            
+            {/* Header Ribbon / INACTIVE Banner */}
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#1C96FF] border-4 border-[#0F3957] text-white px-8 py-1.5 rounded-2xl shadow-md rotate-[-1.5deg] flex items-center justify-center min-w-[185px] z-10 select-none">
+              <span className="font-sans text-xl sm:text-2xl font-black tracking-wider text-white drop-shadow-[0_2px_0_#0F3957] uppercase">
+                INACTIVE
+              </span>
+            </div>
+
+            {/* Sleep SVG Icon */}
+            <div className="w-28 h-28 rounded-full bg-[#FFC51A] border-4 border-[#0F3957] flex items-center justify-center mx-auto mb-6 relative overflow-hidden shadow-inner mt-2">
+              <svg className="w-16 h-16 text-[#0F3957]" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                {/* Table/Desk */}
+                <path d="M15 75 H85" stroke="#0F3957" strokeWidth="6" strokeLinecap="round" />
+                {/* Body leaning */}
+                <path d="M35 75 C35 55, 60 55, 65 75" stroke="#0F3957" strokeWidth="6" strokeLinecap="round" />
+                {/* Arm on desk */}
+                <path d="M42 75 C45 68, 55 68, 58 75" stroke="#0F3957" strokeWidth="5" strokeLinecap="round" fill="none" />
+                {/* Head resting */}
+                <circle cx="50" cy="42" r="14" fill="white" stroke="#0F3957" strokeWidth="5" />
+                {/* Eyes closed (slanted zzz sleepy eyes) */}
+                <path d="M43 45 L47 41" stroke="#0F3957" strokeWidth="3" strokeLinecap="round" />
+                <path d="M53 45 L57 41" stroke="#0F3957" strokeWidth="3" strokeLinecap="round" />
+                {/* Open sleepy mouth */}
+                <circle cx="50" cy="49" r="3" fill="#0F3957" />
+              </svg>
             </div>
             
-            <h3 id="afk-title" className="text-xl font-bold mb-2 tracking-tight text-white">هل أنت هنا؟</h3>
-            <p id="afk-description" className="text-white/80 text-sm mb-6 leading-relaxed">
-              لقد تم اكتشاف خمولك في اللعبة. لتجنب طردك التلقائي والحفاظ على متعة اللعب، يرجى الضغط على الزر أدناه لتأكيد وجودك.
+            <h3 id="afk-title" className="text-2xl font-black mb-1.5 tracking-tight text-[#0F3957]">هل أنت هنا؟</h3>
+            <p id="afk-description" className="text-[#0F3957]/80 text-sm font-bold mb-4 leading-relaxed px-2">
+              يرجى الضغط على زر الموافقة لتجنب قطع الاتصال بالخادم بسبب عدم النشاط.
             </p>
+
+            <div className="bg-amber-100 border-2 border-amber-300 rounded-xl px-4 py-1.5 inline-flex items-center gap-1.5 mb-6 text-sm font-bold text-amber-800">
+              <span className="flex h-2.5 w-2.5 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+              </span>
+              سيتم طردك بعد: <span className="font-black font-mono scale-110 text-amber-600">{afkCountdown}</span> ثانية
+            </div>
             
             <button
               id="afk-return-btn"
               onClick={handleIHaveReturned}
-              className="w-full py-3 px-6 bg-primary-brand hover:bg-primary-brand-dark active:scale-[0.98] transition-all text-white font-bold rounded-2xl shadow-lg hover:shadow-primary-brand/30 hover:scale-[1.02] cursor-pointer"
+              className="w-full py-4 px-6 bg-[#FFC51A] hover:bg-[#E0A800] active:scale-[0.98] transition-all text-[#0F3957] font-black text-xl rounded-2xl shadow-[0_5px_0_#A87900] active:translate-y-1 active:shadow-none border-4 border-[#0F3957] cursor-pointer flex items-center justify-center gap-2 select-none"
             >
-              أنا هنا!
+              <Check strokeWidth={4} size={24} /> OK
             </button>
           </div>
         </div>

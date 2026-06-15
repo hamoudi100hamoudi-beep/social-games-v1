@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid } from 'lucide-react';
+import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 
 interface LobbyProps {
@@ -74,6 +74,13 @@ export default function Lobby({ onPlay }: LobbyProps) {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (socket && !socket.connected) {
+      console.log("[Lobby] Socket is disconnected. Reconnecting cleanly...");
+      socket.connect();
+    }
+  }, [socket]);
   
   const [roomCount, setRoomCount] = useState<number>(0);
   const [testRoomCount, setTestRoomCount] = useState<number>(0);
@@ -228,9 +235,44 @@ export default function Lobby({ onPlay }: LobbyProps) {
             
             <div className="w-full space-y-4">
               {afkWarning && (
-                <div className="w-full bg-amber-500/10 border border-amber-500/40 text-amber-200 font-bold p-4 rounded-2xl flex flex-col gap-1 text-center text-xs relative select-none animate-in fade-in slide-in-from-top-2 duration-300">
-                  <span className="text-sm font-black text-amber-300">⚠️ تنبيه خمول النظام</span>
-                  <span>تم إخراجك تلقائياً بسبب خمول طويل وتوفير باقة البيانات/الطاقة!</span>
+                <div className="w-full border-2 border-[#FFD700] bg-gradient-to-r from-[#1E293B]/95 to-[#0F172A]/90 text-white rounded-3xl p-6 relative overflow-hidden shadow-[0_0_25px_rgba(255,215,0,0.25)] flex flex-col items-center animate-in fade-in slide-in-from-top-4 duration-500">
+                  {/* Laser gold highlight bar */}
+                  <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#FFD700] to-transparent animate-pulse" />
+                  
+                  {/* Sleep SVG Icon */}
+                  <div className="w-20 h-20 rounded-full bg-[#FFC51A] border-3 border-[#0F172A] flex items-center justify-center mb-4 shadow-md">
+                    <svg className="w-12 h-12 text-[#0F172A]" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M15 75 H85" stroke="#0F172A" strokeWidth="6" strokeLinecap="round" />
+                      <path d="M35 75 C35 55, 60 55, 65 75" stroke="#0F172A" strokeWidth="6" strokeLinecap="round" />
+                      <path d="M42 75 C45 68, 55 68, 58 75" stroke="#0F172A" strokeWidth="5" strokeLinecap="round" fill="none" />
+                      <circle cx="50" cy="42" r="14" fill="white" stroke="#0F172A" strokeWidth="5" />
+                      {/* Sleepy eye curves */}
+                      <path d="M43 45 L47 41" stroke="#0F172A" strokeWidth="3" strokeLinecap="round" />
+                      <path d="M53 45 L57 41" stroke="#0F172A" strokeWidth="3" strokeLinecap="round" />
+                      <circle cx="50" cy="49" r="3" fill="#0F172A" />
+                    </svg>
+                  </div>
+
+                  <h4 className="text-xl font-extrabold text-[#FFD700] mb-1 tracking-tight">تم إنهاء الجلسة لخمولك</h4>
+                  <p className="text-slate-200 text-sm font-semibold text-center leading-relaxed max-w-xs mb-4">
+                    لقد تم قطع اتصالك تلقائياً للحفاظ على سلامة الروم وموارد الخادم.
+                  </p>
+
+                  {/* Close button inside card */}
+                  <button
+                    onClick={() => setAfkWarning(false)}
+                    className="px-6 py-2 bg-[#FFC51A] hover:bg-[#E0A800] text-[#0F172A] font-extrabold rounded-xl transition-all shadow-[0_3px_0_#9A7000] active:translate-y-0.5 active:shadow-none border-2 border-[#10172A] cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Check strokeWidth={3} size={16} /> فهمت، العودة للعب
+                  </button>
+
+                  {/* Little X corner button */}
+                  <button 
+                    onClick={() => setAfkWarning(false)}
+                    className="absolute top-3 right-3 text-slate-400 hover:text-white transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
                 </div>
               )}
               <div className="space-y-1">

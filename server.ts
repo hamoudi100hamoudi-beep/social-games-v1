@@ -43,6 +43,7 @@ async function startServer() {
         const player = roomManager.getPlayer(socket.id);
         if (player) {
           player.lastActivity = Date.now();
+          player.afkWarningSent = false;
         }
       } catch (err) {}
     });
@@ -93,7 +94,8 @@ async function startServer() {
         }
 
         if (reconnectOnly) {
-            if (callback) callback({ error: 'session_expired' });
+            if (callback) callback({ error: 'session_expired', reason: 'afk_kicked' });
+            socket.emit('session_expired', { reason: 'afk_kicked' });
             return;
         }
 
@@ -411,6 +413,7 @@ async function startServer() {
         const player = roomManager.getPlayer(socket.id);
         if (player) {
           player.lastActivity = Date.now();
+          player.afkWarningSent = false;
         }
       } catch (e) {
         console.error("Error in ping_activity event:", e);

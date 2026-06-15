@@ -329,6 +329,7 @@ class RoomManager {
 
   private kickIdlePlayers(room: Room) {
     const idleTimeout = 4 * 60 * 1000; // 4 minutes
+    const warningThreshold = 150 * 1000; // 2.5 minutes (150 seconds)
     const now = Date.now();
     const playersToKick: Player[] = [];
 
@@ -337,8 +338,22 @@ class RoomManager {
       // so we only actively kick online idle players to keep rooms healthy.
       if (!p.isOffline) {
         const lastAct = p.lastActivity || now;
-        if (now - lastAct > idleTimeout) {
+        const idleTime = now - lastAct;
+
+        if (idleTime > idleTimeout) {
           playersToKick.push(p);
+        } else if (idleTime > warningThreshold) {
+          if (!p.afkWarningSent) {
+            p.afkWarningSent = true;
+            const socket = this.io?.sockets.sockets.get(p.id);
+            if (socket) {
+              const secondsLeft = Math.max(0, Math.ceil((idleTimeout - idleTime) / 1000));
+              socket.emit('afk_warning', { secondsLeft });
+              console.log(`[AFK WARNING] Sent warning to ${p.name} (${p.id}). Seconds left: ${secondsLeft}`);
+            }
+          }
+        } else {
+          p.afkWarningSent = false;
         }
       }
     });
@@ -348,7 +363,7 @@ class RoomManager {
       
       const socket = this.io?.sockets.sockets.get(p.id);
       if (socket) {
-        socket.emit('session_expired', { reason: 'afk' });
+        socket.emit('session_expired', { reason: 'afk_kicked' });
         socket.disconnect(true);
       }
 
@@ -468,29 +483,40 @@ class RoomManager {
       return this.transitionToWaiting(room);
     }
 
-    // Logic for next turn - cycle through queue to find first player in the room (even if offline)
+    // Safety Guard: if we already have a current drawer, move them to the back of the queue before picking the next drawer
+    const lastDrawerId = room.gameState.currentDrawerId;
+    if (lastDrawerId) {
+      const idx = room.gameState.turnQueue.indexOf(lastDrawerId);
+      if (idx !== -1) {
+        room.gameState.turnQueue.splice(idx, 1);
+        room.gameState.turnQueue.push(lastDrawerId);
+      }
+    }
+
+    // Logic for next turn - find the first player in the queue who is present in the room
     let nextDrawerId: string | null = null;
-    const queueLength = room.gameState.turnQueue.length;
+    let selectedIndex = -1;
 
-    for (let i = 0; i < queueLength; i++) {
-      const candidateId = room.gameState.turnQueue.shift();
-      if (!candidateId) break;
-
-      // Put at the back of the queue
-      room.gameState.turnQueue.push(candidateId);
-
-      // Check if player exists in room (allow even if temporarily offline so they can reconnect during their turn)
+    for (let i = 0; i < room.gameState.turnQueue.length; i++) {
+      const candidateId = room.gameState.turnQueue[i];
       const p = room.players.find(
         (player) => (player.persistentId || player.id) === candidateId,
       );
       if (p) {
         nextDrawerId = candidateId;
+        selectedIndex = i;
         break;
       }
     }
 
     if (!nextDrawerId) {
       return this.transitionToWaiting(room);
+    }
+
+    // Ensure the selected next drawer is at the front of the queue so they remain at index 0 during their turn
+    if (selectedIndex > 0) {
+      room.gameState.turnQueue.splice(selectedIndex, 1);
+      room.gameState.turnQueue.unshift(nextDrawerId);
     }
 
     // Use unused words
