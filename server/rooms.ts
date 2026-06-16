@@ -328,15 +328,15 @@ class RoomManager {
   }
 
   private kickIdlePlayers(room: Room) {
-    const idleTimeout = 4 * 60 * 1000; // 4 minutes
-    const warningThreshold = 150 * 1000; // 2.5 minutes (150 seconds)
+    const idleTimeout = (180 + 90) * 1000; // 4.5 minutes
+    const warningThreshold = 180 * 1000; // 3 minutes (180 seconds)
     const now = Date.now();
     const playersToKick: Player[] = [];
 
     room.players.forEach((p) => {
-      // If player is already offline, the 10-second grace period eviction handles them,
-      // so we only actively kick online idle players to keep rooms healthy.
-      if (!p.isOffline) {
+      // If player is already disconnected (offlineSince is set), they have a silent 90s grace timer running.
+      // So we only actively monitor online interactive players for AFK warning.
+      if (p.offlineSince === undefined) {
         const lastAct = p.lastActivity || now;
         const idleTime = now - lastAct;
 
@@ -359,11 +359,11 @@ class RoomManager {
     });
 
     playersToKick.forEach((p) => {
-      console.warn(`[AFK KICK] Player ${p.name} (${p.id}) is idle for > 4m. Removing.`);
+      console.warn(`[AFK KICK] Player ${p.name} (${p.id}) is idle for > 4.5m. Removing.`);
       
       const socket = this.io?.sockets.sockets.get(p.id);
       if (socket) {
-        socket.emit('session_expired', { reason: 'afk_kicked' });
+        socket.emit('session_expired', { reason: 'afk_idle' });
         socket.disconnect(true);
       }
 
@@ -1427,23 +1427,21 @@ class RoomManager {
         `[PLAYER DISCONNECTED] Socket ID: ${socketId}, Username: ${pToUpdate.name}`,
       );
 
-      pToUpdate.isOffline = true;
+      // Keep isOffline false to prevent UI state shifts or premature turn skipping
+      pToUpdate.isOffline = false;
       pToUpdate.offlineSince = Date.now();
 
       if (roomId) {
         const room = this.rooms.get(roomId);
         if (room) {
-          // Broadcast state so clients see isOffline
-          this.broadcastState(room);
-
-          // Grace period setup (10 seconds)
+          // Grace period setup (90 seconds silent grace)
           const pId = pToUpdate.persistentId || pToUpdate.name;
           if (this.evictionTimers.has(pId)) {
             clearTimeout(this.evictionTimers.get(pId));
           }
 
           console.log(
-            `[GRACE PERIOD] Starting 10-second grace timer for disconnected player ${pToUpdate.name} (${pId})`,
+            `[GRACE PERIOD] Starting 90-second silent grace timer for disconnected player ${pToUpdate.name} (${pId})`,
           );
           const timer = setTimeout(() => {
             try {
@@ -1452,10 +1450,17 @@ class RoomManager {
                 const checkPlayer = currentRoom.players.find(
                   (p) => (p.persistentId || p.name) === pId,
                 );
-                if (checkPlayer && checkPlayer.isOffline) {
+                // If they are still disconnected (offlineSince is still set, meaning they haven't reconnected)
+                if (checkPlayer && checkPlayer.offlineSince !== undefined) {
                   console.log(
-                    `[GRACE PERIOD] Eviction timeout triggered for ${checkPlayer.name}. Cleaning up player representation.`,
+                    `[GRACE PERIOD] Silent eviction timeout triggered for ${checkPlayer.name}. Cleaning up.`,
                   );
+
+                  const socket = this.io?.sockets.sockets.get(checkPlayer.id);
+                  if (socket) {
+                    socket.emit('session_expired', { reason: 'connection_lost' });
+                    socket.disconnect(true);
+                  }
 
                   this.removePlayerFromRoom(roomId!, checkPlayer.id);
                   this.players.delete(checkPlayer.id);
@@ -1466,7 +1471,7 @@ class RoomManager {
                       "sys-" +
                       Date.now().toString() +
                       Math.random().toString(36).substr(2, 5),
-                    text: `خرج ${checkPlayer.name} من اللعبة`,
+                    text: `انقطع اتصال ${checkPlayer.name} وتمت إزالته من اللعبة`,
                     type: "system",
                   });
                 }
@@ -1474,7 +1479,7 @@ class RoomManager {
             } catch (err) {
               console.error("Error running grace eviction:", err);
             }
-          }, 10000);
+          }, 90000); // 90 seconds silent grace period!
 
           this.evictionTimers.set(pId, timer);
         }

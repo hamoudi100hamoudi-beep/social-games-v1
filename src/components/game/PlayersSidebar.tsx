@@ -2,6 +2,65 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserIcon, Check, Pencil } from 'lucide-react';
 
+const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
+  return (
+    <div 
+      id="gartic-trophy-container"
+      key={wins}
+      className="absolute -left-2.5 -bottom-2 z-20 flex items-center justify-center select-none overflow-visible"
+    >
+      <style>{`
+        @keyframes trophyPopCelebrate {
+          0% { transform: scale(0.3) rotate(-15deg); }
+          50% { transform: scale(1.4) rotate(15deg); }
+          70% { transform: scale(0.9) rotate(-10deg); }
+          100% { transform: scale(1) rotate(0deg); }
+        }
+        .animate-trophy-celebrate {
+          animation: trophyPopCelebrate 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+          transform-origin: center;
+        }
+      `}</style>
+      <div className="w-7 h-7 flex items-center justify-center relative">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-7 h-7 animate-trophy-celebrate drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]" fill="none">
+          {/* Base bottom stand */}
+          <path d="M6 21H18" stroke="black" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M9 21L10 17H14L15 21" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinejoin="round"/>
+          
+          {/* Left Handle */}
+          <path d="M7 8H4V11C4 12.5 5.5 13 7 13" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          
+          {/* Right Handle */}
+          <path d="M17 8H20V11C20 12.5 18.5 13 17 13" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          
+          {/* Cup Bowl */}
+          <path d="M7 5H17V12C17 14.76 14.76 17 12 17C9.24 17 7 14.76 7 12V5Z" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinejoin="round"/>
+          
+          {/* Specular shine */}
+          <path d="M8.5 6.5V11" stroke="white" strokeWidth="1" strokeLinecap="round"/>
+
+          {/* Centered count text when there is more than 1 win */}
+          {wins > 1 && (
+            <text 
+              x="12" 
+              y="12.5" 
+              fontFamily="sans-serif" 
+              fontWeight="900" 
+              fontSize="6.5" 
+              fill="black" 
+              textAnchor="middle" 
+              dominantBaseline="middle"
+              className="select-none font-bold"
+            >
+              {wins}
+            </text>
+          )}
+        </svg>
+      </div>
+    </div>
+  );
+};
+
 export interface PlayerSlot {
   id: string;
   name: string;
@@ -164,15 +223,15 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                 transition: 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease',
                 zIndex: zIndex,
               }}
-              className={`absolute inset-x-0 flex items-center p-2 sm:p-4 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''}`}
+              className={`absolute inset-x-0 flex items-center pl-1.5 pr-1 py-1.5 sm:pl-3 sm:pr-2.5 sm:py-3 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''}`}
               onClick={() => {
                 if (!slot.isEmpty && onPlayerClick) {
                   onPlayerClick(slot);
                 }
               }}
             >
-              {/* Avatar */}
-              <div className="relative shrink-0 mr-2 sm:mr-3">
+              {/* Avatar with Gartic Trophy */}
+              <div className="relative shrink-0 mr-1.5 sm:mr-2.5">
                  <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-[3px] transition-colors duration-200
                    ${slot.isEmpty ? 'bg-black/20 border-white/10' : `bg-bg-dark-brand ${borderClass}`}`}>
                    {slot.isEmpty ? (
@@ -182,30 +241,33 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                    )}
                  </div>
                  
+                 {/* Trophy cup for wins (Gartic style) */}
+                 {!slot.isEmpty && (slot.wins ?? 0) > 0 && (
+                   <TrophyContainer wins={slot.wins!} />
+                 )}
+
                  {/* Status/Role Icon badge */}
                  {!slot.isEmpty && isCorrectGuesser && (
                     <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#00E540] rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-15 transition-all scale-in animate-scale-in">
-                       <Check size={10} strokeWidth={4} className="text-black font-extrabold" />
+                        <Check size={10} strokeWidth={4} className="text-black font-extrabold" />
                     </div>
                  )}
                  {!slot.isEmpty && isDrawer && !isCorrectGuesser && (
                     <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-primary-brand rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-15">
-                       <Pencil size={10} strokeWidth={3} className="text-bg-dark-brand" />
+                        <Pencil size={10} strokeWidth={3} className="text-bg-dark-brand" />
                     </div>
                   )}
                </div>
                
                {/* Info */}
-               <div className="flex flex-col justify-center overflow-hidden mr-auto pr-8">
-                  <span className={`font-bold flex items-center gap-1 text-[12px] sm:text-[15px] truncate max-w-full transition-colors duration-200
-                    ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
-                    <span className="truncate">{slot.name}</span>
-                    {(slot.wins ?? 0) > 0 && (
-                      <span className="text-yellow-500 scale-110 shrink-0" title={`${slot.wins} Wins`}>🏆 {slot.wins}</span>
-                    )}
-                  </span>
+               <div className="flex-1 min-w-0 flex flex-col justify-center pr-1 text-left">
+                  <div className={`font-bold text-[13px] sm:text-[15.5px] truncate transition-colors duration-200 leading-tight ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
+                     {slot.name}
+                  </div>
                   {!slot.isEmpty && (
-                    <span className={`text-[11px] sm:text-[13px] font-bold transition-colors duration-200 ${ptsClass}`}>{slot.points} pts</span>
+                    <div className={`text-[11px] sm:text-[13px] font-bold transition-colors duration-200 mt-0.5 leading-none ${ptsClass}`}>
+                      {slot.points} pts
+                    </div>
                   )}
                </div>
 

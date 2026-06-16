@@ -396,6 +396,13 @@ export default function GameRoom({
             );
             if (typeof window !== "undefined") {
               localStorage.removeItem("gartic_player_room");
+              const reason = res.reason || "connection_lost";
+              localStorage.setItem("gartic_session_expired_reason", reason);
+              if (reason === "afk_idle" || reason === "afk_kicked") {
+                localStorage.setItem("gartic_afk_kicked", "true");
+              } else {
+                localStorage.setItem("gartic_connection_lost", "true");
+              }
             }
             onLeave?.();
           } else if (res && res.error === "banned") {
@@ -589,8 +596,12 @@ export default function GameRoom({
       console.warn("[GameRoom] Session expired (AFK/Evicted). Returning to lobby.", data);
       if (typeof window !== "undefined") {
         localStorage.removeItem("gartic_player_room");
-        if (data && data.reason === "afk_kicked") {
+        const reason = (data && data.reason) || "connection_lost";
+        localStorage.setItem("gartic_session_expired_reason", reason);
+        if (reason === "afk_idle" || reason === "afk_kicked") {
           localStorage.setItem("gartic_afk_kicked", "true");
+        } else {
+          localStorage.setItem("gartic_connection_lost", "true");
         }
       }
       onLeave?.();

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check } from 'lucide-react';
+import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check, WifiOff } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 
 interface LobbyProps {
@@ -48,6 +48,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
   const [nicknameError, setNicknameError] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [afkWarning, setAfkWarning] = useState(false);
+  const [connLostWarning, setConnLostWarning] = useState(false);
 
   // Home screen settings modal states
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -68,10 +69,19 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      if (localStorage.getItem('gartic_afk_kicked') === 'true') {
+      const reason = localStorage.getItem('gartic_session_expired_reason');
+      const isAfk = localStorage.getItem('gartic_afk_kicked') === 'true' || reason === 'afk_idle' || reason === 'afk_kicked';
+      const isConnLost = localStorage.getItem('gartic_connection_lost') === 'true' || reason === 'connection_lost';
+      
+      if (isAfk) {
         setAfkWarning(true);
         localStorage.removeItem('gartic_afk_kicked');
+      } else if (isConnLost) {
+        setConnLostWarning(true);
+        localStorage.removeItem('gartic_connection_lost');
       }
+      
+      localStorage.removeItem('gartic_session_expired_reason');
     }
   }, []);
 
@@ -269,6 +279,39 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   {/* Little X corner button */}
                   <button 
                     onClick={() => setAfkWarning(false)}
+                    className="absolute top-3 right-3 text-slate-400 hover:text-white transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+              )}
+
+              {connLostWarning && (
+                <div className="w-full border-2 border-[#FF4A4A] bg-gradient-to-r from-[#1E293B]/95 to-[#0F172A]/90 text-white rounded-3xl p-6 relative overflow-hidden shadow-[0_0_25px_rgba(255,74,74,0.25)] flex flex-col items-center animate-in fade-in slide-in-from-top-4 duration-500">
+                  {/* Laser red highlight bar */}
+                  <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#FF4A4A] to-transparent animate-pulse" />
+                  
+                  {/* WifiOff Icon */}
+                  <div className="w-20 h-20 rounded-full bg-[#FF4A4A] border-3 border-[#0F172A] flex items-center justify-center mb-4 shadow-md text-white">
+                    <WifiOff size={36} strokeWidth={2.5} />
+                  </div>
+
+                  <h4 className="text-xl font-extrabold text-[#FF4A4A] mb-1 tracking-tight">فقدان الاتصال بالخادم</h4>
+                  <p className="text-slate-200 text-sm font-semibold text-center leading-relaxed max-w-xs mb-4">
+                    عذراً، انقطع الاتصال ببيئة اللعب أو تم إنهاء جلستك لغياب النشاط. يمكنك بدء جولة جديدة فوراً.
+                  </p>
+
+                  {/* Close button inside card */}
+                  <button
+                    onClick={() => setConnLostWarning(false)}
+                    className="px-6 py-2 bg-[#FF4A4A] hover:bg-[#E03B3B] text-white font-extrabold rounded-xl transition-all shadow-[0_3px_0_#9A1A1A] active:translate-y-0.5 active:shadow-none border-2 border-[#10172A] cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Check strokeWidth={3} size={16} /> حسناً، فهمت
+                  </button>
+
+                  {/* Little X corner button */}
+                  <button 
+                    onClick={() => setConnLostWarning(false)}
                     className="absolute top-3 right-3 text-slate-400 hover:text-white transition-colors"
                   >
                     <X size={18} />

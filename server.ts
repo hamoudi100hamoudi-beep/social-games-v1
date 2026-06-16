@@ -94,8 +94,8 @@ async function startServer() {
         }
 
         if (reconnectOnly) {
-            if (callback) callback({ error: 'session_expired', reason: 'afk_kicked' });
-            socket.emit('session_expired', { reason: 'afk_kicked' });
+            if (callback) callback({ error: 'session_expired', reason: 'connection_lost' });
+            socket.emit('session_expired', { reason: 'connection_lost' });
             return;
         }
 
@@ -421,26 +421,11 @@ async function startServer() {
     });
 
     socket.on('disconnect', () => {
-      console.log(`[Socket] Client disconnected, securing ghost state: ${socket.id}`);
+      console.log(`[Socket] Client disconnected, delegating to roomManager: ${socket.id}`);
       try {
-        const player = roomManager.getPlayer(socket.id);
-        if (player && player.roomId) {
-          player.isOffline = true;
-          
-          setTimeout(() => {
-            const currentRoom = roomManager.getRoom(player.roomId);
-            const currentPlayerState = currentRoom ? currentRoom.players.find(p => p.persistentId === player.persistentId) : null;
-            if (!currentPlayerState || currentPlayerState.isOffline) {
-              roomManager.handleDisconnect(socket.id);
-              console.log(`[Grace Period] Player ${player.name} evicted after timeout.`);
-            }
-          }, 30000); 
-        } else {
-          roomManager.handleDisconnect(socket.id);
-        }
+        roomManager.handleDisconnect(socket.id);
       } catch (e) {
-        console.error("Error during resilient disconnect handling:", e);
-        try { roomManager.handleDisconnect(socket.id); } catch (_) {}
+        console.error("Error during disconnect handling:", e);
       }
     });
   });
