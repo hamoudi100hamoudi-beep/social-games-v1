@@ -210,6 +210,21 @@ export default function GameRoom({
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
 
+  const confettis = React.useMemo(() => {
+    if (gameState.status !== "PODIUM") return [];
+    const colors = ['bg-yellow-400', 'bg-red-400', 'bg-green-400', 'bg-blue-400', 'bg-pink-400', 'bg-orange-400'];
+    return Array.from({ length: 60 }).map((_, i) => {
+      const left = Math.random() * 100;
+      const size = Math.random() * 8 + 8;
+      const delay = Math.random() * 4 + 2.4; // Starts falling after 1st place finishes popping
+      const duration = Math.random() * 3 + 4;
+      const color = colors[i % colors.length];
+      const isRound = Math.random() > 0.5;
+      const rotation = Math.random() * 360;
+      return { id: i, left, size, delay, duration, color, isRound, rotation };
+    });
+  }, [gameState.status]);
+
   const [selectedProfilePlayer, setSelectedProfilePlayer] = useState<any>(null);
   const [blockedUsers, setBlockedUsers] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
@@ -1571,119 +1586,281 @@ export default function GameRoom({
                 const first = sorted[0];
                 const second = sorted[1];
                 const third = sorted[2];
+                const restOfPlayers = sorted.slice(3);
 
                 return (
                   <div
                     id="podium-overlay"
-                    className="absolute inset-0 z-[50] flex flex-col bg-white p-4 sm:p-6 font-sans select-none animate-in fade-in duration-300 overflow-hidden"
+                    className="absolute inset-0 z-[50] flex flex-col bg-[#F3F4F6] p-4 sm:p-8 font-sans select-none animate-in fade-in duration-300 overflow-y-auto"
                   >
                     <style>{`
-                   @keyframes medal-shine {
-                     0% { transform: translateX(-150%) rotate(25deg); opacity: 0; }
-                     5% { opacity: 1; }
-                     15% { transform: translateX(150%) rotate(25deg); opacity: 0; }
-                     100% { transform: translateX(150%) rotate(25deg); opacity: 0; }
-                   }
-                   .animate-medal-shine {
-                     animation: medal-shine 5s ease-in-out infinite;
-                   }
-                 `}</style>
-                    {/* Title: GAME OVER */}
-                    <div className="w-full flex justify-center mt-0 mb-1">
-                      <h1 className="text-xl sm:text-2xl font-black text-[#0B2E5C] tracking-wide uppercase drop-shadow-[0_2px_0_rgba(251,191,36,1)]">
+                      @keyframes medal-shine {
+                        0% { transform: translateX(-150%) rotate(25deg); opacity: 0; }
+                        5% { opacity: 1; }
+                        15% { transform: translateX(150%) rotate(25deg); opacity: 0; }
+                        100% { transform: translateX(150%) rotate(25deg); opacity: 0; }
+                      }
+                      .animate-medal-shine {
+                        animation: medal-shine 5s ease-in-out infinite;
+                      }
+
+                      @keyframes podiumPop {
+                        0% {
+                          transform: scale(0);
+                          opacity: 0;
+                        }
+                        70% {
+                          transform: scale(1.1);
+                        }
+                        90% {
+                          transform: scale(0.97);
+                        }
+                        100% {
+                          transform: scale(1);
+                          opacity: 1;
+                        }
+                      }
+                      .animate-podium-pop {
+                        animation: podiumPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+                      }
+
+                      @keyframes badgePop {
+                        0% {
+                          transform: scale(0) translateX(-50%);
+                          opacity: 0;
+                        }
+                        70% {
+                          transform: scale(1.3) translateX(-48%);
+                        }
+                        90% {
+                          transform: scale(0.95) translateX(-51%);
+                        }
+                        100% {
+                          transform: scale(1) translateX(-50%);
+                          opacity: 1;
+                        }
+                      }
+                      .animate-badge-pop {
+                        animation: badgePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+                      }
+
+                      @keyframes confettiFall {
+                        0% {
+                          transform: translateY(0) rotate(0deg);
+                          opacity: 0;
+                        }
+                        10% {
+                          opacity: 1;
+                        }
+                        90% {
+                          opacity: 1;
+                        }
+                        100% {
+                          transform: translateY(110vh) rotate(720deg);
+                          opacity: 0;
+                        }
+                      }
+                      .animate-confetti {
+                        animation: confettiFall linear infinite;
+                      }
+                    `}</style>
+
+                    {/* Falling Confetti Layer */}
+                    <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
+                      {confettis.map((c) => (
+                        <div
+                          key={c.id}
+                          className={`absolute animate-confetti ${c.color} ${c.isRound ? 'rounded-full' : 'rounded-sm'}`}
+                          style={{
+                            left: `${c.left}%`,
+                            width: `${c.size}px`,
+                            height: `${c.size}px`,
+                            animationDelay: `${c.delay}s`,
+                            animationDuration: `${c.duration}s`,
+                            top: '-20px',
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Title Box */}
+                    <div className="w-full flex flex-col items-center mt-2 mb-4 z-10 shrink-0">
+                      <h1 className="text-3xl sm:text-4xl font-extrabold text-[#0B2E5C] tracking-wide uppercase drop-shadow-[0_2px_0_rgba(251,191,36,1)]">
                         GAME OVER
                       </h1>
+                      <p className="text-slate-500 font-bold text-xs sm:text-sm mt-1">
+                        تهانينا لمتصدري الجولة!
+                      </p>
                     </div>
 
-                    {/* Winners Podium alignments - elevated closer to top */}
-                    <div className="flex-1 flex flex-col items-center justify-start pt-1 sm:pt-4">
-                      <div className="flex items-end justify-center gap-4 sm:gap-10 w-full max-w-lg pb-2">
-                        {/* Second Place */}
-                        {second ? (
-                          <div
-                            id="podium-second"
-                            className="flex flex-col items-center animate-in slide-in-from-bottom-8 duration-700 relative w-12 sm:w-16 mt-2"
-                          >
-                            <div className="relative">
-                              <div className="relative p-1 bg-gradient-to-r from-slate-400 via-slate-100 to-slate-400 rounded-full shadow-[0_8px_20px_rgba(148,163,184,0.4)] border border-slate-500 overflow-hidden">
-                                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-slate-50 to-slate-200 flex items-center justify-center text-slate-700 font-extrabold text-lg sm:text-2xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
-                                  <span className="drop-shadow-sm">
-                                    {second.avatar}
-                                  </span>
+                    {/* Winners Podium alignments - elevated and beautiful */}
+                    <div className="flex-1 flex flex-col items-center justify-center p-2 z-10">
+                      <div className="flex items-end justify-center gap-4 sm:gap-10 w-full max-w-2xl px-2 pb-4">
+                        
+                        {/* Second Place (Left) */}
+                        <div
+                          id="podium-second"
+                          className="flex flex-col items-center w-24 sm:w-32 animate-podium-pop origin-bottom"
+                          style={{ animationDelay: '1.1s' }}
+                        >
+                          {second ? (
+                            <>
+                              {/* Avatar Area */}
+                              <div className="relative mb-3 flex justify-center">
+                                <div className="p-1 bg-gradient-to-r from-slate-300 via-slate-100 to-slate-400 rounded-full shadow-lg border border-slate-400 relative">
+                                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center text-3xl sm:text-4xl border-4 border-white shadow-inner overflow-hidden">
+                                    <span className="select-none">{second.avatar}</span>
+                                  </div>
                                 </div>
-                                <div className="absolute inset-0 bg-white/40 w-[200%] h-full animate-medal-shine z-10" />
+                                
+                                {/* Silver Medal Badge */}
+                                <div 
+                                  className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-slate-100 via-slate-400 to-slate-600 border-2 border-slate-700 flex items-center justify-center shadow-lg text-white font-extrabold text-xs sm:text-sm z-20 overflow-hidden animate-badge-pop"
+                                  style={{ animationDelay: '1.5s' }}
+                                >
+                                  2
+                                  <div className="absolute inset-0 bg-white/30 animate-medal-shine z-10" />
+                                </div>
                               </div>
-                              {/* Silver Medal Badge (3D look) */}
-                              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 border-[3px] border-slate-700 flex items-center justify-center shadow-[0_4px_8px_rgba(100,116,139,0.35)] text-white font-black text-xs z-20 overflow-hidden">
-                                2
-                                <div className="absolute inset-0 bg-white/40 animate-medal-shine z-10" />
+                              
+                              {/* Name & Points */}
+                              <div className="text-center mb-2 px-1 w-full">
+                                <span className="text-[#0A2540] font-black text-xs sm:text-sm truncate block w-full">
+                                  {second.name}
+                                </span>
+                                <span className="text-slate-500 font-extrabold text-[10px] sm:text-xs">
+                                  {second.points} pts
+                                </span>
                               </div>
-                            </div>
-                            <span className="text-[#0A2540] font-black text-[12px] sm:text-[14px] mt-4 truncate w-full text-center tracking-wide block">
-                              {second.name}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="w-12 sm:w-16" />
-                        )}
 
-                        {/* First Place */}
-                        {first && (
-                          <div
-                            id="podium-first"
-                            className="flex flex-col items-center animate-in slide-in-from-bottom-12 duration-1000 relative w-16 sm:w-20 z-10"
-                          >
-                            <div className="relative overflow-visible">
-                              <div className="relative p-1 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 rounded-full shadow-[0_12px_28px_rgba(245,158,11,0.5)] border border-amber-600 overflow-hidden">
-                                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-yellow-50 to-amber-100 flex items-center justify-center text-amber-900 font-extrabold text-xl sm:text-3xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
-                                  <span className="drop-shadow-sm">
-                                    {first.avatar}
-                                  </span>
-                                </div>
-                                <div className="absolute inset-0 bg-white/50 w-[200%] h-full animate-medal-shine z-10" />
+                              {/* Pedestal Section */}
+                              <div className="w-full bg-gradient-to-b from-slate-300 to-slate-400 rounded-t-xl flex flex-col items-center justify-center border-t-2 border-slate-200 shadow-md h-20 sm:h-28">
+                                <span className="text-white font-black text-xl sm:text-3xl">2nd</span>
                               </div>
-                              {/* Gold Medal Badge (3D look) */}
-                              <div className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 border-[3.5px] border-amber-800 flex items-center justify-center shadow-[0_5px_12px_rgba(217,119,6,0.45)] text-white font-black text-sm z-20 overflow-hidden">
-                                1
-                                <div className="absolute inset-0 bg-white/50 animate-medal-shine z-10" />
-                              </div>
-                            </div>
-                            <span className="text-[#0B2E5C] font-black text-[14px] sm:text-[16px] mt-5 truncate w-full text-center tracking-wide block">
-                              {first.name}
-                            </span>
-                          </div>
-                        )}
+                            </>
+                          ) : (
+                            <div className="w-full" />
+                          )}
+                        </div>
 
-                        {/* Third Place */}
-                        {third ? (
-                          <div
-                            id="podium-third"
-                            className="flex flex-col items-center animate-in slide-in-from-bottom-6 duration-500 relative w-12 sm:w-16 mt-2"
-                          >
-                            <div className="relative">
-                              <div className="relative p-1 bg-gradient-to-r from-orange-700 via-orange-500 to-orange-800 rounded-full shadow-[0_8px_20px_rgba(194,65,12,0.35)] border border-orange-900 overflow-hidden">
-                                <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center text-orange-950 font-extrabold text-lg sm:text-2xl border-4 border-white shadow-inner relative overflow-hidden font-sans">
-                                  <span className="drop-shadow-sm">
-                                    {third.avatar}
-                                  </span>
+                        {/* First Place (Center - Elevated & 30% Bigger) */}
+                        <div
+                          id="podium-first"
+                          className="flex flex-col items-center w-28 sm:w-40 animate-podium-pop origin-bottom z-10"
+                          style={{ animationDelay: '1.9s' }}
+                        >
+                          {first ? (
+                            <>
+                              {/* Crown display */}
+                              <div className="text-2xl sm:text-3xl mb-1 animate-bounce duration-1000">👑</div>
+                              
+                              {/* Avatar Area */}
+                              <div className="relative mb-3 flex justify-center">
+                                <div className="p-1 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 rounded-full shadow-2xl border border-amber-600 relative">
+                                  <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-gradient-to-br from-yellow-50 to-amber-50 flex items-center justify-center text-5xl sm:text-6xl border-4 border-white shadow-inner overflow-hidden">
+                                    <span className="select-none">{first.avatar}</span>
+                                  </div>
                                 </div>
-                                <div className="absolute inset-0 bg-white/30 w-[200%] h-full animate-medal-shine z-10" />
+                                
+                                {/* Gold Trophy Badge */}
+                                <div 
+                                  className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 border-2 border-amber-800 flex items-center justify-center shadow-2xl text-white font-extrabold text-sm sm:text-base z-20 overflow-hidden animate-badge-pop"
+                                  style={{ animationDelay: '2.3s' }}
+                                >
+                                  🏆
+                                  <div className="absolute inset-0 bg-white/40 animate-medal-shine z-10" />
+                                </div>
                               </div>
-                              {/* Bronze Medal Badge (3D look) */}
-                              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-b from-orange-300 via-orange-600 to-orange-800 border-[3px] border-orange-950 flex items-center justify-center shadow-[0_4px_8px_rgba(154,52,18,0.35)] text-white font-black text-xs z-20 overflow-hidden">
-                                3
-                                <div className="absolute inset-0 bg-white/30 animate-medal-shine z-10" />
+                              
+                              {/* Name & Points */}
+                              <div className="text-center mb-2 px-1 w-full">
+                                <span className="text-[#0B2E5C] font-black text-sm sm:text-base truncate block w-full">
+                                  {first.name}
+                                </span>
+                                <span className="text-amber-600 font-extrabold text-xs sm:text-sm">
+                                  {first.points} pts
+                                </span>
                               </div>
-                            </div>
-                            <span className="text-[#0A2540] font-black text-[12px] sm:text-[14px] mt-4 truncate w-full text-center tracking-wide block">
-                              {third.name}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="w-12 sm:w-16" />
-                        )}
+
+                              {/* Pedestal Section */}
+                              <div className="w-full bg-gradient-to-b from-amber-400 to-amber-500 rounded-t-xl flex flex-col items-center justify-center border-t-2 border-amber-200 shadow-xl h-28 sm:h-40">
+                                <span className="text-white font-black text-2xl sm:text-4xl">1st</span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="w-full" />
+                          )}
+                        </div>
+
+                        {/* Third Place (Right) */}
+                        <div
+                          id="podium-third"
+                          className="flex flex-col items-center w-24 sm:w-32 animate-podium-pop origin-bottom"
+                          style={{ animationDelay: '0.3s' }}
+                        >
+                          {third ? (
+                            <>
+                              {/* Avatar Area */}
+                              <div className="relative mb-3 flex justify-center">
+                                <div className="p-1 bg-gradient-to-r from-orange-600 via-orange-400 to-orange-700 rounded-full shadow-lg border border-orange-500 relative">
+                                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center text-3xl sm:text-4xl border-4 border-white shadow-inner overflow-hidden">
+                                    <span className="select-none">{third.avatar}</span>
+                                  </div>
+                                </div>
+                                
+                                {/* Bronze Medal Badge */}
+                                <div 
+                                  className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-orange-300 via-orange-500 to-orange-700 border-2 border-orange-900 flex items-center justify-center shadow-lg text-white font-extrabold text-xs sm:text-sm z-20 overflow-hidden animate-badge-pop"
+                                  style={{ animationDelay: '0.7s' }}
+                                >
+                                  3
+                                  <div className="absolute inset-0 bg-white/30 animate-medal-shine z-10" />
+                                </div>
+                              </div>
+                              
+                              {/* Name & Points */}
+                              <div className="text-center mb-2 px-1 w-full">
+                                <span className="text-[#0A2540] font-black text-xs sm:text-sm truncate block w-full">
+                                  {third.name}
+                                </span>
+                                <span className="text-orange-600 font-extrabold text-[10px] sm:text-xs">
+                                  {third.points} pts
+                                </span>
+                              </div>
+
+                              {/* Pedestal Section */}
+                              <div className="w-full bg-gradient-to-b from-orange-400 to-orange-500 rounded-t-xl flex flex-col items-center justify-center border-t-2 border-orange-300 shadow-md h-14 sm:h-20">
+                                <span className="text-white font-black text-xl sm:text-3xl">3rd</span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="w-full" />
+                          )}
+                        </div>
+
                       </div>
                     </div>
+
+                    {/* Scrollable list for 4th Rank and below */}
+                    {restOfPlayers.length > 0 && (
+                      <div className="w-full max-w-md mx-auto mt-2 mb-4 px-4 bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-slate-200/80 shadow-inner z-10 shrink-0">
+                        <p className="text-center text-[#0B2E5C] font-extrabold text-xs uppercase tracking-wider mb-2">
+                          بقية قائمة المتصدرين
+                        </p>
+                        <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto pr-1">
+                          {restOfPlayers.map((p, idx) => (
+                            <div key={p.id} className="flex items-center justify-between text-slate-700 bg-white/40 p-2 rounded-lg text-xs font-bold border border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400"># {idx + 4}</span>
+                                <span>{p.avatar}</span>
+                                <span>{p.name}</span>
+                              </div>
+                              <span className="text-slate-500">{p.points} Pts</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
