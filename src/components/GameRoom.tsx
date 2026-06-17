@@ -212,16 +212,42 @@ export default function GameRoom({
 
   const confettis = React.useMemo(() => {
     if (gameState.status !== "PODIUM") return [];
-    const colors = ['bg-yellow-400', 'bg-red-400', 'bg-green-400', 'bg-blue-400', 'bg-pink-400', 'bg-orange-400'];
-    return Array.from({ length: 60 }).map((_, i) => {
-      const left = Math.random() * 100;
-      const size = Math.random() * 8 + 8;
-      const delay = Math.random() * 4 + 2.4; // Starts falling after 1st place finishes popping
-      const duration = Math.random() * 3 + 4;
+    const colors = [
+      'bg-yellow-400', 'bg-red-400', 'bg-green-400', 'bg-blue-400', 
+      'bg-pink-400', 'bg-orange-400', 'bg-purple-400', 'bg-teal-400', 'bg-amber-300'
+    ];
+    return Array.from({ length: 120 }).map((_, i) => {
+      const wave = Math.floor(i / 40); // 3 waves of 40 particles
+      const angleDeg = -90 + (Math.random() * 140 - 70); // -160deg to -20deg (upwards)
+      const angleRad = (angleDeg * Math.PI) / 180;
+      
+      const forceX = Math.random() * 45 + 10; // vw scale
+      const forceY = Math.random() * 40 + 55; // vh scale
+      
+      const tx = Math.sin(angleRad) * forceX;
+      const ty = -Math.cos(angleRad) * forceY;
+      
+      const size = Math.random() * 10 + 6;
+      // Delay: Wave 0 @ 2.2s, Wave 1 @ 5.7s, Wave 2 @ 9.2s...
+      const delay = 2.2 + wave * 3.5 + Math.random() * 0.4;
+      const duration = Math.random() * 1.5 + 2.5; // snappier explosion and fall
       const color = colors[i % colors.length];
-      const isRound = Math.random() > 0.5;
-      const rotation = Math.random() * 360;
-      return { id: i, left, size, delay, duration, color, isRound, rotation };
+      const isRound = Math.random() > 0.4;
+      const rotation = Math.random() * 720 + 360;
+      const drift = Math.random() * 20 - 10; // wind drift in vw
+      
+      return { 
+        id: i, 
+        tx: `${tx}vw`, 
+        ty: `${ty}vh`, 
+        drift: `${drift}vw`,
+        size, 
+        delay, 
+        duration, 
+        color, 
+        isRound, 
+        rotation: `${rotation}deg` 
+      };
     });
   }, [gameState.status]);
 
@@ -1630,10 +1656,10 @@ export default function GameRoom({
                           opacity: 0;
                         }
                         70% {
-                          transform: scale(1.3) translateX(-48%);
+                          transform: scale(1.35) translateX(-48%);
                         }
                         90% {
-                          transform: scale(0.95) translateX(-51%);
+                          transform: scale(0.97) translateX(-51%);
                         }
                         100% {
                           transform: scale(1) translateX(-50%);
@@ -1641,47 +1667,77 @@ export default function GameRoom({
                         }
                       }
                       .animate-badge-pop {
-                        animation: badgePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+                        animation: badgePop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
                       }
 
-                      @keyframes confettiFall {
+                      @keyframes crownFall {
                         0% {
-                          transform: translateY(0) rotate(0deg);
+                          transform: translateY(-220px) scale(0.6);
                           opacity: 0;
                         }
-                        10% {
+                        60% {
+                          transform: translateY(0) scale(1.1);
                           opacity: 1;
                         }
-                        90% {
-                          opacity: 1;
+                        75% {
+                          transform: translateY(-12px) rotate(-12deg);
+                        }
+                        85% {
+                          transform: translateY(0) rotate(8deg);
+                        }
+                        92% {
+                          transform: translateY(-4px) rotate(-3deg);
                         }
                         100% {
-                          transform: translateY(110vh) rotate(720deg);
-                          opacity: 0;
+                          transform: translateY(0) rotate(0deg);
+                          opacity: 1;
                         }
                       }
-                      .animate-confetti {
-                        animation: confettiFall linear infinite;
+                      .animate-crown-fall {
+                        animation: crownFall 0.7s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+                      }
+
+                      @keyframes avatarCartoonPop {
+                        0% {
+                          transform: scale(0);
+                          opacity: 0;
+                        }
+                        /* Smoothly decelerate as it approaches peak */
+                        32% {
+                          transform: scale(1.24);
+                          opacity: 1;
+                        }
+                        /* Hold the peak highlight scale with absolute stability */
+                        58% {
+                          transform: scale(1.24);
+                        }
+                        /* Rapid snappy contraction down towards normal */
+                        72% {
+                          transform: scale(1.00);
+                        }
+                        /* Slam / impact bounce: expands slightly simulating hit against the board */
+                        83% {
+                          transform: scale(1.08);
+                        }
+                        /* Subtle settle back to normal */
+                        92% {
+                          transform: scale(0.99);
+                        }
+                        /* Stable, rigid center secure hold */
+                        100% {
+                          transform: scale(1.00);
+                          opacity: 1;
+                        }
+                      }
+
+                      .animate-pop {
+                        animation: avatarCartoonPop 0.72s cubic-bezier(0.25, 1, 0.5, 1) both;
+                      }
+
+                      .animate-element-pop {
+                        animation: podiumPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
                       }
                     `}</style>
-
-                    {/* Falling Confetti Layer */}
-                    <div className="absolute inset-0 pointer-events-none overflow-hidden z-20">
-                      {confettis.map((c) => (
-                        <div
-                          key={c.id}
-                          className={`absolute animate-confetti ${c.color} ${c.isRound ? 'rounded-full' : 'rounded-sm'}`}
-                          style={{
-                            left: `${c.left}%`,
-                            width: `${c.size}px`,
-                            height: `${c.size}px`,
-                            animationDelay: `${c.delay}s`,
-                            animationDuration: `${c.duration}s`,
-                            top: '-20px',
-                          }}
-                        />
-                      ))}
-                    </div>
 
                     {/* Title Box */}
                     <div className="w-full flex flex-col items-center mt-2 mb-4 z-10 shrink-0">
@@ -1694,29 +1750,31 @@ export default function GameRoom({
                     </div>
 
                     {/* Winners Podium alignments - elevated and beautiful */}
-                    <div className="flex-1 flex flex-col items-center justify-center p-2 z-10">
-                      <div className="flex items-end justify-center gap-4 sm:gap-10 w-full max-w-2xl px-2 pb-4">
+                    <div className="flex-1 flex flex-col items-center justify-center p-2 z-10 min-h-0">
+                      <div className="flex items-end justify-center gap-3 sm:gap-10 w-full max-w-2xl px-2 pb-2 mt-auto">
                         
                         {/* Second Place (Left) */}
                         <div
                           id="podium-second"
-                          className="flex flex-col items-center w-24 sm:w-32 animate-podium-pop origin-bottom"
-                          style={{ animationDelay: '1.1s' }}
+                          className="flex flex-col items-center w-20 sm:w-32"
                         >
                           {second ? (
                             <>
                               {/* Avatar Area */}
-                              <div className="relative mb-3 flex justify-center">
-                                <div className="p-1 bg-gradient-to-r from-slate-300 via-slate-100 to-slate-400 rounded-full shadow-lg border border-slate-400 relative">
-                                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center text-3xl sm:text-4xl border-4 border-white shadow-inner overflow-hidden">
+                              <div 
+                                className="relative mb-2 flex justify-center animate-pop"
+                                style={{ animationDelay: '0.6s' }}
+                              >
+                                <div className="p-0.5 sm:p-1 bg-gradient-to-r from-slate-300 via-slate-100 to-slate-400 rounded-full shadow-lg border border-slate-400 relative">
+                                  <div className="w-14 h-14 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center text-2xl sm:text-5xl border-2 sm:border-4 border-white shadow-inner overflow-hidden">
                                     <span className="select-none">{second.avatar}</span>
                                   </div>
                                 </div>
                                 
                                 {/* Silver Medal Badge */}
                                 <div 
-                                  className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-slate-100 via-slate-400 to-slate-600 border-2 border-slate-700 flex items-center justify-center shadow-lg text-white font-extrabold text-xs sm:text-sm z-20 overflow-hidden animate-badge-pop"
-                                  style={{ animationDelay: '1.5s' }}
+                                  className="absolute -bottom-2 sm:-bottom-2.5 left-1/2 -translate-x-1/2 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-slate-100 via-slate-400 to-slate-600 border-2 border-slate-700 flex items-center justify-center shadow-lg text-white font-extrabold text-[10px] sm:text-sm z-20 overflow-hidden animate-badge-pop"
+                                  style={{ animationDelay: '1.2s' }}
                                 >
                                   2
                                   <div className="absolute inset-0 bg-white/30 animate-medal-shine z-10" />
@@ -1724,18 +1782,16 @@ export default function GameRoom({
                               </div>
                               
                               {/* Name & Points */}
-                              <div className="text-center mb-2 px-1 w-full">
-                                <span className="text-[#0A2540] font-black text-xs sm:text-sm truncate block w-full">
+                              <div 
+                                className="text-center mb-1.5 px-0.5 w-full animate-pop"
+                                style={{ animationDelay: '0.7s' }}
+                              >
+                                <span className="text-[#0A2540] font-black text-[10px] sm:text-sm truncate block w-full">
                                   {second.name}
                                 </span>
-                                <span className="text-slate-500 font-extrabold text-[10px] sm:text-xs">
+                                <span className="text-slate-500 font-extrabold text-[9px] sm:text-xs block leading-none">
                                   {second.points} pts
                                 </span>
-                              </div>
-
-                              {/* Pedestal Section */}
-                              <div className="w-full bg-gradient-to-b from-slate-300 to-slate-400 rounded-t-xl flex flex-col items-center justify-center border-t-2 border-slate-200 shadow-md h-20 sm:h-28">
-                                <span className="text-white font-black text-xl sm:text-3xl">2nd</span>
                               </div>
                             </>
                           ) : (
@@ -1746,26 +1802,33 @@ export default function GameRoom({
                         {/* First Place (Center - Elevated & 30% Bigger) */}
                         <div
                           id="podium-first"
-                          className="flex flex-col items-center w-28 sm:w-40 animate-podium-pop origin-bottom z-10"
-                          style={{ animationDelay: '1.9s' }}
+                          className="flex flex-col items-center w-24 sm:w-40 z-10"
                         >
                           {first ? (
                             <>
                               {/* Crown display */}
-                              <div className="text-2xl sm:text-3xl mb-1 animate-bounce duration-1000">👑</div>
+                              <div 
+                                className="text-lg sm:text-3xl mb-0.5 sm:mb-1 animate-crown-fall"
+                                style={{ animationDelay: '2.0s' }}
+                              >
+                                👑
+                              </div>
                               
                               {/* Avatar Area */}
-                              <div className="relative mb-3 flex justify-center">
-                                <div className="p-1 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 rounded-full shadow-2xl border border-amber-600 relative">
-                                  <div className="w-20 h-20 sm:w-28 sm:h-28 rounded-full bg-gradient-to-br from-yellow-50 to-amber-50 flex items-center justify-center text-5xl sm:text-6xl border-4 border-white shadow-inner overflow-hidden">
+                              <div 
+                                className="relative mb-2 flex justify-center animate-pop"
+                                style={{ animationDelay: '1.1s' }}
+                              >
+                                <div className="p-0.5 sm:p-1 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 rounded-full shadow-2xl border border-amber-600 relative">
+                                  <div className="w-20 h-20 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-yellow-50 to-amber-50 flex items-center justify-center text-4xl sm:text-7xl border-2 sm:border-4 border-white shadow-inner overflow-hidden">
                                     <span className="select-none">{first.avatar}</span>
                                   </div>
                                 </div>
                                 
                                 {/* Gold Trophy Badge */}
                                 <div 
-                                  className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 border-2 border-amber-800 flex items-center justify-center shadow-2xl text-white font-extrabold text-sm sm:text-base z-20 overflow-hidden animate-badge-pop"
-                                  style={{ animationDelay: '2.3s' }}
+                                  className="absolute -bottom-2 sm:-bottom-2.5 left-1/2 -translate-x-1/2 w-7 h-7 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 border-2 border-amber-800 flex items-center justify-center shadow-2xl text-white font-extrabold text-xs sm:text-base z-20 overflow-hidden animate-badge-pop"
+                                  style={{ animationDelay: '1.7s' }}
                                 >
                                   🏆
                                   <div className="absolute inset-0 bg-white/40 animate-medal-shine z-10" />
@@ -1773,18 +1836,16 @@ export default function GameRoom({
                               </div>
                               
                               {/* Name & Points */}
-                              <div className="text-center mb-2 px-1 w-full">
-                                <span className="text-[#0B2E5C] font-black text-sm sm:text-base truncate block w-full">
+                              <div 
+                                className="text-center mb-1.5 px-0.5 w-full animate-pop"
+                                style={{ animationDelay: '1.2s' }}
+                              >
+                                <span className="text-[#0B2E5C] font-black text-xs sm:text-base truncate block w-full">
                                   {first.name}
                                 </span>
-                                <span className="text-amber-600 font-extrabold text-xs sm:text-sm">
+                                <span className="text-amber-600 font-extrabold text-[10px] sm:text-sm block leading-none">
                                   {first.points} pts
                                 </span>
-                              </div>
-
-                              {/* Pedestal Section */}
-                              <div className="w-full bg-gradient-to-b from-amber-400 to-amber-500 rounded-t-xl flex flex-col items-center justify-center border-t-2 border-amber-200 shadow-xl h-28 sm:h-40">
-                                <span className="text-white font-black text-2xl sm:text-4xl">1st</span>
                               </div>
                             </>
                           ) : (
@@ -1795,22 +1856,24 @@ export default function GameRoom({
                         {/* Third Place (Right) */}
                         <div
                           id="podium-third"
-                          className="flex flex-col items-center w-24 sm:w-32 animate-podium-pop origin-bottom"
-                          style={{ animationDelay: '0.3s' }}
+                          className="flex flex-col items-center w-20 sm:w-32"
                         >
                           {third ? (
                             <>
                               {/* Avatar Area */}
-                              <div className="relative mb-3 flex justify-center">
-                                <div className="p-1 bg-gradient-to-r from-orange-600 via-orange-400 to-orange-700 rounded-full shadow-lg border border-orange-500 relative">
-                                  <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center text-3xl sm:text-4xl border-4 border-white shadow-inner overflow-hidden">
+                              <div 
+                                className="relative mb-2 flex justify-center animate-pop"
+                                style={{ animationDelay: '0.1s' }}
+                              >
+                                <div className="p-0.5 sm:p-1 bg-gradient-to-r from-orange-600 via-orange-400 to-orange-700 rounded-full shadow-lg border border-orange-500 relative">
+                                  <div className="w-14 h-14 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center text-2xl sm:text-5xl border-2 sm:border-4 border-white shadow-inner overflow-hidden">
                                     <span className="select-none">{third.avatar}</span>
                                   </div>
                                 </div>
                                 
                                 {/* Bronze Medal Badge */}
                                 <div 
-                                  className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-orange-300 via-orange-500 to-orange-700 border-2 border-orange-900 flex items-center justify-center shadow-lg text-white font-extrabold text-xs sm:text-sm z-20 overflow-hidden animate-badge-pop"
+                                  className="absolute -bottom-2 sm:-bottom-2.5 left-1/2 -translate-x-1/2 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-orange-300 via-orange-500 to-orange-700 border-2 border-orange-900 flex items-center justify-center shadow-lg text-white font-extrabold text-[10px] sm:text-sm z-20 overflow-hidden animate-badge-pop"
                                   style={{ animationDelay: '0.7s' }}
                                 >
                                   3
@@ -1819,18 +1882,16 @@ export default function GameRoom({
                               </div>
                               
                               {/* Name & Points */}
-                              <div className="text-center mb-2 px-1 w-full">
-                                <span className="text-[#0A2540] font-black text-xs sm:text-sm truncate block w-full">
+                              <div 
+                                className="text-center mb-1.5 px-0.5 w-full animate-pop"
+                                style={{ animationDelay: '0.2s' }}
+                              >
+                                <span className="text-[#0A2540] font-black text-[10px] sm:text-sm truncate block w-full">
                                   {third.name}
                                 </span>
-                                <span className="text-orange-600 font-extrabold text-[10px] sm:text-xs">
+                                <span className="text-orange-600 font-extrabold text-[9px] sm:text-xs block leading-none">
                                   {third.points} pts
                                 </span>
-                              </div>
-
-                              {/* Pedestal Section */}
-                              <div className="w-full bg-gradient-to-b from-orange-400 to-orange-500 rounded-t-xl flex flex-col items-center justify-center border-t-2 border-orange-300 shadow-md h-14 sm:h-20">
-                                <span className="text-white font-black text-xl sm:text-3xl">3rd</span>
                               </div>
                             </>
                           ) : (
