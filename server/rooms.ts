@@ -458,6 +458,8 @@ class RoomManager {
 
   private transitionToWaiting(room: Room) {
     console.log(`[Room ${room.id}] Transitioning to WAITING`);
+    const lastDrawerBeforeWaiting = room.gameState.currentDrawerId;
+
     room.gameState.status = "WAITING";
     room.gameState.currentDrawerId = null;
     room.gameState.currentWord = null;
@@ -467,13 +469,13 @@ class RoomManager {
 
     const onlinePlayersCount = room.players.filter((p) => !p.isOffline).length;
     if (onlinePlayersCount >= 2) {
-      return this.transitionToChoosing(room);
+      return this.transitionToChoosing(room, lastDrawerBeforeWaiting);
     }
 
     this.broadcastState(room);
   }
 
-  private transitionToChoosing(room: Room) {
+  private transitionToChoosing(room: Room, previousDrawerId?: string | null) {
     if (room.players.length < 2) {
       return this.transitionToWaiting(room);
     }
@@ -483,8 +485,9 @@ class RoomManager {
       return this.transitionToWaiting(room);
     }
 
-    // Safety Guard: if we already have a current drawer, move them to the back of the queue before picking the next drawer
-    const lastDrawerId = room.gameState.currentDrawerId;
+    // Safety Guard: if we already have a current drawer or a previous drawer from the round that just ended,
+    // move them to the back of the queue before picking the next drawer
+    const lastDrawerId = previousDrawerId || room.gameState.currentDrawerId;
     if (lastDrawerId) {
       const idx = room.gameState.turnQueue.indexOf(lastDrawerId);
       if (idx !== -1) {

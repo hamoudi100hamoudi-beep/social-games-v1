@@ -489,8 +489,9 @@ export default function GameRoom({
       const isActiveRound =
         state.gameState?.status === "DRAWING" ||
         state.gameState?.status === "CHOOSING";
-      const players = state.players
-        .map((p) => ({
+
+      setCurrentPlayers((prevPlayers) => {
+        const mapped = state.players.map((p) => ({
           id: p.id,
           name: p.name,
           points: p.score || 0,
@@ -502,10 +503,32 @@ export default function GameRoom({
           avatar: p.avatar,
           isEmpty: false,
           persistentId: p.persistentId,
-        }))
-        .sort((a, b) => b.points - a.points);
+        }));
 
-      setCurrentPlayers(players);
+        mapped.sort((a, b) => {
+          // If points are different, sort by points descending
+          if (b.points !== a.points) {
+            return b.points - a.points;
+          }
+
+          // If points are identical (such as a round-end score reset or tie), preserve their previous ranking order
+          const indexA = prevPlayers.findIndex((p) => p.id === a.id);
+          const indexB = prevPlayers.findIndex((p) => p.id === b.id);
+
+          if (indexA !== -1 && indexB !== -1) {
+            return indexA - indexB;
+          }
+
+          // Fallback if one is new
+          if (indexA !== -1) return -1;
+          if (indexB !== -1) return 1;
+
+          return a.name.localeCompare(b.name);
+        });
+
+        return mapped;
+      });
+
       if (state.gameState) {
         setGameState((prev: any) => {
           return state.gameState;
