@@ -1106,7 +1106,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             path.length = 0;
             delete replaySessions[instId];
             if (!data.isCancelled) {
-              saveSnapshot(true); // Save snapshot on canvas modifications forcing bypass of isReplayingRef
+              saveSnapshot(); // Save snapshot naturally (bypassed during replay)
             }
           } else if (event === 'draw_cancel') {
             path.length = 0;
@@ -1114,11 +1114,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           } else if (event === 'draw_clear') {
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-            saveSnapshot(true);
+            saveSnapshot(); // Bypassed during replay
           } else if (event === 'draw_action') {
             if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
               floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity);
-              saveSnapshot(true);
+              saveSnapshot(); // Bypassed during replay
             }
           } else if (event === 'draw_undo') {
             executeUndo(false);
