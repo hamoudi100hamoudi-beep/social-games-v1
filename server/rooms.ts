@@ -1123,52 +1123,82 @@ class RoomManager {
     //@ts-ignore
     const redoStack = room.gameState.redoStack;
 
-    const isDrawEnd = (cmd: any) =>
-      cmd.event === "draw_end" ||
-      (cmd.event === "draw_binary" &&
-        Buffer.isBuffer(cmd.data) &&
-        cmd.data.length > 0 &&
-        cmd.data[0] === 3);
+    const getFirstByte = (cmdObj: any): number | undefined => {
+      if (!cmdObj || !cmdObj.data) return undefined;
+      const d = cmdObj.data;
+      if (Buffer.isBuffer(d)) return d[0];
+      if (d instanceof Uint8Array) return d[0];
+      if (Array.isArray(d)) return d[0];
+      if (d && typeof d === 'object') {
+        if (d.type === 'Buffer' && Array.isArray(d.data)) {
+          return d.data[0];
+        }
+        if (d.buffer instanceof ArrayBuffer || d instanceof ArrayBuffer) {
+          const view = new DataView(d.buffer || d);
+          if (view.byteLength > 0) return view.getUint8(0);
+        }
+      }
+      return undefined;
+    };
 
-    const isDrawAction = (cmd: any) =>
-      cmd.event === "draw_action" ||
-      (cmd.event === "draw_binary" &&
-        Buffer.isBuffer(cmd.data) &&
-        cmd.data.length > 0 &&
-        cmd.data[0] === 4);
+    const isDrawAction = (cmd: any) => {
+      if (!cmd) return false;
+      if (cmd.event === "draw_action") return true;
+      if (cmd.event === "draw_binary") {
+        const firstByte = getFirstByte(cmd);
+        return firstByte === 4;
+      }
+      return false;
+    };
 
-    const isDrawStart = (cmd: any) =>
-      cmd.event === "draw_start" ||
-      (cmd.event === "draw_binary" &&
-        Buffer.isBuffer(cmd.data) &&
-        cmd.data.length > 0 &&
-        cmd.data[0] === 1);
+    const isDrawStart = (cmd: any) => {
+      if (!cmd) return false;
+      if (cmd.event === "draw_start") return true;
+      if (cmd.event === "draw_binary") {
+        const firstByte = getFirstByte(cmd);
+        return firstByte === 1;
+      }
+      return false;
+    };
 
-    let endIndex = history.length - 1;
-    while (
-      endIndex >= 0 &&
-      !isDrawEnd(history[endIndex]) &&
-      !isDrawAction(history[endIndex])
-    ) {
-      endIndex--;
+    // Find latest draw start or draw action index
+    let lastStartIndex = -1;
+    let lastActionIndex = -1;
+
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (lastStartIndex === -1 && isDrawStart(history[i])) {
+        lastStartIndex = i;
+      }
+      if (lastActionIndex === -1 && isDrawAction(history[i])) {
+        lastActionIndex = i;
+      }
+      // If we found both, we can stop
+      if (lastStartIndex !== -1 && lastActionIndex !== -1) {
+        break;
+      }
     }
 
-    if (endIndex >= 0) {
-      if (isDrawAction(history[endIndex])) {
-        const removed = history.splice(endIndex, history.length - endIndex);
+    if (lastStartIndex !== -1 || lastActionIndex !== -1) {
+      // Determine what was the absolute last action: a path or a fill bucket
+      if (lastActionIndex > lastStartIndex) {
+        // Last action was a draw action (e.g., bucket fill)
+        const removed = history.splice(lastActionIndex, history.length - lastActionIndex);
         redoStack.push(removed);
+        console.log(`[UNDO] Undo successful for DRAW_ACTION at index ${lastActionIndex}. Spliced ${removed.length} commands.`);
       } else {
-        let startIndex = endIndex;
-        while (startIndex >= 0 && !isDrawStart(history[startIndex])) {
-          startIndex--;
-        }
-        if (startIndex >= 0) {
-          const removed = history.splice(
-            startIndex,
-            history.length - startIndex,
-          );
-          redoStack.push(removed);
-        }
+        // Last action was a brush/shape path stroke
+        const removed = history.splice(lastStartIndex, history.length - lastStartIndex);
+        redoStack.push(removed);
+        console.log(`[UNDO] Undo successful for PATH starting at index ${lastStartIndex}. Spliced ${removed.length} commands.`);
+      }
+    } else {
+      // Fallback: if no clear start or action found but we have history, pop last element
+      if (history.length > 0) {
+        const removed = history.splice(history.length - 1, 1);
+        redoStack.push(removed);
+        console.log(`[UNDO] Fallback pop. Spliced 1 command.`);
+      } else {
+        console.log(`[UNDO] WARNING: History is already empty, nothing to undo.`);
       }
     }
     return history;
