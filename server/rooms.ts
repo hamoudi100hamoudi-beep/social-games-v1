@@ -432,13 +432,7 @@ class RoomManager {
     } else if (gameState.status === "PODIUM") {
       gameState.timeLeft--;
       if (gameState.timeLeft <= 0) {
-        // Find highest scorer (top player)
-        const sorted = [...room.players].sort((a, b) => b.score - a.score);
-        if (sorted.length > 0 && sorted[0].score > 0) {
-          sorted[0].wins += 1;
-        }
-
-        // Reset scores
+        // Reset scores (the win was already added in transitionToPodium)
         room.players.forEach((p) => (p.score = 0));
 
         // Since we broadcast waiting, it clears the board
@@ -575,6 +569,12 @@ class RoomManager {
     console.log(`[Room ${room.id}] Transitioning to PODIUM`);
     room.gameState.status = "PODIUM";
     room.gameState.timeLeft = 15;
+
+    // Increment winner's wins immediately
+    const sorted = [...room.players].sort((a, b) => b.score - a.score);
+    if (sorted.length > 0 && sorted[0].score > 0) {
+      sorted[0].wins += 1;
+    }
 
     const winner = [...room.players].reduce(
       (max, p) => (p.score > max.score ? p : max),

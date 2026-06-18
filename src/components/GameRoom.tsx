@@ -1312,11 +1312,11 @@ export default function GameRoom({
                       "easeIn",
                     ],
                   }}
-                  className="w-32 h-32 sm:w-40 sm:h-40 bg-[#00E540] rounded-full border-[5px] border-white flex items-center justify-center shadow-[0_10px_40px_rgba(0,229,64,0.6)]"
+                  className="w-20 h-20 sm:w-26 sm:h-26 bg-[#00E540] rounded-full border-[4px] border-white flex items-center justify-center shadow-[0_6px_24px_rgba(0,229,64,0.5)]"
                 >
                   <motion.svg
                     viewBox="0 0 50 50"
-                    className="w-20 h-20 sm:w-24 sm:h-24 text-white drop-shadow-md"
+                    className="w-11 h-11 sm:w-14 sm:h-14 text-white drop-shadow-sm"
                   >
                     <motion.path
                       d="M 14 27 L 22 35 L 38 15"
@@ -1737,14 +1737,75 @@ export default function GameRoom({
                       .animate-element-pop {
                         animation: podiumPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
                       }
+
+                      @keyframes wordFall {
+                        0% {
+                          transform: translateY(-300px) scale(1);
+                          opacity: 0;
+                        }
+                        /* First dynamic contact with the invisible platform - fast landing with regular size */
+                        45% {
+                          transform: translateY(0) scale(1);
+                          opacity: 1;
+                        }
+                        /* Collision squash: subtle vertical compression and horizontal offset */
+                        58% {
+                          transform: translateY(0) scaleX(1.04) scaleY(0.96);
+                        }
+                        /* Snappy, gentle rebound up with minimal stretch */
+                        74% {
+                          transform: translateY(-3.5px) scaleX(0.99) scaleY(1.01);
+                        }
+                        /* Light stamp back down */
+                        88% {
+                          transform: translateY(0) scaleX(1.005) scaleY(0.995);
+                        }
+                        /* Solid snap with rigid stabilization */
+                        100% {
+                          transform: translateY(0) scale(1);
+                          opacity: 1;
+                        }
+                      }
+                      .animate-word-fall {
+                        transform-origin: bottom center;
+                        animation: wordFall 0.85s cubic-bezier(0.25, 1, 0.5, 1) both;
+                      }
+
+                      @keyframes textFadeIn {
+                        0% {
+                          transform: translateY(10px);
+                          opacity: 0;
+                        }
+                        100% {
+                          transform: translateY(0);
+                          opacity: 1;
+                        }
+                      }
+                      .animate-text-fadeIn {
+                        animation: textFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+                      }
                     `}</style>
 
                     {/* Title Box */}
                     <div className="w-full flex flex-col items-center mt-2 mb-4 z-10 shrink-0">
-                      <h1 className="text-3xl sm:text-4xl font-extrabold text-[#0B2E5C] tracking-wide uppercase drop-shadow-[0_2px_0_rgba(251,191,36,1)]">
-                        GAME OVER
-                      </h1>
-                      <p className="text-slate-500 font-bold text-xs sm:text-sm mt-1">
+                      <div className="flex gap-2">
+                        <span 
+                          className="text-3xl sm:text-4xl font-extrabold text-[#0B2E5C] tracking-wide uppercase drop-shadow-[0_2px_0_rgba(251,191,36,1)] animate-word-fall inline-block"
+                          style={{ animationDelay: '0s' }}
+                        >
+                          GAME
+                        </span>
+                        <span 
+                          className="text-3xl sm:text-4xl font-extrabold text-[#0B2E5C] tracking-wide uppercase drop-shadow-[0_2px_0_rgba(251,191,36,1)] animate-word-fall inline-block"
+                          style={{ animationDelay: '0.3s' }}
+                        >
+                          OVER
+                        </span>
+                      </div>
+                      <p 
+                        className="text-slate-500 font-bold text-xs sm:text-sm mt-1 animate-text-fadeIn"
+                        style={{ animationDelay: '1.2s' }}
+                      >
                         تهانينا لمتصدري الجولة!
                       </p>
                     </div>
@@ -1763,7 +1824,7 @@ export default function GameRoom({
                               {/* Avatar Area */}
                               <div 
                                 className="relative mb-2 flex justify-center animate-pop"
-                                style={{ animationDelay: '0.6s' }}
+                                style={{ animationDelay: '2.9s' }}
                               >
                                 <div className="p-0.5 sm:p-1 bg-gradient-to-r from-slate-300 via-slate-100 to-slate-400 rounded-full shadow-lg border border-slate-400 relative">
                                   <div className="w-14 h-14 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center text-2xl sm:text-5xl border-2 sm:border-4 border-white shadow-inner overflow-hidden">
@@ -1774,7 +1835,7 @@ export default function GameRoom({
                                 {/* Silver Medal Badge */}
                                 <div 
                                   className="absolute -bottom-2 sm:-bottom-2.5 left-1/2 -translate-x-1/2 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-slate-100 via-slate-400 to-slate-600 border-2 border-slate-700 flex items-center justify-center shadow-lg text-white font-extrabold text-[10px] sm:text-sm z-20 overflow-hidden animate-badge-pop"
-                                  style={{ animationDelay: '1.2s' }}
+                                  style={{ animationDelay: '3.6s' }}
                                 >
                                   2
                                   <div className="absolute inset-0 bg-white/30 animate-medal-shine z-10" />
@@ -1784,7 +1845,7 @@ export default function GameRoom({
                               {/* Name & Points */}
                               <div 
                                 className="text-center mb-1.5 px-0.5 w-full animate-pop"
-                                style={{ animationDelay: '0.7s' }}
+                                style={{ animationDelay: '3.1s' }}
                               >
                                 <span className="text-[#0A2540] font-black text-[10px] sm:text-sm truncate block w-full">
                                   {second.name}
@@ -1809,7 +1870,7 @@ export default function GameRoom({
                               {/* Crown display */}
                               <div 
                                 className="text-lg sm:text-3xl mb-0.5 sm:mb-1 animate-crown-fall"
-                                style={{ animationDelay: '2.0s' }}
+                                style={{ animationDelay: third ? '5.1s' : '4.0s' }}
                               >
                                 👑
                               </div>
@@ -1817,7 +1878,7 @@ export default function GameRoom({
                               {/* Avatar Area */}
                               <div 
                                 className="relative mb-2 flex justify-center animate-pop"
-                                style={{ animationDelay: '1.1s' }}
+                                style={{ animationDelay: '1.8s' }}
                               >
                                 <div className="p-0.5 sm:p-1 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 rounded-full shadow-2xl border border-amber-600 relative">
                                   <div className="w-20 h-20 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-yellow-50 to-amber-50 flex items-center justify-center text-4xl sm:text-7xl border-2 sm:border-4 border-white shadow-inner overflow-hidden">
@@ -1828,7 +1889,7 @@ export default function GameRoom({
                                 {/* Gold Trophy Badge */}
                                 <div 
                                   className="absolute -bottom-2 sm:-bottom-2.5 left-1/2 -translate-x-1/2 w-7 h-7 sm:w-11 sm:h-11 rounded-full bg-gradient-to-b from-yellow-200 via-amber-400 to-amber-600 border-2 border-amber-800 flex items-center justify-center shadow-2xl text-white font-extrabold text-xs sm:text-base z-20 overflow-hidden animate-badge-pop"
-                                  style={{ animationDelay: '1.7s' }}
+                                  style={{ animationDelay: '2.5s' }}
                                 >
                                   🏆
                                   <div className="absolute inset-0 bg-white/40 animate-medal-shine z-10" />
@@ -1838,7 +1899,7 @@ export default function GameRoom({
                               {/* Name & Points */}
                               <div 
                                 className="text-center mb-1.5 px-0.5 w-full animate-pop"
-                                style={{ animationDelay: '1.2s' }}
+                                style={{ animationDelay: '2.0s' }}
                               >
                                 <span className="text-[#0B2E5C] font-black text-xs sm:text-base truncate block w-full">
                                   {first.name}
@@ -1863,7 +1924,7 @@ export default function GameRoom({
                               {/* Avatar Area */}
                               <div 
                                 className="relative mb-2 flex justify-center animate-pop"
-                                style={{ animationDelay: '0.1s' }}
+                                style={{ animationDelay: '4.0s' }}
                               >
                                 <div className="p-0.5 sm:p-1 bg-gradient-to-r from-orange-600 via-orange-400 to-orange-700 rounded-full shadow-lg border border-orange-500 relative">
                                   <div className="w-14 h-14 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center text-2xl sm:text-5xl border-2 sm:border-4 border-white shadow-inner overflow-hidden">
@@ -1874,7 +1935,7 @@ export default function GameRoom({
                                 {/* Bronze Medal Badge */}
                                 <div 
                                   className="absolute -bottom-2 sm:-bottom-2.5 left-1/2 -translate-x-1/2 w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-orange-300 via-orange-500 to-orange-700 border-2 border-orange-900 flex items-center justify-center shadow-lg text-white font-extrabold text-[10px] sm:text-sm z-20 overflow-hidden animate-badge-pop"
-                                  style={{ animationDelay: '0.7s' }}
+                                  style={{ animationDelay: '4.7s' }}
                                 >
                                   3
                                   <div className="absolute inset-0 bg-white/30 animate-medal-shine z-10" />
@@ -1884,7 +1945,7 @@ export default function GameRoom({
                               {/* Name & Points */}
                               <div 
                                 className="text-center mb-1.5 px-0.5 w-full animate-pop"
-                                style={{ animationDelay: '0.2s' }}
+                                style={{ animationDelay: '4.2s' }}
                               >
                                 <span className="text-[#0A2540] font-black text-[10px] sm:text-sm truncate block w-full">
                                   {third.name}
