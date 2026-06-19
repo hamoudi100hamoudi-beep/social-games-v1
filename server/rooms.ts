@@ -1113,12 +1113,15 @@ class RoomManager {
     // 🔴 سطر المراقبة الأول: لمعرفة نوع الحدث وحجم مصفوفة الرسم الحالية في السيرفر
     console.log(`[DRAW LOG] Event: ${event}, History Length: ${room.gameState.drawHistory.length}, Current Saved Index: ${room.gameState.lastStrokeIndex}`);
 
+    let isValidStart = false;
     let isNewAction = false;
+
     if (event === "draw_binary" && Buffer.isBuffer(data) && data.length > 0) {
       const type = data[0];
       if (type === 1) { // draw_start
         room.gameState.isDrawingActive = true;
         isNewAction = true;
+        isValidStart = true;
       } else if (type === 2) { // draw_move
         if (room.gameState.isDrawingActive === false) {
           return;
@@ -1128,8 +1131,15 @@ class RoomManager {
       }
     } else if (event === "draw_start" || event === "draw_action" || event === "draw_clear") {
       isNewAction = true;
+      isValidStart = true;
       // 🔴 سطر المراقبة الثاني: كشف تداخل الأدوات غير الباينري والممحاة
       console.log(`[ACTION LOG] Tool action triggered: ${event}`);
+    }
+
+    // 🛡️ حماية حتمية للحسابات الفارغة: لا تقبل أي حزم يتيمة (حركة أو انتهاء) داخل مصفوفة فارغة أبداً
+    if (room.gameState.drawHistory.length === 0 && !isValidStart) {
+      console.log(`[REJECT LOG] Ignored orphaned/out-of-order packet on empty drawHistory: ${event}`);
+      return;
     }
 
     if (isNewAction) {

@@ -6,15 +6,58 @@ import path from 'path';
 import { roomManager } from './server/rooms.js';
 
 const getJsonSafeHistory = (history: any[]) => {
-  return (history || []).map(cmd => {
-    if (cmd && cmd.data && Buffer.isBuffer(cmd.data)) {
-      return {
-        event: cmd.event,
-        data: Array.from(cmd.data)
-      };
+  if (!Array.isArray(history)) return [];
+
+  const safeList: any[] = [];
+  let inDrawingMode = false;
+
+  for (const cmd of history) {
+    if (!cmd) continue;
+
+    // تحويل البيانات الثنائية (Buffers) إلى مصفوفات JSON آمنة 
+    let safeData = cmd.data;
+    if (cmd.data && Buffer.isBuffer(cmd.data)) {
+      safeData = Array.from(cmd.data);
     }
-    return cmd;
-  });
+
+    const event = cmd.event;
+    const isBinary = event === "draw_binary" && Array.isArray(safeData) && safeData.length > 0;
+    const binaryType = isBinary ? safeData[0] : null;
+
+    if (isBinary) {
+      if (binaryType === 1) { // draw_start
+        inDrawingMode = true;
+        safeList.push({ event, data: safeData });
+      } else if (binaryType === 2) { // draw_move
+        if (inDrawingMode) {
+          safeList.push({ event, data: safeData });
+        } else {
+          console.log(`[Sanitizer] Filtered out orphaned move packet (type 2) on transport sync`);
+        }
+      } else if (binaryType === 3 || binaryType === 4) { // draw_end / draw_cancel
+        if (inDrawingMode) {
+          safeList.push({ event, data: safeData });
+          inDrawingMode = false;
+        } else {
+          console.log(`[Sanitizer] Filtered out orphaned end/cancel packet (type 3/4) on transport sync`);
+        }
+      } else {
+        safeList.push({ event, data: safeData });
+      }
+    } else {
+      if (event === "draw_start") {
+        inDrawingMode = true;
+        safeList.push({ event, data: safeData });
+      } else if (event === "draw_action" || event === "draw_clear") {
+        inDrawingMode = false; // تصفير نمط الرسم عند الأدوات المكتملة ذاتياً
+        safeList.push({ event, data: safeData });
+      } else {
+        safeList.push({ event, data: safeData });
+      }
+    }
+  }
+
+  return safeList;
 };
 
 async function startServer() {
