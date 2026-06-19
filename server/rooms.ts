@@ -1110,8 +1110,10 @@ class RoomManager {
     //@ts-ignore
     if (!room.gameState.redoStack) room.gameState.redoStack = [];
 
+    // 🔴 سطر المراقبة الأول: لمعرفة نوع الحدث وحجم مصفوفة الرسم الحالية في السيرفر
+    console.log(`[DRAW LOG] Event: ${event}, History Length: ${room.gameState.drawHistory.length}, Current Saved Index: ${room.gameState.lastStrokeIndex}`);
+
     let isNewAction = false;
-    // Drawing Gatekeeper logic to avoid late-arriving draw_move packets after Undo
     if (event === "draw_binary" && Buffer.isBuffer(data) && data.length > 0) {
       const type = data[0];
       if (type === 1) { // draw_start
@@ -1119,23 +1121,24 @@ class RoomManager {
         isNewAction = true;
       } else if (type === 2) { // draw_move
         if (room.gameState.isDrawingActive === false) {
-          // Ignore and drop late orphaned packets
           return;
         }
-      } else if (type === 3 || type === 4) { // draw_end or cancel
+      } else if (type === 3 || type === 4) { // draw_end أو draw_cancel
         room.gameState.isDrawingActive = false;
       }
     } else if (event === "draw_start" || event === "draw_action" || event === "draw_clear") {
       isNewAction = true;
+      // 🔴 سطر المراقبة الثاني: كشف تداخل الأدوات غير الباينري والممحاة
+      console.log(`[ACTION LOG] Tool action triggered: ${event}`);
     }
 
     if (isNewAction) {
       room.gameState.lastStrokeIndex = room.gameState.drawHistory.length;
+      console.log(`[INDEX SET] Snapshot index set to: ${room.gameState.lastStrokeIndex}`);
     }
 
     room.gameState.drawHistory.push({ event, data });
 
-    // Any new drawing action clears the redo stack
     //@ts-ignore
     room.gameState.redoStack = [];
   }
