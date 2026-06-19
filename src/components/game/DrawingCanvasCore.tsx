@@ -322,9 +322,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     hasManuallyZoomedOrPanned.current = false;
   }, [readOnly]);
 
+  // Stable Callback Reference Guard (معقل المرجع المستقر للتخلص من عواصف الترابط)
+  const onSyncStateChangeRef = useRef(onSyncStateChange);
+  
+  // تحديث فوري للمرجع في كل ريندر لمنع الاستدعاءات المغلقة القديمة (Stale Closures)
+  onSyncStateChangeRef.current = onSyncStateChange;
+
   useEffect(() => {
-    onSyncStateChange?.(isSyncing);
-  }, [isSyncing, onSyncStateChange]);
+    onSyncStateChangeRef.current = onSyncStateChange;
+  });
+
+  useEffect(() => {
+    onSyncStateChangeRef.current?.(isSyncing);
+  }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
   const propsRef = useRef({ tool, color, thickness, opacity, readOnly });

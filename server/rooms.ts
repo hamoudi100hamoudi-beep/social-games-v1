@@ -1153,6 +1153,28 @@ class RoomManager {
     room.gameState.redoStack = [];
   }
 
+  private getLastStrokeStartIndex(drawHistory: any[]): number {
+    for (let i = drawHistory.length - 1; i >= 0; i--) {
+      const cmd = drawHistory[i];
+      if (!cmd) continue;
+      if (cmd.event === 'draw_start' || cmd.event === 'draw_action') {
+        return i;
+      }
+      if (cmd.event === 'draw_binary' && cmd.data) {
+        let firstByte: number | null = null;
+        if (Buffer.isBuffer(cmd.data) && cmd.data.length > 0) {
+          firstByte = cmd.data[0];
+        } else if (Array.isArray(cmd.data) && cmd.data.length > 0) {
+          firstByte = cmd.data[0];
+        }
+        if (firstByte === 1 || firstByte === 4) { // MSG_DRAW_START or MSG_DRAW_ACTION
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
   undoLastDrawing(roomId: string): { event: string; data: any }[] {
     const room = this.rooms.get(roomId);
     if (!room) return [];
@@ -1163,16 +1185,25 @@ class RoomManager {
     // Lock drawing immediately when undo is pressed to lock out any late-arriving draw_move packets
     room.gameState.isDrawingActive = false;
 
-    const lastIndex = room.gameState.lastStrokeIndex;
-    if (lastIndex !== undefined && lastIndex !== null && lastIndex >= 0 && lastIndex < room.gameState.drawHistory.length) {
+    // Use our dynamic scanner to find where the last stroke starts
+    let lastIndex = room.gameState.lastStrokeIndex;
+    if (lastIndex === undefined || lastIndex === null || lastIndex < 0 || lastIndex >= room.gameState.drawHistory.length) {
+      // If lastStrokeIndex is not immediately available or out of bounds, scan backwards to find the last stroke's start
+      lastIndex = this.getLastStrokeStartIndex(room.gameState.drawHistory);
+    }
+
+    if (lastIndex >= 0 && lastIndex < room.gameState.drawHistory.length) {
       // Splice the array from lastIndex to the end at once!
       const removed = room.gameState.drawHistory.splice(lastIndex);
       //@ts-ignore
-      room.gameState.redoStack = [removed];
+      room.gameState.redoStack.push(removed); // push to allow multi-level redo!
     }
     
-    // Set to null after undoing to prevent duplicate undo operations executing on stale/non-existent strokes
-    room.gameState.lastStrokeIndex = null;
+    // Update lastStrokeIndex by scanning the new history to find the new previous stroke's start index
+    room.gameState.lastStrokeIndex = this.getLastStrokeStartIndex(room.gameState.drawHistory);
+    if (room.gameState.lastStrokeIndex === -1) {
+      room.gameState.lastStrokeIndex = null;
+    }
 
     return room.gameState.drawHistory;
   }
@@ -1190,7 +1221,9 @@ class RoomManager {
 
     if (redoStack.length > 0) {
       const commandsToRestore = redoStack.pop();
-      if (commandsToRestore) {
+      if (commandsToRestore && commandsToRestore.length > 0) {
+        // Record the index before pushing to update lastStrokeIndex
+        room.gameState.lastStrokeIndex = history.length;
         history.push(...commandsToRestore);
       }
     }
