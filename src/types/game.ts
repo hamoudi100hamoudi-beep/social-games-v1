@@ -12,6 +12,8 @@ export interface GameState {
   roundEndWord?: string;
   drawHistory?: {event: string, data: any}[];
   reports?: string[]; // Player persistentIds/socketIds who reported the current turn
+  isDrawingActive?: boolean; // GATEKEEPER FLAG FOR UNDO SAFETY
+  lastStrokeIndex?: number | null;
 }
 
 export interface Player {

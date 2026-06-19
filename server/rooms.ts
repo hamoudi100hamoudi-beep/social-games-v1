@@ -1025,6 +1025,8 @@ class RoomManager {
           hintsUsed: 0,
           revealedIndices: [],
           drawHistory: [],
+          isDrawingActive: false,
+          lastStrokeIndex: null,
         },
         usedWords: [],
         chatMessages: [],
@@ -1075,6 +1077,8 @@ class RoomManager {
       room.gameState.drawHistory = [];
       //@ts-ignore
       room.gameState.redoStack = [];
+      room.gameState.isDrawingActive = false;
+      room.gameState.lastStrokeIndex = null;
 
       console.log(
         `[Memory Sweeper] Wiped drawing history completely to avoid RAM Bloat`,
@@ -1105,6 +1109,30 @@ class RoomManager {
     if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
     //@ts-ignore
     if (!room.gameState.redoStack) room.gameState.redoStack = [];
+
+    let isNewAction = false;
+    // Drawing Gatekeeper logic to avoid late-arriving draw_move packets after Undo
+    if (event === "draw_binary" && Buffer.isBuffer(data) && data.length > 0) {
+      const type = data[0];
+      if (type === 1) { // draw_start
+        room.gameState.isDrawingActive = true;
+        isNewAction = true;
+      } else if (type === 2) { // draw_move
+        if (room.gameState.isDrawingActive === false) {
+          // Ignore and drop late orphaned packets
+          return;
+        }
+      } else if (type === 3 || type === 4) { // draw_end or cancel
+        room.gameState.isDrawingActive = false;
+      }
+    } else if (event === "draw_start" || event === "draw_action" || event === "draw_clear") {
+      isNewAction = true;
+    }
+
+    if (isNewAction) {
+      room.gameState.lastStrokeIndex = room.gameState.drawHistory.length;
+    }
+
     room.gameState.drawHistory.push({ event, data });
 
     // Any new drawing action clears the redo stack
@@ -1119,59 +1147,21 @@ class RoomManager {
     //@ts-ignore
     if (!room.gameState.redoStack) room.gameState.redoStack = [];
 
-    const history = room.gameState.drawHistory;
-    //@ts-ignore
-    const redoStack = room.gameState.redoStack;
+    // Lock drawing immediately when undo is pressed to lock out any late-arriving draw_move packets
+    room.gameState.isDrawingActive = false;
 
-    const isDrawEnd = (cmd: any) =>
-      cmd.event === "draw_end" ||
-      (cmd.event === "draw_binary" &&
-        Buffer.isBuffer(cmd.data) &&
-        cmd.data.length > 0 &&
-        cmd.data[0] === 3);
-
-    const isDrawAction = (cmd: any) =>
-      cmd.event === "draw_action" ||
-      (cmd.event === "draw_binary" &&
-        Buffer.isBuffer(cmd.data) &&
-        cmd.data.length > 0 &&
-        cmd.data[0] === 4);
-
-    const isDrawStart = (cmd: any) =>
-      cmd.event === "draw_start" ||
-      (cmd.event === "draw_binary" &&
-        Buffer.isBuffer(cmd.data) &&
-        cmd.data.length > 0 &&
-        cmd.data[0] === 1);
-
-    let endIndex = history.length - 1;
-    while (
-      endIndex >= 0 &&
-      !isDrawEnd(history[endIndex]) &&
-      !isDrawAction(history[endIndex])
-    ) {
-      endIndex--;
+    const lastIndex = room.gameState.lastStrokeIndex;
+    if (lastIndex !== undefined && lastIndex !== null && lastIndex >= 0 && lastIndex < room.gameState.drawHistory.length) {
+      // Splice the array from lastIndex to the end at once!
+      const removed = room.gameState.drawHistory.splice(lastIndex);
+      //@ts-ignore
+      room.gameState.redoStack = [removed];
     }
+    
+    // Set to null after undoing to prevent duplicate undo operations executing on stale/non-existent strokes
+    room.gameState.lastStrokeIndex = null;
 
-    if (endIndex >= 0) {
-      if (isDrawAction(history[endIndex])) {
-        const removed = history.splice(endIndex, history.length - endIndex);
-        redoStack.push(removed);
-      } else {
-        let startIndex = endIndex;
-        while (startIndex >= 0 && !isDrawStart(history[startIndex])) {
-          startIndex--;
-        }
-        if (startIndex >= 0) {
-          const removed = history.splice(
-            startIndex,
-            history.length - startIndex,
-          );
-          redoStack.push(removed);
-        }
-      }
-    }
-    return history;
+    return room.gameState.drawHistory;
   }
 
   redoDrawing(roomId: string): { event: string; data: any }[] {
@@ -1200,6 +1190,8 @@ class RoomManager {
       room.gameState.drawHistory = [];
       //@ts-ignore
       room.gameState.redoStack = [];
+      room.gameState.isDrawingActive = false;
+      room.gameState.lastStrokeIndex = null;
     }
   }
 
