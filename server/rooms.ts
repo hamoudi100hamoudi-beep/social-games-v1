@@ -1138,9 +1138,6 @@ class RoomManager {
       }
     }
 
-    // Monitor type and current history size
-    console.log(`[DRAW LOG] Event: ${event} (type: ${type}), History Length: ${room.gameState.drawHistory.length}`);
-
     let isValidStart = false;
 
     if (isBinary) {
@@ -1168,7 +1165,6 @@ class RoomManager {
             }
             return true;
           });
-          console.log(`[CONSOLIDATE] Pruned legacy live stream in room drawn history for instId: ${instId}. Cleaned history size: ${room.gameState.drawHistory.length}`);
         }
       } else if (type === 4 || type === 10 || type === 5) { // draw_action (bucket) or draw_clear
         isValidStart = true;
@@ -1176,12 +1172,10 @@ class RoomManager {
       }
     } else if (event === "draw_start" || event === "draw_action" || event === "draw_clear") {
       isValidStart = true;
-      console.log(`[ACTION LOG] Tool action triggered: ${event}`);
     }
 
     // Protection to avoid orphaned packages on an empty draw history
     if (room.gameState.drawHistory.length === 0 && !isValidStart) {
-      console.log(`[REJECT LOG] Ignored orphaned/out-of-order packet on empty drawHistory: ${event}`);
       return;
     }
 
