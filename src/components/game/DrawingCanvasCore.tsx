@@ -297,10 +297,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
   }, []);
 
-  // Refined Undo / Redo Snapshot Cache with dynamic memory optimizer (VRAM protection)
-  const historyRef = useRef<{ canvasBuffer: HTMLCanvasElement }[]>([]);
-  const historyIndexRef = useRef(-1);
   const isReplayingRef = useRef(false);
+
+  // Deterministic local command queue for flawless client-side undo/redo and late-joiner state recovery
+  const localCommandsRef = useRef<any[]>([]);
+  const localRedoStackRef = useRef<any[][]>([]);
+  const prevCommandsCountRef = useRef<number>(-1);
 
   // Buffering history syncing before ref ready
   const bufferedSyncRef = useRef<any[] | null>(null);
@@ -727,50 +729,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else {
         socket.emit('draw_binary', msg);
       }
+
+      // Record local durable drawing history for deterministic undo / redo
+      if (event === 'draw_stroke' || event === 'draw_clear' || (event === 'draw_action' && payload.tool === 'bucket')) {
+        prevCommandsCountRef.current = localCommandsRef.current.length;
+        localCommandsRef.current.push({ event: 'draw_binary', data: msg });
+        localRedoStackRef.current = []; // Wipe redo stack on new action
+        syncHistoryButtons();
+      }
     }
   };
 
   // --- Snapshot Management (Adaptive Multi-Step VRAM Memory & CPU Optimizer) ---
   const saveSnapshot = (force = false) => {
-    if (isReplayingRef.current && !force) return;
-    const canvas = canvasRef.current;
-    const ctx = ctxRef.current;
-    if (!canvas || !ctx) return;
-
-    try {
-      // Create a compact GPU-accelerated offscreen canvas backup
-      const buffer = document.createElement('canvas');
-      buffer.width = canvas.width;
-      buffer.height = canvas.height;
-      const bCtx = buffer.getContext('2d');
-      if (bCtx) {
-        bCtx.drawImage(canvas, 0, 0);
-      }
-
-      // If we made custom edits, dump obsolete redo points
-      if (historyIndexRef.current < historyRef.current.length - 1) {
-        historyRef.current = historyRef.current.slice(0, historyIndexRef.current + 1);
-      }
-
-      historyRef.current.push({ canvasBuffer: buffer });
-      
-      // Strict 1-Undo step limit (MAX_HISTORY = 2) across all devices matching Gartic.io competitive pace.
-      const MAX_HISTORY = 2;
-      
-      while (historyRef.current.length > MAX_HISTORY) {
-        // Garbage collect discarded heap elements eagerly by resetting their dimensions
-        const discarded = historyRef.current.shift();
-        if (discarded && discarded.canvasBuffer) {
-          discarded.canvasBuffer.width = 0;
-          discarded.canvasBuffer.height = 0;
-        }
-      }
-
-      historyIndexRef.current = historyRef.current.length - 1;
-      onHistoryStateChange?.(historyIndexRef.current, historyRef.current.length);
-    } catch (err) {
-      console.error("[DrawingCanvasCore] Failed to save step VRAM snapshot:", err);
-    }
+    // No-op: Drawing state-recovery is now 100% powered deterministically by the lightweight command replay engine (localCommandsRef)
   };
 
   // --- Logical Coordinate Conversion ---
@@ -958,16 +930,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     preventBucketRef.current = false;
 
     // Reinitialize Undo / Redo stacks
-    historyRef.current = [];
-    historyIndexRef.current = -1;
     bufferedSyncRef.current = null;
+    localCommandsRef.current = [];
+    localRedoStackRef.current = [];
+    prevCommandsCountRef.current = -1;
 
     if (ctx && tempCtx) {
       saveSnapshot(); 
     }
 
     // Callback to update Parent Component history buttons
-    onHistoryStateChange?.(-1, 0);
+    syncHistoryButtons();
   };
 
   const executeClear = (emit: boolean = true) => {
@@ -985,46 +958,56 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     saveSnapshot();
   };
 
-  const executeUndo = (emit: boolean = true) => {
-    if (historyIndexRef.current > 0) {
-      historyIndexRef.current--;
-      const ctx = ctxRef.current;
-      const canvas = canvasRef.current;
-      const step = historyRef.current[historyIndexRef.current];
-      if (ctx && canvas && step && step.canvasBuffer) {
-        ctx.save();
-        // Reset scale matrices temporarily to paint the backing Store directly without blurring
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(step.canvasBuffer, 0, 0);
-        ctx.restore();
-      }
-      onHistoryStateChange?.(historyIndexRef.current, historyRef.current.length);
+  const syncHistoryButtons = () => {
+    const list = localCommandsRef.current;
+    const canUndo = prevCommandsCountRef.current >= 0 && prevCommandsCountRef.current < list.length;
+    const canRedo = localRedoStackRef.current.length > 0;
+    const index = canUndo ? 1 : 0;
+    const length = index + (canRedo ? 1 : 0) + 1;
+    onHistoryStateChange?.(index, length);
+  };
 
-      if (emit) {
-        emitDrawCommand('draw_undo', {});
+  const executeUndo = (emit: boolean = true) => {
+    const list = localCommandsRef.current;
+    if (prevCommandsCountRef.current >= 0 && prevCommandsCountRef.current < list.length) {
+      const removed = list.splice(prevCommandsCountRef.current);
+      localRedoStackRef.current = [removed];
+      prevCommandsCountRef.current = -1;
+      applySyncedHistory(list);
+    } else {
+      const ctx = ctxRef.current;
+      const tempCtx = tempCtxRef.current;
+      if (ctx && tempCtx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+        tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        localCommandsRef.current = [];
+        prevCommandsCountRef.current = -1;
+        saveSnapshot();
       }
+    }
+
+    syncHistoryButtons();
+
+    if (emit) {
+      emitDrawCommand('draw_undo', {});
     }
   };
 
   const executeRedo = (emit: boolean = true) => {
-    if (historyIndexRef.current < historyRef.current.length - 1) {
-      historyIndexRef.current++;
-      const ctx = ctxRef.current;
-      const canvas = canvasRef.current;
-      const step = historyRef.current[historyIndexRef.current];
-      if (ctx && canvas && step && step.canvasBuffer) {
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(step.canvasBuffer, 0, 0);
-        ctx.restore();
+    if (localRedoStackRef.current.length > 0) {
+      const commandsToRestore = localRedoStackRef.current.pop();
+      if (commandsToRestore && commandsToRestore.length > 0) {
+        prevCommandsCountRef.current = localCommandsRef.current.length;
+        localCommandsRef.current.push(...commandsToRestore);
+        applySyncedHistory(localCommandsRef.current);
       }
-      onHistoryStateChange?.(historyIndexRef.current, historyRef.current.length);
+    }
 
-      if (emit) {
-        emitDrawCommand('draw_redo', {});
-      }
+    syncHistoryButtons();
+
+    if (emit) {
+      emitDrawCommand('draw_redo', {});
     }
   };
 
@@ -1043,8 +1026,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
       // Reset history stacks
-      historyRef.current = [];
-      historyIndexRef.current = -1;
+      localCommandsRef.current = [...commands];
+      prevCommandsCountRef.current = -1;
       saveSnapshot(); // Base empty state in history stack
 
       // Enable replaying flag to prevent intermediate image generation snapshots inside the loops
@@ -1071,7 +1054,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
           const path = replayPaths[instId];
 
-          if (event === 'draw_start') {
+          if (event === 'draw_stroke') {
+            const isShape = cmdTool !== 'pencil' && cmdTool !== 'eraser';
+            const scaledPoints = (data.points || []).map((pt: any) => ({
+              x: pt.x * LOGICAL_WIDTH,
+              y: pt.y * LOGICAL_HEIGHT
+            }));
+            if (scaledPoints.length > 0) {
+              if (isShape && scaledPoints.length >= 2) {
+                const startPt = scaledPoints[0];
+                const lastPt = scaledPoints[scaledPoints.length - 1];
+                drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, cmdTool, cmdColor, cmdWidth, cmdOpacity);
+              } else {
+                drawEntirePath(ctx, scaledPoints, cmdTool, cmdColor, cmdWidth, cmdOpacity);
+              }
+            }
+            saveSnapshot();
+          } else if (event === 'draw_start') {
             replaySessions[instId] = {
               tool: cmdTool,
               color: cmdColor,
@@ -1168,6 +1167,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // Deactivate replaying and save the final integrated snapshot
       isReplayingRef.current = false;
       saveSnapshot();
+      syncHistoryButtons();
     }
   };
 
@@ -1190,7 +1190,31 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const tempCtx = tempCtxRef.current;
       if (!ctx || !tempCtx) return;
 
-      if (event === 'draw_start') {
+      if (event === 'draw_stroke') {
+        const isShape = remoteTool !== 'pencil' && remoteTool !== 'eraser';
+        const scaledPoints = (data.points || []).map((pt: any) => ({
+          x: pt.x * LOGICAL_WIDTH,
+          y: pt.y * LOGICAL_HEIGHT
+        }));
+        if (scaledPoints.length > 0) {
+          if (isShape && scaledPoints.length >= 2) {
+            const startPt = scaledPoints[0];
+            const lastPt = scaledPoints[scaledPoints.length - 1];
+            drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, remoteTool, remoteColor, remoteWidth, remoteOpacity);
+          } else {
+            drawEntirePath(ctx, scaledPoints, remoteTool, remoteColor, remoteWidth, remoteOpacity);
+          }
+          // Solidify the line and wipe the temporary transient trace to prevent artifacts
+          delete activeSessionsRef.current[data.instanceId];
+          redrawTempLayer();
+
+          prevCommandsCountRef.current = localCommandsRef.current.length;
+          localCommandsRef.current.push({ event: 'draw_binary', data: raw });
+          localRedoStackRef.current = [];
+          saveSnapshot();
+          syncHistoryButtons();
+        }
+      } else if (event === 'draw_start') {
         const rx = data.x * LOGICAL_WIDTH;
         const ry = data.y * LOGICAL_HEIGHT;
         activeSessionsRef.current[data.instanceId] = {
@@ -1242,11 +1266,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         delete activeSessionsRef.current[data.instanceId];
         redrawTempLayer();
       } else if (event === 'draw_clear') {
+        prevCommandsCountRef.current = localCommandsRef.current.length;
+        localCommandsRef.current.push({ event: 'draw_binary', data: raw });
+        localRedoStackRef.current = [];
         executeClear(false);
+        syncHistoryButtons();
       } else if (event === 'draw_action') {
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
           floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity);
+          prevCommandsCountRef.current = localCommandsRef.current.length;
+          localCommandsRef.current.push({ event: 'draw_binary', data: raw });
+          localRedoStackRef.current = [];
           saveSnapshot();
+          syncHistoryButtons();
         }
       } else if (event === 'draw_undo') {
         executeUndo(false);
@@ -1629,6 +1661,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       if (currentPathRef.current.length > 0) {
         drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
+
+        // Send complete stroke object for precise restoration and history tracking
+        const normalizedPoints = currentPathRef.current.map(pt => ({
+          x: pt.x / LOGICAL_WIDTH,
+          y: pt.y / LOGICAL_HEIGHT
+        }));
+        emitDrawCommand('draw_stroke', {
+          tool: activeTool,
+          color: activeColor,
+          width: activeWidth,
+          opacity: activeOpacity,
+          points: normalizedPoints
+        });
       }
 
       emitDrawCommand('draw_end', {
@@ -1641,6 +1686,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     } else {
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       drawShape(ctx, startXRef.current, startYRef.current, x, y, activeTool, activeColor, activeWidth, activeOpacity);
+
+      // Send complete stroke object for shapes (straight lines, rectangles, circles, etc.)
+      const normalizedPoints = [
+        { x: startXRef.current / LOGICAL_WIDTH, y: startYRef.current / LOGICAL_HEIGHT },
+        { x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT }
+      ];
+      emitDrawCommand('draw_stroke', {
+        tool: activeTool,
+        color: activeColor,
+        width: activeWidth,
+        opacity: activeOpacity,
+        points: normalizedPoints
+      });
 
       emitDrawCommand('draw_end', {
         tool: activeTool,

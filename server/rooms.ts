@@ -1026,7 +1026,6 @@ class RoomManager {
           revealedIndices: [],
           drawHistory: [],
           isDrawingActive: false,
-          lastStrokeIndex: null,
         },
         usedWords: [],
         chatMessages: [],
@@ -1078,7 +1077,6 @@ class RoomManager {
       //@ts-ignore
       room.gameState.redoStack = [];
       room.gameState.isDrawingActive = false;
-      room.gameState.lastStrokeIndex = null;
 
       console.log(
         `[Memory Sweeper] Wiped drawing history completely to avoid RAM Bloat`,
@@ -1110,41 +1108,78 @@ class RoomManager {
     //@ts-ignore
     if (!room.gameState.redoStack) room.gameState.redoStack = [];
 
-    // 🔴 سطر المراقبة الأول: لمعرفة نوع الحدث وحجم مصفوفة الرسم الحالية في السيرفر
-    console.log(`[DRAW LOG] Event: ${event}, History Length: ${room.gameState.drawHistory.length}, Current Saved Index: ${room.gameState.lastStrokeIndex}`);
+    // Helper to extract instanceId from binary buffer safely on the server side
+    const extractInstanceIdFromBuffer = (buf: any): string => {
+      if (!buf || !Buffer.isBuffer(buf) || buf.length < 8) return "";
+      let str = "";
+      for (let i = 0; i < 7; i++) {
+        const code = buf[1 + i];
+        if (code > 0) {
+          str += String.fromCharCode(code);
+        }
+      }
+      return str;
+    };
+
+    const isBinary = event === "draw_binary" && Buffer.isBuffer(data) && data.length > 0;
+    const type = isBinary ? data[0] : 0;
+    const instId = isBinary ? extractInstanceIdFromBuffer(data) : "";
+
+    // If we already have a solidified draw_stroke (type 9) in history for this instId, do not append any further transient drawing actions
+    if (isBinary && instId && (type === 1 || type === 2 || type === 3 || type === 6)) {
+      const hasStroke = room.gameState.drawHistory.some(cmd => {
+        if (cmd.event === 'draw_binary' && Buffer.isBuffer(cmd.data) && cmd.data.length > 0) {
+          return cmd.data[0] === 9 && extractInstanceIdFromBuffer(cmd.data) === instId;
+        }
+        return false;
+      });
+      if (hasStroke) {
+        return; // Ignore duplicated transient live packet as it's already recorded in a completed stroke object!
+      }
+    }
+
+    // Monitor type and current history size
+    console.log(`[DRAW LOG] Event: ${event} (type: ${type}), History Length: ${room.gameState.drawHistory.length}`);
 
     let isValidStart = false;
-    let isNewAction = false;
 
-    if (event === "draw_binary" && Buffer.isBuffer(data) && data.length > 0) {
-      const type = data[0];
+    if (isBinary) {
       if (type === 1) { // draw_start
         room.gameState.isDrawingActive = true;
-        isNewAction = true;
         isValidStart = true;
       } else if (type === 2) { // draw_move
         if (room.gameState.isDrawingActive === false) {
           return;
         }
-      } else if (type === 3 || type === 4) { // draw_end أو draw_cancel
+      } else if (type === 3 || type === 6) { // draw_end أو draw_cancel
         room.gameState.isDrawingActive = false;
+      } else if (type === 9) { // draw_stroke
+        isValidStart = true;
+        room.gameState.isDrawingActive = false;
+
+        // Consolidate legacy transient stroke streams under the same session instanceId
+        if (instId) {
+          room.gameState.drawHistory = room.gameState.drawHistory.filter(cmd => {
+            if (cmd.event === 'draw_binary' && Buffer.isBuffer(cmd.data) && cmd.data.length > 0) {
+              const t = cmd.data[0];
+              if ((t === 1 || t === 2 || t === 3 || t === 6) && extractInstanceIdFromBuffer(cmd.data) === instId) {
+                return false;
+              }
+            }
+            return true;
+          });
+          console.log(`[CONSOLIDATE] Pruned legacy live stream in room drawn history for instId: ${instId}. Cleaned history size: ${room.gameState.drawHistory.length}`);
+        }
       }
     } else if (event === "draw_start" || event === "draw_action" || event === "draw_clear") {
-      isNewAction = true;
       isValidStart = true;
-      // 🔴 سطر المراقبة الثاني: كشف تداخل الأدوات غير الباينري والممحاة
       console.log(`[ACTION LOG] Tool action triggered: ${event}`);
     }
 
-    // 🛡️ حماية حتمية للحسابات الفارغة: لا تقبل أي حزم يتيمة (حركة أو انتهاء) داخل مصفوفة فارغة أبداً
+    // Protection to avoid orphaned packages on an empty draw history
     if (room.gameState.drawHistory.length === 0 && !isValidStart) {
       console.log(`[REJECT LOG] Ignored orphaned/out-of-order packet on empty drawHistory: ${event}`);
       return;
-    }
-
-    if (isNewAction) {
-      room.gameState.lastStrokeIndex = room.gameState.drawHistory.length;
-      console.log(`[INDEX SET] Snapshot index set to: ${room.gameState.lastStrokeIndex}`);
     }
 
     room.gameState.drawHistory.push({ event, data });
@@ -1167,7 +1202,7 @@ class RoomManager {
         } else if (Array.isArray(cmd.data) && cmd.data.length > 0) {
           firstByte = cmd.data[0];
         }
-        if (firstByte === 1 || firstByte === 4) { // MSG_DRAW_START or MSG_DRAW_ACTION
+        if (firstByte === 1 || firstByte === 4 || firstByte === 9) { // MSG_DRAW_START or MSG_DRAW_ACTION or MSG_DRAW_STROKE
           return i;
         }
       }
@@ -1186,23 +1221,13 @@ class RoomManager {
     room.gameState.isDrawingActive = false;
 
     // Use our dynamic scanner to find where the last stroke starts
-    let lastIndex = room.gameState.lastStrokeIndex;
-    if (lastIndex === undefined || lastIndex === null || lastIndex < 0 || lastIndex >= room.gameState.drawHistory.length) {
-      // If lastStrokeIndex is not immediately available or out of bounds, scan backwards to find the last stroke's start
-      lastIndex = this.getLastStrokeStartIndex(room.gameState.drawHistory);
-    }
+    const lastIndex = this.getLastStrokeStartIndex(room.gameState.drawHistory);
 
     if (lastIndex >= 0 && lastIndex < room.gameState.drawHistory.length) {
       // Splice the array from lastIndex to the end at once!
       const removed = room.gameState.drawHistory.splice(lastIndex);
       //@ts-ignore
-      room.gameState.redoStack.push(removed); // push to allow multi-level redo!
-    }
-    
-    // Update lastStrokeIndex by scanning the new history to find the new previous stroke's start index
-    room.gameState.lastStrokeIndex = this.getLastStrokeStartIndex(room.gameState.drawHistory);
-    if (room.gameState.lastStrokeIndex === -1) {
-      room.gameState.lastStrokeIndex = null;
+      room.gameState.redoStack = [removed]; // Enforce 1-step undo/redo limit
     }
 
     return room.gameState.drawHistory;
@@ -1222,8 +1247,6 @@ class RoomManager {
     if (redoStack.length > 0) {
       const commandsToRestore = redoStack.pop();
       if (commandsToRestore && commandsToRestore.length > 0) {
-        // Record the index before pushing to update lastStrokeIndex
-        room.gameState.lastStrokeIndex = history.length;
         history.push(...commandsToRestore);
       }
     }
@@ -1237,7 +1260,6 @@ class RoomManager {
       //@ts-ignore
       room.gameState.redoStack = [];
       room.gameState.isDrawingActive = false;
-      room.gameState.lastStrokeIndex = null;
     }
   }
 

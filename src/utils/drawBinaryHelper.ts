@@ -54,6 +54,7 @@ const MSG_DRAW_CLEAR = 5;
 const MSG_DRAW_CANCEL = 6;
 const MSG_DRAW_UNDO = 7;
 const MSG_DRAW_REDO = 8;
+const MSG_DRAW_STROKE = 9;
 
 const TOOLS_LIST = ['pencil', 'eraser', 'bucket', 'line', 'strokeRect', 'fillRect', 'strokeCircle', 'fillCircle', 'pipette'];
 
@@ -243,6 +244,33 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     return buffer;
   }
   
+  if (event === 'draw_stroke') {
+    const points = Array.isArray(data.points) ? data.points : [];
+    const pointsLength = points.length;
+    const buffer = new ArrayBuffer(16 + pointsLength * 4);
+    const view = new DataView(buffer);
+    view.setUint8(0, MSG_DRAW_STROKE);
+    writeString7(view, 1, instId);
+    view.setUint8(8, getToolIndex(data.tool));
+    const rgb = parseColorToRGB(data.color);
+    view.setUint8(9, rgb.r);
+    view.setUint8(10, rgb.g);
+    view.setUint8(11, rgb.b);
+    const width = Math.min(255, Math.max(0, Math.round(data.width || 0)));
+    view.setUint8(12, width);
+    const opacityVal = Math.min(100, Math.max(0, Math.round((data.opacity !== undefined ? data.opacity : 1) * 100)));
+    view.setUint8(13, opacityVal);
+    view.setUint16(14, pointsLength, true);
+    for (let i = 0; i < pointsLength; i++) {
+      const pt = points[i];
+      const scaledPtX = Math.min(10000, Math.max(0, Math.round((pt.x || 0) * 10000)));
+      const scaledPtY = Math.min(10000, Math.max(0, Math.round((pt.y || 0) * 10000)));
+      view.setUint16(16 + i * 4, scaledPtX, true);
+      view.setUint16(18 + i * 4, scaledPtY, true);
+    }
+    return buffer;
+  }
+  
   let type = 5;
   if (event === 'draw_clear') type = MSG_DRAW_CLEAR;
   else if (event === 'draw_cancel') type = MSG_DRAW_CANCEL;
@@ -367,6 +395,27 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       return {
         event: 'draw_action',
         data: { instanceId: instId, tool, color, opacity, x, y }
+      };
+    }
+    
+    if (type === MSG_DRAW_STROKE) {
+      const tool = getToolName(view.getUint8(8));
+      const r = view.getUint8(9);
+      const g = view.getUint8(10);
+      const b = view.getUint8(11);
+      const color = formatRGBToHex(r, g, b);
+      const width = view.getUint8(12);
+      const opacity = view.getUint8(13) / 100;
+      const pointsLength = view.getUint16(14, true);
+      const points = [];
+      for (let i = 0; i < pointsLength; i++) {
+        const x = view.getUint16(16 + i * 4, true) / 10000;
+        const y = view.getUint16(18 + i * 4, true) / 10000;
+        points.push({ x, y });
+      }
+      return {
+        event: 'draw_stroke',
+        data: { instanceId: instId, tool, color, width, opacity, points }
       };
     }
     

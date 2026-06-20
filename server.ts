@@ -34,12 +34,12 @@ const getJsonSafeHistory = (history: any[]) => {
         } else {
           console.log(`[Sanitizer] Filtered out orphaned move packet (type 2) on transport sync`);
         }
-      } else if (binaryType === 3 || binaryType === 4) { // draw_end / draw_cancel
+      } else if (binaryType === 3 || binaryType === 6) { // draw_end / draw_cancel
         if (inDrawingMode) {
           safeList.push({ event, data: safeData });
           inDrawingMode = false;
         } else {
-          console.log(`[Sanitizer] Filtered out orphaned end/cancel packet (type 3/4) on transport sync`);
+          console.log(`[Sanitizer] Filtered out orphaned end/cancel packet (type 3/6) on transport sync`);
         }
       } else {
         safeList.push({ event, data: safeData });

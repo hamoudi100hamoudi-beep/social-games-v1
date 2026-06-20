@@ -4,3 +4,13 @@ export interface PooledPoint {
   x: number;
   y: number;
 }
+
+export interface StrokeObject {
+  instanceId: string;
+  tool: ToolType;
+  color: string;
+  width: number;
+  opacity: number;
+  points: PooledPoint[];
+}
+
