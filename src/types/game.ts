@@ -14,6 +14,7 @@ export interface GameState {
   reports?: string[]; // Player persistentIds/socketIds who reported the current turn
   isDrawingActive?: boolean; // GATEKEEPER FLAG FOR UNDO SAFETY
   lastStrokeIndex?: number | null;
+  redoStack?: any[];
 }
 
 export interface Player {

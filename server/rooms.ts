@@ -1170,6 +1170,9 @@ class RoomManager {
           });
           console.log(`[CONSOLIDATE] Pruned legacy live stream in room drawn history for instId: ${instId}. Cleaned history size: ${room.gameState.drawHistory.length}`);
         }
+      } else if (type === 4 || type === 10 || type === 5) { // draw_action (bucket) or draw_clear
+        isValidStart = true;
+        room.gameState.isDrawingActive = false;
       }
     } else if (event === "draw_start" || event === "draw_action" || event === "draw_clear") {
       isValidStart = true;
@@ -1184,7 +1187,6 @@ class RoomManager {
 
     room.gameState.drawHistory.push({ event, data });
 
-    //@ts-ignore
     room.gameState.redoStack = [];
   }
 
@@ -1214,20 +1216,17 @@ class RoomManager {
     const room = this.rooms.get(roomId);
     if (!room) return [];
     if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
-    //@ts-ignore
     if (!room.gameState.redoStack) room.gameState.redoStack = [];
 
     // Lock drawing immediately when undo is pressed to lock out any late-arriving draw_move packets
     room.gameState.isDrawingActive = false;
 
-    // Use our dynamic scanner to find where the last stroke starts
-    const lastIndex = this.getLastStrokeStartIndex(room.gameState.drawHistory);
-
-    if (lastIndex >= 0 && lastIndex < room.gameState.drawHistory.length) {
-      // Splice the array from lastIndex to the end at once!
-      const removed = room.gameState.drawHistory.splice(lastIndex);
-      //@ts-ignore
-      room.gameState.redoStack = [removed]; // Enforce 1-step undo/redo limit
+    const canUndo = room.gameState.drawHistory.length > 0 && room.gameState.redoStack.length === 0;
+    if (canUndo) {
+      const removed = room.gameState.drawHistory.pop();
+      if (removed) {
+        room.gameState.redoStack = [removed]; // Enforce 1-step undo/redo limit
+      }
     }
 
     return room.gameState.drawHistory;
@@ -1237,17 +1236,19 @@ class RoomManager {
     const room = this.rooms.get(roomId);
     if (!room) return [];
     if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
-    //@ts-ignore
     if (!room.gameState.redoStack) room.gameState.redoStack = [];
 
     const history = room.gameState.drawHistory;
-    //@ts-ignore
     const redoStack = room.gameState.redoStack;
 
     if (redoStack.length > 0) {
-      const commandsToRestore = redoStack.pop();
-      if (commandsToRestore && commandsToRestore.length > 0) {
-        history.push(...commandsToRestore);
+      const restored = redoStack.pop();
+      if (restored) {
+        if (Array.isArray(restored)) {
+          history.push(...restored);
+        } else {
+          history.push(restored);
+        }
       }
     }
     return history;

@@ -960,7 +960,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const syncHistoryButtons = () => {
     const list = localCommandsRef.current;
-    const canUndo = prevCommandsCountRef.current >= 0 && prevCommandsCountRef.current < list.length;
+    const canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
     const canRedo = localRedoStackRef.current.length > 0;
     const index = canUndo ? 1 : 0;
     const length = index + (canRedo ? 1 : 0) + 1;
@@ -969,23 +969,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const executeUndo = (emit: boolean = true) => {
     const list = localCommandsRef.current;
-    if (prevCommandsCountRef.current >= 0 && prevCommandsCountRef.current < list.length) {
-      const removed = list.splice(prevCommandsCountRef.current);
+    const canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
+    if (!canUndo) return;
+
+    const removed = list.pop();
+    if (removed) {
       localRedoStackRef.current = [removed];
-      prevCommandsCountRef.current = -1;
-      applySyncedHistory(list);
-    } else {
-      const ctx = ctxRef.current;
-      const tempCtx = tempCtxRef.current;
-      if (ctx && tempCtx) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-        tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-        localCommandsRef.current = [];
-        prevCommandsCountRef.current = -1;
-        saveSnapshot();
-      }
     }
+    applySyncedHistory(list);
 
     syncHistoryButtons();
 
@@ -995,13 +986,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const executeRedo = (emit: boolean = true) => {
-    if (localRedoStackRef.current.length > 0) {
-      const commandsToRestore = localRedoStackRef.current.pop();
-      if (commandsToRestore && commandsToRestore.length > 0) {
-        prevCommandsCountRef.current = localCommandsRef.current.length;
+    const canRedo = localRedoStackRef.current.length > 0;
+    if (!canRedo) return;
+
+    const commandsToRestore = localRedoStackRef.current.pop();
+    if (commandsToRestore) {
+      if (Array.isArray(commandsToRestore)) {
         localCommandsRef.current.push(...commandsToRestore);
-        applySyncedHistory(localCommandsRef.current);
+      } else {
+        localCommandsRef.current.push(commandsToRestore);
       }
+      applySyncedHistory(localCommandsRef.current);
     }
 
     syncHistoryButtons();
