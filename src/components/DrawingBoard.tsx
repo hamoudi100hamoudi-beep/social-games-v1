@@ -485,9 +485,14 @@ function ColorBtn({ color, active, onClick }: { key?: React.Key, color: string, 
     <button 
       type="button"
       onClick={onClick}
-      className={`w-[21px] h-[21px] flex-shrink-0 rounded-[4px] border transition-none relative focus:outline-none select-none
-        ${active ? 'border-[#FBBF24] border-[2.5px] z-10' : 'border-black/20'}`}
+      className={`w-[21px] h-[21px] flex-shrink-0 rounded-[4px] border transition-all duration-150 relative focus:outline-none select-none border-black/15`}
       style={{ backgroundColor: color }}
-    />
+    >
+      {active && (
+        <span 
+          className="absolute -inset-[3px] rounded-[6px] border-[1.5px] border-[#D4AF37] pointer-events-none z-10 shadow-[0_0_5px_rgba(212,175,55,0.7)]" 
+        />
+      )}
+    </button>
   );
 }

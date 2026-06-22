@@ -16,6 +16,8 @@ import {
   WifiOff,
   Eye,
   EyeOff,
+  LogOut,
+  DoorOpen,
 } from "lucide-react";
 import { useSocket } from "./SocketProvider";
 import { motion, AnimatePresence } from "motion/react";
@@ -127,6 +129,44 @@ const SmoothTimer = ({
       </div>
     </div>
   );
+};
+
+// 🎬 2️⃣ Cinematic Flow & Stagger Animation Variants
+const cinematicCardVariants = {
+  hidden: { opacity: 0, scale: 0.94, y: 40 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.45,
+      ease: [0.16, 1, 0.3, 1],
+      staggerChildren: 0.06,
+      delayChildren: 0.05
+    }
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.94,
+    y: -25,
+    transition: {
+      duration: 0.25,
+      ease: [0.7, 0, 0.84, 0]
+    }
+  }
+};
+
+const cinematicItemVariants = {
+  hidden: { opacity: 0, y: 15, scale: 0.97 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      duration: 0.4,
+      ease: [0.16, 1, 0.3, 1]
+    }
+  }
 };
 
 export default function GameRoom({
@@ -1078,81 +1118,95 @@ export default function GameRoom({
         {/* Exit Confirmation Dialog */}
         <AnimatePresence>
           {showExitConfirm && (
-            <div className="absolute inset-0 z-[150] flex flex-col items-center justify-center p-4">
-              {/* Backdrop */}
+            <motion.div
+              key="exit-confirm-overlay"
+              id="exit-confirm-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+              className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowExitConfirm(false);
+                }
+              }}
+            >
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                onClick={() => setShowExitConfirm(false)}
-              />
-              {/* Dialog Content */}
-              <motion.div
-                initial={{ scale: 0.85, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.85, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                className="relative bg-white rounded-[2rem] w-full max-w-sm flex flex-col items-center shadow-2xl p-6 sm:p-8 pt-12 pb-8 overflow-visible z-10"
+                key="exit-confirm-card"
+                id="exit-confirm-card"
+                variants={cinematicCardVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="bg-[#ECEBFC] p-8 rounded-[32px] max-w-sm w-full shadow-xl text-center relative overflow-visible border border-white/40"
               >
-                {/* Banner Ribbon (CSS Ribbon) */}
-                <div className="absolute -top-[1.2rem] left-1/2 -translate-x-1/2 w-48 flex justify-center z-20">
-                  <div className="absolute top-4 -left-3 border-[12px] border-blue-800 border-l-transparent border-b-transparent z-[-1]"></div>
-                  <div className="absolute top-4 -right-3 border-[12px] border-blue-800 border-r-transparent border-b-transparent z-[-1]"></div>
+                
+                {/* Close Button on Top Right */}
+                <motion.button 
+                  variants={cinematicItemVariants}
+                  onClick={() => setShowExitConfirm(false)}
+                  className="absolute top-4 right-4 text-[#8C8AA7] hover:text-[#5E5B7A] transition-colors"
+                >
+                  <X className="w-6 h-6 stroke-[3.5]" />
+                </motion.button>
 
-                  <div className="relative bg-[#2196F3] border-[3px] border-[#0A2540] rounded-lg px-8 py-1 shadow-[0_4px_0_#0A2540]">
-                    <span
-                      className="text-[#FFEB3B] font-black text-xl tracking-wider"
-                      style={{ WebkitTextStroke: "1px #0A2540" }}
-                    >
-                      EXIT
-                    </span>
-                  </div>
-                </div>
+                {/* Title with professional 3D cartoon text style */}
+                <motion.div variants={cinematicItemVariants} className="relative select-none mb-5 mx-auto py-2 px-3">
+                  <h2 className="cartoon-title-exit text-[34px] tracking-widest uppercase select-none text-center">
+                    EXIT
+                  </h2>
+                </motion.div>
 
-                {/* Big Icon */}
-                <div className="w-36 h-36 rounded-full bg-[#FFEB3B] border-[4px] border-[#0A2540] mt-6 flex items-center justify-center relative shadow-[0_4px_0_#0A2540]">
-                  {/* Door representation */}
-                  <div className="w-16 h-20 bg-white border-[3px] border-[#0A2540] rounded-sm relative">
-                    <div className="absolute top-1/2 right-2 w-2 h-2 rounded-full border-[2px] border-[#0A2540]" />
-                  </div>
-                </div>
+                {/* Expressive Open Door icon with delayed swinging exit animation */}
+                <motion.div variants={cinematicItemVariants}>
+                  <motion.div 
+                    className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative"
+                    animate={{
+                      rotate: [0, -12, 8, -6, 4, 0],
+                      scale: [1, 1.05, 0.98, 1.05, 1],
+                      x: [0, -3, 3, -1, 0]
+                    }}
+                    transition={{
+                      delay: 1.5,
+                      repeat: Infinity,
+                      duration: 0.9,
+                      repeatDelay: 2.0,
+                      ease: "easeInOut"
+                    }}
+                  >
+                    <DoorOpen className="w-20 h-20 text-[#FF4D4D] stroke-[2.5]" />
+                  </motion.div>
+                </motion.div>
 
                 {/* Question */}
-                <h3 className="text-gray-500 font-bold text-lg sm:text-xl text-center mt-8 mb-8">
+                <motion.h3 variants={cinematicItemVariants} id="exit-confirm-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-8">
                   Do you want to leave the game?
-                </h3>
+                </motion.h3>
 
                 {/* Buttons */}
-                <div className="flex items-center gap-4 w-full">
+                <motion.div variants={cinematicItemVariants} className="flex gap-4 w-full">
                   <button
+                    id="exit-confirm-no-btn"
                     onClick={() => setShowExitConfirm(false)}
-                    className="flex-1 h-14 bg-[#29C6F6] border-[3px] border-[#0A2540] rounded-full flex items-center justify-center gap-2 shadow-[0_4px_0_#0A2540] active:translate-y-1 active:shadow-[0_0px_0_#0A2540] transition-all"
+                    className="flex-1 select-none cursor-pointer bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-sm tracking-wide"
                   >
-                    <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[#29C6F6] border-2 border-[#0A2540]">
-                      <X size={14} strokeWidth={4} />
-                    </div>
-                    <span className="text-[#0A2540] font-black text-lg">
-                      NO
-                    </span>
+                    NO
                   </button>
                   <button
+                    id="exit-confirm-yes-btn"
                     onClick={() => {
+                      setShowExitConfirm(false);
                       socket?.emit("leave_room", { roomId: room });
                       onLeave?.();
                     }}
-                    className="flex-1 h-14 bg-[#FFB300] border-[3px] border-[#0A2540] rounded-full flex items-center justify-center gap-2 shadow-[0_4px_0_#0A2540] active:translate-y-1 active:shadow-[0_0px_0_#0A2540] transition-all"
+                    className="flex-1 select-none cursor-pointer bg-[#FFB300] text-[#0F3957] hover:bg-[#FFA500] border-2 border-white/60 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-md tracking-wide"
                   >
-                    <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center text-[#FFB300] border-2 border-[#0A2540]">
-                      <Check size={14} strokeWidth={4} />
-                    </div>
-                    <span className="text-[#0A2540] font-black text-lg">
-                      YES
-                    </span>
+                    YES
                   </button>
-                </div>
+                </motion.div>
               </motion.div>
-            </div>
+            </motion.div>
           )}
         </AnimatePresence>
 
@@ -2385,133 +2439,225 @@ export default function GameRoom({
       />
 
       {/* Skip Confirm Modal */}
-      {showSkipConfirm && (
-        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#24174D] p-6 rounded-3xl shadow-2xl flex flex-col items-center border border-white/10 animate-in zoom-in-95 w-full max-w-sm text-center">
-            <h3 className="text-white font-bold text-lg mb-2">Skip Turn?</h3>
-            <p className="text-white/70 text-sm mb-6">
-              Are you sure you want to skip your turn?
-            </p>
-            <div className="flex gap-4 w-full">
-              <button
-                onClick={() => setShowSkipConfirm(false)}
-                className="flex-1 bg-white/10 hover:bg-white/20 text-white font-bold py-3 px-4 rounded-xl transition-all"
+      <AnimatePresence>
+        {showSkipConfirm && (
+          <motion.div
+            id="skip-confirm-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowSkipConfirm(false);
+              }
+            }}
+          >
+            <motion.div
+              key="skip-confirm-card"
+              id="skip-confirm-card"
+              variants={cinematicCardVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="bg-[#ECEBFC] pt-5 pb-8 px-8 rounded-[32px] max-w-sm w-full shadow-xl text-center relative overflow-visible border border-white/40"
+            >
+              {/* Title with professional 3D cartoon text style */}
+              <motion.div variants={cinematicItemVariants} className="relative select-none mb-5 mx-auto py-2 px-3">
+                <h2 className="cartoon-title-skip text-[34px] tracking-widest uppercase select-none text-center">
+                  SKIP
+                </h2>
+              </motion.div>
+
+              {/* Question */}
+              <motion.h3 
+                variants={cinematicItemVariants} 
+                id="skip-confirm-title" 
+                className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-8"
               >
-                No
-              </button>
-              <button
-                onClick={handleSkipTurn}
-                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition-all"
-              >
-                Yes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                Do you want to skip your turn?
+              </motion.h3>
+
+              {/* Buttons */}
+              <motion.div variants={cinematicItemVariants} className="flex gap-4 w-full">
+                <button
+                  id="skip-confirm-no-btn"
+                  onClick={() => setShowSkipConfirm(false)}
+                  className="flex-1 select-none cursor-pointer bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-sm tracking-wide"
+                >
+                  NO
+                </button>
+                <button
+                  id="skip-confirm-yes-btn"
+                  onClick={handleSkipTurn}
+                  className="flex-1 select-none cursor-pointer bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-md tracking-wide"
+                >
+                  YES
+                </button>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* AFK Popup Modal */}
-      {isAfkPopupOpen && (
-        <div id="afk-popup-overlay" className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-          <div id="afk-popup-card" className="bg-white border-4 border-[#0F3957] text-[#0F3957] p-8 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.4)] text-center relative overflow-visible animate-zoom-in">
-            
-            {/* Header Ribbon / INACTIVE Banner */}
-            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#1C96FF] border-4 border-[#0F3957] text-white px-8 py-1.5 rounded-2xl shadow-md rotate-[-1.5deg] flex items-center justify-center min-w-[185px] z-10 select-none">
-              <span className="font-sans text-xl sm:text-2xl font-black tracking-wider text-white drop-shadow-[0_2px_0_#0F3957] uppercase">
-                INACTIVE
-              </span>
-            </div>
-
-            {/* Sleep SVG Icon */}
-            <div className="w-28 h-28 rounded-full bg-[#FFC51A] border-4 border-[#0F3957] flex items-center justify-center mx-auto mb-6 relative overflow-hidden shadow-inner mt-2">
-              <svg className="w-16 h-16 text-[#0F3957]" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                {/* Table/Desk */}
-                <path d="M15 75 H85" stroke="#0F3957" strokeWidth="6" strokeLinecap="round" />
-                {/* Body leaning */}
-                <path d="M35 75 C35 55, 60 55, 65 75" stroke="#0F3957" strokeWidth="6" strokeLinecap="round" />
-                {/* Arm on desk */}
-                <path d="M42 75 C45 68, 55 68, 58 75" stroke="#0F3957" strokeWidth="5" strokeLinecap="round" fill="none" />
-                {/* Head resting */}
-                <circle cx="50" cy="42" r="14" fill="white" stroke="#0F3957" strokeWidth="5" />
-                {/* Eyes closed (slanted zzz sleepy eyes) */}
-                <path d="M43 45 L47 41" stroke="#0F3957" strokeWidth="3" strokeLinecap="round" />
-                <path d="M53 45 L57 41" stroke="#0F3957" strokeWidth="3" strokeLinecap="round" />
-                {/* Open sleepy mouth */}
-                <circle cx="50" cy="49" r="3" fill="#0F3957" />
-              </svg>
-            </div>
-            
-            <h3 id="afk-title" className="text-2xl font-black mb-1.5 tracking-tight text-[#0F3957]">هل أنت هنا؟</h3>
-            <p id="afk-description" className="text-[#0F3957]/80 text-sm font-bold mb-4 leading-relaxed px-2">
-              يرجى الضغط على زر الموافقة لتجنب قطع الاتصال بالخادم بسبب عدم النشاط.
-            </p>
-
-            <div className="bg-amber-100 border-2 border-amber-300 rounded-xl px-4 py-1.5 inline-flex items-center gap-1.5 mb-6 text-sm font-bold text-amber-800">
-              <span className="flex h-2.5 w-2.5 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
-              </span>
-              سيتم طردك بعد: <span className="font-black font-mono scale-110 text-amber-600">{afkCountdown}</span> ثانية
-            </div>
-            
-            <button
-              id="afk-return-btn"
-              onClick={handleIHaveReturned}
-              className="w-full py-4 px-6 bg-[#FFC51A] hover:bg-[#E0A800] active:scale-[0.98] transition-all text-[#0F3957] font-black text-xl rounded-2xl shadow-[0_5px_0_#A87900] active:translate-y-1 active:shadow-none border-4 border-[#0F3957] cursor-pointer flex items-center justify-center gap-2 select-none"
+      <AnimatePresence>
+        {isAfkPopupOpen && (
+          <motion.div
+            id="afk-popup-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              key="afk-popup-card"
+              id="afk-popup-card"
+              variants={cinematicCardVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="bg-[#ECEBFC] pt-5 pb-8 px-8 rounded-[32px] max-w-sm w-full shadow-xl text-center relative overflow-visible border border-white/40"
             >
-              <Check strokeWidth={4} size={24} /> OK
-            </button>
-          </div>
-        </div>
-      )}
+              {/* Optional placeholder space where an image or animation would go, as requested */}
+              <motion.div variants={cinematicItemVariants} className="h-3 w-full" />
+
+              {/* Title with professional 3D cartoon text style */}
+              <motion.div variants={cinematicItemVariants} className="relative select-none mb-5 mx-auto py-2 px-3">
+                <h2 className="cartoon-title-inactive text-[34px] tracking-widest uppercase select-none text-center">
+                  INACTIVE
+                </h2>
+              </motion.div>
+
+              {/* Question */}
+              <motion.h3 
+                variants={cinematicItemVariants}
+                id="afk-title" 
+                className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-4 px-2"
+              >
+                هل ما زلت معنا؟
+              </motion.h3>
+
+              <motion.p 
+                variants={cinematicItemVariants}
+                id="afk-description" 
+                className="text-[#8C8AA7] text-base font-bold mb-5 leading-normal"
+              >
+                اضغط موافق للاستمرار في اللعب
+              </motion.p>
+
+              {/* Remainder Countdown Badge */}
+              <motion.div 
+                variants={cinematicItemVariants}
+                className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-5 py-2 inline-flex items-center gap-2 mb-6 text-sm font-black text-[#EF4444] select-none"
+              >
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]"></span>
+                </span>
+                سيتم طردك بعد: <span className="font-extrabold font-mono text-base">{afkCountdown}</span> ثانية
+              </motion.div>
+
+              {/* Return Button */}
+              <motion.div variants={cinematicItemVariants}>
+                <button
+                  id="afk-return-btn"
+                  onClick={handleIHaveReturned}
+                  className="w-full select-none cursor-pointer bg-[#818CF8] text-white hover:bg-[#6366F1] border-2 border-white/40 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-md tracking-wide flex items-center justify-center gap-2"
+                >
+                  <Check strokeWidth={4} size={20} /> موافق
+                </button>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Report Confirmation Modal */}
-      {showReportConfirm && (
-        <div id="report-confirm-overlay" className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div id="report-confirm-card" className="bg-white border-4 border-[#0F3957] text-[#0F3957] p-8 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.4)] text-center relative overflow-visible animate-zoom-in">
-            
-            {/* Header Ribbon / CONFIRM Banner */}
-            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#1C96FF] border-4 border-[#0F3957] text-white px-8 py-1.5 rounded-2xl shadow-md rotate-[-1.5deg] flex items-center justify-center min-w-[180px] z-10 select-none">
-              <span className="font-mono text-xl sm:text-2xl font-black italic tracking-wider text-white drop-shadow-[0_2px_0_#0F3957] uppercase">
-                CONFIRM
-              </span>
-            </div>
+      <AnimatePresence>
+        {showReportConfirm && (
+          <motion.div
+            key="report-confirm-overlay"
+            id="report-confirm-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeInOut" }}
+            className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShowReportConfirm(false);
+              }
+            }}
+          >
+            <motion.div
+              key="report-confirm-card"
+              id="report-confirm-card"
+              variants={cinematicCardVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="bg-[#ECEBFC] p-8 rounded-[32px] max-w-sm w-full shadow-xl text-center relative overflow-visible border border-white/40"
+            >
+              
+              {/* Title with professional 3D cartoon text style */}
+              <motion.div variants={cinematicItemVariants} className="relative select-none mb-5 mx-auto py-2 px-3">
+                <h2 className="cartoon-title-report text-[34px] tracking-widest uppercase select-none text-center">
+                  REPORT
+                </h2>
+              </motion.div>
 
-            {/* Big Alert Circle */}
-            <div className="w-24 h-24 rounded-full bg-[#FFC502] border-4 border-[#0F3957] flex items-center justify-center mx-auto mb-5 mt-4 shadow-md relative">
-              <AlertTriangle className="w-14 h-14 text-[#0F3957] fill-[#0F3957]/5 stroke-[3.5]" />
-              {/* Highlight shine on golden coin edge */}
-              <div className="absolute top-1.5 right-2 w-3.5 h-3.5 bg-white/40 rounded-full"></div>
-            </div>
+              {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
+              <motion.div variants={cinematicItemVariants}>
+                <motion.div 
+                  className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative"
+                  animate={{
+                    rotate: [-4, 4, -4, 4, -4, 4, 0],
+                    scale: [1, 1.05, 1, 1.05, 1]
+                  }}
+                  transition={{
+                    delay: 1.5,
+                    repeat: Infinity,
+                    duration: 0.6,
+                    repeatDelay: 1.8,
+                    ease: "easeInOut"
+                  }}
+                >
+                  <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+                </motion.div>
+              </motion.div>
 
-            {/* Content Text */}
-            <h3 id="report-confirm-title" className="text-lg sm:text-xl font-extrabold text-[#0D3855] leading-snug tracking-tight mb-6">
-              Are you sure you wanna report this drawing?
-            </h3>
+              {/* Content Text exactly as requested */}
+              <motion.h3 variants={cinematicItemVariants} id="report-confirm-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-6">
+                Are you sure you wanna report this drawing?
+              </motion.h3>
 
-            {/* Confirmation Buttons (NO and YES) styled exactly as requested without icons */}
-            <div className="flex gap-4 w-full">
-              <button
-                id="report-confirm-no-btn"
-                onClick={() => setShowReportConfirm(false)}
-                className="flex-1 py-3 px-6 bg-[#1AAACC] hover:bg-[#1691ae] active:scale-95 transition-all text-white font-extrabold text-lg rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] cursor-pointer flex items-center justify-center uppercase tracking-wide"
-              >
-                NO
-              </button>
-              <button
-                id="report-confirm-yes-btn"
-                onClick={() => {
-                  setShowReportConfirm(false);
-                  socket?.emit("report_draw");
-                }}
-                className="flex-1 py-3 px-6 bg-[#FFC502] hover:bg-[#e2af02] active:scale-95 transition-all text-[#0F3957] font-extrabold text-lg rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] cursor-pointer flex items-center justify-center uppercase tracking-wide"
-              >
-                YES
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              {/* Confirmation Buttons (NO and YES) styled exactly as requested without icons */}
+              <motion.div variants={cinematicItemVariants} className="flex gap-4 w-full">
+                <button
+                  id="report-confirm-no-btn"
+                  onClick={() => setShowReportConfirm(false)}
+                  className="flex-1 select-none cursor-pointer bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-sm tracking-wide"
+                >
+                  NO
+                </button>
+                <button
+                  id="report-confirm-yes-btn"
+                  onClick={() => {
+                    setShowReportConfirm(false);
+                    socket?.emit("report_draw");
+                  }}
+                  className="flex-1 select-none cursor-pointer bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-md tracking-wide"
+                >
+                  YES
+                </button>
+              </motion.div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Global Overlays for CHOOSING state */}
       {gameState.status === "CHOOSING" && amIDrawer && (
@@ -2593,93 +2739,124 @@ export default function GameRoom({
       </AnimatePresence>
 
       {/* Profile Modal */}
-      {selectedProfilePlayer && (() => {
-        const isSelf = selectedProfilePlayer.persistentId === persistentPlayerId || selectedProfilePlayer.id === socket?.id;
-        const targetId = selectedProfilePlayer.persistentId || selectedProfilePlayer.id;
-        const votesList = votekicks[targetId] || [];
-        const alreadyVoted = votesList.includes(persistentPlayerId);
-        const isBlocked = blockedUsers.includes(targetId);
+      <AnimatePresence>
+        {selectedProfilePlayer && (() => {
+          const isSelf = selectedProfilePlayer.persistentId === persistentPlayerId || selectedProfilePlayer.id === socket?.id;
+          const targetId = selectedProfilePlayer.persistentId || selectedProfilePlayer.id;
+          const votesList = votekicks[targetId] || [];
+          const alreadyVoted = votesList.includes(persistentPlayerId);
+          const isBlocked = blockedUsers.includes(targetId);
 
-        return (
-          <div id="profile-modal-overlay" className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-            <div id="profile-modal-card" className="bg-white border-4 border-[#0F3957] text-[#0F3957] p-8 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.4)] text-center relative overflow-visible animate-zoom-in">
-              
-              {/* Close Button */}
-              <button 
-                id="profile-modal-close-btn"
-                onClick={() => setSelectedProfilePlayer(null)} 
-                className="absolute top-4 right-4 text-[#728299] hover:text-[#0F3957] transition-all cursor-pointer active:scale-90"
+          return (
+            <motion.div 
+              key="profile-modal-overlay"
+              id="profile-modal-overlay" 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
+              className="fixed inset-0 z-[310] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setSelectedProfilePlayer(null);
+                }
+              }}
+            >
+              <motion.div 
+                key="profile-modal-card"
+                id="profile-modal-card" 
+                variants={cinematicCardVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                className="bg-[#ECEBFC] p-8 rounded-[32px] max-w-sm w-full shadow-xl text-center relative overflow-visible border border-white/40"
               >
-                <X className="w-6 h-6 stroke-[3]" />
-              </button>
+                
+                {/* Close Button */}
+                <motion.button 
+                  variants={cinematicItemVariants}
+                  id="profile-modal-close-btn"
+                  onClick={() => setSelectedProfilePlayer(null)} 
+                  className="absolute top-4 right-4 w-9 h-9 bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border border-white/80 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-sm text-center cursor-pointer z-20 font-black"
+                >
+                  <X className="w-5 h-5 stroke-[3.5]" />
+                </motion.button>
 
-              {/* Header Ribbon / PROFILE Banner */}
-              <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#1C96FF] border-4 border-[#0F3957] text-white px-8 py-1.5 rounded-2xl shadow-md rotate-[-1.5deg] flex items-center justify-center min-w-[180px] z-10 select-none">
-                <span className="font-mono text-xl sm:text-2xl font-black italic tracking-wider text-white drop-shadow-[0_2px_0_#0F3957] uppercase">
-                  PROFILE
-                </span>
-              </div>
+                {/* Title with professional 3D cartoon text style */}
+                <motion.div variants={cinematicItemVariants} className="relative select-none mb-5 mx-auto py-2 px-3">
+                  <h2 className="cartoon-title-profile text-[34px] tracking-widest uppercase select-none text-center">
+                    PROFILE
+                  </h2>
+                </motion.div>
 
-              {/* Avatar Emoji Frame */}
-              <div className="w-24 h-24 rounded-full bg-[#E5EDF4] border-4 border-[#0F3957] flex items-center justify-center mx-auto mb-3 mt-4 shadow-md relative">
-                <span className="text-5xl">{selectedProfilePlayer.avatar || "👤"}</span>
-                <div className="absolute top-1.5 right-2 w-3.5 h-3.5 bg-white/40 rounded-full"></div>
-              </div>
+                {/* Avatar Emoji Frame with Sequential Animation */}
+                <motion.div
+                  variants={cinematicItemVariants}
+                  className="w-36 h-36 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-5 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)]"
+                >
+                  <span className="text-[85px] leading-none mb-1">{selectedProfilePlayer.avatar || "👤"}</span>
+                </motion.div>
 
-              {/* Player Name */}
-              <h3 id="profile-modal-name" className="text-xl sm:text-2xl font-extrabold text-[#0D3855] leading-snug tracking-tight mb-1">
-                {selectedProfilePlayer.name}
-              </h3>
-              
-              <p id="profile-modal-score" className="text-[#728299] text-xs font-bold mb-6 uppercase tracking-wider">
-                Score: {selectedProfilePlayer.points || 0} Points • Wins: {selectedProfilePlayer.wins || 0}
-              </p>
+                {/* Player Name Card */}
+                <motion.div variants={cinematicItemVariants}>
+                  <h3 id="profile-modal-name" className="text-[25px] font-black text-[#2E2882] leading-snug tracking-tight mb-6">
+                    {selectedProfilePlayer.name}
+                  </h3>
+                </motion.div>
 
-              {isSelf ? (
-                <div className="py-3 px-4 bg-[#F2F6FA] rounded-2xl border-2 border-dashed border-[#CCD6E0] text-center text-[#728299] font-bold text-sm">
-                  هذا هو حسابك الشخصي
-                </div>
-              ) : (
-                <div className="flex flex-col gap-3.5 w-full">
-                  {/* Votekick Action Button */}
-                  <button
-                    id="profile-modal-kick-btn"
-                    onClick={() => {
-                      handleToggleVoteKick();
-                      setSelectedProfilePlayer(null);
-                    }}
-                    className={`w-full py-3.5 px-6 text-[#0F3957] font-extrabold text-[#24174D] text-base rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2 ${
-                      alreadyVoted 
-                        ? "bg-[#FFC502] hover:bg-[#e2af02]" 
-                        : "bg-[#FF3E3E] text-white hover:brightness-95"
-                    }`}
+                {isSelf ? (
+                  <motion.div 
+                    variants={cinematicItemVariants}
+                    className="py-3.5 px-4 bg-white rounded-[20px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm shadow-sm"
                   >
-                    <UserIcon className="w-4 h-4 stroke-[3]" />
-                    {alreadyVoted ? `REMOVE VOTE (${votesList.length})` : "VOTEKICK"}
-                  </button>
+                    هذا هو حسابك الشخصي
+                  </motion.div>
+                ) : (
+                  <motion.div variants={cinematicItemVariants} className="flex flex-col gap-3.5 w-full">
+                    {/* Block / Unblock Action Button (Mute) */}
+                    <div>
+                      <button
+                        id="profile-modal-block-btn"
+                        onClick={() => {
+                          handleToggleBlock();
+                          setSelectedProfilePlayer(null);
+                        }}
+                        className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
+                          isBlocked 
+                            ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
+                            : "bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 shadow-sm"
+                        }`}
+                      >
+                        {isBlocked ? <Volume2 className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                        {isBlocked ? "UNMUTE" : "MUTE"}
+                      </button>
+                    </div>
 
-                  {/* Block / Unblock Action Button */}
-                  <button
-                    id="profile-modal-block-btn"
-                    onClick={() => {
-                      handleToggleBlock();
-                      setSelectedProfilePlayer(null);
-                    }}
-                    className={`w-full py-3.5 px-6 text-white font-extrabold text-base rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] active:translate-y-1 active:shadow-none transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2 ${
-                      isBlocked 
-                        ? "bg-[#1AAACC]" 
-                        : "bg-[#728299]"
-                    }`}
-                  >
-                    {isBlocked ? <Eye className="w-4 h-4 stroke-[3]" /> : <EyeOff className="w-4 h-4 stroke-[3]" />}
-                    {isBlocked ? "UNBLOCK CHAT" : "BLOCK CHAT"}
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+                    {/* Votekick Action Button */}
+                    <div>
+                      <button
+                        id="profile-modal-kick-btn"
+                        onClick={() => {
+                          handleToggleVoteKick();
+                          setSelectedProfilePlayer(null);
+                        }}
+                        className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
+                          alreadyVoted
+                            ? "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
+                            : "bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 shadow-sm"
+                        }`}
+                      >
+                        <UserIcon className="w-5 h-5" />
+                        {alreadyVoted ? `REMOVE VOTE (${votesList.length})` : "VOTEKICK"}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
 
       {/* Cooldown Warning Modal */}
       {showCooldownWarning && (

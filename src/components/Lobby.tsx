@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check, WifiOff } from 'lucide-react';
 import { useSocket } from './SocketProvider';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface LobbyProps {
   onPlay: (nickname: string, room: string, avatar: string) => void;
@@ -13,6 +14,43 @@ const AVATARS = [
 ];
 
 type Screen = 'home' | 'rooms';
+
+const cinematicCardVariants = {
+  hidden: { opacity: 0, scale: 0.94, y: 40 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      duration: 0.45,
+      ease: [0.16, 1, 0.3, 1],
+      staggerChildren: 0.06,
+      delayChildren: 0.05
+    }
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.94,
+    y: -25,
+    transition: {
+      duration: 0.25,
+      ease: [0.7, 0, 0.84, 0]
+    }
+  }
+};
+
+const cinematicItemVariants = {
+  hidden: { opacity: 0, y: 15, scale: 0.97 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: {
+      duration: 0.35,
+      ease: [0.16, 1, 0.3, 1]
+    }
+  }
+};
 
 export default function Lobby({ onPlay }: LobbyProps) {
   const { socket } = useSocket();
@@ -244,80 +282,6 @@ export default function Lobby({ onPlay }: LobbyProps) {
             </div>
             
             <div className="w-full space-y-4">
-              {afkWarning && (
-                <div className="w-full border-2 border-[#FFD700] bg-gradient-to-r from-[#1E293B]/95 to-[#0F172A]/90 text-white rounded-3xl p-6 relative overflow-hidden shadow-[0_0_25px_rgba(255,215,0,0.25)] flex flex-col items-center animate-in fade-in slide-in-from-top-4 duration-500">
-                  {/* Laser gold highlight bar */}
-                  <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#FFD700] to-transparent animate-pulse" />
-                  
-                  {/* Sleep SVG Icon */}
-                  <div className="w-20 h-20 rounded-full bg-[#FFC51A] border-3 border-[#0F172A] flex items-center justify-center mb-4 shadow-md">
-                    <svg className="w-12 h-12 text-[#0F172A]" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M15 75 H85" stroke="#0F172A" strokeWidth="6" strokeLinecap="round" />
-                      <path d="M35 75 C35 55, 60 55, 65 75" stroke="#0F172A" strokeWidth="6" strokeLinecap="round" />
-                      <path d="M42 75 C45 68, 55 68, 58 75" stroke="#0F172A" strokeWidth="5" strokeLinecap="round" fill="none" />
-                      <circle cx="50" cy="42" r="14" fill="white" stroke="#0F172A" strokeWidth="5" />
-                      {/* Sleepy eye curves */}
-                      <path d="M43 45 L47 41" stroke="#0F172A" strokeWidth="3" strokeLinecap="round" />
-                      <path d="M53 45 L57 41" stroke="#0F172A" strokeWidth="3" strokeLinecap="round" />
-                      <circle cx="50" cy="49" r="3" fill="#0F172A" />
-                    </svg>
-                  </div>
-
-                  <h4 className="text-xl font-extrabold text-[#FFD700] mb-1 tracking-tight">تم إنهاء الجلسة لخمولك</h4>
-                  <p className="text-slate-200 text-sm font-semibold text-center leading-relaxed max-w-xs mb-4">
-                    لقد تم قطع اتصالك تلقائياً للحفاظ على سلامة الروم وموارد الخادم.
-                  </p>
-
-                  {/* Close button inside card */}
-                  <button
-                    onClick={() => setAfkWarning(false)}
-                    className="px-6 py-2 bg-[#FFC51A] hover:bg-[#E0A800] text-[#0F172A] font-extrabold rounded-xl transition-all shadow-[0_3px_0_#9A7000] active:translate-y-0.5 active:shadow-none border-2 border-[#10172A] cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Check strokeWidth={3} size={16} /> فهمت، العودة للعب
-                  </button>
-
-                  {/* Little X corner button */}
-                  <button 
-                    onClick={() => setAfkWarning(false)}
-                    className="absolute top-3 right-3 text-slate-400 hover:text-white transition-colors"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-              )}
-
-              {connLostWarning && (
-                <div className="w-full border-2 border-[#FF4A4A] bg-gradient-to-r from-[#1E293B]/95 to-[#0F172A]/90 text-white rounded-3xl p-6 relative overflow-hidden shadow-[0_0_25px_rgba(255,74,74,0.25)] flex flex-col items-center animate-in fade-in slide-in-from-top-4 duration-500">
-                  {/* Laser red highlight bar */}
-                  <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-transparent via-[#FF4A4A] to-transparent animate-pulse" />
-                  
-                  {/* WifiOff Icon */}
-                  <div className="w-20 h-20 rounded-full bg-[#FF4A4A] border-3 border-[#0F172A] flex items-center justify-center mb-4 shadow-md text-white">
-                    <WifiOff size={36} strokeWidth={2.5} />
-                  </div>
-
-                  <h4 className="text-xl font-extrabold text-[#FF4A4A] mb-1 tracking-tight">فقدان الاتصال بالخادم</h4>
-                  <p className="text-slate-200 text-sm font-semibold text-center leading-relaxed max-w-xs mb-4">
-                    عذراً، انقطع الاتصال ببيئة اللعب أو تم إنهاء جلستك لغياب النشاط. يمكنك بدء جولة جديدة فوراً.
-                  </p>
-
-                  {/* Close button inside card */}
-                  <button
-                    onClick={() => setConnLostWarning(false)}
-                    className="px-6 py-2 bg-[#FF4A4A] hover:bg-[#E03B3B] text-white font-extrabold rounded-xl transition-all shadow-[0_3px_0_#9A1A1A] active:translate-y-0.5 active:shadow-none border-2 border-[#10172A] cursor-pointer flex items-center gap-1.5"
-                  >
-                    <Check strokeWidth={3} size={16} /> حسناً، فهمت
-                  </button>
-
-                  {/* Little X corner button */}
-                  <button 
-                    onClick={() => setConnLostWarning(false)}
-                    className="absolute top-3 right-3 text-slate-400 hover:text-white transition-colors"
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-              )}
               <div className="space-y-1">
                 <label className="text-sm font-bold ml-2 text-white/90">NICKNAME</label>
                 <input 
@@ -508,6 +472,102 @@ export default function Lobby({ onPlay }: LobbyProps) {
           </div>
         </div>
       )}
+
+      <AnimatePresence>
+        {afkWarning && (
+          <div
+            id="afk-warning-overlay"
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              key="afk-warning-card"
+              id="afk-warning-card"
+              variants={cinematicCardVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="bg-[#ECEBFC] pt-8 pb-8 px-8 rounded-[32px] max-w-sm w-full shadow-2xl text-center relative overflow-visible border border-white/40"
+            >
+              {/* Title with professional 3D cartoon text style */}
+              <motion.div variants={cinematicItemVariants} className="relative select-none mb-5 mx-auto py-2 px-3">
+                <h2 className="cartoon-title-inactive text-[34px] tracking-widest uppercase select-none text-center">
+                  INACTIVE
+                </h2>
+              </motion.div>
+
+              {/* Message */}
+              <motion.p
+                variants={cinematicItemVariants}
+                id="afk-warning-text"
+                className="text-base sm:text-lg font-bold text-[#8C8AA7] leading-relaxed mb-8 px-2"
+              >
+                تم قطع الاتصال بسبب الخمول
+                <br />
+                <span className="text-[13px] font-semibold opacity-70 block mt-1">(Disconnected due to inactivity)</span>
+              </motion.p>
+
+              {/* Close Button */}
+              <motion.div variants={cinematicItemVariants}>
+                <button
+                  id="afk-warning-ok-btn"
+                  onClick={() => setAfkWarning(false)}
+                  className="w-full select-none cursor-pointer bg-[#ECEBFC] text-[#818CF8] hover:bg-[#D9D6F7] border border-white/80 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-sm tracking-wide"
+                >
+                  OK
+                </button>
+              </motion.div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {connLostWarning && (
+          <div
+            id="conn-lost-warning-overlay"
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              key="conn-lost-warning-card"
+              id="conn-lost-warning-card"
+              variants={cinematicCardVariants}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              className="bg-[#ECEBFC] pt-8 pb-8 px-8 rounded-[32px] max-w-sm w-full shadow-2xl text-center relative overflow-visible border border-white/40"
+            >
+              {/* Title with professional 3D cartoon text style */}
+              <motion.div variants={cinematicItemVariants} className="relative select-none mb-5 mx-auto py-2 px-3">
+                <h2 className="cartoon-title-exit text-[34px] tracking-widest uppercase select-none text-center">
+                  DISCONNECTED
+                </h2>
+              </motion.div>
+
+              {/* Message */}
+              <motion.p
+                variants={cinematicItemVariants}
+                id="conn-lost-warning-text"
+                className="text-base sm:text-lg font-bold text-[#8C8AA7] leading-relaxed mb-8 px-2"
+              >
+                انقطع الاتصال ببيئة اللعب
+                <br />
+                <span className="text-[13px] font-semibold opacity-70 block mt-1">(Connection toast or session expired)</span>
+              </motion.p>
+
+              {/* Close Button */}
+              <motion.div variants={cinematicItemVariants}>
+                <button
+                  id="conn-lost-warning-ok-btn"
+                  onClick={() => setConnLostWarning(false)}
+                  className="w-full select-none cursor-pointer bg-[#ECEBFC] text-[#FFB300] hover:bg-[#D9D6F7] border border-[#FFB300]/20 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-sm tracking-wide"
+                >
+                  OK
+                </button>
+              </motion.div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Background decoration */}
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-primary-brand rounded-full mix-blend-overlay filter blur-[100px] opacity-20 pointer-events-none" />
