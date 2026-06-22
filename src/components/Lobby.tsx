@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check, WifiOff } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 import { motion, AnimatePresence } from 'motion/react';
+import CinematicModal from './game/CinematicModal';
 
 interface LobbyProps {
   onPlay: (nickname: string, room: string, avatar: string) => void;
@@ -473,101 +474,55 @@ export default function Lobby({ onPlay }: LobbyProps) {
         </div>
       )}
 
-      <AnimatePresence>
-        {afkWarning && (
-          <div
-            id="afk-warning-overlay"
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          >
-            <motion.div
-              key="afk-warning-card"
-              id="afk-warning-card"
-              variants={cinematicCardVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="bg-[#ECEBFC] pt-8 pb-8 px-8 rounded-[32px] max-w-sm w-full shadow-2xl text-center relative overflow-visible border border-white/40"
-            >
-              {/* Title with professional 3D cartoon text style */}
-              <motion.div variants={cinematicItemVariants} className="relative select-none mb-5 mx-auto py-2 px-3">
-                <h2 className="cartoon-title-inactive text-[34px] tracking-widest uppercase select-none text-center">
-                  INACTIVE
-                </h2>
-              </motion.div>
+      {/* AFK Warning Modal */}
+      <CinematicModal
+        isOpen={afkWarning}
+        onClose={() => setAfkWarning(false)}
+        titleType="inactive"
+        titleText="INACTIVE"
+        buttons={[
+          {
+            id: "afk-warning-ok-btn",
+            text: "OK",
+            onClick: () => setAfkWarning(false),
+            variant: "secondary",
+          },
+        ]}
+      >
+        <p
+          id="afk-warning-text"
+          className="text-base sm:text-lg font-bold text-[#8C8AA7] leading-relaxed mb-4 px-2 text-center"
+        >
+          تم قطع الاتصال بسبب الخمول
+          <br />
+          <span className="text-[13px] font-semibold opacity-70 block mt-1">(Disconnected due to inactivity)</span>
+        </p>
+      </CinematicModal>
 
-              {/* Message */}
-              <motion.p
-                variants={cinematicItemVariants}
-                id="afk-warning-text"
-                className="text-base sm:text-lg font-bold text-[#8C8AA7] leading-relaxed mb-8 px-2"
-              >
-                تم قطع الاتصال بسبب الخمول
-                <br />
-                <span className="text-[13px] font-semibold opacity-70 block mt-1">(Disconnected due to inactivity)</span>
-              </motion.p>
-
-              {/* Close Button */}
-              <motion.div variants={cinematicItemVariants}>
-                <button
-                  id="afk-warning-ok-btn"
-                  onClick={() => setAfkWarning(false)}
-                  className="w-full select-none cursor-pointer bg-[#ECEBFC] text-[#818CF8] hover:bg-[#D9D6F7] border border-white/80 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-sm tracking-wide"
-                >
-                  OK
-                </button>
-              </motion.div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {connLostWarning && (
-          <div
-            id="conn-lost-warning-overlay"
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-          >
-            <motion.div
-              key="conn-lost-warning-card"
-              id="conn-lost-warning-card"
-              variants={cinematicCardVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="bg-[#ECEBFC] pt-8 pb-8 px-8 rounded-[32px] max-w-sm w-full shadow-2xl text-center relative overflow-visible border border-white/40"
-            >
-              {/* Title with professional 3D cartoon text style */}
-              <motion.div variants={cinematicItemVariants} className="relative select-none mb-5 mx-auto py-2 px-3">
-                <h2 className="cartoon-title-exit text-[34px] tracking-widest uppercase select-none text-center">
-                  DISCONNECTED
-                </h2>
-              </motion.div>
-
-              {/* Message */}
-              <motion.p
-                variants={cinematicItemVariants}
-                id="conn-lost-warning-text"
-                className="text-base sm:text-lg font-bold text-[#8C8AA7] leading-relaxed mb-8 px-2"
-              >
-                انقطع الاتصال ببيئة اللعب
-                <br />
-                <span className="text-[13px] font-semibold opacity-70 block mt-1">(Connection toast or session expired)</span>
-              </motion.p>
-
-              {/* Close Button */}
-              <motion.div variants={cinematicItemVariants}>
-                <button
-                  id="conn-lost-warning-ok-btn"
-                  onClick={() => setConnLostWarning(false)}
-                  className="w-full select-none cursor-pointer bg-[#ECEBFC] text-[#FFB300] hover:bg-[#D9D6F7] border border-[#FFB300]/20 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] shadow-sm tracking-wide"
-                >
-                  OK
-                </button>
-              </motion.div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* Connection Lost Warning Modal */}
+      <CinematicModal
+        isOpen={connLostWarning}
+        onClose={() => setConnLostWarning(false)}
+        titleType="exit"
+        titleText="DISCONNECTED"
+        buttons={[
+          {
+            id: "conn-lost-warning-ok-btn",
+            text: "OK",
+            onClick: () => setConnLostWarning(false),
+            variant: "danger",
+          },
+        ]}
+      >
+        <p
+          id="conn-lost-warning-text"
+          className="text-base sm:text-lg font-bold text-[#8C8AA7] leading-relaxed mb-4 px-2 text-center"
+        >
+          انقطع الاتصال ببيئة اللعب
+          <br />
+          <span className="text-[13px] font-semibold opacity-70 block mt-1">(Connection toast or session expired)</span>
+        </p>
+      </CinematicModal>
 
       {/* Background decoration */}
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-primary-brand rounded-full mix-blend-overlay filter blur-[100px] opacity-20 pointer-events-none" />
