@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check, WifiOff } from 'lucide-react';
+import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check, WifiOff, AlertTriangle } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 import { motion, AnimatePresence } from 'motion/react';
 import CinematicModal from './game/CinematicModal';
@@ -294,11 +294,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   className={`w-full h-14 bg-white/10 backdrop-blur-md text-white placeholder-white/50 border-2 rounded-2xl px-6 font-bold text-lg outline-none transition-all focus:bg-white/20 ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-white/20 focus:border-primary-brand'}`}
                 />
               </div>
-              {joinError && (
-                <div className="text-center text-red-300 font-bold bg-red-900/40 p-2 rounded-xl border border-red-500/50">
-                  {joinError}
-                </div>
-              )}
+              {/* Inline error replaced by the unified Error Modal */}
             </div>
 
             <button 
@@ -406,11 +402,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                 </div>
               </div>
 
-              {joinError && (
-                <div className="w-full text-center text-red-500 font-bold bg-red-50 p-3 rounded-xl border border-red-200 mb-4">
-                  {joinError}
-                </div>
-              )}
+              {/* Inline error replaced by unified Error Modal */}
 
               <button 
                 onClick={handlePlay}
@@ -521,6 +513,47 @@ export default function Lobby({ onPlay }: LobbyProps) {
           انقطع الاتصال ببيئة اللعب
           <br />
           <span className="text-[13px] font-semibold opacity-70 block mt-1">(Connection toast or session expired)</span>
+        </p>
+      </CinematicModal>
+
+      {/* Room Full Warning Modal */}
+      <CinematicModal
+        isOpen={!!joinError}
+        onClose={() => setJoinError(null)}
+        titleType="report"
+        titleText="ERROR"
+        buttons={[
+          {
+            id: "lobby-room-full-ok-btn",
+            text: "OK",
+            onClick: () => setJoinError(null),
+            variant: "danger",
+          },
+        ]}
+      >
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+          <motion.div 
+            animate={{
+              rotate: [-4, 4, -4, 4, -4, 4, 0],
+              scale: [1, 1.05, 1, 1.05, 1]
+            }}
+            transition={{
+              delay: 1.5,
+              repeat: Infinity,
+              duration: 0.6,
+              repeatDelay: 1.8,
+              ease: "easeInOut"
+            }}
+          >
+            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+          </motion.div>
+        </div>
+
+        <h3 id="lobby-room-full-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+          This room is full
+        </h3>
+        <p id="lobby-room-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+          هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>
 

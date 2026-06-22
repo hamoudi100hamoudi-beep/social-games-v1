@@ -318,6 +318,7 @@ export default function GameRoom({
 
   const [votekicks, setVotekicks] = useState<Record<string, string[]>>({});
   const [isBanned, setIsBanned] = useState(false);
+  const [isRoomFull, setIsRoomFull] = useState(false);
   const [showCooldownWarning, setShowCooldownWarning] = useState(false);
   const lastVoteKickTimeRef = React.useRef<number>(0);
 
@@ -497,6 +498,12 @@ export default function GameRoom({
           } else if (res && res.error === "banned") {
             console.warn("[GameRoom] Rejoin blocked: Player is banned from room.");
             setIsBanned(true);
+            setIsInitialLoadingRoom(false);
+          } else if (res && res.error) {
+            console.warn("[GameRoom] Join room failed with error:", res.error);
+            if (res.error.includes("ممتلئة") || res.error.includes("full") || res.error.includes("كامل")) {
+              setIsRoomFull(true);
+            }
             setIsInitialLoadingRoom(false);
           }
         },
@@ -2682,42 +2689,48 @@ export default function GameRoom({
       </CinematicModal>
 
       {/* Cooldown Warning Modal */}
-      {showCooldownWarning && (
-        <div id="cooldown-warning-overlay" className="fixed inset-0 z-[320] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-          <div id="cooldown-warning-card" className="bg-white border-4 border-[#0F3957] text-[#0F3957] p-8 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.4)] text-center relative overflow-visible animate-zoom-in">
-            
-            {/* Header Ribbon / WARNING Banner */}
-            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-[#FFC502] border-4 border-[#0F3957] text-[#0F3957] px-8 py-1.5 rounded-2xl shadow-md rotate-[-1.5deg] flex items-center justify-center min-w-[180px] z-10 select-none">
-              <span className="font-mono text-xl sm:text-2xl font-black italic tracking-wider drop-shadow-[0_1.5px_0_white] uppercase">
-                SLOW DOWN
-              </span>
-            </div>
-
-            {/* Warning Icon */}
-            <div className="w-24 h-24 rounded-full bg-[#FF3E3E]/10 border-4 border-[#0F3957] flex items-center justify-center mx-auto mb-5 mt-4 shadow-md relative animate-pulse">
-              <AlertTriangle className="w-14 h-14 text-[#FF3E3E] stroke-[3.5]" />
-              <div className="absolute top-1.5 right-2 w-3.5 h-3.5 bg-white/40 rounded-full"></div>
-            </div>
-
-            {/* Alert Message */}
-            <h3 id="cooldown-warning-title" className="text-lg sm:text-xl font-extrabold text-[#0D3855] leading-snug tracking-tight mb-2">
-              You voted recently. Please, wait to votekick again
-            </h3>
-            <p id="cooldown-warning-ar" className="text-[#728299] text-xs font-bold mb-6">
-              لقد قمت بالتصويت مؤخراً. يرجى الانتظار للمحاولة مرة أخرى.
-            </p>
-
-            {/* OK Button */}
-            <button
-              id="cooldown-warning-ok-btn"
-              onClick={() => setShowCooldownWarning(false)}
-              className="w-full py-3 px-6 bg-[#1AAACC] hover:bg-[#1691ae] active:scale-95 transition-all text-white font-extrabold text-lg rounded-full border-4 border-[#0F3957] shadow-[0_4px_0_#0F3957] cursor-pointer flex items-center justify-center uppercase tracking-wide"
-            >
-              OK
-            </button>
-          </div>
+      <CinematicModal
+        isOpen={showCooldownWarning}
+        onClose={() => setShowCooldownWarning(false)}
+        titleType="report"
+        titleText="SLOW DOWN"
+        buttons={[
+          {
+            id: "cooldown-warning-ok-btn",
+            text: "OK",
+            onClick: () => setShowCooldownWarning(false),
+            variant: "custom",
+            className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95 shadow-md",
+          },
+        ]}
+      >
+        {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+          <motion.div 
+            animate={{
+              rotate: [-4, 4, -4, 4, -4, 4, 0],
+              scale: [1, 1.05, 1, 1.05, 1]
+            }}
+            transition={{
+              delay: 1.5,
+              repeat: Infinity,
+              duration: 0.6,
+              repeatDelay: 1.8,
+              ease: "easeInOut"
+            }}
+          >
+            <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
+          </motion.div>
         </div>
-      )}
+
+        {/* Alert Message */}
+        <h3 id="cooldown-warning-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+          You voted recently. Please waiting to votekick again
+        </h3>
+        <p id="cooldown-warning-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+          لقد قمت بالتصويت مؤخراً. يرجى الانتظار للمحاولة مرة أخرى.
+        </p>
+      </CinematicModal>
 
       {/* Kicked Out / Hard Block Screen */}
       <CinematicModal
@@ -2763,6 +2776,59 @@ export default function GameRoom({
         </h3>
         <p id="kicked-out-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
           تم طردك من هذه الغرفة بناءً على تصويت اللاعبين الآخرين.
+        </p>
+      </CinematicModal>
+
+      {/* Room Full Warning Modal */}
+      <CinematicModal
+        isOpen={isRoomFull}
+        onClose={() => {
+          setIsRoomFull(false);
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("gartic_player_room");
+          }
+          onLeave?.();
+        }}
+        titleType="report"
+        titleText="ERROR"
+        buttons={[
+          {
+            id: "room-full-exit-btn",
+            text: "OK",
+            onClick: () => {
+              setIsRoomFull(false);
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("gartic_player_room");
+              }
+              onLeave?.();
+            },
+            variant: "danger",
+          },
+        ]}
+      >
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+          <motion.div 
+            animate={{
+              rotate: [-4, 4, -4, 4, -4, 4, 0],
+              scale: [1, 1.05, 1, 1.05, 1]
+            }}
+            transition={{
+              delay: 1.5,
+              repeat: Infinity,
+              duration: 0.6,
+              repeatDelay: 1.8,
+              ease: "easeInOut"
+            }}
+          >
+            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+          </motion.div>
+        </div>
+
+        <h3 id="room-full-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+          This room is full
+        </h3>
+        <p id="room-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+          هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>
     </>
