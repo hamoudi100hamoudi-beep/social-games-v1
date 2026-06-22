@@ -293,6 +293,13 @@ export default function GameRoom({
   }, [gameState.status]);
 
   const [selectedProfilePlayer, setSelectedProfilePlayer] = useState<any>(null);
+  const lastActiveProfilePlayerRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    if (selectedProfilePlayer) {
+      lastActiveProfilePlayerRef.current = selectedProfilePlayer;
+    }
+  }, [selectedProfilePlayer]);
   const [blockedUsers, setBlockedUsers] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -2592,82 +2599,87 @@ export default function GameRoom({
       </AnimatePresence>
 
       {/* Profile Modal */}
-      {selectedProfilePlayer && (() => {
-        const isSelf = selectedProfilePlayer.persistentId === persistentPlayerId || selectedProfilePlayer.id === socket?.id;
-        const targetId = selectedProfilePlayer.persistentId || selectedProfilePlayer.id;
-        const votesList = votekicks[targetId] || [];
-        const alreadyVoted = votesList.includes(persistentPlayerId);
-        const isBlocked = blockedUsers.includes(targetId);
+      <CinematicModal
+        isOpen={!!selectedProfilePlayer}
+        onClose={() => setSelectedProfilePlayer(null)}
+        titleType="profile"
+        titleText="PROFILE"
+      >
+        {(() => {
+          const playerToRender = selectedProfilePlayer || lastActiveProfilePlayerRef.current;
+          if (!playerToRender) return null;
 
-        return (
-          <CinematicModal
-            isOpen={!!selectedProfilePlayer}
-            onClose={() => setSelectedProfilePlayer(null)}
-            titleType="profile"
-            titleText="PROFILE"
-          >
-            {/* Avatar Emoji Frame with Sequential Animation */}
-            <div className="w-36 h-36 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-5 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)]">
-              <span className="text-[85px] leading-none mb-1">{selectedProfilePlayer.avatar || "👤"}</span>
-            </div>
+          const isSelf = playerToRender.persistentId === persistentPlayerId || playerToRender.id === socket?.id;
+          const targetId = playerToRender.persistentId || playerToRender.id;
+          const votesList = votekicks[targetId] || [];
+          const alreadyVoted = votesList.includes(persistentPlayerId);
+          const isBlocked = blockedUsers.includes(targetId);
 
-            {/* Player Name Card */}
-            <div>
-              <h3 id="profile-modal-name" className="text-[25px] font-black text-[#2E2882] leading-snug tracking-tight mb-6">
-                {selectedProfilePlayer.name}
-              </h3>
-            </div>
-
-            {isSelf ? (
-              <div 
-                className="py-3.5 px-4 bg-white rounded-[20px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm shadow-sm"
-              >
-                هذا هو حسابك الشخصي
+          return (
+            <>
+              {/* Avatar Emoji Frame with Sequential Animation */}
+              <div className="w-36 h-36 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-5 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)]">
+                <span className="text-[85px] leading-none mb-1">{playerToRender.avatar || "👤"}</span>
               </div>
-            ) : (
-              <div className="flex flex-col gap-3.5 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
-                {/* Block / Unblock Action Button (Mute) */}
-                <div>
-                  <button
-                    id="profile-modal-block-btn"
-                    onClick={() => {
-                      handleToggleBlock();
-                      setSelectedProfilePlayer(null);
-                    }}
-                    className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
-                      isBlocked 
-                        ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
-                        : "bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 shadow-sm"
-                    }`}
-                  >
-                    {isBlocked ? <Volume2 className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
-                    {isBlocked ? "UNMUTE" : "MUTE"}
-                  </button>
-                </div>
 
-                {/* Votekick Action Button */}
-                <div>
-                  <button
-                    id="profile-modal-kick-btn"
-                    onClick={() => {
-                      handleToggleVoteKick();
-                      setSelectedProfilePlayer(null);
-                    }}
-                    className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
-                      alreadyVoted
-                        ? "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
-                        : "bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 shadow-sm"
-                    }`}
-                  >
-                    <UserIcon className="w-5 h-5" />
-                    {alreadyVoted ? `REMOVE VOTE (${votesList.length})` : "VOTEKICK"}
-                  </button>
-                </div>
+              {/* Player Name Card */}
+              <div>
+                <h3 id="profile-modal-name" className="text-[25px] font-black text-[#2E2882] leading-snug tracking-tight mb-6">
+                  {playerToRender.name}
+                </h3>
               </div>
-            )}
-          </CinematicModal>
-        );
-      })()}
+
+              {isSelf ? (
+                <div 
+                  className="py-3.5 px-4 bg-white rounded-[20px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm shadow-sm"
+                >
+                  هذا هو حسابك الشخصي
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3.5 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  {/* Block / Unblock Action Button (Mute) */}
+                  <div>
+                    <button
+                      id="profile-modal-block-btn"
+                      onClick={() => {
+                        handleToggleBlock();
+                        setSelectedProfilePlayer(null);
+                      }}
+                      className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
+                        isBlocked 
+                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
+                          : "bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 shadow-sm"
+                      }`}
+                    >
+                      {isBlocked ? <Volume2 className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                      {isBlocked ? "UNMUTE" : "MUTE"}
+                    </button>
+                  </div>
+
+                  {/* Votekick Action Button */}
+                  <div>
+                    <button
+                      id="profile-modal-kick-btn"
+                      onClick={() => {
+                        handleToggleVoteKick();
+                        setSelectedProfilePlayer(null);
+                      }}
+                      className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
+                        alreadyVoted
+                          ? "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
+                          : "bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 shadow-sm"
+                      }`}
+                    >
+                      <UserIcon className="w-5 h-5" />
+                      {alreadyVoted ? `REMOVE VOTE (${votesList.length})` : "VOTEKICK"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </CinematicModal>
 
       {/* Cooldown Warning Modal */}
       {showCooldownWarning && (
@@ -2708,51 +2720,51 @@ export default function GameRoom({
       )}
 
       {/* Kicked Out / Hard Block Screen */}
-      {isBanned && (
-        <div id="kicked-out-overlay" className="fixed inset-0 z-[9999999] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm select-none touch-none animate-fade-in" style={{ pointerEvents: "auto" }}>
-          <div id="kicked-out-card" className="bg-white border-[6px] border-[#0D3855] text-[#0D3855] p-8 sm:p-10 rounded-[36px] max-w-sm w-full shadow-[0_15px_40px_rgba(0,0,0,0.55)] text-center relative overflow-visible flex flex flex-col items-center animate-zoom-in">
-            
-            {/* Header Ribbon / KICKED OUT Banner matching Gartic */}
-            <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#0084FF] border-[5px] border-[#0D3855] text-white px-8 py-2 rounded-2xl shadow-md rotate-[-1deg] flex items-center justify-center min-w-[210px] z-10 select-none">
-              <div className="absolute -left-3.5 top-2.5 w-3.5 h-6 bg-[#005EC0] border-t-[4px] border-b-[4px] border-l-[4px] border-[#0D3855] rounded-l-md -z-10" />
-              <div className="absolute -right-3.5 top-2.5 w-3.5 h-6 bg-[#005EC0] border-t-[4px] border-b-[4px] border-r-[4px] border-[#0D3855] rounded-r-md -z-10" />
-              <span className="font-mono text-2xl font-black tracking-wider text-white drop-shadow-[0_2px_0_#0D3855] uppercase italic font-black">
-                KICKED OUT
-              </span>
-            </div>
-
-            {/* Gartic Style Yellow Warning Circle */}
-            <div className="w-32 h-32 rounded-full bg-[#FFC502] border-[6px] border-[#0D3855] flex items-center justify-center mb-6 mt-6 shadow-md relative text-[#0D3855]">
-              <AlertTriangle className="w-16 h-16 text-[#0D3855] stroke-[3]" />
-              <div className="absolute top-2 right-2.5 w-4 h-4 bg-white/30 rounded-full"></div>
-            </div>
-
-            <p id="kicked-out-desc" className="text-[#728299] text-lg sm:text-xl font-black leading-snug mb-2 max-w-[280px]">
-              You were kicked out by voting
-            </p>
-            <p id="kicked-out-desc-ar" className="text-[#A2B2C9] text-xs font-bold mb-8">
-              تم طردك من هذه الغرفة بناءً على تصويت اللاعبين الآخرين.
-            </p>
-
-            {/* Exit/OK Button with check symbol in badge */}
-            <button
-              id="kicked-out-exit-btn"
-              onClick={() => {
-                if (typeof window !== "undefined") {
-                  localStorage.removeItem("gartic_player_room");
-                }
-                onLeave?.();
-              }}
-              className="w-full max-w-[240px] py-2.5 px-6 bg-[#FFC502] hover:bg-[#e2af02] active:translate-y-1 active:shadow-none transition-all text-[#0D3855] font-black text-xl rounded-full border-[5px] border-[#0D3855] shadow-[0_4px_0_#0D3855] cursor-pointer flex items-center justify-center gap-2 uppercase tracking-wide"
-            >
-              <div className="bg-[#FFC502] border-2 border-[#0D3855] w-6 h-6 rounded-md flex items-center justify-center">
-                <Check className="w-4 h-4 stroke-[4] text-[#0D3855]" />
-              </div>
-              OK
-            </button>
-          </div>
+      <CinematicModal
+        isOpen={isBanned}
+        titleType="report"
+        titleText="KICKED"
+        buttons={[
+          {
+            id: "kicked-out-exit-btn",
+            text: "OK",
+            onClick: () => {
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("gartic_player_room");
+              }
+              onLeave?.();
+            },
+            variant: "danger",
+          },
+        ]}
+      >
+        {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+          <motion.div 
+            animate={{
+              rotate: [-4, 4, -4, 4, -4, 4, 0],
+              scale: [1, 1.05, 1, 1.05, 1]
+            }}
+            transition={{
+              delay: 1.5,
+              repeat: Infinity,
+              duration: 0.6,
+              repeatDelay: 1.8,
+              ease: "easeInOut"
+            }}
+          >
+            <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
+          </motion.div>
         </div>
-      )}
+
+        {/* Content Text in standard theme colors */}
+        <h3 id="kicked-out-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+          You were kicked out by voting
+        </h3>
+        <p id="kicked-out-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+          تم طردك من هذه الغرفة بناءً على تصويت اللاعبين الآخرين.
+        </p>
+      </CinematicModal>
     </>
   );
 }
