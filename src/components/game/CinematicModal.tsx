@@ -45,7 +45,7 @@ export const cinematicItemVariants = {
 
 export interface CinematicModalButton {
   id: string;
-  text: string;
+  text: React.ReactNode;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   variant?: "primary" | "secondary" | "danger" | "neutral" | "custom";
   className?: string; // For completely customizable or stateful button overrides (like Block/Unblock toggle styling)

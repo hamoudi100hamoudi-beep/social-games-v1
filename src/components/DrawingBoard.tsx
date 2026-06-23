@@ -6,7 +6,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   Pencil, Eraser, Undo2, Redo2, FileX, RefreshCcw, 
-  Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2
+  Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2,
+  Check, X, AlertTriangle
 } from 'lucide-react';
 import { ToolType } from '../types/draw';
 import {
@@ -14,6 +15,9 @@ import {
   BOT_COLORS
 } from '../utils/drawBinaryHelper';
 import DrawingCanvasCore, { DrawingCanvasCoreRef } from './game/DrawingCanvasCore';
+import { motion } from 'motion/react';
+import CinematicModal from './game/CinematicModal';
+import { safeLocalStorage } from '../utils/storage';
 
 const LOGICAL_HEIGHT = 430;
 
@@ -81,7 +85,7 @@ export default function DrawingBoard({
   // Persistent Zoom & Pan preference
   const [zoomEnabled, setZoomEnabled] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('gartic_zoom_enabled') === 'true';
+      return safeLocalStorage.getItem('gartic_zoom_enabled') === 'true';
     }
     return false;
   });
@@ -90,7 +94,7 @@ export default function DrawingBoard({
     const nextVal = !zoomEnabled;
     setZoomEnabled(nextVal);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('gartic_zoom_enabled', nextVal ? 'true' : 'false');
+      safeLocalStorage.setItem('gartic_zoom_enabled', nextVal ? 'true' : 'false');
     }
   };
 
@@ -188,18 +192,34 @@ export default function DrawingBoard({
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-white touch-none select-none" dir="rtl">
       
-      {showClearConfirm && (
-        <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-           <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-[90%] text-center" dir="rtl">
-              <h3 className="text-xl font-bold mb-2 text-slate-800">تأكيد المسح</h3>
-              <p className="text-slate-600 mb-6">هل أنت متأكد من مسح مساحة الرسم بالكامل؟</p>
-              <div className="flex gap-3 justify-center">
-                 <button onClick={() => setShowClearConfirm(false)} className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-800 font-medium hover:bg-slate-200 transition-colors">إلغاء</button>
-                 <button onClick={confirmClear} className="flex-1 py-3 rounded-xl bg-rose-600 text-white font-medium hover:bg-rose-700 transition-colors">مسح بالكامل</button>
-              </div>
-           </div>
-        </div>
-      )}
+      {/* Clean Drawing Confirm Modal */}
+      <CinematicModal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        titleType="report"
+        titleText="CLEAN"
+        buttons={[
+          {
+            id: "clean-confirm-no-btn",
+            text: <span className="text-white font-black">NO</span>,
+            onClick: () => setShowClearConfirm(false),
+            variant: "primary",
+          },
+          {
+            id: "clean-confirm-yes-btn",
+            text: <span className="text-white font-black">YES</span>,
+            onClick: confirmClear,
+            variant: "danger",
+          },
+        ]}
+      >
+        <h3 id="clean-confirm-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+          Do you want to clean the drawing?
+        </h3>
+        <p id="clean-confirm-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+          هل تريد مسح اللوحة بالكامل؟
+        </p>
+      </CinematicModal>
 
       {/* Canvas Container Area */}
       <div ref={containerRef} dir="ltr" className="flex-1 relative bg-gray-300 overflow-hidden w-full h-full cursor-crosshair">
@@ -250,7 +270,7 @@ export default function DrawingBoard({
             <SubToolBtn icon={<PaintBucket />} active={tool==='bucket'} onClick={() => changeTool('bucket')} />
             <SubToolBtn icon={<Minus />} active={tool==='line'} onClick={() => changeTool('line')} />
             <SubToolBtn icon={<Pipette />} active={tool==='pipette'} onClick={() => changeTool('pipette')} />
-            <SubToolBtn icon={<FileX />} onClick={requestClearCanvas} className="text-white !bg-rose-600/80 hover:!bg-rose-600 !border-rose-500" />
+            <SubToolBtn icon={<FileX />} onClick={requestClearCanvas} className="text-white !bg-[#FB923C]/90 hover:!bg-[#FB923C] !border-orange-500" />
           </div>
         )}
 
@@ -409,12 +429,12 @@ export default function DrawingBoard({
                 </div>
               )}
 
-              {/* 4. Red Skip/Kick Button */}
+              {/* 4. Orange Skip/Kick Button */}
               {onSkipTurn && (
                 <ActionBtn 
                   icon={<UserMinus />} 
                   onClick={onSkipTurn} 
-                  className="!bg-[#f23c4f] !text-white hover:!bg-red-600 !border-transparent !rounded-lg shrink-0" 
+                  className="!bg-[#FB923C] !text-white hover:!bg-[#EA580C] !border-transparent !rounded-lg shrink-0" 
                 />
               )}
             </div>

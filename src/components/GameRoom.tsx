@@ -9,6 +9,7 @@ import {
   Info,
   X,
   User as UserIcon,
+  UserMinus,
   Pencil,
   Copy,
   Check,
@@ -24,6 +25,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { PlayersSidebar } from "./game/PlayersSidebar";
 import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
 import CinematicModal from "./game/CinematicModal";
+import { safeLocalStorage } from "../utils/storage";
 
 interface GameRoomProps {
   nickname: string;
@@ -179,7 +181,7 @@ export default function GameRoom({
 }: GameRoomProps) {
   const { socket, isConnected, socketId } = useSocket();
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
-  const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(justJoined || false);
+  const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const guessInputRef = React.useRef<HTMLInputElement>(null);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
@@ -205,14 +207,14 @@ export default function GameRoom({
 
   const persistentPlayerId = React.useMemo(() => {
     if (typeof window === "undefined") return "";
-    let id = localStorage.getItem("gartic_player_id");
+    let id = safeLocalStorage.getItem("gartic_player_id");
     if (!id) {
       id =
         "usr-" +
         Math.random().toString(36).substring(2, 11) +
         "-" +
         Date.now().toString(36);
-      localStorage.setItem("gartic_player_id", id);
+      safeLocalStorage.setItem("gartic_player_id", id);
     }
     return id;
   }, []);
@@ -303,7 +305,7 @@ export default function GameRoom({
   const [blockedUsers, setBlockedUsers] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
-      const stored = localStorage.getItem("gartic_blocked_users");
+      const stored = safeLocalStorage.getItem("gartic_blocked_users");
       return stored ? JSON.parse(stored) : [];
     } catch (e) {
       return [];
@@ -312,7 +314,7 @@ export default function GameRoom({
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("gartic_blocked_users", JSON.stringify(blockedUsers));
+      safeLocalStorage.setItem("gartic_blocked_users", JSON.stringify(blockedUsers));
     }
   }, [blockedUsers]);
 
@@ -328,7 +330,7 @@ export default function GameRoom({
     const isRemove = (votekicks[targetPlayerId] || []).includes(persistentPlayerId);
 
     if (!isRemove) {
-      const lastVoteStr = typeof window !== "undefined" ? localStorage.getItem("gartic_last_votekick_time") : null;
+      const lastVoteStr = typeof window !== "undefined" ? safeLocalStorage.getItem("gartic_last_votekick_time") : null;
       const lastVoteTime = lastVoteStr ? parseInt(lastVoteStr, 10) : 0;
       const timeSinceLastVote = Date.now() - lastVoteTime;
       if (timeSinceLastVote < 60000) {
@@ -342,7 +344,7 @@ export default function GameRoom({
         if (!isRemove) {
           if (typeof window !== "undefined") {
             const now = Date.now();
-            localStorage.setItem("gartic_last_votekick_time", now.toString());
+            safeLocalStorage.setItem("gartic_last_votekick_time", now.toString());
             lastVoteKickTimeRef.current = now;
           }
         }
@@ -485,13 +487,13 @@ export default function GameRoom({
               "[GameRoom] Server session expired or evicted. Redirecting to setup/lobby.",
             );
             if (typeof window !== "undefined") {
-              localStorage.removeItem("gartic_player_room");
+              safeLocalStorage.removeItem("gartic_player_room");
               const reason = res.reason || "connection_lost";
-              localStorage.setItem("gartic_session_expired_reason", reason);
+              safeLocalStorage.setItem("gartic_session_expired_reason", reason);
               if (reason === "afk_idle" || reason === "afk_kicked") {
-                localStorage.setItem("gartic_afk_kicked", "true");
+                safeLocalStorage.setItem("gartic_afk_kicked", "true");
               } else {
-                localStorage.setItem("gartic_connection_lost", "true");
+                safeLocalStorage.setItem("gartic_connection_lost", "true");
               }
             }
             onLeave?.();
@@ -714,13 +716,13 @@ export default function GameRoom({
     const onSessionExpired = (data: any) => {
       console.warn("[GameRoom] Session expired (AFK/Evicted). Returning to lobby.", data);
       if (typeof window !== "undefined") {
-        localStorage.removeItem("gartic_player_room");
+        safeLocalStorage.removeItem("gartic_player_room");
         const reason = (data && data.reason) || "connection_lost";
-        localStorage.setItem("gartic_session_expired_reason", reason);
+        safeLocalStorage.setItem("gartic_session_expired_reason", reason);
         if (reason === "afk_idle" || reason === "afk_kicked") {
-          localStorage.setItem("gartic_afk_kicked", "true");
+          safeLocalStorage.setItem("gartic_afk_kicked", "true");
         } else {
-          localStorage.setItem("gartic_connection_lost", "true");
+          safeLocalStorage.setItem("gartic_connection_lost", "true");
         }
       }
       onLeave?.();
@@ -1141,7 +1143,7 @@ export default function GameRoom({
               id: "exit-confirm-no-btn",
               text: "NO",
               onClick: () => setShowExitConfirm(false),
-              variant: "secondary",
+              variant: "primary",
             },
             {
               id: "exit-confirm-yes-btn",
@@ -2413,26 +2415,29 @@ export default function GameRoom({
       <CinematicModal
         isOpen={showSkipConfirm}
         onClose={() => setShowSkipConfirm(false)}
-        titleType="skip"
+        titleType="report"
         titleText="SKIP"
         buttons={[
           {
             id: "skip-confirm-no-btn",
-            text: "NO",
+            text: <span className="text-white font-black">NO</span>,
             onClick: () => setShowSkipConfirm(false),
-            variant: "secondary",
+            variant: "primary",
           },
           {
             id: "skip-confirm-yes-btn",
-            text: "YES",
+            text: <span className="text-white font-black">YES</span>,
             onClick: handleSkipTurn,
-            variant: "primary",
+            variant: "danger",
           },
         ]}
       >
-        <h3 id="skip-confirm-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-4">
+        <h3 id="skip-confirm-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
           Do you want to skip your turn?
         </h3>
+        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+          هل تريد تجاوز دورك في الرسم؟
+        </p>
       </CinematicModal>
 
       {/* AFK Popup Modal */}
@@ -2488,7 +2493,7 @@ export default function GameRoom({
             id: "report-confirm-no-btn",
             text: "NO",
             onClick: () => setShowReportConfirm(false),
-            variant: "secondary",
+            variant: "primary",
           },
           {
             id: "report-confirm-yes-btn",
@@ -2743,7 +2748,7 @@ export default function GameRoom({
             text: "OK",
             onClick: () => {
               if (typeof window !== "undefined") {
-                localStorage.removeItem("gartic_player_room");
+                safeLocalStorage.removeItem("gartic_player_room");
               }
               onLeave?.();
             },
@@ -2785,7 +2790,7 @@ export default function GameRoom({
         onClose={() => {
           setIsRoomFull(false);
           if (typeof window !== "undefined") {
-            localStorage.removeItem("gartic_player_room");
+            safeLocalStorage.removeItem("gartic_player_room");
           }
           onLeave?.();
         }}
@@ -2798,7 +2803,7 @@ export default function GameRoom({
             onClick: () => {
               setIsRoomFull(false);
               if (typeof window !== "undefined") {
-                localStorage.removeItem("gartic_player_room");
+                safeLocalStorage.removeItem("gartic_player_room");
               }
               onLeave?.();
             },
