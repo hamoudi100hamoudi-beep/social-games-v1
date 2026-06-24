@@ -129,6 +129,7 @@ async function startServer() {
 
                 // Always emit draw_history_sync to guarantee the client's loader disappears instantly
                 socket.emit('draw_history_sync', getJsonSafeHistory(reconnectedRoom.gameState.drawHistory || []));
+                socket.emit('draw_redo_sync', getJsonSafeHistory(reconnectedRoom.gameState.redoStack || []));
               }
             } catch (syncErr) {
               console.error("[Socket] Error during direct sync in rejoin:", syncErr);
@@ -169,6 +170,7 @@ async function startServer() {
 
             // Always emit draw_history_sync to guarantee the client's loader disappears instantly
             socket.emit('draw_history_sync', getJsonSafeHistory(room.gameState.drawHistory || []));
+            socket.emit('draw_redo_sync', getJsonSafeHistory(room.gameState.redoStack || []));
           }
         } catch (syncErr) {
           console.error("[Socket] Error during direct sync in join:", syncErr);
@@ -196,6 +198,7 @@ async function startServer() {
             roomManager.sendStateToPlayer(room, player);
             // Always emit draw_history_sync to guarantee the client's loader disappears instantly
             socket.emit('draw_history_sync', getJsonSafeHistory(room.gameState.drawHistory || []));
+            socket.emit('draw_redo_sync', getJsonSafeHistory(room.gameState.redoStack || []));
           }
         }
       } catch (e) {

@@ -1454,12 +1454,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       attemptSync();
     };
 
+    const onDrawRedoSync = (commands: any[]) => {
+      console.log("[DrawingCanvasCore] Received draw_redo_sync event, payload length:", commands?.length);
+      localRedoStackRef.current = commands || [];
+      syncHistoryButtons();
+    };
+
     socket.on('draw_binary', onDrawBinary);
     socket.on('draw_history_sync', onDrawHistorySync);
+    socket.on('draw_redo_sync', onDrawRedoSync);
 
     return () => {
       socket.off('draw_binary', onDrawBinary);
       socket.off('draw_history_sync', onDrawHistorySync);
+      socket.off('draw_redo_sync', onDrawRedoSync);
     };
   }, [socket, instanceId]);
 
