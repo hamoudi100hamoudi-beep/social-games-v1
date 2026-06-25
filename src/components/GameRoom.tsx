@@ -2049,11 +2049,11 @@ export default function GameRoom({
 
         {/* Right: Actions & Guess Input */}
         <div
-          className={`flex flex-col relative overflow-hidden bg-bg-dark-brand
+          className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-1 pl-1 sm:pb-3 sm:pr-3 sm:pt-1.5 sm:pl-1.5
                       ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
                      `}
         >
-          <div className="flex-1 flex flex-col bg-[#11264A] rounded-tl-[20px] sm:rounded-tl-[24px] shadow-lg overflow-hidden relative">
+          <div className="flex-1 flex flex-col bg-bg-dark-brand rounded-xl sm:rounded-2xl shadow-inner border border-white/5 overflow-hidden relative">
             {/* Actions Bar */}
             <div
               className={`shrink-0 bg-[#0A1A38] ${isInputFocused ? "hidden" : "block"}`}
@@ -2368,8 +2368,15 @@ export default function GameRoom({
                 </div>
                 <textarea
                   ref={guessInputRef}
+                  id="guess-textarea"
                   dir="auto"
                   rows={1}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck="false"
+                  name="guess_input_random_name"
+                  data-form-type="other"
                   disabled={isInputDisabled && !isInputFocused}
                   value={isInputDisabled ? "" : guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
@@ -2416,7 +2423,7 @@ export default function GameRoom({
                                 ? "You've found the answer!"
                                 : "Answer here..."
                   }
-                  className={`w-full h-12 border-2 border-transparent rounded-[24px] pl-11 pr-14 py-[13px] resize-none overflow-hidden text-white font-bold text-sm sm:text-base outline-none transition-colors duration-200 shadow-sm whitespace-nowrap ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] placeholder:text-white/45"}`}
+                  className={`w-full h-12 border-2 border-transparent rounded-[24px] pl-11 pr-14 py-[13px] resize-none overflow-hidden text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm whitespace-nowrap ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
                   style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                 />
                 <button
