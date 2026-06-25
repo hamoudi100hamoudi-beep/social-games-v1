@@ -183,14 +183,14 @@ export default function GameRoom({
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const guessInputRef = React.useRef<HTMLInputElement>(null);
+  const guessInputRef = React.useRef<HTMLTextAreaElement>(null);
+  const mainContainerRef = React.useRef<HTMLDivElement>(null);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
   const [viewportOffsetTop, setViewportOffsetTop] = useState<number>(0);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(
     typeof window !== "undefined" ? window.innerHeight : 800,
   );
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [lastKeyboardHeight, setLastKeyboardHeight] = useState(280);
   const [unreadCount, setUnreadCount] = useState(0);
   const hasEmittedJoin = React.useRef(false);
 
@@ -773,6 +773,12 @@ export default function GameRoom({
       if (!window.visualViewport) return;
 
       const currentHeight = window.visualViewport.height;
+      
+      // Update DOM synchronously to eliminate React state lag and prevent jumpiness
+      if (mainContainerRef.current) {
+        mainContainerRef.current.style.height = `${currentHeight}px`;
+      }
+      
       setLockedHeight(currentHeight);
       
       // Force scroll reset immediately to prevent room/chat from sliding off-screen or shifting up
@@ -790,7 +796,8 @@ export default function GameRoom({
       setIsKeyboardOpen(isKeyboardShowing);
 
       if (isKeyboardShowing) {
-        setLastKeyboardHeight(currentMax - currentHeight);
+        // We no longer rely on lastKeyboardHeight or localStorage
+        // The synchronous DOM update above handles the smooth resize
       }
 
       // Always ensure layout is at origin (0, 0)
@@ -1114,15 +1121,14 @@ export default function GameRoom({
 
   const effectiveHeight = isChatOpen
     ? "100vh"
-    : isInputFocused
-      ? `${Math.min(lockedHeight || maxViewportHeight, maxViewportHeight - lastKeyboardHeight)}px`
-      : lockedHeight
-        ? `${Math.max(lockedHeight, maxViewportHeight)}px`
-        : "100dvh";
+    : lockedHeight
+      ? `${lockedHeight}px`
+      : "100dvh";
 
   return (
     <>
       <div
+        ref={mainContainerRef}
         className="fixed top-0 left-0 right-0 grid w-full bg-bg-dark-brand font-sans overflow-hidden overscroll-none touch-none"
         style={{
           height: effectiveHeight,
@@ -2360,12 +2366,21 @@ export default function GameRoom({
                 >
                   <Pencil size={18} />
                 </div>
-                <input
+                <textarea
                   ref={guessInputRef}
-                  type="text"
+                  dir="auto"
+                  rows={1}
                   disabled={isInputDisabled && !isInputFocused}
                   value={isInputDisabled ? "" : guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      if (guessInput.trim() && !isInputDisabled) {
+                        handleGuessSubmit(e as any);
+                      }
+                    }
+                  }}
                   onFocus={() => {
                     setIsInputFocused(true);
                     setIsKeyboardOpen(true);
@@ -2401,7 +2416,8 @@ export default function GameRoom({
                                 ? "You've found the answer!"
                                 : "Answer here..."
                   }
-                  className={`w-full h-12 border-2 border-transparent rounded-[24px] pl-11 pr-14 text-white font-bold text-sm sm:text-base outline-none transition-colors duration-200 shadow-sm ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] placeholder:text-white/45"}`}
+                  className={`w-full h-12 border-2 border-transparent rounded-[24px] pl-11 pr-14 py-[13px] resize-none overflow-hidden text-white font-bold text-sm sm:text-base outline-none transition-colors duration-200 shadow-sm whitespace-nowrap ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] placeholder:text-white/45"}`}
+                  style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                 />
                 <button
                   type="submit"
