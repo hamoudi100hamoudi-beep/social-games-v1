@@ -190,6 +190,7 @@ export default function GameRoom({
     typeof window !== "undefined" ? window.innerHeight : 800,
   );
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [lastKeyboardHeight, setLastKeyboardHeight] = useState(280);
   const [unreadCount, setUnreadCount] = useState(0);
   const hasEmittedJoin = React.useRef(false);
 
@@ -788,6 +789,10 @@ export default function GameRoom({
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
+      if (isKeyboardShowing) {
+        setLastKeyboardHeight(currentMax - currentHeight);
+      }
+
       // Always ensure layout is at origin (0, 0)
       window.scrollTo(0, 0);
 
@@ -1107,16 +1112,20 @@ export default function GameRoom({
     return player ? player.name : "";
   };
 
+  const effectiveHeight = isChatOpen
+    ? "100vh"
+    : isInputFocused
+      ? `${Math.min(lockedHeight || maxViewportHeight, maxViewportHeight - lastKeyboardHeight)}px`
+      : lockedHeight
+        ? `${Math.max(lockedHeight, maxViewportHeight)}px`
+        : "100dvh";
+
   return (
     <>
       <div
         className="fixed top-0 left-0 right-0 grid w-full bg-bg-dark-brand font-sans overflow-hidden overscroll-none touch-none"
         style={{
-          height: isChatOpen
-            ? "100vh"
-            : lockedHeight
-              ? `${lockedHeight}px`
-              : "100dvh",
+          height: effectiveHeight,
           gridTemplateColumns: "minmax(0, 32%) minmax(0, 68%)",
           gridTemplateRows: "auto minmax(0, 1fr)",
         }}
@@ -1195,7 +1204,7 @@ export default function GameRoom({
                      `}
         >
           <div 
-            className="w-full max-w-full h-auto max-h-full aspect-[740/430] shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative"
+            className={`w-full max-w-full h-auto max-h-full aspect-[740/430] shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative ${morphMode ? "rounded-bl-[6px] sm:rounded-bl-[8px]" : ""}`}
           >
             {/* Hint/Word Overlay Overlay for spectator view */}
             {!isDrawingMode && renderWordOverlay()}
@@ -2034,17 +2043,17 @@ export default function GameRoom({
 
         {/* Right: Actions & Guess Input */}
         <div
-          className={`flex flex-col bg-bg-dark-brand relative overflow-hidden
+          className={`flex flex-col relative overflow-hidden bg-bg-dark-brand
                       ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
                      `}
         >
+          <div className="flex-1 flex flex-col bg-[#11264A] rounded-tl-[20px] sm:rounded-tl-[24px] shadow-lg overflow-hidden relative">
             {/* Actions Bar */}
             <div
-              className={`grid transition-all duration-150 ease-in-out shrink-0 bg-bg-panel-brand
-                          ${isInputFocused ? "grid-rows-[0fr] opacity-0 border-none" : "grid-rows-[1fr] opacity-100 border-b border-primary-brand/10"}`}
+              className={`shrink-0 bg-[#0A1A38] ${isInputFocused ? "hidden" : "block"}`}
             >
               <div className="overflow-hidden">
-                <div className="flex gap-2 sm:gap-4 p-2 sm:p-3 bg-[#1AAACC]/10 justify-around">
+                <div className="flex gap-2 sm:gap-4 p-2 sm:p-3 justify-around">
                   <button
                     id="report-draw-btn"
                     disabled={!canReport}
@@ -2082,8 +2091,8 @@ export default function GameRoom({
             </div>
 
             {/* Quick Feedback Area (interactive feed) */}
-            <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-2 flex flex-col-reverse font-sans min-h-0">
-              <div className="flex flex-col-reverse gap-1.5">
+            <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-3 flex flex-col-reverse font-sans min-h-0 bg-transparent">
+              <div className="flex flex-col-reverse gap-2">
                 {[...guesses].reverse().map((msg) => {
                   const isSystem = msg.type === "system";
                   if (isSystem) {
@@ -2096,12 +2105,12 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-amber-500 font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-amber-500 font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <span className="text-amber-500 font-black shrink-0">⚡</span>
                           <span dir="auto" className="flex items-center gap-1">
                             <span className="text-amber-500 font-extrabold">{displayWord}</span>
-                            <span className="text-amber-500/90 font-bold">is close!</span>
+                            <span className="text-amber-500/90 font-normal">is close!</span>
                           </span>
                         </div>
                       );
@@ -2112,7 +2121,7 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#EF4444] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <AlertTriangle
                             size={14}
@@ -2120,7 +2129,7 @@ export default function GameRoom({
                           />
                           <span dir="auto" className="flex items-center gap-1">
                             <span className="text-orange-400 font-extrabold">{msg.sender}</span>
-                            <span className="text-red-500 font-bold">reported!</span>
+                            <span className="text-red-500 font-normal">reported!</span>
                           </span>
                         </div>
                       );
@@ -2131,13 +2140,13 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#EF4444] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <AlertTriangle
                             size={14}
                             className="text-[#EF4444] shrink-0 font-extrabold"
                           />
-                          <span dir="auto" className="text-red-500 font-extrabold">Canceled turn</span>
+                          <span dir="auto" className="text-red-500 font-normal">Canceled turn</span>
                         </div>
                       );
                     }
@@ -2146,20 +2155,24 @@ export default function GameRoom({
                     if (subType === "hit") {
                       const isSelfGuesser = msg.senderId === socketId;
                       const displayWord = (msg as any).word || "";
-                      const displayText = isSelfGuesser
-                        ? `You've found the answer: ${displayWord}`
-                        : `${msg.sender || text.replace(" guessed the word!", "")} hit!`;
-
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#00E540] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Check
                             size={14}
                             className="stroke-[3.5] text-[#00E540] shrink-0"
                           />
-                          <span dir="auto">{displayText}</span>
+                          {isSelfGuesser ? (
+                            <span dir="auto" className="font-normal">
+                              You've found the answer: <span className="font-extrabold">{displayWord}</span>
+                            </span>
+                          ) : (
+                            <span dir="auto" className="font-normal">
+                              <span className="font-extrabold text-white">{msg.sender || text.replace(" guessed the word!", "")}</span> hit!
+                            </span>
+                          )}
                         </div>
                       );
                     }
@@ -2169,29 +2182,36 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#1AD2FF] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Clock
                             size={14}
                             className="text-[#1AD2FF] shrink-0"
                           />
-                          <span>Interval...</span>
+                          <span className="font-normal">Interval...</span>
                         </div>
                       );
                     }
 
                     // Turn change
                     if (subType === "turn") {
+                      const match = text.match(/^(Turn of\s+)(.+)$/i);
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#1AD2FF] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Pencil
                             size={12}
                             className="text-[#1AD2FF] shrink-0"
                           />
-                          <span dir="auto">{text}</span>
+                          {match ? (
+                            <span dir="auto">
+                              Turn of <span className="font-extrabold text-white">{match[2]}</span>
+                            </span>
+                          ) : (
+                            <span dir="auto">{text}</span>
+                          )}
                         </div>
                       );
                     }
@@ -2201,13 +2221,13 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-start gap-2 text-[#1AD2FF] font-bold text-xs sm:text-sm py-1 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-start gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-1 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Info
                             size={14}
                             className="text-[#1AD2FF] shrink-0 mt-0.5"
                           />
-                          <span dir="auto">{text}</span>
+                          <span dir="auto" className="font-normal">{text}</span>
                         </div>
                       );
                     }
@@ -2217,13 +2237,13 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#00E540] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <Check
                             size={14}
                             className="stroke-[3.5] text-[#00E540] shrink-0"
                           />
-                          <span>Everybody hit the answer!</span>
+                          <span className="font-normal">Everybody hit the answer!</span>
                         </div>
                       );
                     }
@@ -2241,13 +2261,13 @@ export default function GameRoom({
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#EF4444] font-bold text-xs sm:text-sm py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
                           <AlertTriangle
                             size={14}
                             className="text-[#EF4444] shrink-0"
                           />
-                          <span dir="auto">{displayText}</span>
+                          <span dir="auto" className="font-normal">{displayText}</span>
                         </div>
                       );
                     }
@@ -2297,7 +2317,7 @@ export default function GameRoom({
                     return (
                       <div
                         key={msg.id}
-                        className="flex items-center gap-2 font-bold text-xs sm:text-sm py-0.5"
+                        className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5"
                         style={{ color: textColor }}
                       >
                         {iconNode}
@@ -2307,17 +2327,13 @@ export default function GameRoom({
                   }
 
                   return (
-                    <div key={msg.id} className="text-[12px] sm:text-[14px]">
+                    <div key={msg.id} className="text-sm sm:text-base">
                       <div className="flex items-start gap-1">
-                        <Pencil
-                          size={10}
-                          className="text-primary-brand/40 shrink-0 mt-1"
-                        />
-                        <span className="font-bold text-white/50">
+                        <span className="font-extrabold text-[#F3F4F6] shrink-0">
                           {msg.sender}:
                         </span>
                         <span
-                          className={`${msg.isSelf ? "text-white" : "text-slate-300"} break-words`}
+                          className={`${msg.isSelf ? "text-white" : "text-slate-300"} font-normal break-words`}
                           dir="auto"
                           style={{ unicodeBidi: "plaintext" }}
                         >
@@ -2327,20 +2343,22 @@ export default function GameRoom({
                     </div>
                   );
                 })}
-                <div className="flex items-center gap-1.5 text-primary-brand font-medium text-[11px] sm:text-[13px]">
-                  <Info size={12} />
+                <div className="flex items-center gap-1.5 text-primary-brand font-normal text-sm sm:text-base">
+                  <Info size={14} />
                   Waiting for players
                 </div>
               </div>
             </div>
 
             {/* Guess Input Area */}
-            <div className="p-1.5 shrink-0 mt-auto bg-bg-dark-brand border-t border-white/5">
+            <div 
+              className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 shrink-0 mt-auto bg-transparent"
+            >
               <form onSubmit={handleGuessSubmit} className="relative">
                 <div
-                  className={`absolute left-2.5 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
+                  className={`absolute left-4 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
                 >
-                  <Pencil size={12} />
+                  <Pencil size={18} />
                 </div>
                 <input
                   ref={guessInputRef}
@@ -2383,19 +2401,20 @@ export default function GameRoom({
                                 ? "You've found the answer!"
                                 : "Answer here..."
                   }
-                  className={`w-full h-8 border rounded-lg pl-8 pr-10 text-white font-bold text-xs outline-none transition-all duration-200 ${isInputDisabled ? "bg-black/40 border-white/5 text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-black/20 border-white/10 focus:border-primary-brand placeholder:text-white/45"}`}
+                  className={`w-full h-12 border-2 border-transparent rounded-[24px] pl-11 pr-14 text-white font-bold text-sm sm:text-base outline-none transition-colors duration-200 shadow-sm ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] placeholder:text-white/45"}`}
                 />
                 <button
                   type="submit"
                   onPointerDown={(e) => e.preventDefault()}
                   disabled={!guessInput.trim() || isInputDisabled}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center text-bg-dark-brand disabled:opacity-0 bg-primary-brand rounded-md hover:bg-white transition-opacity"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-bg-dark-brand disabled:opacity-0 bg-primary-brand rounded-full hover:bg-white transition-all shadow-md"
                 >
-                  <Send size={12} className="-ml-0.5" />
+                  <Send size={16} className="-ml-0.5" />
                 </button>
               </form>
             </div>
           </div>
+        </div>
       </div>
 
       {/* Chat Overlay */}
