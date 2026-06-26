@@ -1,6 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
+import GameTitle from "./GameTitle";
 
 // 🎬 Snappy, ultra-responsive high-end physics animations
 export const cinematicCardVariants = {
@@ -155,11 +156,13 @@ export default function CinematicModal({
             {/* Structured Title Label */}
             <motion.div
               variants={cinematicItemVariants}
-              className="relative select-none mb-5 mx-auto py-2 px-3"
+              className="relative select-none mb-5 mx-auto py-2 px-3 flex justify-center w-full"
             >
-              <h2 className={`${getTitleClass()} text-[34px] tracking-widest uppercase select-none text-center`}>
-                {titleText}
-              </h2>
+              <GameTitle
+                text={titleText}
+                type={titleType}
+                className="text-[34px]"
+              />
             </motion.div>
 
             {/* Main Interactive Slot Body (Guaranteed to be h-auto as requested) */}

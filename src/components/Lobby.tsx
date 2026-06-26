@@ -4,6 +4,7 @@ import { useSocket } from './SocketProvider';
 import { motion, AnimatePresence } from 'motion/react';
 import CinematicModal from './game/CinematicModal';
 import { safeLocalStorage } from '../utils/storage';
+import GameTitle from './game/GameTitle';
 
 interface LobbyProps {
   onPlay: (nickname: string, room: string, avatar: string) => void;
@@ -90,10 +91,49 @@ export default function Lobby({ onPlay }: LobbyProps) {
   const [showAvatarGrid, setShowAvatarGrid] = useState(false);
   const [nicknameError, setNicknameError] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
-  const [afkWarning, setAfkWarning] = useState(false);
-  const [connLostWarning, setConnLostWarning] = useState(false);
+  const [afkWarning, setAfkWarning] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const afkStored = safeLocalStorage.getItem('gartic_afk_kicked');
+      if (afkStored) {
+        const timestamp = parseInt(afkStored, 10);
+        if (!isNaN(timestamp) && Date.now() - timestamp < 180000) {
+          return true;
+        }
+      }
+    }
+    return false;
+  });
+
+  const [connLostWarning, setConnLostWarning] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const connLostStored = safeLocalStorage.getItem('gartic_connection_lost');
+      const reason = safeLocalStorage.getItem('gartic_session_expired_reason');
+      const afkStored = safeLocalStorage.getItem('gartic_afk_kicked');
+      
+      let isAfk = false;
+      if (afkStored) {
+        const timestamp = parseInt(afkStored, 10);
+        if (!isNaN(timestamp) && Date.now() - timestamp < 180000) {
+          isAfk = true;
+        }
+      }
+
+      if (connLostStored) {
+        const timestamp = parseInt(connLostStored, 10);
+        if (!isNaN(timestamp) && Date.now() - timestamp < 180000) {
+          return true;
+        }
+      }
+
+      if (!isAfk && !afkStored && reason === 'connection_lost' && !connLostStored) {
+        return true;
+      }
+    }
+    return false;
+  });
 
   // Home screen settings modal states
+
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [localZoomEnabled, setLocalZoomEnabled] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -112,18 +152,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const reason = safeLocalStorage.getItem('gartic_session_expired_reason');
-      const isAfk = safeLocalStorage.getItem('gartic_afk_kicked') === 'true' || reason === 'afk_idle' || reason === 'afk_kicked';
-      const isConnLost = safeLocalStorage.getItem('gartic_connection_lost') === 'true' || reason === 'connection_lost';
-      
-      if (isAfk) {
-        setAfkWarning(true);
-        safeLocalStorage.removeItem('gartic_afk_kicked');
-      } else if (isConnLost) {
-        setConnLostWarning(true);
-        safeLocalStorage.removeItem('gartic_connection_lost');
-      }
-      
+      safeLocalStorage.removeItem('gartic_afk_kicked');
+      safeLocalStorage.removeItem('gartic_connection_lost');
       safeLocalStorage.removeItem('gartic_session_expired_reason');
     }
   }, []);
@@ -210,7 +240,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
     <div className="w-full h-full min-h-screen bg-game-primary-blue text-white font-sans flex flex-col relative overflow-hidden">
       
       {/* Settings gear in top corner */}
-      {screen === 'home' && (
+      {screen === 'home' && !afkWarning && !connLostWarning && (
         <button 
           onClick={() => setShowSettingsModal(true)}
           className="absolute top-4 right-4 z-40 w-11 h-11 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 text-white backdrop-blur-md"
@@ -221,7 +251,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
       )}
 
       {/* Home Screen */}
-      {screen === 'home' && (
+      {screen === 'home' && !afkWarning && !connLostWarning && (
         <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 z-10">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
@@ -230,10 +260,12 @@ export default function Lobby({ onPlay }: LobbyProps) {
             className="w-full max-w-sm bg-[#ECEBFC] pt-6 pb-8 px-6 sm:px-8 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col h-auto text-[#2E2882]"
           >
             {/* Title flag */}
-            <div className="text-center mb-6 mt-1 select-none">
-              <h1 className="cartoon-title-profile text-[42px] tracking-widest uppercase text-center">
-                DRAW.IO
-              </h1>
+            <div className="text-center mb-6 mt-1 select-none flex justify-center w-full">
+              <GameTitle 
+                text="DRAW.IO" 
+                type="profile" 
+                className="text-[42px]" 
+              />
             </div>
             
             {/* Content body wrapper */}
@@ -336,10 +368,12 @@ export default function Lobby({ onPlay }: LobbyProps) {
             </button>
 
             {/* Header */}
-            <div className="text-center mb-5 mt-1 select-none">
-              <h2 className="cartoon-title-skip text-[36px] tracking-widest uppercase">
-                ROOMS
-              </h2>
+            <div className="text-center mb-5 mt-1 select-none flex justify-center w-full">
+              <GameTitle 
+                text="ROOMS" 
+                type="skip" 
+                className="text-[36px]" 
+              />
             </div>
 
             {/* Search Bar */}

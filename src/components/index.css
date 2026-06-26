@@ -26,6 +26,7 @@
   }
 
   /* 🎨 3D Cartoon Title Style Classes - Rounded, Rich stacked shadow, No sharp spikes */
+  /* Compatible with older devices (Android 7 etc.) by using multi-directional text-shadow instead of -webkit-text-stroke and paint-order */
   .cartoon-title-exit,
   .cartoon-title-report,
   .cartoon-title-profile,
@@ -34,15 +35,30 @@
     font-family: 'Fredoka', 'Inter', sans-serif;
     font-weight: 900;
     color: var(--title-color);
-    -webkit-text-stroke: 6px var(--title-stroke);
-    paint-order: stroke fill;
-    stroke-linejoin: round;
-    -webkit-stroke-linejoin: round;
     text-shadow:
-      0px 1px 0px var(--title-stroke),
-      0px 2px 0px var(--title-stroke),
-      0px 3px 0px var(--title-stroke),
-      0px 4px 0px var(--title-stroke);
+      /* High-compatibility crisp 3px outer border */
+      -3px -3px 0 var(--title-stroke),
+       0px -3px 0 var(--title-stroke),
+       3px -3px 0 var(--title-stroke),
+       3px  0px 0 var(--title-stroke),
+       3px  3px 0 var(--title-stroke),
+       0px  3px 0 var(--title-stroke),
+      -3px  3px 0 var(--title-stroke),
+      -3px  0px 0 var(--title-stroke),
+      /* Diagonal sub-pixel smoothing for clean curves */
+      -1.5px -3px 0 var(--title-stroke),
+       1.5px -3px 0 var(--title-stroke),
+       3px -1.5px 0 var(--title-stroke),
+       3px  1.5px 0 var(--title-stroke),
+       1.5px  3px 0 var(--title-stroke),
+      -1.5px  3px 0 var(--title-stroke),
+      -3px  1.5px 0 var(--title-stroke),
+      -3px -1.5px 0 var(--title-stroke),
+      /* Solid 3D depth extrusion */
+       0px  4px 0px var(--title-stroke),
+       0px  5px 0px var(--title-stroke),
+       0px  6px 0px var(--title-stroke),
+       0px  7px 0px var(--title-stroke);
   }
 
   .cartoon-title-exit {

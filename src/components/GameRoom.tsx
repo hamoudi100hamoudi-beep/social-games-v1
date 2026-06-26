@@ -492,9 +492,9 @@ export default function GameRoom({
               const reason = res.reason || "connection_lost";
               safeLocalStorage.setItem("gartic_session_expired_reason", reason);
               if (reason === "afk_idle" || reason === "afk_kicked") {
-                safeLocalStorage.setItem("gartic_afk_kicked", "true");
+                safeLocalStorage.setItem("gartic_afk_kicked", Date.now().toString());
               } else {
-                safeLocalStorage.setItem("gartic_connection_lost", "true");
+                safeLocalStorage.setItem("gartic_connection_lost", Date.now().toString());
               }
             }
             onLeave?.();
@@ -721,9 +721,9 @@ export default function GameRoom({
         const reason = (data && data.reason) || "connection_lost";
         safeLocalStorage.setItem("gartic_session_expired_reason", reason);
         if (reason === "afk_idle" || reason === "afk_kicked") {
-          safeLocalStorage.setItem("gartic_afk_kicked", "true");
+          safeLocalStorage.setItem("gartic_afk_kicked", Date.now().toString());
         } else {
-          safeLocalStorage.setItem("gartic_connection_lost", "true");
+          safeLocalStorage.setItem("gartic_connection_lost", Date.now().toString());
         }
       }
       onLeave?.();
