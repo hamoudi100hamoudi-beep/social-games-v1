@@ -2049,7 +2049,7 @@ export default function GameRoom({
 
         {/* Right: Actions & Guess Input */}
         <div
-          className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-1 pl-1 sm:pb-3 sm:pr-3 sm:pt-1.5 sm:pl-1.5
+          className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-0 pl-1 sm:pb-3 sm:pr-3 sm:pt-0 sm:pl-1.5
                       ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
                      `}
         >
@@ -2134,8 +2134,8 @@ export default function GameRoom({
                             className="text-[#EF4444] shrink-0 font-extrabold"
                           />
                           <span dir="auto" className="flex items-center gap-1">
-                            <span className="text-orange-400 font-extrabold">{msg.sender}</span>
-                            <span className="text-red-500 font-normal">reported!</span>
+                            <span className="text-[#EF4444] font-extrabold">{msg.sender}</span>
+                            <span className="text-[#EF4444] font-normal">reported!</span>
                           </span>
                         </div>
                       );
@@ -2152,7 +2152,7 @@ export default function GameRoom({
                             size={14}
                             className="text-[#EF4444] shrink-0 font-extrabold"
                           />
-                          <span dir="auto" className="text-red-500 font-normal">Canceled turn</span>
+                          <span dir="auto" className="text-[#EF4444] font-normal">Canceled turn</span>
                         </div>
                       );
                     }
@@ -2171,12 +2171,12 @@ export default function GameRoom({
                             className="stroke-[3.5] text-[#00E540] shrink-0"
                           />
                           {isSelfGuesser ? (
-                            <span dir="auto" className="font-normal">
-                              You've found the answer: <span className="font-extrabold">{displayWord}</span>
+                            <span dir="auto" className="font-normal text-[#00E540]">
+                              You've found the answer: <span className="font-extrabold text-[#00E540]">{displayWord}</span>
                             </span>
                           ) : (
-                            <span dir="auto" className="font-normal">
-                              <span className="font-extrabold text-white">{msg.sender || text.replace(" guessed the word!", "")}</span> hit!
+                            <span dir="auto" className="font-normal text-[#00E540]">
+                              <span className="font-extrabold text-[#00E540]">{msg.sender || text.replace(" guessed the word!", "")}</span> hit!
                             </span>
                           )}
                         </div>
@@ -2194,7 +2194,7 @@ export default function GameRoom({
                             size={14}
                             className="text-[#1AD2FF] shrink-0"
                           />
-                          <span className="font-normal">Interval...</span>
+                          <span className="font-normal text-[#1AD2FF]">Interval...</span>
                         </div>
                       );
                     }
@@ -2212,11 +2212,11 @@ export default function GameRoom({
                             className="text-[#1AD2FF] shrink-0"
                           />
                           {match ? (
-                            <span dir="auto">
-                              Turn of <span className="font-extrabold text-white">{match[2]}</span>
+                            <span dir="auto" className="text-[#1AD2FF]">
+                              Turn of <span className="font-extrabold text-[#1AD2FF]">{match[2]}</span>
                             </span>
                           ) : (
-                            <span dir="auto">{text}</span>
+                            <span dir="auto" className="text-[#1AD2FF]">{text}</span>
                           )}
                         </div>
                       );
@@ -2644,8 +2644,8 @@ export default function GameRoom({
           >
             <div className="flex flex-col items-center">
               <div className="relative w-14 h-14">
-                <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
-                <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
+                <div className="absolute inset-0 rounded-full border-4 border-[#1AD2FF]/20" />
+                <div className="absolute inset-0 rounded-full border-4 border-t-[#1AD2FF] animate-spin" />
               </div>
             </div>
           </motion.div>

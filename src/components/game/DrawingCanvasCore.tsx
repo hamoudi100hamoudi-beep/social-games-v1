@@ -21,8 +21,8 @@ import {
   GameRoom uses aspect-[740/430]. Any internal canvas resizing must preserve
   this exact aspect ratio to prevent spectator layout squishing or grey gaps. 
 */
-export const CANVAS_WIDTH = 666;
-export const CANVAS_HEIGHT = 387;
+export const CANVAS_WIDTH = 592;
+export const CANVAS_HEIGHT = 344;
 
 const LOGICAL_WIDTH = CANVAS_WIDTH;
 const LOGICAL_HEIGHT = CANVAS_HEIGHT;
@@ -1539,7 +1539,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncTimeoutRef.current = null;
       }
     };
-  }, [socket, hasSyncedOnce]);
+  }, [socket, hasSyncedOnce, readOnly]);
 
   // Automated Clean Reset State on turn / drawer change
   const previousStateRef = useRef({ currentDrawerId, status });
@@ -1934,17 +1934,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.35, ease: 'easeInOut' }}
-              className={`fixed inset-0 flex flex-col items-center justify-center z-[999999] cursor-not-allowed select-none touch-none ${
+              className={`fixed inset-0 flex flex-col items-center justify-center z-[999999] select-none touch-none ${
                 hasSyncedOnce
-                  ? "bg-[#0c061d]/95 backdrop-blur-md"
-                  : "bg-[#0c061d]"
+                  ? (readOnly ? "bg-transparent" : "bg-[#0c061d]/80 backdrop-blur-sm cursor-not-allowed")
+                  : "bg-[#0c061d] cursor-not-allowed"
               }`}
-              style={{ pointerEvents: 'auto' }}
+              style={{ pointerEvents: hasSyncedOnce && readOnly ? 'none' : 'auto' }}
             >
               <div className="flex flex-col items-center">
                 <div className="relative w-14 h-14">
-                  <div className="absolute inset-0 rounded-full border-4 border-violet-500/20" />
-                  <div className="absolute inset-0 rounded-full border-4 border-t-violet-500 animate-spin" />
+                  <div className="absolute inset-0 rounded-full border-4 border-[#1AD2FF]/20" />
+                  <div className="absolute inset-0 rounded-full border-4 border-t-[#1AD2FF] animate-spin" />
                 </div>
               </div>
             </motion.div>

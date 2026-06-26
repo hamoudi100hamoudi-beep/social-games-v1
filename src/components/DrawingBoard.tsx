@@ -200,16 +200,16 @@ export default function DrawingBoard({
         titleText="CLEAN"
         buttons={[
           {
-            id: "clean-confirm-no-btn",
-            text: <span className="text-white font-black">NO</span>,
-            onClick: () => setShowClearConfirm(false),
-            variant: "primary",
-          },
-          {
             id: "clean-confirm-yes-btn",
             text: <span className="text-white font-black">YES</span>,
             onClick: confirmClear,
             variant: "danger",
+          },
+          {
+            id: "clean-confirm-no-btn",
+            text: <span className="text-white font-black">NO</span>,
+            onClick: () => setShowClearConfirm(false),
+            variant: "primary",
           },
         ]}
       >
@@ -383,11 +383,11 @@ export default function DrawingBoard({
             </div>
           )}
 
-          <div className="p-2 sm:p-2.5 pt-1.5 flex items-center justify-between gap-2.5">
+          <div className="p-2 sm:p-2.5 pt-1.5 flex items-center justify-between gap-0">
             <div className="flex items-center gap-1.5 shrink-0">
               {/* 1. Yellow Swap eraser/pencil toggle button */}
               <ActionBtn 
-                icon={<RefreshCcw />} 
+                icon={<SwapIcon />} 
                 active={tool === 'eraser'} 
                 onClick={() => {
                   if (tool === 'eraser') changeTool('pencil');
@@ -442,11 +442,11 @@ export default function DrawingBoard({
             {/* Colors scroll palette */}
             <div 
               ref={colorsScrollRef} 
-              className="flex-1 overflow-x-auto select-none touch-pan-x no-scrollbar ml-1.5 -mr-2 sm:-mr-2.5 max-w-full py-0.5" 
+              className="flex-1 overflow-x-auto select-none touch-pan-x no-scrollbar ml-[8px] sm:ml-[10px] -mr-2 sm:-mr-2.5 max-w-full py-0.5" 
               dir="ltr"
               style={{ scrollbarWidth: 'none' }}
             >
-              <div className="flex flex-col gap-[3px] min-w-max pr-2 sm:pr-2.5">
+              <div className="flex flex-col gap-[3px] min-w-max pl-[4px] pr-2 sm:pr-2.5">
                 <div className="flex gap-[3px]">
                   {TOP_COLORS.map(c => (
                     <ColorBtn key={c} color={c} active={color===c && tool !== 'eraser'} onClick={() => { setColor(c); setActiveMenu(null); if (tool === 'eraser') changeTool(previousTool.current); }} />
@@ -468,18 +468,56 @@ export default function DrawingBoard({
 }
 
 // Sub components
+const SwapIcon = ({ size = 22, strokeWidth = 2.5, className }: any) => {
+  return (
+    <div 
+      className={`relative flex items-center justify-center text-current pointer-events-none ${className || ''}`}
+      style={{ width: 40, height: 40 }}
+    >
+      {/* Pencil top-left */}
+      <div className="absolute top-[3px] left-[3px]">
+        <Pencil size={18} strokeWidth={strokeWidth} />
+      </div>
+
+      {/* Eraser bottom-right */}
+      <div className="absolute bottom-[3px] right-[3px]">
+        <Eraser size={18} strokeWidth={strokeWidth} />
+      </div>
+
+      {/* Arrows */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        viewBox="0 0 40 40"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {/* Top-Right arrow: start from right (above eraser), curve to top-middle (right of pencil) */}
+        <path d="M 37 18 A 14 14 0 0 0 23 4" />
+        <path d="M 28 0 L 23 4 L 28 8" />
+
+        {/* Bottom-Left arrow: start from left (below pencil), curve to bottom-middle (left of eraser) */}
+        <path d="M 3 22 A 14 14 0 0 0 17 36" />
+        <path d="M 12 32 L 17 36 L 12 40" />
+      </svg>
+    </div>
+  );
+};
+
 function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string }) {
   return (
     <button 
       type="button"
       onClick={onClick}
-      className={`w-[38px] h-[38px] flex items-center justify-center rounded-lg transition-all shadow-sm focus:outline-none select-none
+      className={`w-[45px] h-[45px] flex items-center justify-center rounded-lg transition-all shadow-sm focus:outline-none select-none
         ${active 
           ? 'bg-white text-primary-brand scale-105 shadow-md' 
           : 'bg-accent-brand text-bg-dark-brand hover:bg-white hover:scale-105 active:scale-95'
         } ${className}`}
     >
-      {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { size: 19, strokeWidth: 2.5 }) : icon}
+      {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { size: 22, strokeWidth: 2.5 }) : icon}
     </button>
   );
 }

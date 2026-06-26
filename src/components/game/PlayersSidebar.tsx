@@ -138,7 +138,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   }, [slots]);
 
   return (
-    <div className={`flex flex-col border-r border-primary-brand/20 bg-bg-panel-brand overflow-y-auto overscroll-contain touch-pan-y
+    <div className={`flex flex-col bg-bg-panel-brand overflow-y-auto overscroll-contain touch-pan-y
                     ${morphMode ? 'col-start-1 col-end-2 row-start-1 row-end-3' : 'col-start-1 col-end-2 row-start-2 row-end-3'}
                    `}>
       <style>{`
