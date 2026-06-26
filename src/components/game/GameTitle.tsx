@@ -33,37 +33,45 @@ export default function GameTitle({ text, type, className = "text-[34px]" }: Gam
       style={{ fontFamily: "'Fredoka', 'Inter', sans-serif" }}
     >
       {/* 
-        🎨 1. Background Layer (الطبقة الخلفية):
-        Draws the ultra-smooth, thick round border using standard browser text stroke,
-        and adds the clean 3D solid shadow extrusion directed straight downwards.
-        Both stroke and fill of this layer share the stroke color, eliminating any
-        aliasing artifacts, overlaps, or transparent bleeding.
+        🎨 1. Layer 3: Background 3D Block Layer (الطبقة الخلفية ثلاثية الأبعاد)
+        Placed at the very bottom. Drawn using the stroke color for both fill and the thick 5px round outline.
+        Shifted downwards by 3px using transform to build a fully solid, gapless, and unified 3D base blocks.
       */}
       <span
-        className="block"
+        className="absolute top-0 left-0 w-full h-full block text-center"
         style={{
           color: stroke,
-          WebkitTextStroke: `8px ${stroke}`,
-          textStroke: `8px ${stroke}`,
+          WebkitTextStroke: `5px ${stroke}`,
+          textStroke: `5px ${stroke}`,
           paintOrder: "stroke fill",
-          textShadow: `
-            0px 1px 0px ${stroke},
-            0px 2px 0px ${stroke},
-            0px 3px 0px ${stroke},
-            0px 4px 0px ${stroke},
-            0px 5px 0px ${stroke},
-            0px 6px 0px ${stroke}
-          `,
+          transform: "translate(0px, 3px)",
+          WebkitTransform: "translate(0px, 3px)",
+          pointerEvents: "none",
         }}
       >
         {text}
       </span>
 
       {/* 
-        🎨 2. Foreground Layer (الطبقة الأمامية):
-        Sits perfectly on top of the background layer.
-        Displays the crisp, untampered inner characters with zero aliasing,
-        ensuring 100% legibility and absolute softness on both old and new devices.
+        🎨 2. Layer 2: Middle Outline Layer (الطبقة الوسطى المحددة للحدود)
+        Acts as the relative block layout anchor to define natural dimensions in the DOM flow.
+        Renders the perfect 5px round outer border outline in the normal, unshifted location.
+      */}
+      <span
+        className="block"
+        style={{
+          color: stroke,
+          WebkitTextStroke: `5px ${stroke}`,
+          textStroke: `5px ${stroke}`,
+          paintOrder: "stroke fill",
+        }}
+      >
+        {text}
+      </span>
+
+      {/* 
+        🎨 3. Layer 1: Foreground Layer (الطبقة الأمامية الصافية)
+        Sits at the very top of the stack, overlaying the smooth inner letters in pristine, high-contrast color.
       */}
       <span
         className="absolute top-0 left-0 w-full h-full block text-center"
@@ -77,3 +85,4 @@ export default function GameTitle({ text, type, className = "text-[34px]" }: Gam
     </div>
   );
 }
+
