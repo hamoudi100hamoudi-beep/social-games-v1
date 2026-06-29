@@ -11,9 +11,8 @@ interface LobbyProps {
 }
 
 const AVATARS = [
-  '😊', '😂', '😎', '🤪', '😍', '🤔', '🥶', '😡', '🤡', '🤠', '👽', '👻', '🤖', '💩', '👾', '👹', 
-  '🐱', '🐶', '🦊', '🐼', '🦁', '🐯', '🐰', '🐭', '🐹', '🐻', '🐨', '🐷', '🐸', '🐵', '🐔', '🐧', 
-  '🦆', '🦉', '🦄', '🦖', '🐙', '🦋', '🐞', '🐢', '🐍', '🐬', '🐳', '🦈', '🐊', '🐅', '🐆', '🦓'
+  '😂', '😅', '😁', '😃', '😙', '😗', '😍', '🙂', '🥲', '☺️', '😌', '🙃', '🤪', '😑', '🤔', '🥺', '🥹', '🫠',
+  '🌝', '🌞', '🤠', '🧐', '🤫', '😠', '🥶', '😎', '🥸', '🤡', '👹', '☠️', '👀', '🌹', '🌼', '🌷', '🌺', '🌜', '⭐', '🐨', '🐻', '❄️', '🐻', '🐺', '🐶', '🐱', '🐯', '🦁', '🐮', '🦊', '🐰', '🐭', '🐹', '🐼', '🐴', '🐧', '🐣', '🐸'
 ];
 
 type Screen = 'home' | 'rooms';
@@ -237,178 +236,174 @@ export default function Lobby({ onPlay }: LobbyProps) {
   };
 
   return (
-    <div className="w-full h-full min-h-screen bg-game-primary-blue text-white font-sans flex flex-col relative overflow-hidden">
+    <div className="fixed inset-0 bg-game-primary-blue text-white font-sans flex flex-col overflow-hidden">
       
-      {/* Settings gear in top corner */}
-      {screen === 'home' && !afkWarning && !connLostWarning && (
-        <button 
-          onClick={() => setShowSettingsModal(true)}
-          className="absolute top-4 right-4 z-40 w-11 h-11 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 text-white backdrop-blur-md"
-          title="الإعدادات"
-        >
-          <Settings size={22} />
-        </button>
-      )}
-
       {/* Home Screen */}
       {screen === 'home' && !afkWarning && !connLostWarning && (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 z-10">
+        <div className="flex-1 flex flex-col items-center justify-between p-3 sm:p-5 z-10 w-full max-w-md mx-auto">
+          {/* Header Row (Game Title and Settings Gear) */}
+          <div className="w-full flex items-center justify-between mb-2 relative px-2 mt-2">
+            {/* Spacer for symmetry on the left */}
+            <div className="w-10 h-10 pointer-events-none invisible" />
+
+            {/* Center Game Title */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none">
+              <GameTitle 
+                text="DRAW.IO" 
+                type="skip" 
+                className="text-[38px] sm:text-[42px]" 
+              />
+            </div>
+
+            {/* Settings button on the right side of the header row */}
+            <button 
+              onClick={() => setShowSettingsModal(true)}
+              className="w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 text-white backdrop-blur-md cursor-pointer z-20 shadow-md"
+              title="الإعدادات"
+            >
+              <Settings size={20} />
+            </button>
+          </div>
+
+          {/* White/Light-purple Card */}
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full max-w-sm bg-[#ECEBFC] pt-6 pb-8 px-6 sm:px-8 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col h-auto text-[#2E2882]"
+            className="w-[90%] max-w-[340px] bg-[#ECEBFC] py-5 px-6 sm:px-8 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col my-2 text-[#2E2882] justify-center items-center min-h-0"
           >
-            {/* Title flag */}
-            <div className="text-center mb-6 mt-1 select-none flex justify-center w-full">
-              <GameTitle 
-                text="DRAW.IO" 
-                type="profile" 
-                className="text-[42px]" 
-              />
-            </div>
-            
             {/* Content body wrapper */}
-            <div className="space-y-6 flex flex-col items-center w-full">
+            <div className="space-y-4 flex flex-col items-center w-full">
               {/* Avatar Selector */}
               <div className="flex flex-col items-center gap-2 w-full">
-                <label className="text-xs font-black text-[#8C8AA7] uppercase tracking-wide">CHOOSE AVATAR</label>
+                <label className="text-sm font-black text-[#8C8AA7] uppercase tracking-wider">CHOOSE AVATAR</label>
                 
-                {!showAvatarGrid ? (
-                  <div className="flex items-center justify-between w-full relative">
-                    <button 
-                      onClick={() => setAvatarIndex((prev) => (prev - 1 + AVATARS.length) % AVATARS.length)}
-                      className="w-11 h-11 bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer"
-                    >
-                      <ChevronLeft strokeWidth={3.5} className="w-5 h-5" />
-                    </button>
-                    
-                    <div className="relative group cursor-pointer" onClick={() => setShowAvatarGrid(true)}>
-                      <div className="w-24 h-24 rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-transform select-none overflow-hidden">
-                        <span className="text-[64px] translate-y-1">{AVATARS[avatarIndex]}</span>
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                           <LayoutGrid className="text-white" size={24} />
-                        </div>
-                      </div>
-                      {/* Small grid badge */}
-                      <div className="absolute -bottom-1 -right-1 bg-[#38BDF8] p-1.5 rounded-full border-2 border-white text-white shadow-md transition-transform hover:scale-110 active:scale-95">
-                        <LayoutGrid size={14} strokeWidth={3} />
+                <div className="flex items-center justify-between w-full relative max-w-[280px] sm:max-w-[320px]">
+                  <button 
+                    onClick={() => setAvatarIndex((prev) => (prev - 1 + AVATARS.length) % AVATARS.length)}
+                    className="w-11 h-11 bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer"
+                  >
+                    <ChevronLeft strokeWidth={3.5} className="w-5 h-5" />
+                  </button>
+                  
+                  <div className="relative group cursor-pointer" onClick={() => setShowAvatarGrid(true)}>
+                    <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-transform select-none overflow-hidden">
+                      <span className="text-[80px] sm:text-[96px] translate-y-1 sm:translate-y-2 leading-none flex items-center justify-center select-none">{AVATARS[avatarIndex]}</span>
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full">
+                         <LayoutGrid className="text-white" size={28} />
                       </div>
                     </div>
-                    
-                    <button 
-                      onClick={() => setAvatarIndex((prev) => (prev + 1) % AVATARS.length)}
-                      className="w-11 h-11 bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer"
-                    >
-                      <ChevronRight strokeWidth={3.5} className="w-5 h-5" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="w-full bg-white rounded-2xl p-4 border border-[#2E2882]/10 relative animate-in zoom-in-95 duration-200 shadow-md">
-                    <div className="flex justify-between items-center mb-2.5">
-                      <span className="text-xs font-black text-[#38BDF8]">ALL AVATARS</span>
-                      <button onClick={() => setShowAvatarGrid(false)} className="text-[#8C8AA7] hover:text-[#2E2882] bg-slate-100 p-1 rounded-full transition-colors active:scale-90">
-                        <X size={14} strokeWidth={3} />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-6 gap-1.5 overflow-y-auto max-h-[140px] no-scrollbar">
-                      {AVATARS.map((emoji, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          onClick={() => { setAvatarIndex(idx); setShowAvatarGrid(false); }}
-                          className={`text-2xl h-9 w-9 flex items-center justify-center hover:scale-125 transition-transform ${idx === avatarIndex ? 'bg-[#38BDF8]/15 rounded-lg scale-110 border border-[#38BDF8]/30 font-black' : ''}`}
-                        >
-                          {emoji}
-                        </button>
-                      ))}
+                    {/* Small grid badge */}
+                    <div className="absolute -bottom-1 -right-1 bg-[#38BDF8] p-2 rounded-full border-2 border-white text-white shadow-md transition-transform hover:scale-110 active:scale-95">
+                      <LayoutGrid size={16} strokeWidth={3} />
                     </div>
                   </div>
-                )}
+                  
+                  <button 
+                    onClick={() => setAvatarIndex((prev) => (prev + 1) % AVATARS.length)}
+                    className="w-11 h-11 bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer"
+                  >
+                    <ChevronRight strokeWidth={3.5} className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
               
-              <div className="w-full space-y-1">
+              <div className="w-full space-y-2 max-w-[280px] sm:max-w-[320px]">
                 <label className="text-xs font-black text-[#8C8AA7] uppercase tracking-wide">NICKNAME</label>
-                <input 
-                  type="text" 
+                <textarea 
                   maxLength={10}
+                  rows={1}
                   value={nickname}
-                  onChange={(e) => { setNickname(e.target.value); setNicknameError(false); setJoinError(null); }}
+                  onChange={(e) => { setNickname(e.target.value.replace(/\n/g, '')); setNicknameError(false); setJoinError(null); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleGoToRooms();
+                    }
+                  }}
                   placeholder="Enter your name..."
-                  className={`w-full h-13 bg-white text-[#2E2882] placeholder-[#8C8AA7]/50 border-2 rounded-2xl px-5 font-black text-base outline-none transition-all focus:bg-white ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-[#2E2882]/10 focus:border-[#38BDF8]'}`}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck="false"
+                  name="nickname_input_random_name"
+                  data-form-type="other"
+                  style={{ resize: 'none' }}
+                  className={`w-full h-14 py-3.5 bg-white text-[#2E2882] placeholder-[#8C8AA7]/50 border-2 rounded-2xl px-5 font-black text-base outline-none transition-all focus:bg-white overflow-hidden whitespace-nowrap ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-[#2E2882]/10 focus:border-[#38BDF8]'}`}
                 />
               </div>
-
-              <button 
-                onClick={handleGoToRooms}
-                className="w-full h-14 bg-[#FB923C] hover:bg-[#EA580C] text-white rounded-2xl font-black text-lg border-b-4 border-[#EA580C] shadow-md hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>ROOMS</span>
-              </button>
             </div>
           </motion.div>
+
+          {/* Bottom Rooms button OUTSIDE the white card */}
+          <button 
+            onClick={handleGoToRooms}
+            className="w-[85%] sm:w-[75%] max-w-[320px] mx-auto h-14 sm:h-16 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-[24px] font-black text-lg sm:text-xl flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg mb-2"
+          >
+            <span>ROOMS</span>
+          </button>
         </div>
       )}
 
       {/* Rooms Browser Screen */}
       {screen === 'rooms' && (
-        <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 z-10 w-full">
+        <div className="flex-1 flex flex-col items-center justify-between p-3 sm:p-5 z-10 w-full max-w-md mx-auto">
+          {/* Header Row (Back Button and "ROOMS" Title) */}
+          <div className="w-full flex items-center justify-between mb-2 relative px-2 mt-2">
+            {/* Back button */}
+            <button 
+              onClick={() => setScreen('home')}
+              className="w-10 h-10 bg-white hover:bg-slate-100 rounded-full flex items-center justify-center text-[#2E2882] active:scale-90 transition-transform shadow-md cursor-pointer border border-[#2E2882]/10 z-20"
+            >
+              <ChevronLeft size={20} strokeWidth={4} />
+            </button>
+
+            {/* Title */}
+            <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-center pointer-events-none">
+              <GameTitle 
+                text="ROOMS" 
+                type="skip" 
+                className="text-[34px] sm:text-[36px]" 
+              />
+            </div>
+
+            {/* Spacer for symmetry */}
+            <div className="w-10 h-10 pointer-events-none invisible" />
+          </div>
+
+          {/* White/Light-purple Room Card */}
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full max-w-sm bg-[#ECEBFC] pt-5 pb-8 px-5 sm:px-6 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col h-[525px] text-[#2E2882]"
+            className="w-full bg-[#ECEBFC] p-4 sm:p-6 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col flex-1 my-2 text-[#2E2882] overflow-hidden min-h-0"
           >
-            {/* Back button */}
-            <button 
-              onClick={() => setScreen('home')}
-              className="absolute top-5 left-5 w-10 h-10 bg-white hover:bg-slate-100 rounded-full flex items-center justify-center text-[#2E2882] active:scale-90 transition-transform shadow-sm cursor-pointer border border-[#2E2882]/10"
-            >
-              <ChevronLeft size={22} strokeWidth={3.5} />
-            </button>
-
-            {/* Header */}
-            <div className="text-center mb-5 mt-1 select-none flex justify-center w-full">
-              <GameTitle 
-                text="ROOMS" 
-                type="skip" 
-                className="text-[36px]" 
-              />
-            </div>
-
-            {/* Search Bar */}
-            <div className="relative mb-4">
-              <input 
-                type="text" 
-                placeholder="Search a room..."
-                className="w-full h-12 bg-white rounded-2xl px-4 pl-11 font-black text-[#2E2882] placeholder-[#8C8AA7]/60 outline-none border border-[#2E2882]/10 focus:border-[#38BDF8] transition-colors shadow-inner"
-              />
-              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8C8AA7]" strokeWidth={2.5} />
-            </div>
-
-            {/* List */}
-            <div className="flex-1 overflow-y-auto pr-1 space-y-3 mb-4 no-scrollbar">
-              {/* Dummy Room Item */}
+            {/* List - Positioned cleanly at the top of the white container */}
+            <div className="flex-1 overflow-y-auto pr-1 space-y-4 no-scrollbar">
+              {/* Dummy Room Item - Enlarged for premium layout */}
               <button 
                 onClick={() => handleRoomClick('General #Test')}
-                className="w-full bg-white hover:bg-slate-50 border-2 border-[#2E2882]/10 hover:border-[#38BDF8]/40 p-4 rounded-3xl flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer shadow-sm group"
+                className="w-full bg-white hover:bg-slate-50 border border-[#2E2882]/5 hover:border-[#38BDF8]/20 p-5 sm:p-6 rounded-[28px] flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer shadow-md group"
               >
                 <div className="flex flex-col items-start">
-                  <span className="font-black text-base text-[#2E2882] group-hover:text-[#38BDF8] transition-colors">General <span className="text-[#8C8AA7]/75 font-semibold">#Test</span></span>
+                  <span className="font-black text-lg sm:text-xl text-[#2E2882] group-hover:text-[#38BDF8] transition-colors flex items-center gap-2">
+                    General <span className="text-[#8C8AA7]/70 font-semibold text-xs sm:text-sm">#Test</span>
+                  </span>
                 </div>
-                <div className="flex items-center gap-1.5 text-white font-black text-xs bg-[#38BDF8] border-b-4 border-[#0EA5E9] px-3 py-1.5 rounded-2xl shadow-sm">
-                  <Users size={15} strokeWidth={3} />
+                {/* Style optimized: No blue frame, dark blue text & icon */}
+                <div className="flex items-center gap-1.5 text-[#2E2882] font-black text-base sm:text-lg px-1">
+                  <Users size={20} strokeWidth={3.5} className="text-[#2E2882]" />
                   <span>{testRoomCount}/5</span>
                 </div>
               </button>
             </div>
-
-            {/* Bottom button */}
-            <button className="w-full h-14 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-2xl font-black text-lg border-b-4 border-[#0EA5E9] flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-md">
-              <Plus size={20} strokeWidth={3.5} />
-              <span>NEW ROOM</span>
-            </button>
           </motion.div>
+
+          {/* Bottom New Room button OUTSIDE the white card */}
+          <button className="w-[85%] sm:w-[75%] max-w-[320px] mx-auto h-14 sm:h-16 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-[24px] font-black text-lg sm:text-xl flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg mb-2">
+            <Plus size={22} strokeWidth={4} />
+            <span>NEW ROOM</span>
+          </button>
         </div>
       )}
 
@@ -592,6 +587,33 @@ export default function Lobby({ onPlay }: LobbyProps) {
           هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>
+
+      {/* Avatar Grid Overlay */}
+      {showAvatarGrid && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer" onClick={() => setShowAvatarGrid(false)} />
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 border border-white/40 shadow-2xl animate-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center mb-4">
+              <span className="text-sm font-black text-[#38BDF8]">ALL AVATARS</span>
+              <button onClick={() => setShowAvatarGrid(false)} className="text-[#8C8AA7] hover:text-[#2E2882] bg-slate-100 p-1.5 rounded-full transition-colors active:scale-90">
+                <X size={18} strokeWidth={3} />
+              </button>
+            </div>
+            <div className="grid grid-cols-6 gap-2 overflow-y-auto max-h-[300px] sm:max-h-[400px] no-scrollbar">
+              {AVATARS.map((emoji, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => { setAvatarIndex(idx); setShowAvatarGrid(false); }}
+                  className={`text-3xl h-12 w-12 flex items-center justify-center hover:scale-125 transition-transform ${idx === avatarIndex ? 'bg-[#38BDF8]/15 rounded-xl scale-110 border border-[#38BDF8]/30 font-black shadow-inner' : ''}`}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Background decoration */}
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-primary-brand rounded-full mix-blend-overlay filter blur-[100px] opacity-20 pointer-events-none" />

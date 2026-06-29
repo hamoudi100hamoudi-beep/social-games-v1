@@ -658,7 +658,7 @@ class RoomManager {
         subType: "answer_reveal",
         color: "#38BDF8",
       });
-      if (word) {
+      if (word && hasSucceeded) {
         this.broadcastGuess(room, {
           id: "sys-" + Date.now() + "-answer-word",
           text: `The answer was: ${word}`,
@@ -669,6 +669,7 @@ class RoomManager {
         });
       }
     } else if (reason === "skipped") {
+      const hasSucceeded = (room.gameState.correctGuessers || []).length > 0;
       const drawer = room.players.find(
         (p) => (p.persistentId || p.id) === room.gameState.currentDrawerId,
       );
@@ -680,7 +681,7 @@ class RoomManager {
         subType: "skipped",
         color: "#EF4444",
       });
-      if (word) {
+      if (word && hasSucceeded) {
         this.broadcastGuess(room, {
           id: "sys-" + Date.now() + "-answer-word",
           text: `The answer was: ${word}`,
