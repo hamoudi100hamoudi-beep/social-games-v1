@@ -39,9 +39,9 @@ export function MiniBoardOverlay({
           exit={{ opacity: 0 }}
           className={containerClass}
         >
-          <div className="text-center w-full max-w-sm pb-10">
+          <div className="text-center w-full max-w-sm pb-2">
             <div className="mb-4">
-              <GameTitle text="WAITING" type="miniboard" className="text-[26px] sm:text-[30px]" />
+              <GameTitle text="WAITING" type="miniboard" className="text-[22px] sm:text-[26px]" />
             </div>
             <div className="relative w-16 h-16 sm:w-20 sm:h-20 mb-4 mx-auto bg-sky-100 rounded-full flex items-center justify-center border-4 border-[#0B2E5C]/10 shadow-inner">
               <span className="text-4xl sm:text-5xl animate-pulse">⏳</span>
@@ -63,9 +63,9 @@ export function MiniBoardOverlay({
           exit={{ opacity: 0 }}
           className={containerClass}
         >
-          <div className="text-center w-full max-w-sm pb-10">
+          <div className="text-center w-full max-w-sm pb-2">
             <div className="mb-6">
-              <GameTitle text="NEW TURN!" type="miniboard" className="text-[28px] sm:text-[34px]" />
+              <GameTitle text="NEW TURN!" type="miniboard" className="text-[22px] sm:text-[26px]" />
             </div>
 
             <div className="relative w-max mx-auto mb-5">
@@ -105,9 +105,9 @@ export function MiniBoardOverlay({
           if (reason === "skipped") {
             return (
               <motion.div key="round-end-skipped" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass}>
-                <div className="text-center w-full max-w-sm pb-10">
+                <div className="text-center w-full max-w-sm pb-2">
                   <div className="mb-5">
-                    <GameTitle text="SKIPPED!" type="miniboard" className="text-[26px] sm:text-[32px]" />
+                    <GameTitle text="SKIPPED!" type="miniboard" className="text-[22px] sm:text-[26px]" />
                   </div>
                   <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-green-50 rounded-full flex items-center justify-center border-4 sm:border-[5px] border-green-100 shadow-sm mb-5">
                     <span className="text-5xl sm:text-6xl animate-bounce">✏️</span>
@@ -125,9 +125,9 @@ export function MiniBoardOverlay({
           if (reason === "turn_lost") {
             return (
               <motion.div key="round-end-lost" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass}>
-                <div className="text-center w-full max-w-sm pb-10">
+                <div className="text-center w-full max-w-sm pb-2">
                   <div className="mb-5">
-                    <GameTitle text="INACTIVE" type="miniboard" className="text-[26px] sm:text-[32px]" />
+                    <GameTitle text="INACTIVE" type="miniboard" className="text-[22px] sm:text-[26px]" />
                   </div>
                   <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-amber-50 rounded-full flex items-center justify-center border-4 sm:border-[5px] border-amber-100 shadow-sm mb-5">
                     <span className="text-5xl sm:text-6xl animate-pulse">💤</span>
@@ -145,9 +145,9 @@ export function MiniBoardOverlay({
           if (reason === "canceled") {
             return (
               <motion.div key="round-end-canceled" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans border-2 border-red-500 rounded-3xl overflow-hidden shadow-2xl">
-                <div className="text-center w-full max-w-sm pb-6">
+                <div className="text-center w-full max-w-sm pb-2">
                   <div className="mb-5">
-                    <GameTitle text="CANCELED TURN" type="miniboard" className="text-[24px] sm:text-[28px]" />
+                    <GameTitle text="CANCELED TURN" type="miniboard" className="text-[20px] sm:text-[24px]" />
                   </div>
 
                   <div className="relative w-24 h-28 mb-5 mx-auto flex flex-col items-center justify-end">
@@ -207,9 +207,9 @@ export function MiniBoardOverlay({
 
           return (
             <motion.div key="round-end-interval" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass}>
-              <div className="text-center w-full max-w-sm pb-10">
+              <div className="text-center w-full max-w-sm pb-2">
                 <div className={subTitle ? "mb-1" : "mb-5"}>
-                  <GameTitle text={titleText} type="miniboard" className="text-[26px] sm:text-[32px]" />
+                  <GameTitle text={titleText} type="miniboard" className="text-[22px] sm:text-[26px]" />
                 </div>
 
                 {subTitle && (
@@ -234,7 +234,7 @@ export function MiniBoardOverlay({
                     <span className="text-[#728299] text-sm sm:text-[15px] font-bold block mb-1">
                       The answer was:
                     </span>
-                    <span className="text-[#0B2E5C] text-xl sm:text-2xl font-black tracking-wide inline-block bg-[#F1F5F9] border-2 border-slate-200/60 px-5 py-1.5 rounded-full shadow-inner" dir="auto">
+                    <span className="text-[#0B2E5C] text-xl sm:text-2xl font-black tracking-wide inline-block drop-shadow-sm" dir="auto">
                       {word}
                     </span>
                   </div>
