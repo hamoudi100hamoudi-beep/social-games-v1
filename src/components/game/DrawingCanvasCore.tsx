@@ -265,7 +265,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const tempCtxRef = useRef<CanvasRenderingContext2D | null>(null);
 
   // States
-  const [isDrawing, setIsDrawing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(true);
   const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -424,7 +423,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // Immediately cancel any active solo-touch stroke if user introduces a second touch (pinch zoom start)
       if (e.touches.length >= 2 && isDrawingRef.current) {
         isDrawingRef.current = false;
-        setIsDrawing(false);
+        
         if (tempCtxRef.current) {
           tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         }
@@ -1591,6 +1590,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.lineJoin = 'round';
       tempCtxRef.current = tempCtx;
 
+      // WARM-UP Canvas rendering engine to prevent first-stroke stutter on weak devices
+      // This forces Skia / GPU to compile shaders immediately rather than when user draws.
+      tempCtx.beginPath();
+      tempCtx.moveTo(0,0);
+      tempCtx.lineTo(0.1, 0.1);
+      tempCtx.quadraticCurveTo(0.2, 0.2, 0.3, 0.3);
+      tempCtx.strokeStyle = 'rgba(0,0,0,0.01)';
+      tempCtx.stroke();
+      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+
       saveSnapshot();
 
       if (bufferedSyncRef.current) {
@@ -1652,7 +1661,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     isDrawingRef.current = true;
-    setIsDrawing(true);
 
     if (activeTool === 'pipette') {
       const offscreen = document.createElement('canvas');
@@ -1668,7 +1676,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         onPipetteColorPicked?.(hex);
       }
       isDrawingRef.current = false;
-      setIsDrawing(false);
+      
       return;
     }
 
@@ -1701,7 +1709,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
       isDrawingRef.current = false;
-      setIsDrawing(false);
+      
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       moveBatchRef.current = [];
       emitDrawCommand('draw_end', {
@@ -1807,7 +1815,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeOpacity = propsRef.current.opacity;
 
     isDrawingRef.current = false;
-    setIsDrawing(false);
+    
 
     if (throttleTimeoutRef.current) {
       clearTimeout(throttleTimeoutRef.current);
