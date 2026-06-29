@@ -318,6 +318,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const hasManuallyZoomedOrPanned = useRef(false);
   const activeTouchCountRef = useRef(0);
   const isZoomPinchingRef = useRef(false);
+  const redrawRequestedRef = useRef(false);
 
   // Force re-centering instantly when user drawing status / role updates
   useEffect(() => {
@@ -807,7 +808,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeCtx.restore();
   };
 
-  const redrawTempLayer = () => {
+  const executeRedrawTempLayer = () => {
     const tempCtx = tempCtxRef.current;
     if (!tempCtx) return;
 
@@ -843,6 +844,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           drawEntirePath(tempCtx, session.path, session.tool, session.color, session.width, session.opacity);
         }
       }
+    });
+  };
+
+  const redrawTempLayer = () => {
+    if (redrawRequestedRef.current) return;
+    redrawRequestedRef.current = true;
+    requestAnimationFrame(() => {
+      redrawRequestedRef.current = false;
+      executeRedrawTempLayer();
     });
   };
 
