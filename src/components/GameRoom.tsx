@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import DrawingBoard from "./DrawingBoard";
 import {
@@ -181,20 +181,6 @@ export default function GameRoom({
   onLeave,
   justJoined,
 }: GameRoomProps) {
-  const pRenderStart = performance.now();
-  
-  useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).FIRST_FRAME_DIAGNOSTICS) {
-      (window as any).FIRST_FRAME_DIAGNOSTICS.record('React Render', performance.now() - pRenderStart);
-    }
-  });
-
-  useLayoutEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).FIRST_FRAME_DIAGNOSTICS) {
-      (window as any).FIRST_FRAME_DIAGNOSTICS.record('Layout', performance.now() - pRenderStart);
-    }
-  });
-
   const { socket, isConnected, socketId } = useSocket();
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);

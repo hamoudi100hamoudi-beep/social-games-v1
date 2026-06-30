@@ -3,7 +3,7 @@
  * This component handles the UI layers, menus, toolbar controls and palette bindings,
  * delegating the high-performance drawing actions to the isolated DrawingCanvasCore.
  */
-import React, { useEffect, useRef, useState, useLayoutEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Pencil, Eraser, Undo2, Redo2, FileX, RefreshCcw, 
   Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2,
@@ -42,21 +42,6 @@ export default function DrawingBoard({
   key?: any;
   onSyncStateChange?: (syncing: boolean) => void;
 }) {
-  const pRenderStart = performance.now();
-  
-  // Track render and layout of DrawingBoard
-  useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).FIRST_FRAME_DIAGNOSTICS) {
-      (window as any).FIRST_FRAME_DIAGNOSTICS.record('React Render', performance.now() - pRenderStart);
-    }
-  });
-
-  useLayoutEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).FIRST_FRAME_DIAGNOSTICS) {
-      (window as any).FIRST_FRAME_DIAGNOSTICS.record('Layout', performance.now() - pRenderStart);
-    }
-  });
-
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
 
   // Layout scale tracking for thickness preview bubble resizing
