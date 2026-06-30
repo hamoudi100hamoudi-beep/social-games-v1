@@ -752,6 +752,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // --- Logical Coordinate Conversion ---
   const getLogicalCoords = (clientX: number, clientY: number, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
     const x = ((clientX - rect.left) / rect.width) * LOGICAL_WIDTH;
     const y = ((clientY - rect.top) / rect.height) * LOGICAL_HEIGHT;
     return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
@@ -1615,6 +1616,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (propsRef.current.readOnly) return;
     if (isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
+    
+    // STRICT GUARD: Prevent drawing before Canvas layout and ResizeObserver are fully ready.
+    // If the canvas width/height are 0 during early mount, getLogicalCoords produces Infinity,
+    // which causes catastrophic GPU lag when passed to ctx.stroke().
+    if (!isCanvasResizeObserverReadyRef.current) return;
     
     const canvas = canvasRef.current;
     const tempCanvas = tempCanvasRef.current;
