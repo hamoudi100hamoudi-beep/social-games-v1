@@ -4,7 +4,8 @@ import React, {
   useState,
   useMemo,
   useImperativeHandle,
-  forwardRef
+  forwardRef,
+  useLayoutEffect
 } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
