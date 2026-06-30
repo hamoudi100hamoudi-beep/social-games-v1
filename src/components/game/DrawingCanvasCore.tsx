@@ -1563,15 +1563,26 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Automated Clean Reset State on turn / drawer change
   const previousStateRef = useRef({ currentDrawerId, status });
+  const hasTransitionedToDrawingRef = useRef(false);
   useEffect(() => {
     if (previousStateRef.current.currentDrawerId !== currentDrawerId || previousStateRef.current.status !== status) {
       if (hasSyncedOnce && !isSyncing) {
         console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
-        executeResetState();
+        
+        const isMyFirstDrawingTurn = status === 'DRAWING' && currentDrawerId === socket?.id && !hasTransitionedToDrawingRef.current;
+        
+        if (isMyFirstDrawingTurn) {
+          hasTransitionedToDrawingRef.current = true;
+          requestAnimationFrame(() => {
+            executeResetState();
+          });
+        } else {
+          executeResetState();
+        }
       }
     }
     previousStateRef.current = { currentDrawerId, status };
-  }, [currentDrawerId, status, hasSyncedOnce, isSyncing]);
+  }, [currentDrawerId, status, hasSyncedOnce, isSyncing, socket?.id]);
 
   // --- HTML Canvas Initialization ---
   useEffect(() => {
