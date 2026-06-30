@@ -318,6 +318,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const activeTouchCountRef = useRef(0);
   const isZoomPinchingRef = useRef(false);
   const redrawRequestedRef = useRef(false);
+  
+  // --- Performance Profiler ---
+  const drawProfilerRef = useRef({
+    isFirstStroke: true,
+    firstPointerDownDone: false,
+    firstMoveDone: false,
+    firstRedrawDone: false,
+    firstTempShapeDone: false,
+    firstMainShapeDone: false,
+    firstCanvasCommitDone: false,
+  });
 
   // Force re-centering instantly when user drawing status / role updates
   useEffect(() => {
@@ -767,6 +778,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     drawWidth: number,
     drawOpacity: number
   ) => {
+    const pStart = performance.now();
     if (path.length === 0) return;
 
     activeCtx.save();
@@ -806,9 +818,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     activeCtx.restore();
+    
+    const pEnd = performance.now();
+    if (drawProfilerRef.current.isFirstStroke) {
+      const isMain = activeCtx === ctxRef.current;
+      if (isMain && !drawProfilerRef.current.firstMainShapeDone) {
+        drawProfilerRef.current.firstMainShapeDone = true;
+        console.log(`[DRAW PROFILE]\nPrimary Stroke (drawEntirePath):\n${(pEnd - pStart).toFixed(2)} ms`);
+      } else if (!isMain && !drawProfilerRef.current.firstTempShapeDone) {
+        drawProfilerRef.current.firstTempShapeDone = true;
+        console.log(`[DRAW PROFILE]\nTemp Stroke (drawEntirePath):\n${(pEnd - pStart).toFixed(2)} ms`);
+      }
+    }
   };
 
   const executeRedrawTempLayer = () => {
+    const pStart = performance.now();
     const tempCtx = tempCtxRef.current;
     if (!tempCtx) return;
 
@@ -845,13 +870,24 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }
     });
+
+    const pEnd = performance.now();
+    if (drawProfilerRef.current.isFirstStroke && !drawProfilerRef.current.firstRedrawDone) {
+      drawProfilerRef.current.firstRedrawDone = true;
+      console.log(`[DRAW PROFILE]\nexecuteRedrawTempLayer:\n${(pEnd - pStart).toFixed(2)} ms`);
+    }
   };
 
   const redrawTempLayer = () => {
+    const pStart = performance.now();
     if (redrawRequestedRef.current) return;
     redrawRequestedRef.current = true;
     requestAnimationFrame(() => {
       redrawRequestedRef.current = false;
+      const pRAF = performance.now();
+      if (drawProfilerRef.current.isFirstStroke && !drawProfilerRef.current.firstRedrawDone) {
+        console.log(`[DRAW PROFILE]\nTemp Redraw RAF Delay:\n${(pRAF - pStart).toFixed(2)} ms`);
+      }
       executeRedrawTempLayer();
     });
   };
@@ -865,6 +901,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     drawWidth: number,
     drawOpacity: number
   ) => {
+    const pStart = performance.now();
     const isZeroLength = Math.abs(x1 - x0) < 0.5 && Math.abs(y1 - y0) < 0.5;
     if (isZeroLength) {
       return;
@@ -911,6 +948,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     activeCtx.restore();
+    
+    const pEnd = performance.now();
+    if (drawProfilerRef.current.isFirstStroke) {
+      const isMain = activeCtx === ctxRef.current;
+      if (isMain && !drawProfilerRef.current.firstMainShapeDone) {
+        drawProfilerRef.current.firstMainShapeDone = true;
+        console.log(`[DRAW PROFILE]\nPrimary Stroke (drawShape):\n${(pEnd - pStart).toFixed(2)} ms`);
+      } else if (!isMain && !drawProfilerRef.current.firstTempShapeDone) {
+        drawProfilerRef.current.firstTempShapeDone = true;
+        console.log(`[DRAW PROFILE]\nTemp Stroke (drawShape):\n${(pEnd - pStart).toFixed(2)} ms`);
+      }
+    }
   };
 
   // --- Handlers & Commands Replays ---
@@ -1613,6 +1662,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // --- Drawing Pointer Events Hooks ---
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const pStart = performance.now();
+    
     if (propsRef.current.readOnly) return;
     if (isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
@@ -1702,9 +1753,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       drawShape(tempCtx, x, y, x, y, activeTool, activeColor, activeWidth, activeOpacity);
     }
+    
+    const pEnd = performance.now();
+    if (drawProfilerRef.current.isFirstStroke && !drawProfilerRef.current.firstPointerDownDone) {
+      drawProfilerRef.current.firstPointerDownDone = true;
+      console.log(`[DRAW PROFILE]\n\nPointerDown:\n${(pEnd - pStart).toFixed(2)} ms`);
+    }
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const pStart = performance.now();
     if (!isDrawingRef.current) return;
 
     const canvas = canvasRef.current;
@@ -1801,9 +1859,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       drawShape(tempCtx, startXRef.current, startYRef.current, x, y, activeTool, activeColor, activeWidth, activeOpacity);
     }
+
+    const pEnd = performance.now();
+    const duration = pEnd - pStart;
+    if (drawProfilerRef.current.isFirstStroke) {
+      if (!drawProfilerRef.current.firstMoveDone) {
+        drawProfilerRef.current.firstMoveDone = true;
+        console.log(`[DRAW PROFILE]\nPointerMove:\n${duration.toFixed(2)} ms`);
+      } else if (duration > 5) {
+        console.log(`[DRAW PROFILE]\nSLOW PointerMove (>5ms):\n${duration.toFixed(2)} ms`);
+      }
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const pStart = performance.now();
     e.currentTarget.releasePointerCapture(e.pointerId);
 
     const canvas = canvasRef.current;
@@ -1900,6 +1970,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     currentPathRef.current = [];
     saveSnapshot();
+    
+    const pEnd = performance.now();
+    if (drawProfilerRef.current.isFirstStroke && !drawProfilerRef.current.firstCanvasCommitDone) {
+      drawProfilerRef.current.firstCanvasCommitDone = true;
+      drawProfilerRef.current.isFirstStroke = false;
+      console.log(`[DRAW PROFILE]\nCanvas Commit:\n${(pEnd - pStart).toFixed(2)} ms`);
+      console.log(`[DRAW PROFILE]\n\n--- END OF FIRST STROKE PROFILE ---`);
+    }
   };
 
   return (
