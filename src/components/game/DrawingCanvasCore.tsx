@@ -24,8 +24,48 @@ import {
 export const CANVAS_WIDTH = 592;
 export const CANVAS_HEIGHT = 344;
 
+export const FIRST_FRAME_DIAGNOSTICS = {
+  isActive: true,
+  metrics: {
+    'GameState Update': 0,
+    'Canvas Reset': 0,
+    'ResizeObserver': 0,
+    'Replay': 0,
+    'React Render': 0,
+    'Layout': 0,
+    'Socket Processing': 0,
+    'Pointer Events': 0,
+    'Other': 0,
+  },
+  pointerDownTime: 0,
+  rafStartTime: 0,
+  record: (name: keyof typeof FIRST_FRAME_DIAGNOSTICS.metrics, duration: number) => {
+    if (FIRST_FRAME_DIAGNOSTICS.isActive) {
+      FIRST_FRAME_DIAGNOSTICS.metrics[name] += duration;
+    }
+  },
+  print: (rafDelay: number) => {
+    if (!FIRST_FRAME_DIAGNOSTICS.isActive) return;
+    FIRST_FRAME_DIAGNOSTICS.isActive = false;
+    
+    let total = 0;
+    let output = "========================\n\nFIRST FRAME ANALYSIS\n\n";
+    for (const [key, value] of Object.entries(FIRST_FRAME_DIAGNOSTICS.metrics)) {
+      output += `${key}:\n${value.toFixed(2)} ms\n\n`;
+      total += value;
+    }
+    output += `Total before first RAF:\n${total.toFixed(2)} ms\n\n`;
+    output += `RAF Delay:\n${rafDelay.toFixed(2)} ms\n\n========================`;
+    console.log(output);
+  }
+};
+
 const LOGICAL_WIDTH = CANVAS_WIDTH;
 const LOGICAL_HEIGHT = CANVAS_HEIGHT;
+
+if (typeof window !== 'undefined') {
+  (window as any).FIRST_FRAME_DIAGNOSTICS = FIRST_FRAME_DIAGNOSTICS;
+}
 
 // --- Performance and DPR Tiering ---
 const getPerformanceTier = () => {
@@ -308,6 +348,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const lastSyncRequestTimeRef = useRef<number>(0);
 
   // Layout scale tracking for responsive full viewport fitting
+  const pRenderStart = performance.now();
+  
+  // Update diagnostics layout total
+  useEffect(() => {
+    FIRST_FRAME_DIAGNOSTICS.record('React Render', performance.now() - pRenderStart);
+  });
+
+  useLayoutEffect(() => {
+    FIRST_FRAME_DIAGNOSTICS.record('Layout', performance.now() - pRenderStart);
+  });
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const transformWrapperRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef({ scale: 1, x: 0, y: 0 });
@@ -376,6 +427,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const container = containerRef.current;
     if (!container) return;
     const obs = new ResizeObserver((entries) => {
+      const t0 = performance.now();
       for (let entry of entries) {
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
@@ -402,6 +454,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         // Signal that the DOM is fully laid out and ResizeObserver has evaluated physical scale
         isCanvasResizeObserverReadyRef.current = true;
       }
+      FIRST_FRAME_DIAGNOSTICS.record('ResizeObserver', performance.now() - t0);
     });
     obs.observe(container);
     return () => obs.disconnect();
@@ -737,6 +790,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Binary Command Dispatch helper
   const emitDrawCommand = (event: string, payload: any) => {
+    const t0 = performance.now();
     if (socket?.connected) {
       const msg = encodeBinaryDrawMessage(event, { ...payload, instanceId });
       if (event === 'draw_move' && socket.volatile) {
@@ -753,6 +807,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncHistoryButtons();
       }
     }
+    FIRST_FRAME_DIAGNOSTICS.record('Socket Processing', performance.now() - t0);
   };
 
   // --- Snapshot Management (Adaptive Multi-Step VRAM Memory & CPU Optimizer) ---
@@ -887,6 +942,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const pRAF = performance.now();
       if (drawProfilerRef.current.isFirstStroke && !drawProfilerRef.current.firstRedrawDone) {
         console.log(`[DRAW PROFILE]\nTemp Redraw RAF Delay:\n${(pRAF - pStart).toFixed(2)} ms`);
+        FIRST_FRAME_DIAGNOSTICS.print(pRAF - pStart);
       }
       executeRedrawTempLayer();
     });
@@ -965,6 +1021,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // --- Handlers & Commands Replays ---
 
   const executeResetState = () => {
+    const t0 = performance.now();
     console.log("[DrawingCanvasCore] Hard-resetting drawing state...");
     const ctx = ctxRef.current;
     const tempCtx = tempCtxRef.current;
@@ -1004,6 +1061,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // Callback to update Parent Component history buttons
     syncHistoryButtons();
+    FIRST_FRAME_DIAGNOSTICS.record('Canvas Reset', performance.now() - t0);
   };
 
   const executeClear = (emit: boolean = true) => {
@@ -1071,6 +1129,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Replay of full history from reconnect/new joiner sync event
   const applySyncedHistory = (commands: any[]) => {
+    const t0 = performance.now();
     try {
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
@@ -1226,6 +1285,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       isReplayingRef.current = false;
       saveSnapshot();
       syncHistoryButtons();
+      FIRST_FRAME_DIAGNOSTICS.record('Replay', performance.now() - t0);
     }
   };
 
@@ -1604,10 +1664,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const previousStateRef = useRef({ currentDrawerId, status });
   useEffect(() => {
     if (previousStateRef.current.currentDrawerId !== currentDrawerId || previousStateRef.current.status !== status) {
+      const t0 = performance.now();
       if (hasSyncedOnce && !isSyncing) {
         console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
         executeResetState();
       }
+      FIRST_FRAME_DIAGNOSTICS.record('GameState Update', performance.now() - t0);
     }
     previousStateRef.current = { currentDrawerId, status };
   }, [currentDrawerId, status, hasSyncedOnce, isSyncing]);
@@ -1755,6 +1817,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
     
     const pEnd = performance.now();
+    FIRST_FRAME_DIAGNOSTICS.record('Pointer Events', pEnd - pStart);
     if (drawProfilerRef.current.isFirstStroke && !drawProfilerRef.current.firstPointerDownDone) {
       drawProfilerRef.current.firstPointerDownDone = true;
       console.log(`[DRAW PROFILE]\n\nPointerDown:\n${(pEnd - pStart).toFixed(2)} ms`);
@@ -1862,6 +1925,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const pEnd = performance.now();
     const duration = pEnd - pStart;
+    FIRST_FRAME_DIAGNOSTICS.record('Pointer Events', duration);
     if (drawProfilerRef.current.isFirstStroke) {
       if (!drawProfilerRef.current.firstMoveDone) {
         drawProfilerRef.current.firstMoveDone = true;

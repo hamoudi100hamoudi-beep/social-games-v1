@@ -42,6 +42,21 @@ export default function DrawingBoard({
   key?: any;
   onSyncStateChange?: (syncing: boolean) => void;
 }) {
+  const pRenderStart = performance.now();
+  
+  // Track render and layout of DrawingBoard
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).FIRST_FRAME_DIAGNOSTICS) {
+      (window as any).FIRST_FRAME_DIAGNOSTICS.record('React Render', performance.now() - pRenderStart);
+    }
+  });
+
+  useLayoutEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).FIRST_FRAME_DIAGNOSTICS) {
+      (window as any).FIRST_FRAME_DIAGNOSTICS.record('Layout', performance.now() - pRenderStart);
+    }
+  });
+
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
 
   // Layout scale tracking for thickness preview bubble resizing
