@@ -435,6 +435,24 @@ export default function GameRoom({
     }
   }, [gameState?.status, amIDrawer]);
 
+  useEffect(() => {
+    if (gameState.status === 'CHOOSING' && amIDrawer) {
+      const warmupDiv = document.createElement('div');
+      warmupDiv.className = "fixed inset-0 z-[100] bg-gray-300 flex flex-col items-center justify-center overflow-hidden";
+      warmupDiv.style.opacity = '0';
+      warmupDiv.style.pointerEvents = 'none';
+      document.body.appendChild(warmupDiv);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (document.body.contains(warmupDiv)) {
+            warmupDiv.remove();
+          }
+        });
+      });
+    }
+  }, [gameState.status, amIDrawer]);
+
   const isDrawingMode = gameState.status === "DRAWING" && amIDrawer;
 
   const hasAlreadyReported = React.useMemo(() => {
