@@ -1621,6 +1621,28 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.strokeStyle = 'rgba(0,0,0,0.01)';
       tempCtx.stroke();
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      
+      // WARM-UP main ctx too
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.lineTo(0.1, 0.1);
+      ctx.quadraticCurveTo(0.2, 0.2, 0.3, 0.3);
+      ctx.strokeStyle = 'rgba(0,0,0,0.01)';
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+
+      // WARM-UP Flood Fill shared offscreen canvas (memory allocation & getImageData GPU readback buffer)
+      if (!sharedOffscreenCanvas) {
+        sharedOffscreenCanvas = document.createElement('canvas');
+        sharedOffscreenCanvas.width = LOGICAL_WIDTH * DPR;
+        sharedOffscreenCanvas.height = LOGICAL_HEIGHT * DPR;
+        sharedOffscreenCtx = sharedOffscreenCanvas.getContext('2d', { willReadFrequently: true });
+        if (sharedOffscreenCtx) {
+          sharedOffscreenCtx.fillRect(0, 0, 1, 1);
+          sharedOffscreenCtx.getImageData(0, 0, 1, 1);
+        }
+      }
 
       saveSnapshot();
 
