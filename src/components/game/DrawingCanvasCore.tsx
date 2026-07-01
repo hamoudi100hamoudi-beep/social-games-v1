@@ -289,6 +289,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const preventBucketRef = useRef(false);
 
   useEffect(() => {
+    if (!readOnly && window.__dp && !window.__dp.canvascore_readonly_false) {
+      window.__dp.canvascore_readonly_false = performance.now();
+    }
+  }, [readOnly]);
+
+  useEffect(() => {
     return () => {
       if (bucketTimeoutRef.current) {
         clearTimeout(bucketTimeoutRef.current);
@@ -365,6 +371,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const container = containerRef.current;
     if (!container) return;
     const obs = new ResizeObserver((entries) => {
+      if (window.__dp && !window.__dp.resize_observer_cb) {
+        window.__dp.resize_observer_cb = performance.now();
+      }
       for (let entry of entries) {
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
@@ -812,6 +821,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
         activeCtx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
       }
+      if (window.__dp && !window.__dp.first_stroke) {
+        window.__dp.first_stroke = performance.now();
+      }
       activeCtx.stroke();
     }
 
@@ -819,6 +831,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const executeRedrawTempLayer = () => {
+    if (window.__dp && !window.__dp.first_execute_redraw) {
+      window.__dp.first_execute_redraw = performance.now();
+    }
     const tempCtx = tempCtxRef.current;
     if (!tempCtx) return;
 
@@ -858,9 +873,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const redrawTempLayer = () => {
+    if (window.__dp && !window.__dp.first_redraw) {
+      window.__dp.first_redraw = performance.now();
+    }
     if (redrawRequestedRef.current) return;
     redrawRequestedRef.current = true;
     requestAnimationFrame(() => {
+      if (window.__dp && !window.__dp.first_raf) {
+        window.__dp.first_raf = performance.now();
+      }
       redrawRequestedRef.current = false;
       executeRedrawTempLayer();
     });
@@ -926,6 +947,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // --- Handlers & Commands Replays ---
 
   const executeResetState = () => {
+    if (window.__dp && !window.__dp.execute_reset_state) {
+      window.__dp.execute_reset_state = performance.now();
+    }
     console.log("[DrawingCanvasCore] Hard-resetting drawing state...");
     const ctx = ctxRef.current;
     const tempCtx = tempCtxRef.current;
@@ -1656,6 +1680,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // --- Drawing Pointer Events Hooks ---
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (window.__dp && !window.__dp.first_pointerdown) {
+      window.__dp.first_pointerdown = performance.now();
+    }
     if (propsRef.current.readOnly) return;
     if (isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
@@ -1748,6 +1775,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (window.__dp && !window.__dp.first_pointermove) {
+      window.__dp.first_pointermove = performance.now();
+    }
     if (!isDrawingRef.current) return;
 
     const canvas = canvasRef.current;
@@ -1886,6 +1916,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
       if (currentPathRef.current.length > 0) {
+        if (window.__dp && !window.__dp.first_commit) {
+          window.__dp.first_commit = performance.now();
+          if (window.__dpReport) window.__dpReport();
+        }
         drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
 
         // Send complete stroke object for precise restoration and history tracking

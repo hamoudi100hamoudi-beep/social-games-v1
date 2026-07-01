@@ -90,6 +90,14 @@ export default function DrawingBoard({
     return false;
   });
 
+  React.useLayoutEffect(() => {
+    if (!readOnly && window.__dp) {
+      if (!window.__dp.drawingboard_mount) {
+        window.__dp.drawingboard_mount = performance.now();
+      }
+    }
+  });
+
   const toggleZoom = () => {
     const nextVal = !zoomEnabled;
     setZoomEnabled(nextVal);
