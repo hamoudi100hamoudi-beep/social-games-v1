@@ -267,24 +267,21 @@ export default function DrawingBoard({
         )}
 
         {/* Overlay Tools Sub-Menu */}
-        {!readOnly && activeMenu === 'tools' && (
-          <div className="absolute bottom-[58px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 shadow-xl z-20 animate-in fade-in slide-in-from-bottom-2">
-            <SubToolBtn icon={<Pencil />} active={tool==='pencil'} onClick={() => changeTool('pencil')} />
-            <SubToolBtn icon={<Eraser />} active={tool==='eraser'} onClick={() => changeTool('eraser')} />
-            <SubToolBtn icon={<Square fill="currentColor" />} active={tool==='fillRect'} onClick={() => changeTool('fillRect')} />
-            <SubToolBtn icon={<Square />} active={tool==='strokeRect'} onClick={() => changeTool('strokeRect')} />
-            <SubToolBtn icon={<Circle fill="currentColor" />} active={tool==='fillCircle'} onClick={() => changeTool('fillCircle')} />
-            <SubToolBtn icon={<Circle />} active={tool==='strokeCircle'} onClick={() => changeTool('strokeCircle')} />
-            <SubToolBtn icon={<PaintBucket />} active={tool==='bucket'} onClick={() => changeTool('bucket')} />
-            <SubToolBtn icon={<Minus />} active={tool==='line'} onClick={() => changeTool('line')} />
-            <SubToolBtn icon={<Pipette />} active={tool==='pipette'} onClick={() => changeTool('pipette')} />
-            <SubToolBtn icon={<FileX />} onClick={requestClearCanvas} className="text-white !bg-[#FB923C]/90 hover:!bg-[#FB923C] !border-orange-500" />
-          </div>
-        )}
+        <div className={`absolute bottom-[58px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 shadow-xl z-20 animate-in fade-in slide-in-from-bottom-2 ${readOnly || activeMenu !== 'tools' ? 'hidden' : ''}`}>
+          <SubToolBtn icon={<Pencil />} active={tool==='pencil'} onClick={() => changeTool('pencil')} />
+          <SubToolBtn icon={<Eraser />} active={tool==='eraser'} onClick={() => changeTool('eraser')} />
+          <SubToolBtn icon={<Square fill="currentColor" />} active={tool==='fillRect'} onClick={() => changeTool('fillRect')} />
+          <SubToolBtn icon={<Square />} active={tool==='strokeRect'} onClick={() => changeTool('strokeRect')} />
+          <SubToolBtn icon={<Circle fill="currentColor" />} active={tool==='fillCircle'} onClick={() => changeTool('fillCircle')} />
+          <SubToolBtn icon={<Circle />} active={tool==='strokeCircle'} onClick={() => changeTool('strokeCircle')} />
+          <SubToolBtn icon={<PaintBucket />} active={tool==='bucket'} onClick={() => changeTool('bucket')} />
+          <SubToolBtn icon={<Minus />} active={tool==='line'} onClick={() => changeTool('line')} />
+          <SubToolBtn icon={<Pipette />} active={tool==='pipette'} onClick={() => changeTool('pipette')} />
+          <SubToolBtn icon={<FileX />} onClick={requestClearCanvas} className="text-white !bg-[#FB923C]/90 hover:!bg-[#FB923C] !border-orange-500" />
+        </div>
 
         {/* Floating Action Buttons (Undo/Redo / Reset Zoom / Toggle Zoom) - Upper-Left */}
-        {!readOnly && (
-          <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-30 pointer-events-auto" dir="ltr">
+        <div className={`absolute top-3 left-3 flex flex-col gap-1.5 z-30 pointer-events-auto ${readOnly ? 'hidden' : ''}`} dir="ltr">
             <div className="flex gap-1.5">
               <button 
                 type="button"
@@ -333,11 +330,10 @@ export default function DrawingBoard({
               )}
             </div>
           </div>
-        )}
+        {/* Closing brace for div originally wrapped by !readOnly */}
 
         {/* Brush Sliders Panel */}
-        {!readOnly && (
-          <div className="absolute bottom-[2px] left-0 right-0 w-full flex items-center justify-center px-4 gap-4 z-40 pointer-events-none" dir="ltr">
+        <div className={`absolute bottom-[2px] left-0 right-0 w-full flex items-center justify-center px-4 gap-4 z-40 pointer-events-none ${readOnly ? 'hidden' : ''}`} dir="ltr">
             
             {/* Stroke Width Slider */}
             <div className="flex-1 relative flex items-center h-4 max-w-[45%] group pointer-events-auto" dir="ltr">
@@ -378,13 +374,12 @@ export default function DrawingBoard({
             </div>
 
           </div>
-        )}
+        {/* Closing brace for div originally wrapped by !readOnly */}
 
       </div>
       
       {/* Bottom Toolbar with integrated timer and controls */}
-      {!readOnly && (
-        <div className="bg-game-primary-blue flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30" dir="ltr">
+      <div className={`bg-game-primary-blue flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30 ${readOnly ? 'hidden' : ''}`} dir="ltr">
           {timerBarNode && (
             <div className="w-full">
               {timerBarNode}
@@ -469,7 +464,7 @@ export default function DrawingBoard({
             </div>
           </div>
         </div>
-      )}
+      {/* Closing brace for div originally wrapped by !readOnly */}
       
     </div>
   );

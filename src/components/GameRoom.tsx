@@ -1310,13 +1310,13 @@ export default function GameRoom({
                 }
                 timerPercentage={timerPercentage}
                 timerBarNode={
-                  isDrawingMode ? (
+                  <div className={isDrawingMode ? "" : "hidden"}>
                     <SmoothTimer
                       gameState={gameState}
                       maxTime={getMaxTime()}
                       isFullScreen={true}
                     />
-                  ) : undefined
+                  </div>
                 }
                 hintsRemaining={
                   isDrawingMode
