@@ -53,24 +53,22 @@ window.__dpReport = function() {
   
   const safeStr = (val?: number) => val ? (val - t0).toFixed(2) + " ms" : "N/A";
   
-  console.log(`[DRAW START PROFILE]
+  const t_pd = window.__dp.first_pointerdown;
+  const safeStrPd = (val?: number) => (val && t_pd) ? (val - t_pd).toFixed(2) + " ms" : "N/A";
+  
+  console.log(`[DRAW START PROFILE v2]
 t0 = ${t0.toFixed(2)}
-Game state became DRAWING: 0 ms
-GameRoom render after DRAWING: ${safeStr(window.__dp.gameroom_render)}
-DrawingBoard mount/show: ${safeStr(window.__dp.drawingboard_mount)}
-Toolbar mount/show: ${safeStr(window.__dp.toolbar_mount)}
-CanvasCore readOnly false: ${safeStr(window.__dp.canvascore_readonly_false)}
-ResizeObserver first callback: ${safeStr(window.__dp.resize_observer_cb)}
-executeResetState: ${safeStr(window.__dp.execute_reset_state)}
-First pointerdown: ${safeStr(window.__dp.first_pointerdown)}
-First pointermove: ${safeStr(window.__dp.first_pointermove)}
-First RAF: ${safeStr(window.__dp.first_raf)}
-First redrawTempLayer: ${safeStr(window.__dp.first_redraw)}
-First executeRedrawTempLayer: ${safeStr(window.__dp.first_execute_redraw)}
-First stroke: ${safeStr(window.__dp.first_stroke)}
-First canvas commit: ${safeStr(window.__dp.first_commit)}
+Time until first pointerdown: ${safeStr(window.__dp.first_pointerdown)}
+Time until first pointermove: ${safeStr(window.__dp.first_pointermove)}
 
-Total time from DRAWING to first paintable frame: ${safeStr(window.__dp.first_commit)}
+Pointerdown cost: 0.00 ms
+First RAF after pointerdown: ${safeStrPd(window.__dp.first_raf)}
+First redrawTempLayer after pointerdown: ${safeStrPd(window.__dp.first_redraw)}
+First executeRedrawTempLayer after pointerdown: ${safeStrPd(window.__dp.first_execute_redraw)}
+First stroke after pointerdown: ${safeStrPd(window.__dp.first_stroke)}
+First canvas commit after pointerdown: ${safeStrPd(window.__dp.first_commit)}
+
+Time from first pointerdown to first canvas commit: ${safeStrPd(window.__dp.first_commit)}
   `);
 };
 
