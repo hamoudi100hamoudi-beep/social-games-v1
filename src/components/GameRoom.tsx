@@ -33,31 +33,44 @@ declare global {
   interface Window {
     __dp?: Record<string, number>;
     __dpReport?: () => void;
+    __dpReset?: () => void;
   }
 }
-window.__dp = window.__dp || {};
-window.__dpReport = window.__dpReport || function() {
-  if (window.__dp!.reported) return;
-  window.__dp!.reported = 1;
-  const t0 = window.__dp!.game_state_drawing || 0;
+window.__dpReset = function() {
+  window.__dp = {
+    game_state_drawing: performance.now(),
+    reported: 0
+  };
+};
+if (!window.__dp) {
+  window.__dpReset();
+}
+window.__dpReport = function() {
+  if (!window.__dp || window.__dp.reported) return;
+  window.__dp.reported = 1;
+  const t0 = window.__dp.game_state_drawing || 0;
   if (!t0) return;
+  
+  const safeStr = (val?: number) => val ? (val - t0).toFixed(2) + " ms" : "N/A";
+  
   console.log(`[DRAW START PROFILE]
+t0 = ${t0.toFixed(2)}
 Game state became DRAWING: 0 ms
-GameRoom render after DRAWING: ${((window.__dp!.gameroom_render || t0) - t0).toFixed(2)} ms
-DrawingBoard mount/show: ${((window.__dp!.drawingboard_mount || t0) - t0).toFixed(2)} ms
-Toolbar mount/show: ${((window.__dp!.toolbar_mount || t0) - t0).toFixed(2)} ms
-CanvasCore readOnly false: ${((window.__dp!.canvascore_readonly_false || t0) - t0).toFixed(2)} ms
-ResizeObserver first callback: ${((window.__dp!.resize_observer_cb || t0) - t0).toFixed(2)} ms
-executeResetState: ${((window.__dp!.execute_reset_state || t0) - t0).toFixed(2)} ms
-First pointerdown: ${((window.__dp!.first_pointerdown || t0) - t0).toFixed(2)} ms
-First pointermove: ${((window.__dp!.first_pointermove || t0) - t0).toFixed(2)} ms
-First RAF: ${((window.__dp!.first_raf || t0) - t0).toFixed(2)} ms
-First redrawTempLayer: ${((window.__dp!.first_redraw || t0) - t0).toFixed(2)} ms
-First executeRedrawTempLayer: ${((window.__dp!.first_execute_redraw || t0) - t0).toFixed(2)} ms
-First stroke: ${((window.__dp!.first_stroke || t0) - t0).toFixed(2)} ms
-First canvas commit: ${((window.__dp!.first_commit || t0) - t0).toFixed(2)} ms
+GameRoom render after DRAWING: ${safeStr(window.__dp.gameroom_render)}
+DrawingBoard mount/show: ${safeStr(window.__dp.drawingboard_mount)}
+Toolbar mount/show: ${safeStr(window.__dp.toolbar_mount)}
+CanvasCore readOnly false: ${safeStr(window.__dp.canvascore_readonly_false)}
+ResizeObserver first callback: ${safeStr(window.__dp.resize_observer_cb)}
+executeResetState: ${safeStr(window.__dp.execute_reset_state)}
+First pointerdown: ${safeStr(window.__dp.first_pointerdown)}
+First pointermove: ${safeStr(window.__dp.first_pointermove)}
+First RAF: ${safeStr(window.__dp.first_raf)}
+First redrawTempLayer: ${safeStr(window.__dp.first_redraw)}
+First executeRedrawTempLayer: ${safeStr(window.__dp.first_execute_redraw)}
+First stroke: ${safeStr(window.__dp.first_stroke)}
+First canvas commit: ${safeStr(window.__dp.first_commit)}
 
-Total time from DRAWING to first paintable frame: ${((window.__dp!.first_commit || t0) - t0).toFixed(2)} ms
+Total time from DRAWING to first paintable frame: ${safeStr(window.__dp.first_commit)}
   `);
 };
 
@@ -673,7 +686,7 @@ export default function GameRoom({
       if (state.gameState) {
         setGameState((prev: any) => {
           if (prev?.status !== "DRAWING" && state.gameState.status === "DRAWING") {
-            window.__dp!.game_state_drawing = performance.now();
+            if (window.__dpReset) window.__dpReset();
           }
           return state.gameState;
         });
@@ -683,7 +696,7 @@ export default function GameRoom({
     const onTimerTick = (data: { timeLeft: number; status: string }) => {
       setGameState((prev) => {
         if (prev?.status !== "DRAWING" && data.status === "DRAWING") {
-          window.__dp!.game_state_drawing = performance.now();
+          if (window.__dpReset) window.__dpReset();
         }
         return {
           ...prev,
