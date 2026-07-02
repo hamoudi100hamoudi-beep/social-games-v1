@@ -1296,16 +1296,15 @@ export default function GameRoom({
                 key={`shared-board-${room || ""}`}
                 currentDrawerId={gameState.currentDrawerId}
                 status={gameState.status}
-                readOnly={gameState.status !== "DRAWING" || !amIDrawer}
-                isPreMounting={gameState.status === "CHOOSING" && amIDrawer}
+                readOnly={isDrawingMode ? false : !amIDrawer}
                 onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
                 onSkipTurn={
-                  isDrawingMode && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
+                  isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
                     ? () => setShowSkipConfirm(true)
                     : undefined
                 }
                 onRequestHint={
-                  isDrawingMode && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
+                  isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
                     ? () => socket?.emit("request_hint")
                     : undefined
                 }
