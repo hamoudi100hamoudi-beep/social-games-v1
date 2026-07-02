@@ -29,7 +29,8 @@ export default function DrawingBoard({
   timerBarNode,
   currentDrawerId,
   status,
-  onSyncStateChange
+  onSyncStateChange,
+  isPreMounting = false,
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -41,6 +42,7 @@ export default function DrawingBoard({
   status?: string;
   key?: any;
   onSyncStateChange?: (syncing: boolean) => void;
+  isPreMounting?: boolean;
 }) {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
 
@@ -267,7 +269,7 @@ export default function DrawingBoard({
         )}
 
         {/* Overlay Tools Sub-Menu */}
-        <div className={`absolute bottom-[58px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 shadow-xl z-20 animate-in fade-in slide-in-from-bottom-2 ${readOnly || activeMenu !== 'tools' ? 'hidden' : ''}`}>
+        <div className={`absolute bottom-[58px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 shadow-xl z-20 animate-in fade-in slide-in-from-bottom-2 ${isPreMounting || activeMenu !== 'tools' ? 'opacity-0 pointer-events-none' : readOnly ? 'hidden' : ''}`}>
           <SubToolBtn icon={<Pencil />} active={tool==='pencil'} onClick={() => changeTool('pencil')} />
           <SubToolBtn icon={<Eraser />} active={tool==='eraser'} onClick={() => changeTool('eraser')} />
           <SubToolBtn icon={<Square fill="currentColor" />} active={tool==='fillRect'} onClick={() => changeTool('fillRect')} />
@@ -281,7 +283,7 @@ export default function DrawingBoard({
         </div>
 
         {/* Floating Action Buttons (Undo/Redo / Reset Zoom / Toggle Zoom) - Upper-Left */}
-        <div className={`absolute top-3 left-3 flex flex-col gap-1.5 z-30 pointer-events-auto ${readOnly ? 'hidden' : ''}`} dir="ltr">
+        <div className={`absolute top-3 left-3 flex flex-col gap-1.5 z-30 pointer-events-auto ${isPreMounting ? 'opacity-0 pointer-events-none' : readOnly ? 'hidden' : ''}`} dir="ltr">
             <div className="flex gap-1.5">
               <button 
                 type="button"
@@ -330,10 +332,9 @@ export default function DrawingBoard({
               )}
             </div>
           </div>
-        {/* Closing brace for div originally wrapped by !readOnly */}
 
         {/* Brush Sliders Panel */}
-        <div className={`absolute bottom-[2px] left-0 right-0 w-full flex items-center justify-center px-4 gap-4 z-40 pointer-events-none ${readOnly ? 'hidden' : ''}`} dir="ltr">
+        <div className={`absolute bottom-[2px] left-0 right-0 w-full flex items-center justify-center px-4 gap-4 z-40 pointer-events-none ${isPreMounting ? 'opacity-0' : readOnly ? 'hidden' : ''}`} dir="ltr">
             
             {/* Stroke Width Slider */}
             <div className="flex-1 relative flex items-center h-4 max-w-[45%] group pointer-events-auto" dir="ltr">
@@ -374,12 +375,11 @@ export default function DrawingBoard({
             </div>
 
           </div>
-        {/* Closing brace for div originally wrapped by !readOnly */}
 
       </div>
       
       {/* Bottom Toolbar with integrated timer and controls */}
-      <div className={`bg-game-primary-blue flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30 ${readOnly ? 'hidden' : ''}`} dir="ltr">
+      <div className={`bg-game-primary-blue flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30 ${isPreMounting ? 'opacity-0 pointer-events-none' : readOnly ? 'hidden' : ''}`} dir="ltr">
           {timerBarNode && (
             <div className="w-full">
               {timerBarNode}
@@ -464,7 +464,6 @@ export default function DrawingBoard({
             </div>
           </div>
         </div>
-      {/* Closing brace for div originally wrapped by !readOnly */}
       
     </div>
   );
