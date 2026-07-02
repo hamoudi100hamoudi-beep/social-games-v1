@@ -409,6 +409,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         
         // Signal that the DOM is fully laid out and ResizeObserver has evaluated physical scale
         isCanvasResizeObserverReadyRef.current = true;
+        // Warm up layout calculation silently
+        canvasRef.current?.getBoundingClientRect();
       }
     });
     obs.observe(container);
@@ -1638,6 +1640,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       // WARM-UP Canvas rendering engine to prevent first-stroke stutter on weak devices
       // This forces Skia / GPU to compile shaders immediately rather than when user draws.
+      tempCtx.save();
+      tempCtx.globalAlpha = 0.01;
+      tempCtx.beginPath();
+      tempCtx.arc(0, 0, 0.1, 0, Math.PI * 2);
+      tempCtx.fill();
+      tempCtx.restore();
+
       tempCtx.beginPath();
       tempCtx.moveTo(0,0);
       tempCtx.lineTo(0.1, 0.1);
@@ -1647,6 +1656,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       
       // WARM-UP main ctx too
+      ctx.save();
+      ctx.globalAlpha = 0.01;
+      ctx.beginPath();
+      ctx.arc(0, 0, 0.1, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
       ctx.beginPath();
       ctx.moveTo(0,0);
       ctx.lineTo(0.1, 0.1);
