@@ -379,7 +379,7 @@ export default function DrawingBoard({
       </div>
       
       {/* Bottom Toolbar with integrated timer and controls */}
-      <div className={`bg-game-primary-blue flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30 ${isPreMounting ? 'opacity-0 pointer-events-none' : readOnly ? 'hidden' : ''}`} dir="ltr">
+      <div className={`bg-game-primary-blue flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30 ${isPreMounting ? 'opacity-0 pointer-events-none absolute bottom-0 left-0 right-0 h-0 overflow-hidden' : readOnly ? 'hidden' : ''}`} dir="ltr">
           {timerBarNode && (
             <div className="w-full">
               {timerBarNode}

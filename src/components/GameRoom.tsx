@@ -486,8 +486,7 @@ export default function GameRoom({
     }
   }, [gameState?.status, amIDrawer]);
 
-  // We include CHOOSING here so that the full-screen canvas container is pre-mounted early, preventing layout shift when drawing actually starts.
-  const isDrawingMode = (gameState.status === "DRAWING" || gameState.status === "CHOOSING") && amIDrawer;
+  const isDrawingMode = gameState.status === "DRAWING" && amIDrawer;
 
   const hasAlreadyReported = React.useMemo(() => {
     if (!gameState.reports) return false;
@@ -1301,12 +1300,12 @@ export default function GameRoom({
                 isPreMounting={gameState.status === "CHOOSING" && amIDrawer}
                 onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
                 onSkipTurn={
-                  isDrawingMode && (gameState.status === "DRAWING" || gameState.status === "CHOOSING") && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
+                  isDrawingMode && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
                     ? () => setShowSkipConfirm(true)
                     : undefined
                 }
                 onRequestHint={
-                  isDrawingMode && (gameState.status === "DRAWING" || gameState.status === "CHOOSING") && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
+                  isDrawingMode && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
                     ? () => socket?.emit("request_hint")
                     : undefined
                 }
