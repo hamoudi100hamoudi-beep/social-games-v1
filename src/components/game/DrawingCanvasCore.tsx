@@ -289,12 +289,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const preventBucketRef = useRef(false);
 
   useEffect(() => {
-    if (!readOnly && window.__dp && !window.__dp.canvascore_readonly_false) {
-      window.__dp.canvascore_readonly_false = performance.now();
-    }
-  }, [readOnly]);
-
-  useEffect(() => {
     return () => {
       if (bucketTimeoutRef.current) {
         clearTimeout(bucketTimeoutRef.current);
@@ -353,7 +347,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const applyTransform = (overrideBaseScale?: number) => {
     if (transformWrapperRef.current) {
-      if (propsRef.current.readOnly) {
+      if (readOnly) {
         transformWrapperRef.current.style.transform = 'none';
         return;
       }
@@ -371,16 +365,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const container = containerRef.current;
     if (!container) return;
     const obs = new ResizeObserver((entries) => {
-      if (window.__dp && !window.__dp.resize_observer_cb) {
-        window.__dp.resize_observer_cb = performance.now();
-      }
       for (let entry of entries) {
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
         
-        const currentReadOnly = propsRef.current.readOnly;
-        
-        const targetScale = currentReadOnly
+        const targetScale = readOnly
           ? Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT)
           : height / LOGICAL_HEIGHT;
         
@@ -393,29 +382,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const initialY = (height - canvasDisplayHeight) / 2;
 
         // Auto-center on layout update/transition unless the player already Zoomed or Panned manually
-        if (!hasInitializedTransform.current || currentReadOnly || !hasManuallyZoomedOrPanned.current) {
+        if (!hasInitializedTransform.current || readOnly || !hasManuallyZoomedOrPanned.current) {
           transformRef.current = { scale: 1, x: initialX, y: initialY };
-          
-          if (transformWrapperRef.current) {
-            if (currentReadOnly) {
-              transformWrapperRef.current.style.transform = 'none';
-            } else {
-              transformWrapperRef.current.style.transform = `translate(${initialX}px, ${initialY}px) scale(${targetScale})`;
-            }
-          }
-          
-          if (!currentReadOnly) hasInitializedTransform.current = true;
+          applyTransform(targetScale);
+          if (!readOnly) hasInitializedTransform.current = true;
         }
         
         // Signal that the DOM is fully laid out and ResizeObserver has evaluated physical scale
         isCanvasResizeObserverReadyRef.current = true;
-        // Warm up layout calculation silently
-        canvasRef.current?.getBoundingClientRect();
       }
     });
     obs.observe(container);
     return () => obs.disconnect();
-  }, []); // <-- Empty dependency array to prevent recreation on readOnly changes
+  }, [readOnly]);
 
   // --- Multi-touch Mobile Pinch to Zoom and Pan ---
   useEffect(() => {
@@ -823,9 +802,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
         activeCtx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
       }
-      if (window.__dp && !window.__dp.first_stroke) {
-        window.__dp.first_stroke = performance.now();
-      }
       activeCtx.stroke();
     }
 
@@ -833,9 +809,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const executeRedrawTempLayer = () => {
-    if (window.__dp && !window.__dp.first_execute_redraw) {
-      window.__dp.first_execute_redraw = performance.now();
-    }
     const tempCtx = tempCtxRef.current;
     if (!tempCtx) return;
 
@@ -875,15 +848,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const redrawTempLayer = () => {
-    if (window.__dp && !window.__dp.first_redraw) {
-      window.__dp.first_redraw = performance.now();
-    }
     if (redrawRequestedRef.current) return;
     redrawRequestedRef.current = true;
     requestAnimationFrame(() => {
-      if (window.__dp && !window.__dp.first_raf) {
-        window.__dp.first_raf = performance.now();
-      }
       redrawRequestedRef.current = false;
       executeRedrawTempLayer();
     });
@@ -949,9 +916,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // --- Handlers & Commands Replays ---
 
   const executeResetState = () => {
-    if (window.__dp && !window.__dp.execute_reset_state) {
-      window.__dp.execute_reset_state = performance.now();
-    }
     console.log("[DrawingCanvasCore] Hard-resetting drawing state...");
     const ctx = ctxRef.current;
     const tempCtx = tempCtxRef.current;
@@ -1589,26 +1553,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Automated Clean Reset State on turn / drawer change
   const previousStateRef = useRef({ currentDrawerId, status });
-  const hasTransitionedToDrawingRef = useRef(false);
   useEffect(() => {
     if (previousStateRef.current.currentDrawerId !== currentDrawerId || previousStateRef.current.status !== status) {
       if (hasSyncedOnce && !isSyncing) {
         console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
-        
-        const isMyFirstDrawingTurn = status === 'DRAWING' && currentDrawerId === socket?.id && !hasTransitionedToDrawingRef.current;
-        
-        if (isMyFirstDrawingTurn) {
-          hasTransitionedToDrawingRef.current = true;
-          requestAnimationFrame(() => {
-            executeResetState();
-          });
-        } else {
-          executeResetState();
-        }
+        executeResetState();
       }
     }
     previousStateRef.current = { currentDrawerId, status };
-  }, [currentDrawerId, status, hasSyncedOnce, isSyncing, socket?.id]);
+  }, [currentDrawerId, status, hasSyncedOnce, isSyncing]);
 
   // --- HTML Canvas Initialization ---
   useEffect(() => {
@@ -1640,13 +1593,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       // WARM-UP Canvas rendering engine to prevent first-stroke stutter on weak devices
       // This forces Skia / GPU to compile shaders immediately rather than when user draws.
-      tempCtx.save();
-      tempCtx.globalAlpha = 0.01;
-      tempCtx.beginPath();
-      tempCtx.arc(0, 0, 0.1, 0, Math.PI * 2);
-      tempCtx.fill();
-      tempCtx.restore();
-
       tempCtx.beginPath();
       tempCtx.moveTo(0,0);
       tempCtx.lineTo(0.1, 0.1);
@@ -1654,35 +1600,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.strokeStyle = 'rgba(0,0,0,0.01)';
       tempCtx.stroke();
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-      
-      // WARM-UP main ctx too
-      ctx.save();
-      ctx.globalAlpha = 0.01;
-      ctx.beginPath();
-      ctx.arc(0, 0, 0.1, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-
-      ctx.beginPath();
-      ctx.moveTo(0,0);
-      ctx.lineTo(0.1, 0.1);
-      ctx.quadraticCurveTo(0.2, 0.2, 0.3, 0.3);
-      ctx.strokeStyle = 'rgba(0,0,0,0.01)';
-      ctx.stroke();
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-
-      // WARM-UP Flood Fill shared offscreen canvas (memory allocation & getImageData GPU readback buffer)
-      if (!sharedOffscreenCanvas) {
-        sharedOffscreenCanvas = document.createElement('canvas');
-        sharedOffscreenCanvas.width = LOGICAL_WIDTH * DPR;
-        sharedOffscreenCanvas.height = LOGICAL_HEIGHT * DPR;
-        sharedOffscreenCtx = sharedOffscreenCanvas.getContext('2d', { willReadFrequently: true });
-        if (sharedOffscreenCtx) {
-          sharedOffscreenCtx.fillRect(0, 0, 1, 1);
-          sharedOffscreenCtx.getImageData(0, 0, 1, 1);
-        }
-      }
 
       saveSnapshot();
 
@@ -1696,9 +1613,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // --- Drawing Pointer Events Hooks ---
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (window.__dp && !window.__dp.first_pointerdown) {
-      window.__dp.first_pointerdown = performance.now();
-    }
     if (propsRef.current.readOnly) return;
     if (isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
@@ -1791,9 +1705,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (window.__dp && !window.__dp.first_pointermove) {
-      window.__dp.first_pointermove = performance.now();
-    }
     if (!isDrawingRef.current) return;
 
     const canvas = canvasRef.current;
@@ -1932,10 +1843,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
       if (currentPathRef.current.length > 0) {
-        if (window.__dp && !window.__dp.first_commit) {
-          window.__dp.first_commit = performance.now();
-          if (window.__dpReport) window.__dpReport();
-        }
         drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
 
         // Send complete stroke object for precise restoration and history tracking

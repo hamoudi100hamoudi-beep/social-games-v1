@@ -29,49 +29,6 @@ import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
 import CinematicModal from "./game/CinematicModal";
 import { safeLocalStorage } from "../utils/storage";
 
-declare global {
-  interface Window {
-    __dp?: Record<string, number>;
-    __dpReport?: () => void;
-    __dpReset?: () => void;
-  }
-}
-window.__dpReset = function() {
-  window.__dp = {
-    game_state_drawing: performance.now(),
-    reported: 0
-  };
-};
-if (!window.__dp) {
-  window.__dpReset();
-}
-window.__dpReport = function() {
-  if (!window.__dp || window.__dp.reported) return;
-  window.__dp.reported = 1;
-  const t0 = window.__dp.game_state_drawing || 0;
-  if (!t0) return;
-  
-  const safeStr = (val?: number) => val ? (val - t0).toFixed(2) + " ms" : "N/A";
-  
-  const t_pd = window.__dp.first_pointerdown;
-  const safeStrPd = (val?: number) => (val && t_pd) ? (val - t_pd).toFixed(2) + " ms" : "N/A";
-  
-  console.log(`[DRAW START PROFILE v2]
-t0 = ${t0.toFixed(2)}
-Time until first pointerdown: ${safeStr(window.__dp.first_pointerdown)}
-Time until first pointermove: ${safeStr(window.__dp.first_pointermove)}
-
-Pointerdown cost: 0.00 ms
-First RAF after pointerdown: ${safeStrPd(window.__dp.first_raf)}
-First redrawTempLayer after pointerdown: ${safeStrPd(window.__dp.first_redraw)}
-First executeRedrawTempLayer after pointerdown: ${safeStrPd(window.__dp.first_execute_redraw)}
-First stroke after pointerdown: ${safeStrPd(window.__dp.first_stroke)}
-First canvas commit after pointerdown: ${safeStrPd(window.__dp.first_commit)}
-
-Time from first pointerdown to first canvas commit: ${safeStrPd(window.__dp.first_commit)}
-  `);
-};
-
 interface GameRoomProps {
   nickname: string;
   room: string;
@@ -166,14 +123,6 @@ const SmoothTimer = ({
     requestId = requestAnimationFrame(updateTimer);
     return () => cancelAnimationFrame(requestId);
   }, [maxTime, gameState.status]);
-
-  React.useLayoutEffect(() => {
-    if (gameState.status === "DRAWING") {
-      if (window.__dp && !window.__dp.gameroom_render) {
-        window.__dp.gameroom_render = performance.now();
-      }
-    }
-  });
 
   return (
     <div
@@ -683,25 +632,17 @@ export default function GameRoom({
 
       if (state.gameState) {
         setGameState((prev: any) => {
-          if (prev?.status !== "DRAWING" && state.gameState.status === "DRAWING") {
-            if (window.__dpReset) window.__dpReset();
-          }
           return state.gameState;
         });
       }
     };
 
     const onTimerTick = (data: { timeLeft: number; status: string }) => {
-      setGameState((prev) => {
-        if (prev?.status !== "DRAWING" && data.status === "DRAWING") {
-          if (window.__dpReset) window.__dpReset();
-        }
-        return {
-          ...prev,
-          timeLeft: data.timeLeft,
-          status: data.status,
-        };
-      });
+      setGameState((prev) => ({
+        ...prev,
+        timeLeft: data.timeLeft,
+        status: data.status,
+      }));
     };
 
     const onReceiveMessage = (msg: any) => {
@@ -1287,7 +1228,7 @@ export default function GameRoom({
             <div
               className={
                 isDrawingMode
-                  ? "fixed inset-0 z-[100] bg-gray-300 flex flex-col items-center justify-center overflow-hidden"
+                  ? "fixed inset-0 z-[100] bg-gray-300 flex flex-col items-center justify-center overflow-hidden transition-all duration-300 opacity-100"
                   : "w-full h-full relative flex flex-col"
               }
             >
@@ -1310,13 +1251,13 @@ export default function GameRoom({
                 }
                 timerPercentage={timerPercentage}
                 timerBarNode={
-                  <div className={isDrawingMode ? "" : "hidden"}>
+                  isDrawingMode ? (
                     <SmoothTimer
                       gameState={gameState}
                       maxTime={getMaxTime()}
                       isFullScreen={true}
                     />
-                  </div>
+                  ) : undefined
                 }
                 hintsRemaining={
                   isDrawingMode
