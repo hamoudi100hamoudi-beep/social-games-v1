@@ -136,7 +136,7 @@ export default function CinematicModal({
             initial="hidden"
             animate="visible"
             exit="exit"
-            className={`bg-[#ECEBFC] pt-5 pb-8 px-6 sm:px-8 rounded-[32px] w-full ${maxWidthClass} shadow-xl text-center relative overflow-visible border border-white/40 flex flex-col h-auto`}
+            className={`bg-[#ECEBFC] pt-5 pb-8 px-6 sm:px-8 rounded-[32px] w-[85%] max-w-[340px] shadow-xl text-center relative overflow-visible border border-white/40 flex flex-col h-auto`}
           >
             {/* Minimalist Top Corner Close Button - No circle, no border, no shadow, completely static relative to card */}
             {onClose && (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSocket } from './components/SocketProvider';
 import GameRoom from './components/GameRoom';
 import Lobby from './components/Lobby';
@@ -6,6 +6,34 @@ import { safeLocalStorage } from './utils/storage';
 
 export default function App() {
   const { isConnected } = useSocket();
+  
+  // Fix for Android mobile keyboard push issue
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window !== 'undefined' && document.body) {
+        document.body.style.height = `${window.innerHeight}px`;
+        document.body.scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+        window.scrollTo(0, 0);
+      }
+    };
+    
+    handleResize(); // Initialize
+    
+    window.addEventListener('resize', handleResize);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleResize);
+      window.visualViewport.addEventListener('scroll', handleResize);
+    }
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleResize);
+        window.visualViewport.removeEventListener('scroll', handleResize);
+      }
+    };
+  }, []);
   
   const [playerInfo, setPlayerInfo] = useState(() => {
     if (typeof window !== 'undefined') {
