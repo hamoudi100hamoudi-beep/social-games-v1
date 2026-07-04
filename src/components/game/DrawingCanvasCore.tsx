@@ -482,7 +482,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         if (touchStartDist > 0) {
-          const rect = container.getBoundingClie          // Dynamically compute perfect fit scale so mobile user can see full drawing stage
+          const rect = container.getBoundingClientRect();
+          const containerW = rect.width;
+          const containerH = rect.height;
+
+          // Dynamically compute perfect fit scale so mobile user can see full drawing stage
           const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScaleRef.current);
           const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScaleRef.current);
           const perfectFitScale = Math.min(fitWidthScale, fitHeightScale);
