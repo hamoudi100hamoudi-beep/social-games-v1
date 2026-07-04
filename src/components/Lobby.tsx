@@ -163,14 +163,6 @@ export default function Lobby({ onPlay }: LobbyProps) {
       socket.connect();
     }
   }, [socket]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.scrollTo(0, 0);
-      if (document.body) document.body.scrollTop = 0;
-      if (document.documentElement) document.documentElement.scrollTop = 0;
-    }
-  }, [screen]);
   
   const [roomCount, setRoomCount] = useState<number>(0);
   const [testRoomCount, setTestRoomCount] = useState<number>(0);
@@ -244,13 +236,13 @@ export default function Lobby({ onPlay }: LobbyProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-game-primary-blue text-white font-sans flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-game-primary-blue text-white font-sans flex flex-col overflow-hidden h-[100dvh]">
       
       {/* Home Screen */}
       {screen === 'home' && !afkWarning && !connLostWarning && (
-        <div className="flex-1 flex flex-col items-center justify-between p-3 sm:p-5 z-10 w-full max-w-md mx-auto">
+        <div className="flex-1 flex flex-col items-center justify-start p-3 sm:p-5 z-10 w-full max-w-md mx-auto overflow-y-auto no-scrollbar">
           {/* Header Row (Game Title and Settings Gear) */}
-          <div className="w-full flex items-center justify-between mb-2 relative px-2 mt-2">
+          <div className="w-full flex items-center justify-between mb-auto relative px-2 mt-2 shrink-0">
             {/* Spacer for symmetry on the left */}
             <div className="w-10 h-10 pointer-events-none invisible" />
 
@@ -278,7 +270,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-[85%] max-w-[340px] bg-[#ECEBFC] py-5 px-6 sm:px-8 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col my-2 text-[#2E2882] justify-center items-center min-h-0"
+            className="w-[90%] max-w-[340px] bg-[#ECEBFC] py-4 [@media(min-height:600px)]:py-5 px-5 [@media(min-height:600px)]:px-6 sm:px-8 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col my-auto shrink-0 text-[#2E2882] justify-center items-center min-h-0"
           >
             {/* Content body wrapper */}
             <div className="space-y-4 flex flex-col items-center w-full">
@@ -295,8 +287,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   </button>
                   
                   <div className="relative group cursor-pointer" onClick={() => setShowAvatarGrid(true)}>
-                    <div className="w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-transform select-none overflow-hidden">
-                      <span className="text-[80px] sm:text-[96px] translate-y-1 sm:translate-y-2 leading-none flex items-center justify-center select-none">{AVATARS[avatarIndex]}</span>
+                    <div className="w-[85px] h-[85px] [@media(min-height:600px)]:w-32 [@media(min-height:600px)]:h-32 sm:w-36 sm:h-36 rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-transform select-none overflow-hidden">
+                      <span className="text-[55px] [@media(min-height:600px)]:text-[80px] sm:text-[96px] translate-y-1 sm:translate-y-2 leading-none flex items-center justify-center select-none">{AVATARS[avatarIndex]}</span>
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full">
                          <LayoutGrid className="text-white" size={28} />
                       </div>
@@ -329,23 +321,6 @@ export default function Lobby({ onPlay }: LobbyProps) {
                       handleGoToRooms();
                     }
                   }}
-                  onFocus={() => {
-                    if (typeof window !== 'undefined') {
-                      setTimeout(() => {
-                        window.scrollTo(0, 0);
-                        if (document.body) document.body.scrollTop = 0;
-                      }, 50);
-                    }
-                  }}
-                  onBlur={() => {
-                    if (typeof window !== 'undefined') {
-                      setTimeout(() => {
-                        window.scrollTo(0, 0);
-                        if (document.body) document.body.scrollTop = 0;
-                        if (document.documentElement) document.documentElement.scrollTop = 0;
-                      }, 80);
-                    }
-                  }}
                   placeholder="Enter your name..."
                   autoComplete="off"
                   autoCorrect="off"
@@ -354,7 +329,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   name="nickname_input_random_name"
                   data-form-type="other"
                   style={{ resize: 'none' }}
-                  className={`w-full h-14 py-3.5 bg-white text-[#2E2882] placeholder-[#8C8AA7]/50 border-2 rounded-2xl px-5 font-black text-base outline-none transition-all focus:bg-white overflow-hidden whitespace-nowrap ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-[#2E2882]/10 focus:border-[#38BDF8]'}`}
+                  className={`w-full h-12 [@media(min-height:600px)]:h-14 py-2 [@media(min-height:600px)]:py-3.5 bg-white text-[#2E2882] placeholder-[#8C8AA7]/50 border-2 rounded-2xl px-5 font-black text-sm [@media(min-height:600px)]:text-base outline-none transition-all focus:bg-white overflow-hidden whitespace-nowrap ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-[#2E2882]/10 focus:border-[#38BDF8]'}`}
                 />
               </div>
             </div>
@@ -363,7 +338,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
           {/* Bottom Rooms button OUTSIDE the white card */}
           <button 
             onClick={handleGoToRooms}
-            className="w-[85%] sm:w-[75%] max-w-[320px] mx-auto h-14 sm:h-16 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-[24px] font-black text-lg sm:text-xl flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg mb-2"
+            className="w-[85%] sm:w-[75%] max-w-[320px] mx-auto h-12 [@media(min-height:600px)]:h-14 sm:h-16 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-[24px] font-black text-base [@media(min-height:600px)]:text-lg sm:text-xl flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg mt-auto mb-2 shrink-0"
           >
             <span>ROOMS</span>
           </button>
@@ -372,9 +347,9 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
       {/* Rooms Browser Screen */}
       {screen === 'rooms' && (
-        <div className="flex-1 flex flex-col items-center justify-between p-3 sm:p-5 z-10 w-full max-w-md mx-auto">
+        <div className="flex-1 flex flex-col items-center justify-start p-3 sm:p-5 z-10 w-full max-w-md mx-auto overflow-y-auto no-scrollbar">
           {/* Header Row (Back Button and "ROOMS" Title) */}
-          <div className="w-full flex items-center justify-between mb-2 relative px-2 mt-2">
+          <div className="w-full flex items-center justify-between mb-auto relative px-2 mt-2 shrink-0">
             {/* Back button */}
             <button 
               onClick={() => setScreen('home')}
@@ -401,7 +376,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-[85%] max-w-[340px] mx-auto bg-[#ECEBFC] p-4 sm:p-6 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col flex-1 my-2 text-[#2E2882] overflow-hidden min-h-0"
+            className="w-full bg-[#ECEBFC] p-4 sm:p-6 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col flex-1 my-auto text-[#2E2882] overflow-hidden min-h-[250px] shrink-0"
           >
             {/* List - Positioned cleanly at the top of the white container */}
             <div className="flex-1 overflow-y-auto pr-1 space-y-4 no-scrollbar">
@@ -425,7 +400,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
           </motion.div>
 
           {/* Bottom New Room button OUTSIDE the white card */}
-          <button className="w-[85%] sm:w-[75%] max-w-[320px] mx-auto h-14 sm:h-16 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-[24px] font-black text-lg sm:text-xl flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg mb-2">
+          <button className="w-[85%] sm:w-[75%] max-w-[320px] mx-auto h-12 [@media(min-height:600px)]:h-14 sm:h-16 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-[24px] font-black text-base [@media(min-height:600px)]:text-lg sm:text-xl flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg mt-auto mb-2 shrink-0">
             <Plus size={22} strokeWidth={4} />
             <span>NEW ROOM</span>
           </button>
@@ -475,7 +450,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
       {/* Global Settings Modal */}
       {showSettingsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-white rounded-[32px] p-6 shadow-2xl max-w-[340px] w-[85%] text-slate-800 relative animate-in zoom-in-95 duration-200" dir="rtl">
+          <div className="bg-white rounded-[32px] p-6 shadow-2xl max-w-sm w-[90%] text-slate-800 relative animate-in zoom-in-95 duration-200" dir="rtl">
             <button 
               onClick={() => setShowSettingsModal(false)}
               className="absolute top-4 right-4 w-9 h-9 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 active:scale-95 transition-transform"
@@ -617,7 +592,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
       {showAvatarGrid && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer" onClick={() => setShowAvatarGrid(false)} />
-          <div className="relative w-[85%] max-w-[340px] bg-white rounded-3xl p-5 border border-white/40 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 border border-white/40 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-4">
               <span className="text-sm font-black text-[#38BDF8]">ALL AVATARS</span>
               <button onClick={() => setShowAvatarGrid(false)} className="text-[#8C8AA7] hover:text-[#2E2882] bg-slate-100 p-1.5 rounded-full transition-colors active:scale-90">

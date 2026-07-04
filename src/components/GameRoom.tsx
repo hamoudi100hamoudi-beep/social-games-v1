@@ -1769,15 +1769,8 @@ export default function GameRoom({
                       window.scrollTo(0, 0);
                     }, 50);
                   }}
-                   onBlur={() => {
+                  onBlur={() => {
                     setIsInputFocused(false);
-                    if (typeof window !== 'undefined') {
-                      setTimeout(() => {
-                        window.scrollTo(0, 0);
-                        if (document.body) document.body.scrollTop = 0;
-                        if (document.documentElement) document.documentElement.scrollTop = 0;
-                      }, 80);
-                    }
                   }}
                   placeholder={
                     gameState.status === "WAITING"
