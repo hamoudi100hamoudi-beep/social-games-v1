@@ -311,7 +311,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const containerRef = useRef<HTMLDivElement>(null);
   const transformWrapperRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef({ scale: 1, x: 0, y: 0 });
-  const baseScaleRef = useRef(1);
+  const [baseScale, setBaseScale] = useState(1);
   const hasInitializedTransform = useRef(false);
   const isCanvasResizeObserverReadyRef = useRef(false);
   const hasManuallyZoomedOrPanned = useRef(false);
@@ -352,10 +352,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         return;
       }
       const { x, y, scale } = transformRef.current;
-      const currentBaseScale = overrideBaseScale !== undefined ? overrideBaseScale : baseScaleRef.current;
+      const currentBaseScale = overrideBaseScale !== undefined ? overrideBaseScale : baseScale;
       transformWrapperRef.current.style.transform = `translate(${x}px, ${y}px) scale(${currentBaseScale * scale})`;
     }
   };
+
+  useEffect(() => {
+    applyTransform();
+  }, [baseScale]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -369,7 +373,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           ? Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT)
           : height / LOGICAL_HEIGHT;
         
-        baseScaleRef.current = targetScale;
+        setBaseScale(targetScale);
         
         // Exact responsive centered coordinates
         const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
@@ -487,8 +491,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           const containerH = rect.height;
 
           // Dynamically compute perfect fit scale so mobile user can see full drawing stage
-          const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScaleRef.current);
-          const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScaleRef.current);
+          const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScale);
+          const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScale);
           const perfectFitScale = Math.min(fitWidthScale, fitHeightScale);
           const minScaleLimit = Math.max(0.3, Math.min(1.0, perfectFitScale * 0.9));
           let scaleFactor = dist / touchStartDist;
@@ -503,8 +507,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           let nextY = currentCenterY - ((touchStartCenterY - touchStartY) / touchStartScale) * nextScale;
 
           // Apply boundary buffers to prevent the canvas from getting lost offscreen
-          const dispW = LOGICAL_WIDTH * baseScaleRef.current * nextScale;
-          const dispH = LOGICAL_HEIGHT * baseScaleRef.current * nextScale;
+          const dispW = LOGICAL_WIDTH * baseScale * nextScale;
+          const dispH = LOGICAL_HEIGHT * baseScale * nextScale;
 
           const minX = -dispW + 100;
           const maxX = containerW - 100;
@@ -549,7 +553,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [isZoomEnabled]);
+  }, [isZoomEnabled, baseScale]);
 
   // --- Desktop Wheel / Pinch Zoom ---
   useEffect(() => {
@@ -565,8 +569,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const containerH = rect.height;
 
       // Dynamically compute perfect fit scale so user can zoom out enough to see full canvas
-      const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScaleRef.current);
-      const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScaleRef.current);
+      const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScale);
+      const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScale);
       const perfectFitScale = Math.min(fitWidthScale, fitHeightScale);
       const minScaleLimit = Math.max(0.3, Math.min(1.0, perfectFitScale * 0.9));
 
@@ -581,8 +585,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       let nextY = my - (my - transformRef.current.y) * scaleRatio;
 
       // Apply boundary buffers
-      const dispW = LOGICAL_WIDTH * baseScaleRef.current * nextScale;
-      const dispH = LOGICAL_HEIGHT * baseScaleRef.current * nextScale;
+      const dispW = LOGICAL_WIDTH * baseScale * nextScale;
+      const dispH = LOGICAL_HEIGHT * baseScale * nextScale;
 
       const minX = -dispW + 100;
       const maxX = containerW - 100;
@@ -601,7 +605,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [isZoomEnabled]);
+  }, [isZoomEnabled, baseScale]);
 
   // --- Desktop Click-Drag To Pan (Right Click / Middle Click-Drag) ---
   useEffect(() => {
@@ -639,8 +643,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       let nextY = initialY + dy;
 
       const rect = container.getBoundingClientRect();
-      const dispW = LOGICAL_WIDTH * baseScaleRef.current * transformRef.current.scale;
-      const dispH = LOGICAL_HEIGHT * baseScaleRef.current * transformRef.current.scale;
+      const dispW = LOGICAL_WIDTH * baseScale * transformRef.current.scale;
+      const dispH = LOGICAL_HEIGHT * baseScale * transformRef.current.scale;
       const containerW = rect.width;
       const containerH = rect.height;
 
@@ -687,7 +691,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       container.removeEventListener('pointercancel', handlePointerUp);
       container.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [isZoomEnabled]);
+  }, [isZoomEnabled, baseScale]);
 
   // Expose handles to Parent Component
   useImperativeHandle(ref, () => ({
@@ -755,6 +759,32 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   // --- Dynamic Drawing Functions ---
+  const drawSegment = (
+    activeCtx: CanvasRenderingContext2D,
+    p1: { x: number; y: number },
+    p2: { x: number; y: number },
+    tool: string,
+    color: string,
+    width: number,
+    opacity: number
+  ) => {
+    activeCtx.save();
+    activeCtx.lineWidth = width;
+    activeCtx.lineCap = 'round';
+    activeCtx.lineJoin = 'round';
+    activeCtx.globalAlpha = opacity;
+    if (tool === 'eraser') {
+      activeCtx.strokeStyle = '#ffffff';
+    } else {
+      activeCtx.strokeStyle = color;
+    }
+    activeCtx.beginPath();
+    activeCtx.moveTo(p1.x, p1.y);
+    activeCtx.lineTo(p2.x, p2.y);
+    activeCtx.stroke();
+    activeCtx.restore();
+  };
+
   const drawEntirePath = (
     activeCtx: CanvasRenderingContext2D,
     path: { x: number; y: number }[],
@@ -1229,12 +1259,26 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           opacity: remoteOpacity,
           path: [{ x: rx, y: ry }]
         };
-        redrawTempLayer();
+        if ((remoteTool === 'pencil' || remoteTool === 'eraser') && remoteOpacity === 1.0) {
+          ctx.save();
+          ctx.fillStyle = remoteTool === 'eraser' ? '#ffffff' : remoteColor;
+          ctx.beginPath();
+          ctx.arc(rx, ry, remoteWidth / 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else {
+          redrawTempLayer();
+        }
       } else if (event === 'draw_move') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
+          const isSolidPencilEraser = (session.tool === 'pencil' || session.tool === 'eraser') && session.opacity === 1.0;
           const handleMovePoint = (mx: number, my: number) => {
+            const prevPt = session.path[session.path.length - 1];
             session.path.push({ x: mx, y: my });
+            if (isSolidPencilEraser && prevPt) {
+              drawSegment(ctx, prevPt, { x: mx, y: my }, session.tool, session.color, session.width, session.opacity);
+            }
           };
 
           if (data.moves && Array.isArray(data.moves)) {
@@ -1244,13 +1288,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           } else if (data.x !== undefined && data.y !== undefined) {
             handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT);
           }
-          redrawTempLayer();
+          if (!isSolidPencilEraser) {
+            redrawTempLayer();
+          }
         }
       } else if (event === 'draw_end') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
           const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-          if (!data.isCancelled && session.path.length > 0 && !isShape) {
+          const isSolidPencilEraser = !isShape && session.opacity === 1.0;
+          if (!data.isCancelled && session.path.length > 0 && !isShape && !isSolidPencilEraser) {
             drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
           }
 
@@ -1597,6 +1644,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.stroke();
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.lineTo(0.1, 0.1);
+      ctx.quadraticCurveTo(0.2, 0.2, 0.3, 0.3);
+      ctx.strokeStyle = 'rgba(0,0,0,0.01)';
+      ctx.stroke();
+      
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+
       saveSnapshot();
 
       if (bufferedSyncRef.current) {
@@ -1693,7 +1750,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     });
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
-      redrawTempLayer();
+      if (activeOpacity === 1.0) {
+        ctx.save();
+        ctx.fillStyle = activeTool === 'eraser' ? '#ffffff' : activeColor;
+        ctx.beginPath();
+        ctx.arc(x, y, activeWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else {
+        redrawTempLayer();
+      }
     } else {
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       drawShape(tempCtx, x, y, x, y, activeTool, activeColor, activeWidth, activeOpacity);
@@ -1761,15 +1827,29 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               const t = i / stepsCount;
               const lerpX = Math.round((lastPt.x + (roundedX - lastPt.x) * t) * 10) / 10;
               const lerpY = Math.round((lastPt.y + (roundedY - lastPt.y) * t) * 10) / 10;
+              
+              const currentPrev = path[path.length - 1];
               path.push({ x: lerpX, y: lerpY });
               moveBatchRef.current.push({ x: lerpX / LOGICAL_WIDTH, y: lerpY / LOGICAL_HEIGHT });
+              
+              if (activeOpacity === 1.0 && currentPrev) {
+                drawSegment(ctx, currentPrev, { x: lerpX, y: lerpY }, activeTool, activeColor, activeWidth, activeOpacity);
+              }
             }
           }
         }
       }
 
+      const lastPrev = path[path.length - 1];
       path.push({ x: roundedX, y: roundedY });
-      redrawTempLayer();
+      
+      if (activeOpacity === 1.0) {
+        if (lastPrev) {
+          drawSegment(ctx, lastPrev, { x: roundedX, y: roundedY }, activeTool, activeColor, activeWidth, activeOpacity);
+        }
+      } else {
+        redrawTempLayer();
+      }
 
       const normX = roundedX / LOGICAL_WIDTH;
       const normY = roundedY / LOGICAL_HEIGHT;
@@ -1839,7 +1919,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
       if (currentPathRef.current.length > 0) {
-        drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
+        if (activeOpacity !== 1.0) {
+          drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
+        }
 
         // Send complete stroke object for precise restoration and history tracking
         const normalizedPoints = currentPathRef.current.map(pt => ({
@@ -1956,7 +2038,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               transition={{ duration: 0.35, ease: 'easeInOut' }}
               className={`fixed inset-0 flex flex-col items-center justify-center z-[999999] select-none touch-none ${
                 hasSyncedOnce
-                  ? (readOnly ? "bg-transparent" : "bg-[#0c061d]/80 backdrop-blur-sm cursor-not-allowed")
+                  ? (readOnly ? "bg-transparent" : "bg-[#0c061d]/85 cursor-not-allowed")
                   : "bg-[#0c061d] cursor-not-allowed"
               }`}
               style={{ pointerEvents: hasSyncedOnce && readOnly ? 'none' : 'auto' }}
