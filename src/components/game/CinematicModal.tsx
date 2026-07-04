@@ -3,42 +3,34 @@ import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
 import GameTitle from "./GameTitle";
 
-// 🎬 Snappy, ultra-responsive high-end physics animations
+// 🎬 High-performance animation variants for low-end devices
 export const cinematicCardVariants = {
-  hidden: { opacity: 0, scale: 0.95, y: 15 },
+  hidden: { opacity: 0, scale: 0.95 },
   visible: {
     opacity: 1,
     scale: 1,
-    y: 0,
     transition: {
-      type: "spring",
-      duration: 0.25, // Responsive 250ms feel
-      bounce: 0.12,   // Safe, organic bounce
-      staggerChildren: 0.03, // Accelerated stagger
-      delayChildren: 0.02,
+      duration: 0.2, // Fast, non-blocking ease-out instead of heavy physics
+      ease: "easeOut"
     },
   },
   exit: {
-    // Elegant two-phase exit layout:
-    // Page expands slightly in scale while opacity begins to drop, then expands more as it fades away completely.
-    scale: [1, 1.03, 1.09],
-    opacity: [1, 0.45, 0],
-    y: [0, -4, -18],
+    scale: 0.95,
+    opacity: 0,
     transition: {
-      duration: 0.22, // Crisp 220ms dismissal
-      ease: "easeInOut",
+      duration: 0.15,
+      ease: "easeIn",
     },
   },
 };
 
 export const cinematicItemVariants = {
-  hidden: { opacity: 0, y: 10, scale: 0.98 },
+  hidden: { opacity: 0, y: 5 },
   visible: {
     opacity: 1,
     y: 0,
-    scale: 1,
     transition: {
-      duration: 0.18,
+      duration: 0.15,
       ease: "easeOut",
     },
   },
@@ -123,21 +115,24 @@ export default function CinematicModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-[350] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[350] flex items-center justify-center p-4 bg-slate-900/80"
           onClick={(e) => {
             if (e.target === e.currentTarget && onClose) {
               onClose();
             }
           }}
         >
-          <motion.div
-            key="cinematic-modal-card"
-            variants={cinematicCardVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className={`bg-[#ECEBFC] pt-5 pb-8 px-6 sm:px-8 rounded-[32px] w-full ${maxWidthClass} shadow-xl text-center relative overflow-visible border border-white/40 flex flex-col h-auto`}
-          >
+          <div className="w-full flex justify-center pointer-events-none">
+            <div className={`responsive-modal-scale pointer-events-auto flex justify-center w-full ${maxWidthClass}`}>
+              <motion.div
+                key="cinematic-modal-card"
+                variants={cinematicCardVariants}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                style={{ willChange: "transform, opacity" }}
+                className={`bg-[#ECEBFC] pt-5 pb-8 px-6 sm:px-8 rounded-[32px] w-full shadow-xl text-center relative overflow-visible border border-white/40 flex flex-col h-auto`}
+              >
             {/* Minimalist Top Corner Close Button - No circle, no border, no shadow, completely static relative to card */}
             {onClose && (
               <button
@@ -193,6 +188,8 @@ export default function CinematicModal({
               </motion.div>
             )}
           </motion.div>
+            </div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

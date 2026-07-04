@@ -258,7 +258,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
             {/* Settings button on the right side of the header row */}
             <button 
               onClick={() => setShowSettingsModal(true)}
-              className="w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 text-white backdrop-blur-md cursor-pointer z-20 shadow-md"
+              className="w-10 h-10 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 text-white  cursor-pointer z-20 shadow-md"
               title="الإعدادات"
             >
               <Settings size={20} />
@@ -449,7 +449,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
       {/* Global Settings Modal */}
       {showSettingsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60  animate-in fade-in duration-200">
           <div className="bg-white rounded-[32px] p-6 shadow-2xl max-w-sm w-[90%] text-slate-800 relative animate-in zoom-in-95 duration-200" dir="rtl">
             <button 
               onClick={() => setShowSettingsModal(false)}
@@ -591,7 +591,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
       {/* Avatar Grid Overlay */}
       {showAvatarGrid && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm cursor-pointer" onClick={() => setShowAvatarGrid(false)} />
+          <div className="absolute inset-0 bg-black/40  cursor-pointer" onClick={() => setShowAvatarGrid(false)} />
           <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 border border-white/40 shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-4">
               <span className="text-sm font-black text-[#38BDF8]">ALL AVATARS</span>

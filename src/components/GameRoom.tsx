@@ -1945,7 +1945,7 @@ export default function GameRoom({
 
       {/* Global Overlays for CHOOSING state */}
       {gameState.status === "CHOOSING" && amIDrawer && (
-        <div className="fixed inset-0 z-[500] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 touch-none">
+        <div className="fixed inset-0 z-[500] bg-black/70  flex items-center justify-center p-4 touch-none">
           <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
             <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 drop-shadow-md tracking-wide">
               IT'S YOUR TURN!
