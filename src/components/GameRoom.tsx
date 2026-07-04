@@ -1237,7 +1237,7 @@ export default function GameRoom({
                 key={`shared-board-${room || ""}`}
                 currentDrawerId={gameState.currentDrawerId}
                 status={gameState.status}
-                readOnly={isDrawingMode ? false : !amIDrawer}
+                readOnly={!isDrawingMode}
                 onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
                 onSkipTurn={
                   isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
