@@ -1228,7 +1228,7 @@ export default function GameRoom({
             <div
               className={
                 isDrawingMode
-                  ? "fixed inset-0 z-[100] bg-gray-300 flex flex-col items-center justify-center overflow-hidden transition-all duration-300 opacity-100"
+                  ? "fixed inset-0 z-[100] bg-gray-300 flex flex-col items-center justify-center overflow-hidden"
                   : "w-full h-full relative flex flex-col"
               }
             >
