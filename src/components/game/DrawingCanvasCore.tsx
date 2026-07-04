@@ -311,7 +311,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const containerRef = useRef<HTMLDivElement>(null);
   const transformWrapperRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef({ scale: 1, x: 0, y: 0 });
-  const [baseScale, setBaseScale] = useState(1);
+  const baseScaleRef = useRef(1);
   const hasInitializedTransform = useRef(false);
   const isCanvasResizeObserverReadyRef = useRef(false);
   const hasManuallyZoomedOrPanned = useRef(false);
@@ -352,14 +352,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         return;
       }
       const { x, y, scale } = transformRef.current;
-      const currentBaseScale = overrideBaseScale !== undefined ? overrideBaseScale : baseScale;
+      const currentBaseScale = overrideBaseScale !== undefined ? overrideBaseScale : baseScaleRef.current;
       transformWrapperRef.current.style.transform = `translate(${x}px, ${y}px) scale(${currentBaseScale * scale})`;
     }
   };
-
-  useEffect(() => {
-    applyTransform();
-  }, [baseScale]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -373,7 +369,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           ? Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT)
           : height / LOGICAL_HEIGHT;
         
-        setBaseScale(targetScale);
+        baseScaleRef.current = targetScale;
         
         // Exact responsive centered coordinates
         const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
@@ -384,9 +380,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         // Auto-center on layout update/transition unless the player already Zoomed or Panned manually
         if (!hasInitializedTransform.current || readOnly || !hasManuallyZoomedOrPanned.current) {
           transformRef.current = { scale: 1, x: initialX, y: initialY };
-          applyTransform(targetScale);
           if (!readOnly) hasInitializedTransform.current = true;
         }
+        
+        applyTransform(targetScale);
         
         // Signal that the DOM is fully laid out and ResizeObserver has evaluated physical scale
         isCanvasResizeObserverReadyRef.current = true;
@@ -485,16 +482,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         if (touchStartDist > 0) {
-          const rect = container.getBoundingClientRect();
-          const containerW = rect.width;
-          const containerH = rect.height;
-
-          // Dynamically compute perfect fit scale so mobile user can see full drawing stage
-          const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScale);
-          const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScale);
+          const rect = container.getBoundingClie          // Dynamically compute perfect fit scale so mobile user can see full drawing stage
+          const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScaleRef.current);
+          const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScaleRef.current);
           const perfectFitScale = Math.min(fitWidthScale, fitHeightScale);
           const minScaleLimit = Math.max(0.3, Math.min(1.0, perfectFitScale * 0.9));
-
           let scaleFactor = dist / touchStartDist;
           let nextScale = Math.max(minScaleLimit, Math.min(4.0, touchStartScale * scaleFactor));
 
@@ -507,8 +499,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           let nextY = currentCenterY - ((touchStartCenterY - touchStartY) / touchStartScale) * nextScale;
 
           // Apply boundary buffers to prevent the canvas from getting lost offscreen
-          const dispW = LOGICAL_WIDTH * baseScale * nextScale;
-          const dispH = LOGICAL_HEIGHT * baseScale * nextScale;
+          const dispW = LOGICAL_WIDTH * baseScaleRef.current * nextScale;
+          const dispH = LOGICAL_HEIGHT * baseScaleRef.current * nextScale;
 
           const minX = -dispW + 100;
           const maxX = containerW - 100;
@@ -553,7 +545,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [isZoomEnabled, baseScale]);
+  }, [isZoomEnabled]);
 
   // --- Desktop Wheel / Pinch Zoom ---
   useEffect(() => {
@@ -569,8 +561,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const containerH = rect.height;
 
       // Dynamically compute perfect fit scale so user can zoom out enough to see full canvas
-      const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScale);
-      const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScale);
+      const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScaleRef.current);
+      const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScaleRef.current);
       const perfectFitScale = Math.min(fitWidthScale, fitHeightScale);
       const minScaleLimit = Math.max(0.3, Math.min(1.0, perfectFitScale * 0.9));
 
@@ -585,8 +577,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       let nextY = my - (my - transformRef.current.y) * scaleRatio;
 
       // Apply boundary buffers
-      const dispW = LOGICAL_WIDTH * baseScale * nextScale;
-      const dispH = LOGICAL_HEIGHT * baseScale * nextScale;
+      const dispW = LOGICAL_WIDTH * baseScaleRef.current * nextScale;
+      const dispH = LOGICAL_HEIGHT * baseScaleRef.current * nextScale;
 
       const minX = -dispW + 100;
       const maxX = containerW - 100;
@@ -605,7 +597,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [isZoomEnabled, baseScale]);
+  }, [isZoomEnabled]);
 
   // --- Desktop Click-Drag To Pan (Right Click / Middle Click-Drag) ---
   useEffect(() => {
@@ -643,8 +635,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       let nextY = initialY + dy;
 
       const rect = container.getBoundingClientRect();
-      const dispW = LOGICAL_WIDTH * baseScale * transformRef.current.scale;
-      const dispH = LOGICAL_HEIGHT * baseScale * transformRef.current.scale;
+      const dispW = LOGICAL_WIDTH * baseScaleRef.current * transformRef.current.scale;
+      const dispH = LOGICAL_HEIGHT * baseScaleRef.current * transformRef.current.scale;
       const containerW = rect.width;
       const containerH = rect.height;
 
@@ -691,7 +683,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       container.removeEventListener('pointercancel', handlePointerUp);
       container.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [isZoomEnabled, baseScale]);
+  }, [isZoomEnabled]);
 
   // Expose handles to Parent Component
   useImperativeHandle(ref, () => ({
