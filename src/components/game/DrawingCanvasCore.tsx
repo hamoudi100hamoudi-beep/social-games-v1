@@ -361,28 +361,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     applyTransform();
   }, [baseScale]);
 
-  // --- Geometry Cache to prevent layout thrashing on weak devices ---
-  const geometryCacheRef = useRef<{
-    containerRect: { left: number, top: number, width: number, height: number } | null;
-  }>({ containerRect: null });
-
-  const updateGeometryCache = () => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      geometryCacheRef.current.containerRect = {
-        left: rect.left,
-        top: rect.top,
-        width: rect.width,
-        height: rect.height
-      };
-    }
-  };
-
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const obs = new ResizeObserver((entries) => {
-      updateGeometryCache();
       for (let entry of entries) {
         const { width, height } = entry.contentRect;
         if (width === 0 || height === 0) continue;
@@ -473,7 +455,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const clientMidX = (t1.clientX + t2.clientX) / 2;
         const clientMidY = (t1.clientY + t2.clientY) / 2;
 
-        const rect = geometryCacheRef.current.containerRect || container.getBoundingClientRect();
+        const rect = container.getBoundingClientRect();
         touchStartCenterX = clientMidX - rect.left;
         touchStartCenterY = clientMidY - rect.top;
 
@@ -503,7 +485,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         if (touchStartDist > 0) {
-          const rect = geometryCacheRef.current.containerRect || container.getBoundingClientRect();
+          const rect = container.getBoundingClientRect();
           const containerW = rect.width;
           const containerH = rect.height;
 
@@ -582,7 +564,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (!isZoomEnabled || propsRef.current.readOnly) return;
 
       e.preventDefault();
-      const rect = geometryCacheRef.current.containerRect || container.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
       const containerW = rect.width;
       const containerH = rect.height;
 
@@ -660,7 +642,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       let nextX = initialX + dx;
       let nextY = initialY + dy;
 
-      const rect = geometryCacheRef.current.containerRect || container.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
       const dispW = LOGICAL_WIDTH * baseScale * transformRef.current.scale;
       const dispH = LOGICAL_HEIGHT * baseScale * transformRef.current.scale;
       const containerW = rect.width;
@@ -726,7 +708,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     resetZoom: () => {
       const container = containerRef.current;
       if (!container) return;
-      const rect = geometryCacheRef.current.containerRect || container.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
       const targetScale = propsRef.current.readOnly
          ? Math.min(rect.width / LOGICAL_WIDTH, rect.height / LOGICAL_HEIGHT)
          : rect.height / LOGICAL_HEIGHT;
@@ -769,31 +751,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // --- Logical Coordinate Conversion ---
   const getLogicalCoords = (clientX: number, clientY: number, canvas: HTMLCanvasElement) => {
-    let rectLeft = 0;
-    let rectTop = 0;
-    let rectWidth = LOGICAL_WIDTH;
-    let rectHeight = LOGICAL_HEIGHT;
-
-    // Use cached geometry + transform to avoid DOM layout thrashing during drawing/zooming
-    if (geometryCacheRef.current.containerRect && !propsRef.current.readOnly) {
-      const cRect = geometryCacheRef.current.containerRect;
-      const t = transformRef.current;
-      const bScale = baseScale;
-      rectWidth = LOGICAL_WIDTH * bScale * t.scale;
-      rectHeight = LOGICAL_HEIGHT * bScale * t.scale;
-      rectLeft = cRect.left + t.x;
-      rectTop = cRect.top + t.y;
-    } else {
-      const rect = canvas.getBoundingClientRect();
-      rectLeft = rect.left;
-      rectTop = rect.top;
-      rectWidth = rect.width;
-      rectHeight = rect.height;
-    }
-
-    if (rectWidth === 0 || rectHeight === 0) return { x: 0, y: 0 };
-    const x = ((clientX - rectLeft) / rectWidth) * LOGICAL_WIDTH;
-    const y = ((clientY - rectTop) / rectHeight) * LOGICAL_HEIGHT;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
+    const x = ((clientX - rect.left) / rect.width) * LOGICAL_WIDTH;
+    const y = ((clientY - rect.top) / rect.height) * LOGICAL_HEIGHT;
     return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
   };
 
