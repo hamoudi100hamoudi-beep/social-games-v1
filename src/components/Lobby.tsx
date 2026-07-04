@@ -163,6 +163,14 @@ export default function Lobby({ onPlay }: LobbyProps) {
       socket.connect();
     }
   }, [socket]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+      if (document.body) document.body.scrollTop = 0;
+      if (document.documentElement) document.documentElement.scrollTop = 0;
+    }
+  }, [screen]);
   
   const [roomCount, setRoomCount] = useState<number>(0);
   const [testRoomCount, setTestRoomCount] = useState<number>(0);
@@ -319,6 +327,23 @@ export default function Lobby({ onPlay }: LobbyProps) {
                     if (e.key === 'Enter') {
                       e.preventDefault();
                       handleGoToRooms();
+                    }
+                  }}
+                  onFocus={() => {
+                    if (typeof window !== 'undefined') {
+                      setTimeout(() => {
+                        window.scrollTo(0, 0);
+                        if (document.body) document.body.scrollTop = 0;
+                      }, 50);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (typeof window !== 'undefined') {
+                      setTimeout(() => {
+                        window.scrollTo(0, 0);
+                        if (document.body) document.body.scrollTop = 0;
+                        if (document.documentElement) document.documentElement.scrollTop = 0;
+                      }, 80);
                     }
                   }}
                   placeholder="Enter your name..."

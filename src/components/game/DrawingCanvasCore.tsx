@@ -384,10 +384,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         // Auto-center on layout update/transition unless the player already Zoomed or Panned manually
         if (!hasInitializedTransform.current || readOnly || !hasManuallyZoomedOrPanned.current) {
           transformRef.current = { scale: 1, x: initialX, y: initialY };
+          applyTransform(targetScale);
           if (!readOnly) hasInitializedTransform.current = true;
         }
-        
-        applyTransform(targetScale);
         
         // Signal that the DOM is fully laid out and ResizeObserver has evaluated physical scale
         isCanvasResizeObserverReadyRef.current = true;
@@ -495,6 +494,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScale);
           const perfectFitScale = Math.min(fitWidthScale, fitHeightScale);
           const minScaleLimit = Math.max(0.3, Math.min(1.0, perfectFitScale * 0.9));
+
           let scaleFactor = dist / touchStartDist;
           let nextScale = Math.max(minScaleLimit, Math.min(4.0, touchStartScale * scaleFactor));
 
@@ -759,32 +759,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   // --- Dynamic Drawing Functions ---
-  const drawSegment = (
-    activeCtx: CanvasRenderingContext2D,
-    p1: { x: number; y: number },
-    p2: { x: number; y: number },
-    tool: string,
-    color: string,
-    width: number,
-    opacity: number
-  ) => {
-    activeCtx.save();
-    activeCtx.lineWidth = width;
-    activeCtx.lineCap = 'round';
-    activeCtx.lineJoin = 'round';
-    activeCtx.globalAlpha = opacity;
-    if (tool === 'eraser') {
-      activeCtx.strokeStyle = '#ffffff';
-    } else {
-      activeCtx.strokeStyle = color;
-    }
-    activeCtx.beginPath();
-    activeCtx.moveTo(p1.x, p1.y);
-    activeCtx.lineTo(p2.x, p2.y);
-    activeCtx.stroke();
-    activeCtx.restore();
-  };
-
   const drawEntirePath = (
     activeCtx: CanvasRenderingContext2D,
     path: { x: number; y: number }[],
@@ -1259,26 +1233,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           opacity: remoteOpacity,
           path: [{ x: rx, y: ry }]
         };
-        if ((remoteTool === 'pencil' || remoteTool === 'eraser') && remoteOpacity === 1.0) {
-          ctx.save();
-          ctx.fillStyle = remoteTool === 'eraser' ? '#ffffff' : remoteColor;
-          ctx.beginPath();
-          ctx.arc(rx, ry, remoteWidth / 2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        } else {
-          redrawTempLayer();
-        }
+        redrawTempLayer();
       } else if (event === 'draw_move') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
-          const isSolidPencilEraser = (session.tool === 'pencil' || session.tool === 'eraser') && session.opacity === 1.0;
           const handleMovePoint = (mx: number, my: number) => {
-            const prevPt = session.path[session.path.length - 1];
             session.path.push({ x: mx, y: my });
-            if (isSolidPencilEraser && prevPt) {
-              drawSegment(ctx, prevPt, { x: mx, y: my }, session.tool, session.color, session.width, session.opacity);
-            }
           };
 
           if (data.moves && Array.isArray(data.moves)) {
@@ -1288,16 +1248,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           } else if (data.x !== undefined && data.y !== undefined) {
             handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT);
           }
-          if (!isSolidPencilEraser) {
-            redrawTempLayer();
-          }
+          redrawTempLayer();
         }
       } else if (event === 'draw_end') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
           const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-          const isSolidPencilEraser = !isShape && session.opacity === 1.0;
-          if (!data.isCancelled && session.path.length > 0 && !isShape && !isSolidPencilEraser) {
+          if (!data.isCancelled && session.path.length > 0 && !isShape) {
             drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
           }
 
@@ -1644,16 +1601,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.stroke();
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
-      ctx.beginPath();
-      ctx.moveTo(0,0);
-      ctx.lineTo(0.1, 0.1);
-      ctx.quadraticCurveTo(0.2, 0.2, 0.3, 0.3);
-      ctx.strokeStyle = 'rgba(0,0,0,0.01)';
-      ctx.stroke();
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-
       saveSnapshot();
 
       if (bufferedSyncRef.current) {
@@ -1750,16 +1697,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     });
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
-      if (activeOpacity === 1.0) {
-        ctx.save();
-        ctx.fillStyle = activeTool === 'eraser' ? '#ffffff' : activeColor;
-        ctx.beginPath();
-        ctx.arc(x, y, activeWidth / 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      } else {
-        redrawTempLayer();
-      }
+      redrawTempLayer();
     } else {
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       drawShape(tempCtx, x, y, x, y, activeTool, activeColor, activeWidth, activeOpacity);
@@ -1827,29 +1765,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               const t = i / stepsCount;
               const lerpX = Math.round((lastPt.x + (roundedX - lastPt.x) * t) * 10) / 10;
               const lerpY = Math.round((lastPt.y + (roundedY - lastPt.y) * t) * 10) / 10;
-              
-              const currentPrev = path[path.length - 1];
               path.push({ x: lerpX, y: lerpY });
               moveBatchRef.current.push({ x: lerpX / LOGICAL_WIDTH, y: lerpY / LOGICAL_HEIGHT });
-              
-              if (activeOpacity === 1.0 && currentPrev) {
-                drawSegment(ctx, currentPrev, { x: lerpX, y: lerpY }, activeTool, activeColor, activeWidth, activeOpacity);
-              }
             }
           }
         }
       }
 
-      const lastPrev = path[path.length - 1];
       path.push({ x: roundedX, y: roundedY });
-      
-      if (activeOpacity === 1.0) {
-        if (lastPrev) {
-          drawSegment(ctx, lastPrev, { x: roundedX, y: roundedY }, activeTool, activeColor, activeWidth, activeOpacity);
-        }
-      } else {
-        redrawTempLayer();
-      }
+      redrawTempLayer();
 
       const normX = roundedX / LOGICAL_WIDTH;
       const normY = roundedY / LOGICAL_HEIGHT;
@@ -1919,9 +1843,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
       if (currentPathRef.current.length > 0) {
-        if (activeOpacity !== 1.0) {
-          drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
-        }
+        drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
 
         // Send complete stroke object for precise restoration and history tracking
         const normalizedPoints = currentPathRef.current.map(pt => ({
@@ -2038,7 +1960,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               transition={{ duration: 0.35, ease: 'easeInOut' }}
               className={`fixed inset-0 flex flex-col items-center justify-center z-[999999] select-none touch-none ${
                 hasSyncedOnce
-                  ? (readOnly ? "bg-transparent" : "bg-[#0c061d]/85 cursor-not-allowed")
+                  ? (readOnly ? "bg-transparent" : "bg-[#0c061d]/80 backdrop-blur-sm cursor-not-allowed")
                   : "bg-[#0c061d] cursor-not-allowed"
               }`}
               style={{ pointerEvents: hasSyncedOnce && readOnly ? 'none' : 'auto' }}
