@@ -133,9 +133,3 @@ html, body, #root {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
-
-/* Fallback height for older browsers, using 100vh then 100dvh */
-.fallback-height {
-  height: 100vh;
-  height: 100dvh;
-}

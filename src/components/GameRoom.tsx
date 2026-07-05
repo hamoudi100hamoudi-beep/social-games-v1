@@ -817,20 +817,20 @@ export default function GameRoom({
         const activeEl = document.activeElement;
         if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
           if (wasKeyboardShowingRef.current) {
-            // Apply iOS-specific delay to prevent bouncing and layout jumps
-            const isIOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document));
-            
-            if (isIOS) {
-               setTimeout(() => {
-                 const activeNow = document.activeElement;
-                 if (activeNow && (activeNow.tagName === "INPUT" || activeNow.tagName === "TEXTAREA")) {
-                     (activeNow as HTMLElement).blur();
-                 }
-               }, 300);
-            } else {
-               (activeEl as HTMLElement).blur();
-            }
+            (activeEl as HTMLElement).blur();
             wasKeyboardShowingRef.current = false;
+          } else {
+            if (!delayedBlurTimeoutRef.current) {
+              delayedBlurTimeoutRef.current = setTimeout(() => {
+                const currentHeightNow = window.visualViewport?.height || window.innerHeight;
+                const isKeyboardShowingNow = currentHeightNow < currentMax - 150;
+                const activeTagNow = document.activeElement?.tagName;
+                if (!isKeyboardShowingNow && (activeTagNow === "INPUT" || activeTagNow === "TEXTAREA")) {
+                  (document.activeElement as HTMLElement).blur();
+                }
+                delayedBlurTimeoutRef.current = null;
+              }, 50);
+            }
           }
         }
       }
@@ -1122,18 +1122,18 @@ export default function GameRoom({
   };
 
   const effectiveHeight = isChatOpen
-    ? undefined // Will use fallback-height class
+    ? "100vh"
     : lockedHeight
       ? `${lockedHeight}px`
-      : undefined; // Will use fallback-height class
+      : "100dvh";
 
   return (
     <>
       <div
         ref={mainContainerRef}
-        className={`fixed top-0 left-0 right-0 grid w-full bg-bg-dark-brand font-sans overflow-hidden overscroll-none touch-none ${!effectiveHeight ? 'fallback-height' : ''}`}
+        className="fixed top-0 left-0 right-0 grid w-full bg-bg-dark-brand font-sans overflow-hidden overscroll-none touch-none"
         style={{
-          ...(effectiveHeight ? { height: effectiveHeight } : {}),
+          height: effectiveHeight,
           gridTemplateColumns: "minmax(0, 32%) minmax(0, 68%)",
           gridTemplateRows: "auto minmax(0, 1fr)",
         }}
