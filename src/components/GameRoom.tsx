@@ -817,20 +817,20 @@ export default function GameRoom({
         const activeEl = document.activeElement;
         if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
           if (wasKeyboardShowingRef.current) {
-            (activeEl as HTMLElement).blur();
-            wasKeyboardShowingRef.current = false;
-          } else {
-            if (!delayedBlurTimeoutRef.current) {
-              delayedBlurTimeoutRef.current = setTimeout(() => {
-                const currentHeightNow = window.visualViewport?.height || window.innerHeight;
-                const isKeyboardShowingNow = currentHeightNow < currentMax - 150;
-                const activeTagNow = document.activeElement?.tagName;
-                if (!isKeyboardShowingNow && (activeTagNow === "INPUT" || activeTagNow === "TEXTAREA")) {
-                  (document.activeElement as HTMLElement).blur();
-                }
-                delayedBlurTimeoutRef.current = null;
-              }, 50);
+            // Apply iOS-specific delay to prevent bouncing and layout jumps
+            const isIOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document));
+            
+            if (isIOS) {
+               setTimeout(() => {
+                 const activeNow = document.activeElement;
+                 if (activeNow && (activeNow.tagName === "INPUT" || activeNow.tagName === "TEXTAREA")) {
+                     (activeNow as HTMLElement).blur();
+                 }
+               }, 300);
+            } else {
+               (activeEl as HTMLElement).blur();
             }
+            wasKeyboardShowingRef.current = false;
           }
         }
       }
@@ -970,7 +970,7 @@ export default function GameRoom({
     if (amIDrawer && !isFullScreenMode) return null;
     return (
       <div 
-        className="absolute left-0 right-0 flex items-center justify-center z-[150] pointer-events-none drop-shadow-md"
+        className="absolute left-0 right-0 flex items-center justify-center z-[150] pointer-events-none"
         style={{ top: 'clamp(6px, 1.6vw, 12px)' }}
       >
         {(() => {
@@ -1009,13 +1009,13 @@ export default function GameRoom({
                         style={{ height: 'clamp(22px, 5.2vw, 42px)' }}
                       >
                         <span
-                          className={`leading-none font-black ${isRevealed ? "text-[#FBBF24] drop-shadow-md" : "text-slate-400/40"}`}
+                          className={`leading-none font-black ${isRevealed ? "text-[#FBBF24]" : "text-[#0F172A]"}`}
                           style={{ fontSize: 'clamp(14px, 3.2vw, 24px)' }}
                         >
                           {char}
                         </span>
                         <div
-                          className={`rounded-full mt-auto ${hintsUsed >= 1 ? "bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]" : "bg-slate-300/80 shadow-sm"}`}
+                          className={`rounded-full mt-auto ${hintsUsed >= 1 ? (isRevealed ? "bg-[#FBBF24]" : "bg-[#0F172A]") : "opacity-0"}`}
                           style={{
                             width: 'clamp(7px, 1.9vw, 14px)',
                             height: 'clamp(2.5px, 0.4vw, 3px)'
@@ -1058,13 +1058,13 @@ export default function GameRoom({
                       style={{ height: 'clamp(22px, 5.2vw, 42px)' }}
                     >
                       <span 
-                        className="leading-none font-black text-[#FBBF24] drop-shadow-md"
+                        className="leading-none font-black text-[#0F172A]"
                         style={{ fontSize: 'clamp(14px, 3.2vw, 24px)' }}
                       >
                         {item.char || ""}
                       </span>
                       <div
-                        className={`rounded-full mt-auto ${hintsUsed >= 1 ? "bg-[#FBBF24] shadow-[0_0_5px_rgba(251,191,36,0.5)]" : "bg-slate-300/80 shadow-sm"}`}
+                        className={`rounded-full mt-auto ${item.char ? "bg-[#0F172A]" : "bg-slate-500"}`}
                         style={{
                           width: 'clamp(7px, 1.9vw, 14px)',
                           height: 'clamp(2.5px, 0.4vw, 3px)'
@@ -1122,18 +1122,18 @@ export default function GameRoom({
   };
 
   const effectiveHeight = isChatOpen
-    ? "100vh"
+    ? undefined // Will use fallback-height class
     : lockedHeight
       ? `${lockedHeight}px`
-      : "100dvh";
+      : undefined; // Will use fallback-height class
 
   return (
     <>
       <div
         ref={mainContainerRef}
-        className="fixed top-0 left-0 right-0 grid w-full bg-bg-dark-brand font-sans overflow-hidden overscroll-none touch-none"
+        className={`fixed top-0 left-0 right-0 grid w-full bg-bg-dark-brand font-sans overflow-hidden overscroll-none touch-none ${!effectiveHeight ? 'fallback-height' : ''}`}
         style={{
-          height: effectiveHeight,
+          ...(effectiveHeight ? { height: effectiveHeight } : {}),
           gridTemplateColumns: "minmax(0, 32%) minmax(0, 68%)",
           gridTemplateRows: "auto minmax(0, 1fr)",
         }}

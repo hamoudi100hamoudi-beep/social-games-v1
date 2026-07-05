@@ -249,7 +249,7 @@ export default function DrawingBoard({
         {previewSize !== null && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50 touch-none">
             <div 
-              className="rounded-full border border-black shadow-[0_0_0_1px_rgba(255,255,255,0.8)]"
+              className="rounded-full border border-black ring-1 ring-white/80"
               style={{
                 width: previewSize * baseScale,
                 height: previewSize * baseScale,
@@ -260,7 +260,7 @@ export default function DrawingBoard({
 
         {/* Overlay Tools Sub-Menu */}
         {!readOnly && activeMenu === 'tools' && (
-          <div className="absolute bottom-[58px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 shadow-xl z-20 animate-in fade-in slide-in-from-bottom-2">
+          <div className="absolute bottom-[58px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 z-20 animate-in fade-in slide-in-from-bottom-2">
             <SubToolBtn icon={<Pencil />} active={tool==='pencil'} onClick={() => changeTool('pencil')} />
             <SubToolBtn icon={<Eraser />} active={tool==='eraser'} onClick={() => changeTool('eraser')} />
             <SubToolBtn icon={<Square fill="currentColor" />} active={tool==='fillRect'} onClick={() => changeTool('fillRect')} />
@@ -283,7 +283,7 @@ export default function DrawingBoard({
                 onClick={undo} 
                 disabled={historyState.index <= 0}
                 title="تراجع"
-                className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all ${historyState.index <= 0 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
+                className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 transition-all ${historyState.index <= 0 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
               >
                 <Undo2 size={16} strokeWidth={2.5} />
               </button>
@@ -292,7 +292,7 @@ export default function DrawingBoard({
                 onClick={redo} 
                 disabled={historyState.index >= historyState.length - 1}
                 title="إعادة"
-                className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all ${historyState.index >= historyState.length - 1 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
+                className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 transition-all ${historyState.index >= historyState.length - 1 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
               >
                 <Redo2 size={16} strokeWidth={2.5} />
               </button>
@@ -304,7 +304,7 @@ export default function DrawingBoard({
                 type="button"
                 onClick={toggleZoom} 
                 title={zoomEnabled ? "تعطيل وضع التكبير والتنقل" : "تفعيل وضع التكبير والتنقل (بإصبعين)"}
-                className={`h-[32px] px-2 rounded-lg flex items-center justify-center border shadow-[0_2px_6px_rgba(0,0,0,0.15)] text-[10px] font-black tracking-wider transition-all select-none hover:scale-105 active:scale-95
+                className={`h-[32px] px-2 rounded-lg flex items-center justify-center border text-[10px] font-black tracking-wider transition-all select-none hover:scale-105 active:scale-95
                   ${zoomEnabled 
                     ? 'bg-amber-500 text-white border-amber-400' 
                     : 'bg-white text-slate-700 border-slate-300/40'}`}
@@ -318,7 +318,7 @@ export default function DrawingBoard({
                   type="button"
                   onClick={handleResetZoom} 
                   title="توسيط وإعادة تعيين اللوحة"
-                  className="w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 shadow-[0_2px_6px_rgba(0,0,0,0.15)] transition-all hover:bg-slate-100 hover:scale-105 active:scale-95 text-xs font-bold"
+                  className="w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 transition-all hover:bg-slate-100 hover:scale-105 active:scale-95 text-xs font-bold"
                 >
                   <Maximize2 size={13} strokeWidth={3} />
                 </button>
@@ -333,7 +333,7 @@ export default function DrawingBoard({
             
             {/* Stroke Width Slider */}
             <div className="flex-1 relative flex items-center h-4 max-w-[45%] group pointer-events-auto" dir="ltr">
-               <div className="absolute inset-x-0 top-1/2 -mt-[2px] h-[4px] rounded-full bg-slate-200 pointer-events-none shadow-sm" />
+               <div className="absolute inset-x-0 top-1/2 -mt-[2px] h-[4px] rounded-full bg-slate-200 pointer-events-none" />
                <div 
                   className="absolute left-0 top-1/2 -mt-[2px] h-[4px] rounded-l-full bg-primary-brand pointer-events-none"
                   style={{ width: `${((currentWidth - 1) / ((tool === 'eraser' ? (typeof window !== 'undefined' ? window.innerWidth / 2 : 200) : 40) - 1)) * 100}%` }} 
@@ -341,31 +341,31 @@ export default function DrawingBoard({
                <input 
                   type="range" min="1" max={tool === 'eraser' ? (typeof window !== 'undefined' ? window.innerWidth / 2 : 200) : 40} value={currentWidth} 
                   onChange={(e) => {
-                    const val = Number(e.target.value);
-                    if (tool === 'eraser') setEraserWidth(val);
-                    else setPenWidth(val);
-                    setPreviewSize(val);
+                     const val = Number(e.target.value);
+                     if (tool === 'eraser') setEraserWidth(val);
+                     else setPenWidth(val);
+                     setPreviewSize(val);
                   }}
                   onPointerUp={() => setPreviewSize(null)}
                   onPointerLeave={() => setPreviewSize(null)}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_1px_4px_rgba(0,0,0,0.3)] [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300/80 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-[0_1px_4px_rgba(0,0,0,0.3)] [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300/80"
+                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300/80 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300/80"
                 />
             </div>
 
             {/* Opacity Slider */}
             <div className="flex-1 relative flex items-center h-4 max-w-[45%] group pointer-events-auto" dir="ltr">
-               <div className="absolute inset-x-0 top-1/2 -mt-[2px] h-[4px] rounded-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjY2NjIi8+CjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz4KPC9zdmc+')] pointer-events-none overflow-hidden border border-slate-300/30 shadow-inner block">
+               <div className="absolute inset-x-0 top-1/2 -mt-[2px] h-[4px] rounded-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjY2NjIi8+CjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz4KPC9zdmc+')] pointer-events-none overflow-hidden border border-slate-300/30 block">
                   <div className="absolute inset-0 w-full h-full" style={{ background: `linear-gradient(to right, transparent, ${tool === 'eraser' ? '#ffffff' : color})` }} />
                </div>
                <input 
                   type="range" min="10" max="100" value={currentOpacity * 100} 
                   onChange={(e) => {
-                    const val = Number(e.target.value) / 100;
-                    if (tool === 'eraser') setEraserOpacity(val);
-                    else if (tool === 'bucket') setBucketOpacity(val);
-                    else setPenOpacity(val);
+                     const val = Number(e.target.value) / 100;
+                     if (tool === 'eraser') setEraserOpacity(val);
+                     else if (tool === 'bucket') setBucketOpacity(val);
+                     else setPenOpacity(val);
                   }}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:shadow-[0_1px_4px_rgba(0,0,0,0.3)] [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300/80 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:shadow-[0_1px_4px_rgba(0,0,0,0.3)] [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300/80"
+                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300/80 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300/80"
                 />
             </div>
 
@@ -376,7 +376,7 @@ export default function DrawingBoard({
       
       {/* Bottom Toolbar with integrated timer and controls */}
       {!readOnly && (
-        <div className="bg-game-primary-blue flex flex-col shrink-0 pb-safe shadow-[0_-4px_10px_rgba(0,0,0,0.1)] z-30" dir="ltr">
+        <div className="bg-game-primary-blue flex flex-col shrink-0 pb-safe z-30" dir="ltr">
           {timerBarNode && (
             <div className="w-full">
               {timerBarNode}
@@ -511,9 +511,9 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
     <button 
       type="button"
       onClick={onClick}
-      className={`w-[45px] h-[45px] flex items-center justify-center rounded-lg transition-all shadow-sm focus:outline-none select-none
+      className={`w-[45px] h-[45px] flex items-center justify-center rounded-lg transition-all focus:outline-none select-none
         ${active 
-          ? 'bg-white text-primary-brand scale-105 shadow-md' 
+          ? 'bg-white text-primary-brand scale-105' 
           : 'bg-accent-brand text-bg-dark-brand hover:bg-white hover:scale-105 active:scale-95'
         } ${className}`}
     >
@@ -529,7 +529,7 @@ function SubToolBtn({ icon, active, onClick, className = '' }: { icon: React.Rea
       onClick={onClick}
       className={`w-11 h-11 flex items-center justify-center rounded-lg border transition-all
         ${active 
-          ? 'bg-blue-600 border-blue-400 text-white shadow-inner scale-105' 
+          ? 'bg-blue-600 border-blue-400 text-white scale-105' 
           : 'bg-white/10 border-transparent text-white hover:bg-white/20 ' + className
         }`}
     >
@@ -548,7 +548,7 @@ function ColorBtn({ color, active, onClick }: { key?: React.Key, color: string, 
     >
       {active && (
         <span 
-          className="absolute -inset-[3px] rounded-[6px] border-[1.5px] border-[#D4AF37] pointer-events-none z-10 shadow-[0_0_5px_rgba(212,175,55,0.7)]" 
+          className="absolute -inset-[3px] rounded-[6px] border-[1.5px] border-[#D4AF37] pointer-events-none z-10" 
         />
       )}
     </button>
