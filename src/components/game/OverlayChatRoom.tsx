@@ -276,6 +276,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
 
   return (
     <div 
+      id="overlay-chat-room"
       className="fixed left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none animate-in fade-in duration-200"
       style={{ 
         top: `${viewportOffsetTop}px`,
