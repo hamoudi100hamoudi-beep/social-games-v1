@@ -783,11 +783,6 @@ export default function GameRoom({
       
       setLockedHeight(currentHeight);
       
-      // Force scroll reset immediately to prevent room/chat from sliding off-screen or shifting up
-      window.scrollTo(0, 0);
-      if (document.body) document.body.scrollTop = 0;
-      setViewportOffsetTop(0);
-
       if (currentHeight > currentMax) {
         currentMax = currentHeight;
         setMaxViewportHeight(currentMax);
@@ -798,42 +793,20 @@ export default function GameRoom({
       setIsKeyboardOpen(isKeyboardShowing);
 
       if (isKeyboardShowing) {
-        // We no longer rely on lastKeyboardHeight or localStorage
-        // The synchronous DOM update above handles the smooth resize
-      }
-
-      // Always ensure layout is at origin (0, 0)
-      window.scrollTo(0, 0);
-
-      if (isKeyboardShowing) {
         wasKeyboardShowingRef.current = true;
-        // Clear any scheduled delayed blurs if keyboard is actively showing
-        if (delayedBlurTimeoutRef.current) {
-          clearTimeout(delayedBlurTimeoutRef.current);
-          delayedBlurTimeoutRef.current = null;
-        }
       } else {
-        // Keyboard is closed/dismissed
-        const activeEl = document.activeElement;
-        if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
-          if (wasKeyboardShowingRef.current) {
-            (activeEl as HTMLElement).blur();
-            wasKeyboardShowingRef.current = false;
-          } else {
-            if (!delayedBlurTimeoutRef.current) {
-              delayedBlurTimeoutRef.current = setTimeout(() => {
-                const currentHeightNow = window.visualViewport?.height || window.innerHeight;
-                const isKeyboardShowingNow = currentHeightNow < currentMax - 150;
-                const activeTagNow = document.activeElement?.tagName;
-                if (!isKeyboardShowingNow && (activeTagNow === "INPUT" || activeTagNow === "TEXTAREA")) {
-                  (document.activeElement as HTMLElement).blur();
-                }
-                delayedBlurTimeoutRef.current = null;
-              }, 50);
-            }
-          }
+        // Only reset the flag when keyboard is fully closed
+        if (wasKeyboardShowingRef.current) {
+          wasKeyboardShowingRef.current = false;
         }
+        
+        // Only force scroll reset when keyboard is closed to prevent fighting iOS Safari
+        if (window.scrollY > 0 || window.scrollX > 0) {
+          window.scrollTo(0, 0);
+        }
+        if (document.body && document.body.scrollTop > 0) document.body.scrollTop = 0;
       }
+      setViewportOffsetTop(0);
     };
 
     if (window.visualViewport) {
@@ -888,25 +861,7 @@ export default function GameRoom({
     }
   }, [isChatOpen]);
 
-  // Prevent any browser automatic layout scrolling when chat is open or keyboard is showing
-  useEffect(() => {
-    const preventAutoScroll = () => {
-      if (typeof window !== "undefined" && (isChatOpen || isKeyboardOpen)) {
-        if (window.scrollY !== 0 || window.scrollX !== 0) {
-          window.scrollTo(0, 0);
-        }
-      }
-    };
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("scroll", preventAutoScroll, { passive: true });
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("scroll", preventAutoScroll);
-      }
-    };
-  }, [isChatOpen, isKeyboardOpen]);
+  // Removed aggressive preventAutoScroll effect that conflicts with iOS keyboard
 
   const isInputDisabled =
     gameState.status === "WAITING" ||
@@ -1765,9 +1720,6 @@ export default function GameRoom({
                       clearTimeout(delayedBlurTimeoutRef.current);
                       delayedBlurTimeoutRef.current = null;
                     }
-                    setTimeout(() => {
-                      window.scrollTo(0, 0);
-                    }, 50);
                   }}
                   onBlur={() => {
                     setIsInputFocused(false);
