@@ -775,23 +775,30 @@ export default function GameRoom({
       if (!window.visualViewport) return;
 
       const currentHeight = window.visualViewport.height;
-      const offsetTop = window.visualViewport.offsetTop;
       
       // Update DOM synchronously to eliminate React state lag and prevent jumpiness
       if (mainContainerRef.current) {
         mainContainerRef.current.style.height = `${currentHeight}px`;
-        mainContainerRef.current.style.top = `${offsetTop}px`;
+        mainContainerRef.current.style.top = `0px`;
       }
       
       const chatOverlay = document.getElementById("overlay-chat-room");
       if (chatOverlay) {
         chatOverlay.style.height = `${currentHeight}px`;
-        chatOverlay.style.top = `${offsetTop}px`;
+        chatOverlay.style.top = `0px`;
       }
       
       setLockedHeight(currentHeight);
-      setViewportOffsetTop(offsetTop);
+      setViewportOffsetTop(0);
       
+      // Unconditionally keep layout at origin to stop iOS Safari from pushing the page up
+      if (window.scrollY > 0 || window.scrollX > 0) {
+        window.scrollTo(0, 0);
+      }
+      if (document.body && document.body.scrollTop > 0) {
+        document.body.scrollTop = 0;
+      }
+
       if (currentHeight > currentMax) {
         currentMax = currentHeight;
         setMaxViewportHeight(currentMax);
@@ -808,10 +815,6 @@ export default function GameRoom({
         if (wasKeyboardShowingRef.current) {
           wasKeyboardShowingRef.current = false;
         }
-        
-        // Force scroll reset when keyboard is closed to fix Android height freeze and iOS Safari layout shift
-        window.scrollTo(0, 0);
-        if (document.body && document.body.scrollTop > 0) document.body.scrollTop = 0;
       }
     };
 
