@@ -775,22 +775,28 @@ export default function GameRoom({
       if (!window.visualViewport) return;
 
       const currentHeight = window.visualViewport.height;
-      const offsetTop = window.visualViewport.offsetTop;
+      
+      // If iOS tries to scroll the layout viewport, immediately force it back to 0
+      // This prevents the whole screen from shifting up/down, keeping the layout stable
+      if (window.scrollY > 0 || window.scrollX > 0 || window.visualViewport.offsetTop > 0) {
+        window.scrollTo(0, 0);
+      }
+      if (document.body && document.body.scrollTop > 0) document.body.scrollTop = 0;
       
       // Update DOM synchronously to eliminate React state lag and prevent jumpiness
       if (mainContainerRef.current) {
         mainContainerRef.current.style.height = `${currentHeight}px`;
-        mainContainerRef.current.style.top = `${offsetTop}px`;
+        mainContainerRef.current.style.top = `0px`;
       }
       
       const chatOverlay = document.getElementById("overlay-chat-room");
       if (chatOverlay) {
         chatOverlay.style.height = `${currentHeight}px`;
-        chatOverlay.style.top = `${offsetTop}px`;
+        chatOverlay.style.top = `0px`;
       }
       
       setLockedHeight(currentHeight);
-      setViewportOffsetTop(offsetTop);
+      setViewportOffsetTop(0);
       
       if (currentHeight > currentMax) {
         currentMax = currentHeight;
@@ -808,10 +814,6 @@ export default function GameRoom({
         if (wasKeyboardShowingRef.current) {
           wasKeyboardShowingRef.current = false;
         }
-        
-        // Force scroll reset when keyboard is closed to fix Android height freeze and iOS Safari layout shift
-        window.scrollTo(0, 0);
-        if (document.body && document.body.scrollTop > 0) document.body.scrollTop = 0;
       }
     };
 
@@ -867,7 +869,26 @@ export default function GameRoom({
     }
   }, [isChatOpen]);
 
-  // Removed aggressive preventAutoScroll effect that conflicts with iOS keyboard
+  // Prevent any browser automatic layout scrolling when chat is open or keyboard is showing
+  useEffect(() => {
+    const preventAutoScroll = () => {
+      if (typeof window !== "undefined") {
+        if (window.scrollY > 0 || window.scrollX > 0) {
+          window.scrollTo(0, 0);
+        }
+        if (document.body && document.body.scrollTop > 0) document.body.scrollTop = 0;
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("scroll", preventAutoScroll, { passive: true });
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("scroll", preventAutoScroll);
+      }
+    };
+  }, []);
 
   const isInputDisabled =
     gameState.status === "WAITING" ||
