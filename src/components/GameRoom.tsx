@@ -776,6 +776,13 @@ export default function GameRoom({
 
       const currentHeight = window.visualViewport.height;
       
+      // If iOS tries to scroll the layout viewport, immediately force it back to 0
+      // This prevents the whole screen from shifting up/down, keeping the layout stable
+      if (window.scrollY > 0 || window.scrollX > 0 || window.visualViewport.offsetTop > 0) {
+        window.scrollTo(0, 0);
+      }
+      if (document.body && document.body.scrollTop > 0) document.body.scrollTop = 0;
+      
       // Update DOM synchronously to eliminate React state lag and prevent jumpiness
       if (mainContainerRef.current) {
         mainContainerRef.current.style.height = `${currentHeight}px`;
@@ -886,6 +893,20 @@ export default function GameRoom({
     document.documentElement.style.height = "100%";
     document.documentElement.style.overscrollBehavior = "none";
 
+    const preventAutoScroll = () => {
+      if (window.scrollY > 0 || window.scrollX > 0) {
+        window.scrollTo(0, 0);
+      }
+      if (document.body && document.body.scrollTop > 0) {
+        document.body.scrollTop = 0;
+      }
+      if (document.documentElement && document.documentElement.scrollTop > 0) {
+        document.documentElement.scrollTop = 0;
+      }
+    };
+
+    window.addEventListener("scroll", preventAutoScroll, { passive: true });
+
     return () => {
       document.body.style.overflow = originalBodyOverflow;
       document.body.style.position = originalBodyPosition;
@@ -897,6 +918,8 @@ export default function GameRoom({
       document.documentElement.style.position = originalHtmlPosition;
       document.documentElement.style.height = originalHtmlHeight;
       document.documentElement.style.overscrollBehavior = originalHtmlOverscroll;
+
+      window.removeEventListener("scroll", preventAutoScroll);
     };
   }, []);
 
