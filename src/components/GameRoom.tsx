@@ -771,60 +771,60 @@ export default function GameRoom({
     let currentMax = window.visualViewport?.height || window.innerHeight;
     setMaxViewportHeight(currentMax);
 
+    let rafId: number | null = null;
     const handleResize = () => {
-      if (!window.visualViewport) return;
-
-      const currentHeight = window.visualViewport.height;
+      if (rafId !== null) return;
       
-      // If iOS tries to scroll the layout viewport, immediately force it back to 0
-      // This prevents the whole screen from shifting up/down, keeping the layout stable
-      if (window.scrollY > 0 || window.scrollX > 0 || window.visualViewport.offsetTop > 0) {
-        window.scrollTo(0, 0);
-      }
-      if (document.body && document.body.scrollTop > 0) document.body.scrollTop = 0;
-      
-      // Update DOM synchronously to eliminate React state lag and prevent jumpiness
-      if (mainContainerRef.current) {
-        mainContainerRef.current.style.height = `${currentHeight}px`;
-        mainContainerRef.current.style.top = `0px`;
-      }
-      
-      const chatOverlay = document.getElementById("overlay-chat-room");
-      if (chatOverlay) {
-        chatOverlay.style.height = `${currentHeight}px`;
-        chatOverlay.style.top = `0px`;
-      }
-      
-      setLockedHeight(currentHeight);
-      setViewportOffsetTop(0);
-      
-      if (currentHeight > currentMax) {
-        currentMax = currentHeight;
-        setMaxViewportHeight(currentMax);
-      }
-
-      // True if height shrunk significantly
-      const isKeyboardShowing = currentHeight < currentMax - 150;
-      setIsKeyboardOpen(isKeyboardShowing);
-
-      if (isKeyboardShowing) {
-        wasKeyboardShowingRef.current = true;
-      } else {
-        // Only reset the flag when keyboard is fully closed
-        if (wasKeyboardShowingRef.current) {
-          wasKeyboardShowingRef.current = false;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (!window.visualViewport) return;
+        
+        const currentHeight = window.visualViewport.height;
+        const offsetTop = window.visualViewport.offsetTop;
+        
+        if (mainContainerRef.current) {
+          mainContainerRef.current.style.height = `${currentHeight}px`;
+          mainContainerRef.current.style.transform = `translateY(${offsetTop}px)`;
         }
-      }
+        
+        const chatOverlay = document.getElementById("overlay-chat-room");
+        if (chatOverlay) {
+          chatOverlay.style.height = `${currentHeight}px`;
+          chatOverlay.style.transform = `translateY(${offsetTop}px)`;
+        }
+        
+        setLockedHeight(currentHeight);
+        setViewportOffsetTop(offsetTop);
+        
+        if (currentHeight > currentMax) {
+          currentMax = currentHeight;
+          setMaxViewportHeight(currentMax);
+        }
+
+        // True if height shrunk significantly
+        const isKeyboardShowing = currentHeight < currentMax - 150;
+        setIsKeyboardOpen(isKeyboardShowing);
+
+        if (isKeyboardShowing) {
+          wasKeyboardShowingRef.current = true;
+        } else {
+          // Only reset the flag when keyboard is fully closed
+          if (wasKeyboardShowingRef.current) {
+            wasKeyboardShowingRef.current = false;
+          }
+        }
+      });
     };
 
     if (window.visualViewport) {
       setLockedHeight(window.visualViewport.height);
-      setViewportOffsetTop(0);
+      setViewportOffsetTop(window.visualViewport.offsetTop);
       window.visualViewport.addEventListener("resize", handleResize);
       window.visualViewport.addEventListener("scroll", handleResize);
     }
 
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       window.visualViewport?.removeEventListener("resize", handleResize);
       window.visualViewport?.removeEventListener("scroll", handleResize);
     };
@@ -893,20 +893,6 @@ export default function GameRoom({
     document.documentElement.style.height = "100%";
     document.documentElement.style.overscrollBehavior = "none";
 
-    const preventAutoScroll = () => {
-      if (window.scrollY > 0 || window.scrollX > 0) {
-        window.scrollTo(0, 0);
-      }
-      if (document.body && document.body.scrollTop > 0) {
-        document.body.scrollTop = 0;
-      }
-      if (document.documentElement && document.documentElement.scrollTop > 0) {
-        document.documentElement.scrollTop = 0;
-      }
-    };
-
-    window.addEventListener("scroll", preventAutoScroll, { passive: true });
-
     return () => {
       document.body.style.overflow = originalBodyOverflow;
       document.body.style.position = originalBodyPosition;
@@ -918,8 +904,6 @@ export default function GameRoom({
       document.documentElement.style.position = originalHtmlPosition;
       document.documentElement.style.height = originalHtmlHeight;
       document.documentElement.style.overscrollBehavior = originalHtmlOverscroll;
-
-      window.removeEventListener("scroll", preventAutoScroll);
     };
   }, []);
 
@@ -939,6 +923,24 @@ export default function GameRoom({
       setIsInputFocused(false);
     }
   }, [isInputDisabled]);
+
+  // Safety net for iOS 26 bug
+  useEffect(() => {
+    const input = guessInputRef.current;
+    if (!input) return;
+    
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        if (window.visualViewport && window.visualViewport.offsetTop > 0) {
+          window.scrollBy(0, -1);
+          window.scrollBy(0, 1);
+        }
+      }, 100);
+    };
+    
+    input.addEventListener("focusout", handleFocusOut);
+    return () => input.removeEventListener("focusout", handleFocusOut);
+  }, []);
 
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();

@@ -272,6 +272,25 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
     }
   }, [chatMessages, isChatOpen]);
 
+  // Safety net for iOS 26 bug
+  useEffect(() => {
+    if (!isChatOpen) return;
+    const input = document.getElementById("chat-input");
+    if (!input) return;
+    
+    const handleFocusOut = () => {
+      setTimeout(() => {
+        if (window.visualViewport && window.visualViewport.offsetTop > 0) {
+          window.scrollBy(0, -1);
+          window.scrollBy(0, 1);
+        }
+      }, 100);
+    };
+    
+    input.addEventListener("focusout", handleFocusOut);
+    return () => input.removeEventListener("focusout", handleFocusOut);
+  }, [isChatOpen]);
+
   if (!isChatOpen) return null;
 
   return (
@@ -279,7 +298,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
       id="overlay-chat-room"
       className="fixed left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none animate-in fade-in duration-200"
       style={{ 
-        top: '0px',
+        transform: `translateY(${viewportOffsetTop}px)`,
         height: lockedHeight ? `${lockedHeight}px` : '100dvh' 
       }}
     >
