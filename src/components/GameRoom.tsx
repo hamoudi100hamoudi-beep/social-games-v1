@@ -779,8 +779,8 @@ export default function GameRoom({
         rafId = null;
         if (!window.visualViewport) return;
         
-        const currentHeight = window.visualViewport.height;
-        const offsetTop = window.visualViewport.offsetTop;
+        const currentHeight = window.visualViewport.height || window.innerHeight;
+        const offsetTop = window.visualViewport.offsetTop || 0;
         
         if (mainContainerRef.current) {
           mainContainerRef.current.style.height = `${currentHeight}px`;
@@ -816,19 +816,25 @@ export default function GameRoom({
       });
     };
 
+    const handleWindowResize = () => {
+      handleResize();
+      setTimeout(handleResize, 100);
+      setTimeout(handleResize, 300);
+    };
+
     if (window.visualViewport) {
-      setLockedHeight(window.visualViewport.height);
-      setViewportOffsetTop(window.visualViewport.offsetTop);
+      setLockedHeight(window.visualViewport.height || window.innerHeight);
+      setViewportOffsetTop(window.visualViewport.offsetTop || 0);
       window.visualViewport.addEventListener("resize", handleResize);
       window.visualViewport.addEventListener("scroll", handleResize);
-      window.addEventListener("resize", handleResize);
+      window.addEventListener("resize", handleWindowResize);
     }
 
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       window.visualViewport?.removeEventListener("resize", handleResize);
       window.visualViewport?.removeEventListener("scroll", handleResize);
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", handleWindowResize);
     };
   }, []);
 
