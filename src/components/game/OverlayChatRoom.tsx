@@ -351,46 +351,6 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                  </button>
                  <textarea
                    id="chat-textarea"
-                   onFocus={() => {
-                     const isIPhoneDevice = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
-                     if (isIPhoneDevice) {
-                       if (window.scrollY !== 0) {
-                         window.scrollTo(0, 0);
-                       }
-                       if (document.body && document.body.scrollTop !== 0) {
-                         document.body.scrollTop = 0;
-                       }
-                     } else {
-                       window.scrollTo(0, 0);
-                       if (document.body) document.body.scrollTop = 0;
-                       setTimeout(() => {
-                         window.scrollTo(0, 0);
-                         if (document.body) document.body.scrollTop = 0;
-                       }, 20);
-                       setTimeout(() => {
-                         window.scrollTo(0, 0);
-                         if (document.body) document.body.scrollTop = 0;
-                       }, 100);
-                     }
-                   }}
-                   onBlur={() => {
-                     const isIPhoneDevice = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
-                     if (isIPhoneDevice) {
-                       if (window.scrollY !== 0) {
-                         window.scrollTo(0, 0);
-                       }
-                       if (document.body && document.body.scrollTop !== 0) {
-                         document.body.scrollTop = 0;
-                       }
-                     } else {
-                       window.scrollTo(0, 0);
-                       if (document.body) document.body.scrollTop = 0;
-                       setTimeout(() => {
-                         window.scrollTo(0, 0);
-                         if (document.body) document.body.scrollTop = 0;
-                       }, 100);
-                     }
-                   }}
                    value={chatInput}
                    onChange={(e) => {
                      setChatInput(e.target.value);

@@ -764,8 +764,6 @@ export default function GameRoom({
 
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const delayedBlurTimeoutRef = React.useRef<any>(null);
-  const wasKeyboardShowingRef = React.useRef<boolean>(false);
 
   useEffect(() => {
     let currentMax = window.visualViewport?.height || window.innerHeight;
@@ -776,26 +774,12 @@ export default function GameRoom({
 
       const currentHeight = window.visualViewport.height;
       
-      // Update DOM synchronously to eliminate React state lag and prevent jumpiness
+      // Update DOM synchronously to eliminate React state lag
       if (mainContainerRef.current) {
         mainContainerRef.current.style.height = `${currentHeight}px`;
       }
       
       setLockedHeight(currentHeight);
-      
-      // Force scroll reset immediately to prevent room/chat from sliding off-screen or shifting up
-      const isIPhoneDevice = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
-      if (isIPhoneDevice) {
-        if (window.scrollY !== 0) {
-          window.scrollTo(0, 0);
-        }
-        if (document.body && document.body.scrollTop !== 0) {
-          document.body.scrollTop = 0;
-        }
-      } else {
-        window.scrollTo(0, 0);
-        if (document.body) document.body.scrollTop = 0;
-      }
       setViewportOffsetTop(0);
 
       if (currentHeight > currentMax) {
@@ -806,62 +790,17 @@ export default function GameRoom({
       // True if height shrunk significantly
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
-
-      if (isKeyboardShowing) {
-        // We no longer rely on lastKeyboardHeight or localStorage
-        // The synchronous DOM update above handles the smooth resize
-      }
-
-      // Always ensure layout is at origin (0, 0)
-      if (isIPhoneDevice) {
-        if (window.scrollY !== 0) {
-          window.scrollTo(0, 0);
-        }
-      } else {
-        window.scrollTo(0, 0);
-      }
-
-      if (isKeyboardShowing) {
-        wasKeyboardShowingRef.current = true;
-        // Clear any scheduled delayed blurs if keyboard is actively showing
-        if (delayedBlurTimeoutRef.current) {
-          clearTimeout(delayedBlurTimeoutRef.current);
-          delayedBlurTimeoutRef.current = null;
-        }
-      } else {
-        // Keyboard is closed/dismissed
-        const activeEl = document.activeElement;
-        if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
-          if (wasKeyboardShowingRef.current) {
-            (activeEl as HTMLElement).blur();
-            wasKeyboardShowingRef.current = false;
-          } else {
-            if (!delayedBlurTimeoutRef.current) {
-              delayedBlurTimeoutRef.current = setTimeout(() => {
-                const currentHeightNow = window.visualViewport?.height || window.innerHeight;
-                const isKeyboardShowingNow = currentHeightNow < currentMax - 150;
-                const activeTagNow = document.activeElement?.tagName;
-                if (!isKeyboardShowingNow && (activeTagNow === "INPUT" || activeTagNow === "TEXTAREA")) {
-                  (document.activeElement as HTMLElement).blur();
-                }
-                delayedBlurTimeoutRef.current = null;
-              }, 50);
-            }
-          }
-        }
-      }
     };
 
     if (window.visualViewport) {
       setLockedHeight(window.visualViewport.height);
       setViewportOffsetTop(0);
       window.visualViewport.addEventListener("resize", handleResize);
-      window.visualViewport.addEventListener("scroll", handleResize);
+      // We don't listen to scroll here anymore to avoid conflicting with natural panning
     }
 
     return () => {
       window.visualViewport?.removeEventListener("resize", handleResize);
-      window.visualViewport?.removeEventListener("scroll", handleResize);
     };
   }, []);
 
@@ -876,6 +815,8 @@ export default function GameRoom({
       const originalHtmlPosition = document.documentElement.style.position;
       const originalHtmlHeight = document.documentElement.style.height;
 
+      // When chat is open, lock body to prevent outer scrolling,
+      // but let the chat container itself handle its internal scrolling.
       document.body.style.overflow = "hidden";
       document.body.style.position = "fixed";
       document.body.style.width = "100vw";
@@ -884,8 +825,6 @@ export default function GameRoom({
       document.documentElement.style.overflow = "hidden";
       document.documentElement.style.position = "fixed";
       document.documentElement.style.height = "100%";
-
-      window.scrollTo(0, 0);
 
       return () => {
         document.body.style.overflow = originalBodyOverflow;
@@ -896,33 +835,10 @@ export default function GameRoom({
         document.documentElement.style.overflow = originalHtmlOverflow;
         document.documentElement.style.position = originalHtmlPosition;
         document.documentElement.style.height = originalHtmlHeight;
-
-        setTimeout(() => {
-          window.scrollTo(0, 0);
-        }, 50);
       };
     }
   }, [isChatOpen]);
 
-  // Prevent any browser automatic layout scrolling when chat is open or keyboard is showing
-  useEffect(() => {
-    const preventAutoScroll = () => {
-      if (typeof window !== "undefined" && (isChatOpen || isKeyboardOpen)) {
-        if (window.scrollY !== 0 || window.scrollX !== 0) {
-          window.scrollTo(0, 0);
-        }
-      }
-    };
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("scroll", preventAutoScroll, { passive: true });
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("scroll", preventAutoScroll);
-      }
-    };
-  }, [isChatOpen, isKeyboardOpen]);
 
   const isInputDisabled =
     gameState.status === "WAITING" ||
@@ -1137,8 +1053,7 @@ export default function GameRoom({
     return player ? player.name : "";
   };
 
-  const isIPhoneDeviceForHeight = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
-  const effectiveHeight = (isChatOpen && !isIPhoneDeviceForHeight)
+  const effectiveHeight = isChatOpen
     ? "100vh"
     : lockedHeight
       ? `${lockedHeight}px`
@@ -1775,23 +1690,9 @@ export default function GameRoom({
                       }
                     }
                   }}
-                   onFocus={() => {
+                  onFocus={() => {
                     setIsInputFocused(true);
                     setIsKeyboardOpen(true);
-                    if (delayedBlurTimeoutRef.current) {
-                      clearTimeout(delayedBlurTimeoutRef.current);
-                      delayedBlurTimeoutRef.current = null;
-                    }
-                    const isIPhoneDevice = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
-                    if (!isIPhoneDevice) {
-                      setTimeout(() => {
-                        window.scrollTo(0, 0);
-                      }, 50);
-                    } else {
-                      if (window.scrollY !== 0) {
-                        window.scrollTo(0, 0);
-                      }
-                    }
                   }}
                   onBlur={() => {
                     setIsInputFocused(false);
