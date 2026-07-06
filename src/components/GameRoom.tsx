@@ -773,14 +773,6 @@ export default function GameRoom({
       if (!window.visualViewport) return;
 
       const currentHeight = window.visualViewport.height;
-      
-      // Update DOM synchronously to eliminate React state lag
-      if (mainContainerRef.current) {
-        mainContainerRef.current.style.height = `${currentHeight}px`;
-      }
-      
-      setLockedHeight(currentHeight);
-      setViewportOffsetTop(0);
 
       if (currentHeight > currentMax) {
         currentMax = currentHeight;
@@ -790,12 +782,35 @@ export default function GameRoom({
       // True if height shrunk significantly
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
+
+      // Calculate keyboard inset for iOS Safari
+      // On Android, the main container (100dvh) usually shrinks with the visual viewport.
+      // On iOS Safari, the main container stays full height, but visual viewport shrinks.
+      if (mainContainerRef.current) {
+         const containerHeight = mainContainerRef.current.getBoundingClientRect().height;
+         // If container is larger than visual viewport, it means keyboard is covering the bottom
+         // and the container didn't shrink to accommodate it (iOS Safari behavior).
+         const inset = Math.max(0, containerHeight - currentHeight);
+         document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
+      }
+
+      if (!isKeyboardShowing) {
+        // Android specific fix: When keyboard is dismissed using back button,
+        // the input remains focused but the keyboard is gone. We must blur it
+        // so the room returns to its normal layout. We target Android specifically
+        // to ensure we don't interfere with iOS Safari behavior.
+        if (typeof window !== "undefined" && /android/i.test(navigator.userAgent || "")) {
+          const activeEl = document.activeElement;
+          if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
+            (activeEl as HTMLElement).blur();
+          }
+        }
+      }
     };
 
     if (window.visualViewport) {
-      setLockedHeight(window.visualViewport.height);
-      setViewportOffsetTop(0);
       window.visualViewport.addEventListener("resize", handleResize);
+      handleResize();
       // We don't listen to scroll here anymore to avoid conflicting with natural panning
     }
 
@@ -1053,11 +1068,7 @@ export default function GameRoom({
     return player ? player.name : "";
   };
 
-  const effectiveHeight = isChatOpen
-    ? "100vh"
-    : lockedHeight
-      ? `${lockedHeight}px`
-      : "100dvh";
+  const effectiveHeight = "100dvh";
 
   return (
     <>
@@ -1661,6 +1672,7 @@ export default function GameRoom({
             {/* Guess Input Area */}
             <div 
               className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 shrink-0 mt-auto bg-transparent"
+              style={{ paddingBottom: 'calc(0.5rem + var(--keyboard-inset, 0px))' }}
             >
               <form onSubmit={handleGuessSubmit} className="relative">
                 <div

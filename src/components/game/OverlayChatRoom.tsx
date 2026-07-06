@@ -242,7 +242,6 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 interface OverlayChatRoomProps {
   isChatOpen: boolean;
   viewportOffsetTop: number;
-  lockedHeight: number | null;
   closeChat: () => void;
   chatMessages: ChatMessage[];
   socketId: string | null;
@@ -254,7 +253,6 @@ interface OverlayChatRoomProps {
 export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
   isChatOpen,
   viewportOffsetTop,
-  lockedHeight,
   closeChat,
   chatMessages,
   socketId,
@@ -279,7 +277,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
       className="fixed left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none animate-in fade-in duration-200"
       style={{ 
         top: `${viewportOffsetTop}px`,
-        height: lockedHeight ? `${lockedHeight}px` : '100dvh' 
+        height: '100dvh' 
       }}
     >
        <div className="w-full h-full flex flex-col">
@@ -339,7 +337,12 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                onPointerDown={(e) => e.stopPropagation()}
                onContextMenu={(e) => e.stopPropagation()}
                className="p-3 bg-game-primary-blue/95 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full select-auto"
-               style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'auto', userSelect: 'auto' }}
+               style={{ 
+                 WebkitTouchCallout: 'default', 
+                 WebkitUserSelect: 'auto', 
+                 userSelect: 'auto',
+                 paddingBottom: 'calc(0.75rem + var(--keyboard-inset, 0px))'
+               }}
              >
                <form onSubmit={handleChatSubmit} className="relative max-w-2xl mx-auto flex gap-2 items-end">
                  <button 
