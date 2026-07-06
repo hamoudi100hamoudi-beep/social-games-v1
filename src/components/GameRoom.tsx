@@ -821,12 +821,14 @@ export default function GameRoom({
       setViewportOffsetTop(window.visualViewport.offsetTop);
       window.visualViewport.addEventListener("resize", handleResize);
       window.visualViewport.addEventListener("scroll", handleResize);
+      window.addEventListener("resize", handleResize);
     }
 
     return () => {
       if (rafId !== null) cancelAnimationFrame(rafId);
       window.visualViewport?.removeEventListener("resize", handleResize);
       window.visualViewport?.removeEventListener("scroll", handleResize);
+      window.removeEventListener("resize", handleResize);
     };
   }, []);
 
