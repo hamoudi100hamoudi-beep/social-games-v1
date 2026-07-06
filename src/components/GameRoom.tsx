@@ -776,13 +776,6 @@ export default function GameRoom({
 
       const currentHeight = window.visualViewport.height;
       
-      // If iOS tries to scroll the layout viewport, immediately force it back to 0
-      // This prevents the whole screen from shifting up/down, keeping the layout stable
-      if (window.scrollY > 0 || window.scrollX > 0 || window.visualViewport.offsetTop > 0) {
-        window.scrollTo(0, 0);
-      }
-      if (document.body && document.body.scrollTop > 0) document.body.scrollTop = 0;
-      
       // Update DOM synchronously to eliminate React state lag and prevent jumpiness
       if (mainContainerRef.current) {
         mainContainerRef.current.style.height = `${currentHeight}px`;
@@ -869,24 +862,41 @@ export default function GameRoom({
     }
   }, [isChatOpen]);
 
-  // Prevent any browser automatic layout scrolling when chat is open or keyboard is showing
+  // Lock the body and html completely when GameRoom is mounted to prevent iOS Safari layout shift
   useEffect(() => {
-    const preventAutoScroll = () => {
-      if (typeof window !== "undefined") {
-        if (window.scrollY > 0 || window.scrollX > 0) {
-          window.scrollTo(0, 0);
-        }
-        if (document.body && document.body.scrollTop > 0) document.body.scrollTop = 0;
-      }
-    };
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalBodyPosition = document.body.style.position;
+    const originalBodyWidth = document.body.style.width;
+    const originalBodyHeight = document.body.style.height;
+    const originalBodyOverscroll = document.body.style.overscrollBehavior;
 
-    if (typeof window !== "undefined") {
-      window.addEventListener("scroll", preventAutoScroll, { passive: true });
-    }
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const originalHtmlPosition = document.documentElement.style.position;
+    const originalHtmlHeight = document.documentElement.style.height;
+    const originalHtmlOverscroll = document.documentElement.style.overscrollBehavior;
+
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.width = "100%";
+    document.body.style.height = "100%";
+    document.body.style.overscrollBehavior = "none";
+
+    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.position = "fixed";
+    document.documentElement.style.height = "100%";
+    document.documentElement.style.overscrollBehavior = "none";
+
     return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("scroll", preventAutoScroll);
-      }
+      document.body.style.overflow = originalBodyOverflow;
+      document.body.style.position = originalBodyPosition;
+      document.body.style.width = originalBodyWidth;
+      document.body.style.height = originalBodyHeight;
+      document.body.style.overscrollBehavior = originalBodyOverscroll;
+
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      document.documentElement.style.position = originalHtmlPosition;
+      document.documentElement.style.height = originalHtmlHeight;
+      document.documentElement.style.overscrollBehavior = originalHtmlOverscroll;
     };
   }, []);
 
@@ -1718,14 +1728,15 @@ export default function GameRoom({
                 >
                   <Pencil size={18} />
                 </div>
-                <textarea
-                  ref={guessInputRef}
-                  id="guess-textarea"
+                <input
+                  type="text"
+                  enterKeyHint="send"
+                  ref={guessInputRef as any}
+                  id="guess-input"
                   dir="auto"
-                  rows={1}
                   autoComplete="off"
                   autoCorrect="off"
-                  autoCapitalize="off"
+                  autoCapitalize="none"
                   spellCheck="false"
                   name="guess_input_random_name"
                   data-form-type="other"
@@ -1733,7 +1744,7 @@ export default function GameRoom({
                   value={isInputDisabled ? "" : guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    if (e.key === "Enter") {
                       e.preventDefault();
                       if (guessInput.trim() && !isInputDisabled) {
                         handleGuessSubmit(e as any);

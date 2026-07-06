@@ -350,19 +350,24 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                  >
                    <X size={18} />
                  </button>
-                 <textarea
-                   id="chat-textarea"
+                 <input
+                   type="text"
+                   enterKeyHint="send"
+                   id="chat-input"
                    value={chatInput}
                    onChange={(e) => {
                      setChatInput(e.target.value);
-                     e.target.style.height = 'auto'; 
-                     e.target.style.height = `${Math.max(40, e.target.scrollHeight)}px`; 
                    }}
                    dir="auto"
-                   rows={1}
+                   autoComplete="off"
+                   autoCorrect="off"
+                   autoCapitalize="none"
+                   spellCheck="false"
+                   name="chat_input_random_name"
+                   data-form-type="other"
                    placeholder="Type your message here..."
-                   className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-primary-brand outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text"
-                   style={{ height: '40px', WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
+                   className="flex-1 w-full min-w-0 h-[40px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-primary-brand outline-none transition-all shadow-inner resize-none overflow-hidden touch-pan-y leading-tight select-text"
+                   style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                  />
                  <button 
                    type="submit"
