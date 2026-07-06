@@ -272,33 +272,13 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
     }
   }, [chatMessages, isChatOpen]);
 
-  // Safety net for iOS 26 bug
-  useEffect(() => {
-    if (!isChatOpen) return;
-    const input = document.getElementById("chat-input");
-    if (!input) return;
-    
-    const handleFocusOut = () => {
-      setTimeout(() => {
-        if (window.visualViewport && window.visualViewport.offsetTop > 0) {
-          window.scrollBy(0, -1);
-          window.scrollBy(0, 1);
-        }
-      }, 100);
-    };
-    
-    input.addEventListener("focusout", handleFocusOut);
-    return () => input.removeEventListener("focusout", handleFocusOut);
-  }, [isChatOpen]);
-
   if (!isChatOpen) return null;
 
   return (
     <div 
-      id="overlay-chat-room"
       className="fixed left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none animate-in fade-in duration-200"
       style={{ 
-        transform: `translateY(${viewportOffsetTop}px)`,
+        top: `${viewportOffsetTop}px`,
         height: lockedHeight ? `${lockedHeight}px` : '100dvh' 
       }}
     >
@@ -369,24 +349,59 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                  >
                    <X size={18} />
                  </button>
-                 <input
-                   type="text"
-                   enterKeyHint="send"
-                   id="chat-input"
+                 <textarea
+                   id="chat-textarea"
+                   onFocus={() => {
+                     const isIPhoneDevice = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
+                     if (isIPhoneDevice) {
+                       if (window.scrollY !== 0) {
+                         window.scrollTo(0, 0);
+                       }
+                       if (document.body && document.body.scrollTop !== 0) {
+                         document.body.scrollTop = 0;
+                       }
+                     } else {
+                       window.scrollTo(0, 0);
+                       if (document.body) document.body.scrollTop = 0;
+                       setTimeout(() => {
+                         window.scrollTo(0, 0);
+                         if (document.body) document.body.scrollTop = 0;
+                       }, 20);
+                       setTimeout(() => {
+                         window.scrollTo(0, 0);
+                         if (document.body) document.body.scrollTop = 0;
+                       }, 100);
+                     }
+                   }}
+                   onBlur={() => {
+                     const isIPhoneDevice = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
+                     if (isIPhoneDevice) {
+                       if (window.scrollY !== 0) {
+                         window.scrollTo(0, 0);
+                       }
+                       if (document.body && document.body.scrollTop !== 0) {
+                         document.body.scrollTop = 0;
+                       }
+                     } else {
+                       window.scrollTo(0, 0);
+                       if (document.body) document.body.scrollTop = 0;
+                       setTimeout(() => {
+                         window.scrollTo(0, 0);
+                         if (document.body) document.body.scrollTop = 0;
+                       }, 100);
+                     }
+                   }}
                    value={chatInput}
                    onChange={(e) => {
                      setChatInput(e.target.value);
+                     e.target.style.height = 'auto'; 
+                     e.target.style.height = `${Math.max(40, e.target.scrollHeight)}px`; 
                    }}
                    dir="auto"
-                   autoComplete="off"
-                   autoCorrect="off"
-                   autoCapitalize="none"
-                   spellCheck="false"
-                   name="chat_input_random_name"
-                   data-form-type="other"
+                   rows={1}
                    placeholder="Type your message here..."
-                   className="flex-1 w-full min-w-0 h-[40px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-primary-brand outline-none transition-all shadow-inner resize-none overflow-hidden touch-pan-y leading-tight select-text"
-                   style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
+                   className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-primary-brand outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text"
+                   style={{ height: '40px', WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                  />
                  <button 
                    type="submit"

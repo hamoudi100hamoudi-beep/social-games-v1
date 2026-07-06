@@ -771,70 +771,97 @@ export default function GameRoom({
     let currentMax = window.visualViewport?.height || window.innerHeight;
     setMaxViewportHeight(currentMax);
 
-    let rafId: number | null = null;
     const handleResize = () => {
-      if (rafId !== null) return;
+      if (!window.visualViewport) return;
+
+      const currentHeight = window.visualViewport.height;
       
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (!window.visualViewport) return;
-        
-        const currentHeight = window.visualViewport.height || window.innerHeight;
-        const offsetTop = window.visualViewport.offsetTop || 0;
-        
-        if (mainContainerRef.current) {
-          mainContainerRef.current.style.height = `${currentHeight}px`;
-          mainContainerRef.current.style.transform = `translateY(${offsetTop}px)`;
+      // Update DOM synchronously to eliminate React state lag and prevent jumpiness
+      if (mainContainerRef.current) {
+        mainContainerRef.current.style.height = `${currentHeight}px`;
+      }
+      
+      setLockedHeight(currentHeight);
+      
+      // Force scroll reset immediately to prevent room/chat from sliding off-screen or shifting up
+      const isIPhoneDevice = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
+      if (isIPhoneDevice) {
+        if (window.scrollY !== 0) {
+          window.scrollTo(0, 0);
         }
-        
-        const chatOverlay = document.getElementById("overlay-chat-room");
-        if (chatOverlay) {
-          chatOverlay.style.height = `${currentHeight}px`;
-          chatOverlay.style.transform = `translateY(${offsetTop}px)`;
+        if (document.body && document.body.scrollTop !== 0) {
+          document.body.scrollTop = 0;
         }
-        
-        setLockedHeight(currentHeight);
-        setViewportOffsetTop(offsetTop);
-        
-        if (currentHeight > currentMax) {
-          currentMax = currentHeight;
-          setMaxViewportHeight(currentMax);
-        }
+      } else {
+        window.scrollTo(0, 0);
+        if (document.body) document.body.scrollTop = 0;
+      }
+      setViewportOffsetTop(0);
 
-        // True if height shrunk significantly
-        const isKeyboardShowing = currentHeight < currentMax - 150;
-        setIsKeyboardOpen(isKeyboardShowing);
+      if (currentHeight > currentMax) {
+        currentMax = currentHeight;
+        setMaxViewportHeight(currentMax);
+      }
 
-        if (isKeyboardShowing) {
-          wasKeyboardShowingRef.current = true;
-        } else {
-          // Only reset the flag when keyboard is fully closed
+      // True if height shrunk significantly
+      const isKeyboardShowing = currentHeight < currentMax - 150;
+      setIsKeyboardOpen(isKeyboardShowing);
+
+      if (isKeyboardShowing) {
+        // We no longer rely on lastKeyboardHeight or localStorage
+        // The synchronous DOM update above handles the smooth resize
+      }
+
+      // Always ensure layout is at origin (0, 0)
+      if (isIPhoneDevice) {
+        if (window.scrollY !== 0) {
+          window.scrollTo(0, 0);
+        }
+      } else {
+        window.scrollTo(0, 0);
+      }
+
+      if (isKeyboardShowing) {
+        wasKeyboardShowingRef.current = true;
+        // Clear any scheduled delayed blurs if keyboard is actively showing
+        if (delayedBlurTimeoutRef.current) {
+          clearTimeout(delayedBlurTimeoutRef.current);
+          delayedBlurTimeoutRef.current = null;
+        }
+      } else {
+        // Keyboard is closed/dismissed
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
           if (wasKeyboardShowingRef.current) {
+            (activeEl as HTMLElement).blur();
             wasKeyboardShowingRef.current = false;
+          } else {
+            if (!delayedBlurTimeoutRef.current) {
+              delayedBlurTimeoutRef.current = setTimeout(() => {
+                const currentHeightNow = window.visualViewport?.height || window.innerHeight;
+                const isKeyboardShowingNow = currentHeightNow < currentMax - 150;
+                const activeTagNow = document.activeElement?.tagName;
+                if (!isKeyboardShowingNow && (activeTagNow === "INPUT" || activeTagNow === "TEXTAREA")) {
+                  (document.activeElement as HTMLElement).blur();
+                }
+                delayedBlurTimeoutRef.current = null;
+              }, 50);
+            }
           }
         }
-      });
-    };
-
-    const handleWindowResize = () => {
-      handleResize();
-      setTimeout(handleResize, 100);
-      setTimeout(handleResize, 300);
+      }
     };
 
     if (window.visualViewport) {
-      setLockedHeight(window.visualViewport.height || window.innerHeight);
-      setViewportOffsetTop(window.visualViewport.offsetTop || 0);
+      setLockedHeight(window.visualViewport.height);
+      setViewportOffsetTop(0);
       window.visualViewport.addEventListener("resize", handleResize);
       window.visualViewport.addEventListener("scroll", handleResize);
-      window.addEventListener("resize", handleWindowResize);
     }
 
     return () => {
-      if (rafId !== null) cancelAnimationFrame(rafId);
       window.visualViewport?.removeEventListener("resize", handleResize);
       window.visualViewport?.removeEventListener("scroll", handleResize);
-      window.removeEventListener("resize", handleWindowResize);
     };
   }, []);
 
@@ -877,43 +904,25 @@ export default function GameRoom({
     }
   }, [isChatOpen]);
 
-  // Lock the body and html completely when GameRoom is mounted to prevent iOS Safari layout shift
+  // Prevent any browser automatic layout scrolling when chat is open or keyboard is showing
   useEffect(() => {
-    const originalBodyOverflow = document.body.style.overflow;
-    const originalBodyPosition = document.body.style.position;
-    const originalBodyWidth = document.body.style.width;
-    const originalBodyHeight = document.body.style.height;
-    const originalBodyOverscroll = document.body.style.overscrollBehavior;
-
-    const originalHtmlOverflow = document.documentElement.style.overflow;
-    const originalHtmlPosition = document.documentElement.style.position;
-    const originalHtmlHeight = document.documentElement.style.height;
-    const originalHtmlOverscroll = document.documentElement.style.overscrollBehavior;
-
-    document.body.style.overflow = "hidden";
-    document.body.style.position = "fixed";
-    document.body.style.width = "100%";
-    document.body.style.height = "100%";
-    document.body.style.overscrollBehavior = "none";
-
-    document.documentElement.style.overflow = "hidden";
-    document.documentElement.style.position = "fixed";
-    document.documentElement.style.height = "100%";
-    document.documentElement.style.overscrollBehavior = "none";
-
-    return () => {
-      document.body.style.overflow = originalBodyOverflow;
-      document.body.style.position = originalBodyPosition;
-      document.body.style.width = originalBodyWidth;
-      document.body.style.height = originalBodyHeight;
-      document.body.style.overscrollBehavior = originalBodyOverscroll;
-
-      document.documentElement.style.overflow = originalHtmlOverflow;
-      document.documentElement.style.position = originalHtmlPosition;
-      document.documentElement.style.height = originalHtmlHeight;
-      document.documentElement.style.overscrollBehavior = originalHtmlOverscroll;
+    const preventAutoScroll = () => {
+      if (typeof window !== "undefined" && (isChatOpen || isKeyboardOpen)) {
+        if (window.scrollY !== 0 || window.scrollX !== 0) {
+          window.scrollTo(0, 0);
+        }
+      }
     };
-  }, []);
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("scroll", preventAutoScroll, { passive: true });
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("scroll", preventAutoScroll);
+      }
+    };
+  }, [isChatOpen, isKeyboardOpen]);
 
   const isInputDisabled =
     gameState.status === "WAITING" ||
@@ -931,24 +940,6 @@ export default function GameRoom({
       setIsInputFocused(false);
     }
   }, [isInputDisabled]);
-
-  // Safety net for iOS 26 bug
-  useEffect(() => {
-    const input = guessInputRef.current;
-    if (!input) return;
-    
-    const handleFocusOut = () => {
-      setTimeout(() => {
-        if (window.visualViewport && window.visualViewport.offsetTop > 0) {
-          window.scrollBy(0, -1);
-          window.scrollBy(0, 1);
-        }
-      }, 100);
-    };
-    
-    input.addEventListener("focusout", handleFocusOut);
-    return () => input.removeEventListener("focusout", handleFocusOut);
-  }, []);
 
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1146,7 +1137,8 @@ export default function GameRoom({
     return player ? player.name : "";
   };
 
-  const effectiveHeight = isChatOpen
+  const isIPhoneDeviceForHeight = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
+  const effectiveHeight = (isChatOpen && !isIPhoneDeviceForHeight)
     ? "100vh"
     : lockedHeight
       ? `${lockedHeight}px`
@@ -1761,15 +1753,14 @@ export default function GameRoom({
                 >
                   <Pencil size={18} />
                 </div>
-                <input
-                  type="text"
-                  enterKeyHint="send"
-                  ref={guessInputRef as any}
-                  id="guess-input"
+                <textarea
+                  ref={guessInputRef}
+                  id="guess-textarea"
                   dir="auto"
+                  rows={1}
                   autoComplete="off"
                   autoCorrect="off"
-                  autoCapitalize="none"
+                  autoCapitalize="off"
                   spellCheck="false"
                   name="guess_input_random_name"
                   data-form-type="other"
@@ -1777,19 +1768,29 @@ export default function GameRoom({
                   value={isInputDisabled ? "" : guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       if (guessInput.trim() && !isInputDisabled) {
                         handleGuessSubmit(e as any);
                       }
                     }
                   }}
-                  onFocus={() => {
+                   onFocus={() => {
                     setIsInputFocused(true);
                     setIsKeyboardOpen(true);
                     if (delayedBlurTimeoutRef.current) {
                       clearTimeout(delayedBlurTimeoutRef.current);
                       delayedBlurTimeoutRef.current = null;
+                    }
+                    const isIPhoneDevice = typeof navigator !== 'undefined' && /iPhone|iPod/i.test(navigator.userAgent) && !/iPad/i.test(navigator.userAgent);
+                    if (!isIPhoneDevice) {
+                      setTimeout(() => {
+                        window.scrollTo(0, 0);
+                      }, 50);
+                    } else {
+                      if (window.scrollY !== 0) {
+                        window.scrollTo(0, 0);
+                      }
                     }
                   }}
                   onBlur={() => {
