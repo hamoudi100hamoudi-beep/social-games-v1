@@ -264,32 +264,9 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
   const bgTouchStartTime = useRef<number>(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const handleIOSFocusBypass = (e: React.TouchEvent<HTMLTextAreaElement> | React.FocusEvent<HTMLTextAreaElement>) => {
+  const handleIOSPreLift = () => {
     if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
-      const target = e.currentTarget;
-      
-      const originalPosition = target.style.position;
-      const originalTop = target.style.top;
-      const originalLeft = target.style.left;
-      const originalZIndex = target.style.zIndex;
-      const originalTransform = target.style.transform;
-      
-      // Temporarily fix the element to the top of the viewport
-      target.style.position = 'fixed';
-      target.style.top = '10px';
-      target.style.left = '10px';
-      target.style.zIndex = '99999';
-      target.style.transform = 'none';
-      
-      setTimeout(() => {
-        target.style.position = originalPosition;
-        target.style.top = originalTop;
-        target.style.left = originalLeft;
-        target.style.zIndex = originalZIndex;
-        target.style.transform = originalTransform;
-        
-        window.scrollTo(0, 0);
-      }, 50);
+      document.documentElement.style.setProperty("--keyboard-inset", "350px");
     }
   };
 
@@ -388,10 +365,9 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                    dir="auto"
                    rows={1}
                    placeholder="Type your message here..."
-                   className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-primary-brand outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text"
+                   className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-primary-brand outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text ios-input-focus"
                    style={{ height: '40px', WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
-                   onFocus={handleIOSFocusBypass}
-                   onTouchStart={handleIOSFocusBypass}
+                   onTouchStart={handleIOSPreLift}
                  />
                  <button 
                    type="submit"

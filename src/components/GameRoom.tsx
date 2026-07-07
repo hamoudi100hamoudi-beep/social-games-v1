@@ -191,7 +191,6 @@ export default function GameRoom({
     typeof window !== "undefined" ? window.innerHeight : 800,
   );
   const [isInputFocused, setIsInputFocused] = useState(false);
-  const [iosViewportHeight, setIosViewportHeight] = useState<number | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const hasEmittedJoin = React.useRef(false);
 
@@ -782,22 +781,15 @@ export default function GameRoom({
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
-      const isIOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-
-      if (isIOS) {
-        if (isKeyboardShowing) {
-          setIosViewportHeight(currentHeight);
-        } else {
-          setIosViewportHeight(null);
-        }
-        document.documentElement.style.setProperty("--keyboard-inset", "0px");
-      } else {
-        // Calculate keyboard inset for Non-iOS (e.g. Android)
-        if (mainContainerRef.current) {
-           const containerHeight = mainContainerRef.current.getBoundingClientRect().height;
-           const inset = Math.max(0, containerHeight - currentHeight);
-           document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
-        }
+      // Calculate keyboard inset for iOS Safari
+      // On Android, the main container (100dvh) usually shrinks with the visual viewport.
+      // On iOS Safari, the main container stays full height, but visual viewport shrinks.
+      if (mainContainerRef.current) {
+         const containerHeight = mainContainerRef.current.getBoundingClientRect().height;
+         // If container is larger than visual viewport, it means keyboard is covering the bottom
+         // and the container didn't shrink to accommodate it (iOS Safari behavior).
+         const inset = Math.max(0, containerHeight - currentHeight);
+         document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
       }
 
       if (!isKeyboardShowing) {
@@ -817,6 +809,7 @@ export default function GameRoom({
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", handleResize);
       handleResize();
+      // We don't listen to scroll here anymore to avoid conflicting with natural panning
     }
 
     return () => {
@@ -845,19 +838,6 @@ export default function GameRoom({
     document.documentElement.style.position = "fixed";
     document.documentElement.style.height = "100%";
 
-    const isIOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-
-    const preventScroll = () => {
-      if (window.scrollY !== 0 || window.scrollX !== 0) {
-        window.scrollTo(0, 0);
-      }
-    };
-
-    if (isIOS) {
-      window.addEventListener("scroll", preventScroll, { passive: true });
-      window.scrollTo(0, 0);
-    }
-
     return () => {
       document.body.style.overflow = originalBodyOverflow;
       document.body.style.position = originalBodyPosition;
@@ -867,10 +847,6 @@ export default function GameRoom({
       document.documentElement.style.overflow = originalHtmlOverflow;
       document.documentElement.style.position = originalHtmlPosition;
       document.documentElement.style.height = originalHtmlHeight;
-
-      if (isIOS) {
-        window.removeEventListener("scroll", preventScroll);
-      }
     };
   }, []);
 
@@ -892,32 +868,9 @@ export default function GameRoom({
     }
   }, [isInputDisabled]);
 
-  const handleIOSFocusBypass = (e: React.TouchEvent<HTMLTextAreaElement> | React.FocusEvent<HTMLTextAreaElement>) => {
+  const handleIOSPreLift = () => {
     if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
-      const target = e.currentTarget;
-      
-      const originalPosition = target.style.position;
-      const originalTop = target.style.top;
-      const originalLeft = target.style.left;
-      const originalZIndex = target.style.zIndex;
-      const originalTransform = target.style.transform;
-      
-      // Temporarily fix the element to the top of the viewport
-      target.style.position = 'fixed';
-      target.style.top = '10px';
-      target.style.left = '10px';
-      target.style.zIndex = '99999';
-      target.style.transform = 'none';
-      
-      setTimeout(() => {
-        target.style.position = originalPosition;
-        target.style.top = originalTop;
-        target.style.left = originalLeft;
-        target.style.zIndex = originalZIndex;
-        target.style.transform = originalTransform;
-        
-        window.scrollTo(0, 0);
-      }, 50);
+      document.documentElement.style.setProperty("--keyboard-inset", "350px");
     }
   };
 
@@ -1117,7 +1070,7 @@ export default function GameRoom({
     return player ? player.name : "";
   };
 
-  const effectiveHeight = iosViewportHeight !== null ? `${iosViewportHeight}px` : "100dvh";
+  const effectiveHeight = "100dvh";
 
   return (
     <>
@@ -1751,12 +1704,11 @@ export default function GameRoom({
                       }
                     }
                   }}
-                  onFocus={(e) => {
-                    handleIOSFocusBypass(e);
+                  onFocus={() => {
                     setIsInputFocused(true);
                     setIsKeyboardOpen(true);
                   }}
-                  onTouchStart={handleIOSFocusBypass}
+                  onTouchStart={handleIOSPreLift}
                   onBlur={() => {
                     setIsInputFocused(false);
                   }}
@@ -1781,7 +1733,7 @@ export default function GameRoom({
                                 ? "You've found the answer!"
                                 : "Answer here..."
                   }
-                  className={`w-full h-12 border-2 border-transparent rounded-[24px] pl-11 pr-14 py-[13px] resize-none overflow-hidden text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm whitespace-nowrap ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
+                  className={`w-full h-12 border-2 border-transparent rounded-[24px] pl-11 pr-14 py-[13px] resize-none overflow-hidden text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm whitespace-nowrap ios-input-focus ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
                   style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                 />
                 <button

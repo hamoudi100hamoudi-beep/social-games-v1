@@ -133,3 +133,13 @@ html, body, #root {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
 }
+
+@keyframes ios_focus_bypass {
+  0% { opacity: 0; }
+  99% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+.ios-input-focus:focus {
+  animation: ios_focus_bypass 0.1s forwards;
+}
