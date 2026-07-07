@@ -242,7 +242,6 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 interface OverlayChatRoomProps {
   isChatOpen: boolean;
   viewportOffsetTop: number;
-  effectiveHeight: string;
   closeChat: () => void;
   chatMessages: ChatMessage[];
   socketId: string | null;
@@ -254,7 +253,6 @@ interface OverlayChatRoomProps {
 export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
   isChatOpen,
   viewportOffsetTop,
-  effectiveHeight,
   closeChat,
   chatMessages,
   socketId,
@@ -276,11 +274,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
 
   return (
     <div 
-      className="fixed left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none animate-in fade-in duration-200"
-      style={{ 
-        top: `${viewportOffsetTop}px`,
-        height: effectiveHeight
-      }}
+      className="fixed top-0 bottom-0 left-0 right-0 z-50 bg-black/60 flex flex-col justify-end overscroll-none touch-none animate-in fade-in duration-200"
     >
        <div className="w-full h-full flex flex-col">
            {/* Header (Close if clicked) */}

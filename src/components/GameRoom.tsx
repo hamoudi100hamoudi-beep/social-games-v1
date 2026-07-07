@@ -187,8 +187,6 @@ export default function GameRoom({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const guessInputRef = React.useRef<HTMLTextAreaElement>(null);
   const mainContainerRef = React.useRef<HTMLDivElement>(null);
-  const [lockedHeight, setLockedHeight] = useState<number | null>(null);
-  const [viewportOffsetTop, setViewportOffsetTop] = useState<number>(0);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(
     typeof window !== "undefined" ? window.innerHeight : 800,
   );
@@ -767,7 +765,6 @@ export default function GameRoom({
 
   useEffect(() => {
     let currentMax = window.visualViewport?.height || window.innerHeight;
-    let currentWidth = window.innerWidth;
     setMaxViewportHeight(currentMax);
 
     const handleResize = () => {
@@ -775,12 +772,7 @@ export default function GameRoom({
 
       const currentHeight = window.visualViewport.height;
 
-      // Handle orientation changes or screen resizes
-      if (window.innerWidth !== currentWidth) {
-        currentWidth = window.innerWidth;
-        currentMax = currentHeight;
-        setMaxViewportHeight(currentMax);
-      } else if (currentHeight > currentMax) {
+      if (currentHeight > currentMax) {
         currentMax = currentHeight;
         setMaxViewportHeight(currentMax);
       }
@@ -798,6 +790,19 @@ export default function GameRoom({
          // and the container didn't shrink to accommodate it (iOS Safari behavior).
          const inset = Math.max(0, containerHeight - currentHeight);
          document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
+      }
+
+      if (!isKeyboardShowing) {
+        // Android specific fix: When keyboard is dismissed using back button,
+        // the input remains focused but the keyboard is gone. We must blur it
+        // so the room returns to its normal layout. We target Android specifically
+        // to ensure we don't interfere with iOS Safari behavior.
+        if (typeof window !== "undefined" && /android/i.test(navigator.userAgent || "")) {
+          const activeEl = document.activeElement;
+          if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")) {
+            (activeEl as HTMLElement).blur();
+          }
+        }
       }
     };
 
@@ -1061,7 +1066,7 @@ export default function GameRoom({
     return player ? player.name : "";
   };
 
-  const effectiveHeight = maxViewportHeight ? `${maxViewportHeight}px` : "100dvh";
+  const effectiveHeight = "100dvh";
 
   return (
     <>
@@ -1743,8 +1748,6 @@ export default function GameRoom({
       {/* Chat Overlay */}
       <OverlayChatRoom
         isChatOpen={isChatOpen}
-        viewportOffsetTop={viewportOffsetTop}
-        effectiveHeight={effectiveHeight}
         closeChat={closeChat}
         chatMessages={filteredChatMessages}
         socketId={socketId}
