@@ -267,10 +267,29 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
   const handleIOSFocusBypass = (e: React.TouchEvent<HTMLTextAreaElement> | React.FocusEvent<HTMLTextAreaElement>) => {
     if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
       const target = e.currentTarget;
-      target.style.transform = 'translateY(-2000px)';
+      
+      const originalPosition = target.style.position;
+      const originalTop = target.style.top;
+      const originalLeft = target.style.left;
+      const originalZIndex = target.style.zIndex;
+      const originalTransform = target.style.transform;
+      
+      // Temporarily fix the element to the top of the viewport
+      target.style.position = 'fixed';
+      target.style.top = '10px';
+      target.style.left = '10px';
+      target.style.zIndex = '99999';
+      target.style.transform = 'none';
+      
       setTimeout(() => {
-        target.style.transform = 'none';
-      }, 0);
+        target.style.position = originalPosition;
+        target.style.top = originalTop;
+        target.style.left = originalLeft;
+        target.style.zIndex = originalZIndex;
+        target.style.transform = originalTransform;
+        
+        window.scrollTo(0, 0);
+      }, 50);
     }
   };
 

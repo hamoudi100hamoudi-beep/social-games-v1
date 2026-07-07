@@ -191,6 +191,7 @@ export default function GameRoom({
     typeof window !== "undefined" ? window.innerHeight : 800,
   );
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [iosViewportHeight, setIosViewportHeight] = useState<number | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const hasEmittedJoin = React.useRef(false);
 
@@ -781,15 +782,22 @@ export default function GameRoom({
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
 
-      // Calculate keyboard inset for iOS Safari
-      // On Android, the main container (100dvh) usually shrinks with the visual viewport.
-      // On iOS Safari, the main container stays full height, but visual viewport shrinks.
-      if (mainContainerRef.current) {
-         const containerHeight = mainContainerRef.current.getBoundingClientRect().height;
-         // If container is larger than visual viewport, it means keyboard is covering the bottom
-         // and the container didn't shrink to accommodate it (iOS Safari behavior).
-         const inset = Math.max(0, containerHeight - currentHeight);
-         document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
+      const isIOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+      if (isIOS) {
+        if (isKeyboardShowing) {
+          setIosViewportHeight(currentHeight);
+        } else {
+          setIosViewportHeight(null);
+        }
+        document.documentElement.style.setProperty("--keyboard-inset", "0px");
+      } else {
+        // Calculate keyboard inset for Non-iOS (e.g. Android)
+        if (mainContainerRef.current) {
+           const containerHeight = mainContainerRef.current.getBoundingClientRect().height;
+           const inset = Math.max(0, containerHeight - currentHeight);
+           document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
+        }
       }
 
       if (!isKeyboardShowing) {
@@ -809,7 +817,6 @@ export default function GameRoom({
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", handleResize);
       handleResize();
-      // We don't listen to scroll here anymore to avoid conflicting with natural panning
     }
 
     return () => {
@@ -838,6 +845,19 @@ export default function GameRoom({
     document.documentElement.style.position = "fixed";
     document.documentElement.style.height = "100%";
 
+    const isIOS = typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+    const preventScroll = () => {
+      if (window.scrollY !== 0 || window.scrollX !== 0) {
+        window.scrollTo(0, 0);
+      }
+    };
+
+    if (isIOS) {
+      window.addEventListener("scroll", preventScroll, { passive: true });
+      window.scrollTo(0, 0);
+    }
+
     return () => {
       document.body.style.overflow = originalBodyOverflow;
       document.body.style.position = originalBodyPosition;
@@ -847,6 +867,10 @@ export default function GameRoom({
       document.documentElement.style.overflow = originalHtmlOverflow;
       document.documentElement.style.position = originalHtmlPosition;
       document.documentElement.style.height = originalHtmlHeight;
+
+      if (isIOS) {
+        window.removeEventListener("scroll", preventScroll);
+      }
     };
   }, []);
 
@@ -871,10 +895,29 @@ export default function GameRoom({
   const handleIOSFocusBypass = (e: React.TouchEvent<HTMLTextAreaElement> | React.FocusEvent<HTMLTextAreaElement>) => {
     if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
       const target = e.currentTarget;
-      target.style.transform = 'translateY(-2000px)';
+      
+      const originalPosition = target.style.position;
+      const originalTop = target.style.top;
+      const originalLeft = target.style.left;
+      const originalZIndex = target.style.zIndex;
+      const originalTransform = target.style.transform;
+      
+      // Temporarily fix the element to the top of the viewport
+      target.style.position = 'fixed';
+      target.style.top = '10px';
+      target.style.left = '10px';
+      target.style.zIndex = '99999';
+      target.style.transform = 'none';
+      
       setTimeout(() => {
-        target.style.transform = 'none';
-      }, 0);
+        target.style.position = originalPosition;
+        target.style.top = originalTop;
+        target.style.left = originalLeft;
+        target.style.zIndex = originalZIndex;
+        target.style.transform = originalTransform;
+        
+        window.scrollTo(0, 0);
+      }, 50);
     }
   };
 
@@ -1074,7 +1117,7 @@ export default function GameRoom({
     return player ? player.name : "";
   };
 
-  const effectiveHeight = "100dvh";
+  const effectiveHeight = iosViewportHeight !== null ? `${iosViewportHeight}px` : "100dvh";
 
   return (
     <>
