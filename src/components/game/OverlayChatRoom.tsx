@@ -264,6 +264,16 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
   const bgTouchStartTime = useRef<number>(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  const handleIOSFocusBypass = (e: React.TouchEvent<HTMLTextAreaElement> | React.FocusEvent<HTMLTextAreaElement>) => {
+    if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
+      const target = e.currentTarget;
+      target.style.transform = 'translateY(-2000px)';
+      setTimeout(() => {
+        target.style.transform = 'none';
+      }, 0);
+    }
+  };
+
   useEffect(() => {
     if (isChatOpen && scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
@@ -361,6 +371,8 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                    placeholder="Type your message here..."
                    className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-primary-brand outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text"
                    style={{ height: '40px', WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
+                   onFocus={handleIOSFocusBypass}
+                   onTouchStart={handleIOSFocusBypass}
                  />
                  <button 
                    type="submit"
