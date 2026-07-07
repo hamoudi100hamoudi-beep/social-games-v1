@@ -876,6 +876,18 @@ export default function GameRoom({
     document.documentElement.style.position = "fixed";
     document.documentElement.style.height = "100%";
 
+    // Explicitly prevent touchmove to stop visual viewport panning on iOS
+    const preventScroll = (e: TouchEvent) => {
+      const target = e.target as HTMLElement;
+      // Allow scrolling inside text inputs and chat messages
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') return;
+      if (target.closest('.overflow-y-auto') || target.closest('.overflow-x-auto') || target.closest('.overflow-auto')) return;
+      
+      e.preventDefault();
+    };
+
+    document.addEventListener('touchmove', preventScroll, { passive: false });
+
     return () => {
       document.body.style.overflow = originalBodyOverflow;
       document.body.style.position = originalBodyPosition;
@@ -885,6 +897,8 @@ export default function GameRoom({
       document.documentElement.style.overflow = originalHtmlOverflow;
       document.documentElement.style.position = originalHtmlPosition;
       document.documentElement.style.height = originalHtmlHeight;
+
+      document.removeEventListener('touchmove', preventScroll);
     };
   }, []);
 
