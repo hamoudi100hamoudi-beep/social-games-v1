@@ -818,39 +818,37 @@ export default function GameRoom({
   }, []);
 
   useEffect(() => {
-    if (isChatOpen) {
-      const originalBodyOverflow = document.body.style.overflow;
-      const originalBodyPosition = document.body.style.position;
-      const originalBodyWidth = document.body.style.width;
-      const originalBodyHeight = document.body.style.height;
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalBodyPosition = document.body.style.position;
+    const originalBodyWidth = document.body.style.width;
+    const originalBodyHeight = document.body.style.height;
 
-      const originalHtmlOverflow = document.documentElement.style.overflow;
-      const originalHtmlPosition = document.documentElement.style.position;
-      const originalHtmlHeight = document.documentElement.style.height;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const originalHtmlPosition = document.documentElement.style.position;
+    const originalHtmlHeight = document.documentElement.style.height;
 
-      // When chat is open, lock body to prevent outer scrolling,
-      // but let the chat container itself handle its internal scrolling.
-      document.body.style.overflow = "hidden";
-      document.body.style.position = "fixed";
-      document.body.style.width = "100vw";
-      document.body.style.height = "100%";
+    // Lock body to prevent outer scrolling entirely in the GameRoom,
+    // so iOS Safari never scrolls the page up when the keyboard appears.
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.width = "100vw";
+    document.body.style.height = "100%";
 
-      document.documentElement.style.overflow = "hidden";
-      document.documentElement.style.position = "fixed";
-      document.documentElement.style.height = "100%";
+    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.position = "fixed";
+    document.documentElement.style.height = "100%";
 
-      return () => {
-        document.body.style.overflow = originalBodyOverflow;
-        document.body.style.position = originalBodyPosition;
-        document.body.style.width = originalBodyWidth;
-        document.body.style.height = originalBodyHeight;
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.body.style.position = originalBodyPosition;
+      document.body.style.width = originalBodyWidth;
+      document.body.style.height = originalBodyHeight;
 
-        document.documentElement.style.overflow = originalHtmlOverflow;
-        document.documentElement.style.position = originalHtmlPosition;
-        document.documentElement.style.height = originalHtmlHeight;
-      };
-    }
-  }, [isChatOpen]);
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      document.documentElement.style.position = originalHtmlPosition;
+      document.documentElement.style.height = originalHtmlHeight;
+    };
+  }, []);
 
 
   const isInputDisabled =
