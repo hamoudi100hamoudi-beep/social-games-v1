@@ -767,6 +767,32 @@ export default function GameRoom({
     let currentMax = window.visualViewport?.height || window.innerHeight;
     setMaxViewportHeight(currentMax);
 
+    const isIOS = typeof window !== 'undefined' && 
+      (/iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+    const handleFocusIn = (e: FocusEvent) => {
+      if (!isIOS) return;
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+        // Early reservation for iOS to prevent Safari from pushing the page up
+        document.documentElement.style.setProperty("--keyboard-inset", `320px`);
+      }
+    };
+
+    const handleFocusOut = (e: FocusEvent) => {
+      if (!isIOS) return;
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) {
+        document.documentElement.style.setProperty("--keyboard-inset", `0px`);
+      }
+    };
+
+    if (isIOS) {
+      document.addEventListener("focusin", handleFocusIn);
+      document.addEventListener("focusout", handleFocusOut);
+    }
+
     const handleResize = () => {
       if (!window.visualViewport) return;
 
@@ -789,7 +815,9 @@ export default function GameRoom({
          // If container is larger than visual viewport, it means keyboard is covering the bottom
          // and the container didn't shrink to accommodate it (iOS Safari behavior).
          const inset = Math.max(0, containerHeight - currentHeight);
-         document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
+         if (isIOS) {
+           document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
+         }
       }
 
       if (!isKeyboardShowing) {
@@ -814,10 +842,20 @@ export default function GameRoom({
 
     return () => {
       window.visualViewport?.removeEventListener("resize", handleResize);
+      if (isIOS) {
+        document.removeEventListener("focusin", handleFocusIn);
+        document.removeEventListener("focusout", handleFocusOut);
+      }
     };
   }, []);
 
   useEffect(() => {
+    const isIOS = typeof window !== 'undefined' && 
+      (/iPad|iPhone|iPod/.test(navigator.userAgent) || 
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
+    if (!isIOS) return;
+
     const originalBodyOverflow = document.body.style.overflow;
     const originalBodyPosition = document.body.style.position;
     const originalBodyWidth = document.body.style.width;
@@ -827,7 +865,7 @@ export default function GameRoom({
     const originalHtmlPosition = document.documentElement.style.position;
     const originalHtmlHeight = document.documentElement.style.height;
 
-    // Lock body to prevent outer scrolling entirely in the GameRoom,
+    // Lock body to prevent outer scrolling entirely in the GameRoom for iOS,
     // so iOS Safari never scrolls the page up when the keyboard appears.
     document.body.style.overflow = "hidden";
     document.body.style.position = "fixed";
