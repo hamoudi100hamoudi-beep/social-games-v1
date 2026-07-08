@@ -266,7 +266,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
 
   const handleIOSFocusBypass = () => {
     if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
-      document.documentElement.style.setProperty("--keyboard-inset", "350px");
+      document.documentElement.style.setProperty("--keyboard-inset", "300px");
       window.scrollTo(0, 0);
       setTimeout(() => window.scrollTo(0, 0), 10);
     }
