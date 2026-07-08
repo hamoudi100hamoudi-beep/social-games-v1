@@ -90,6 +90,89 @@ export default function Lobby({ onPlay }: LobbyProps) {
   const [showAvatarGrid, setShowAvatarGrid] = useState(false);
   const [nicknameError, setNicknameError] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+
+  // Keyboard and viewport scaling states for initial screen
+  const lobbyContainerRef = React.useRef<HTMLDivElement>(null);
+  const lobbyKeyboardHeightCache = React.useRef<number>(300);
+  const [maxViewportHeight, setMaxViewportHeight] = useState<number>(
+    typeof window !== 'undefined' ? window.innerHeight : 800
+  );
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalBodyPosition = document.body.style.position;
+    const originalBodyWidth = document.body.style.width;
+    const originalBodyHeight = document.body.style.height;
+
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const originalHtmlPosition = document.documentElement.style.position;
+    const originalHtmlHeight = document.documentElement.style.height;
+
+    // Lock body to prevent outer scrolling entirely in the Lobby,
+    // so iOS Safari never scrolls the page up when the keyboard appears.
+    document.body.style.overflow = "hidden";
+    document.body.style.position = "fixed";
+    document.body.style.width = "100vw";
+    document.body.style.height = "100%";
+
+    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.position = "fixed";
+    document.documentElement.style.height = "100%";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.body.style.position = originalBodyPosition;
+      document.body.style.width = originalBodyWidth;
+      document.body.style.height = originalBodyHeight;
+
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      document.documentElement.style.position = originalHtmlPosition;
+      document.documentElement.style.height = originalHtmlHeight;
+    };
+  }, []);
+
+  useEffect(() => {
+    let currentMax = window.visualViewport?.height || window.innerHeight;
+    setMaxViewportHeight(currentMax);
+
+    const handleResize = () => {
+      if (!window.visualViewport) return;
+      const currentHeight = window.visualViewport.height;
+      if (currentHeight > currentMax) {
+        currentMax = currentHeight;
+      }
+      setMaxViewportHeight(currentHeight);
+
+      const isKeyboardShowing = currentHeight < currentMax - 150;
+      setIsKeyboardOpen(isKeyboardShowing);
+
+      if (lobbyContainerRef.current) {
+        const containerHeight = lobbyContainerRef.current.getBoundingClientRect().height;
+        const inset = Math.max(0, containerHeight - currentHeight);
+        if (inset > 150) {
+          lobbyKeyboardHeightCache.current = inset + 25;
+        }
+        document.documentElement.style.setProperty("--lobby-keyboard-inset", `${inset}px`);
+      }
+    };
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", handleResize);
+      handleResize();
+    }
+    return () => {
+      window.visualViewport?.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  const handleIOSFocusBypass = () => {
+    if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
+      document.documentElement.style.setProperty("--lobby-keyboard-inset", `${lobbyKeyboardHeightCache.current}px`);
+      window.scrollTo(0, 0);
+      setTimeout(() => window.scrollTo(0, 0), 10);
+    }
+  };
   const [afkWarning, setAfkWarning] = useState(() => {
     if (typeof window !== 'undefined') {
       const afkStored = safeLocalStorage.getItem('gartic_afk_kicked');
@@ -236,11 +319,15 @@ export default function Lobby({ onPlay }: LobbyProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-game-primary-blue text-white font-sans flex flex-col overflow-hidden h-[100dvh]">
+    <div 
+      ref={lobbyContainerRef}
+      className="fixed inset-0 bg-game-primary-blue text-white font-sans flex flex-col overflow-hidden"
+      style={{ height: maxViewportHeight }}
+    >
       
       {/* Home Screen */}
       {screen === 'home' && !afkWarning && !connLostWarning && (
-        <div className="flex-1 flex flex-col items-center justify-start p-3 sm:p-5 z-10 w-full max-w-md mx-auto overflow-y-auto no-scrollbar">
+        <div className="flex-1 flex flex-col items-center justify-start p-3 sm:p-5 z-10 w-full max-w-md mx-auto overflow-hidden no-scrollbar">
           {/* Header Row (Game Title and Settings Gear) */}
           <div className="w-full flex items-center justify-between mb-auto relative px-2 mt-2 shrink-0">
             {/* Spacer for symmetry on the left */}
@@ -270,46 +357,58 @@ export default function Lobby({ onPlay }: LobbyProps) {
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-[90%] max-w-[340px] bg-[#ECEBFC] py-4 [@media(min-height:600px)]:py-5 px-5 [@media(min-height:600px)]:px-6 sm:px-8 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col my-auto shrink-0 text-[#2E2882] justify-center items-center min-h-0"
+            className={`w-[90%] max-w-[340px] bg-[#ECEBFC] rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col justify-center items-center text-[#2E2882] transition-all duration-300 min-h-0 ${
+              isKeyboardOpen 
+                ? "py-2 px-4 my-1 flex-1 shrink" 
+                : "py-4 [@media(min-height:600px)]:py-5 px-5 [@media(min-height:600px)]:px-6 sm:px-8 my-auto shrink-0"
+            }`}
           >
             {/* Content body wrapper */}
-            <div className="space-y-4 flex flex-col items-center w-full">
+            <div className={`flex flex-col items-center w-full transition-all duration-300 ${isKeyboardOpen ? 'space-y-1.5' : 'space-y-4'}`}>
               {/* Avatar Selector */}
-              <div className="flex flex-col items-center gap-2 w-full">
-                <label className="text-sm font-black text-[#8C8AA7] uppercase tracking-wider">CHOOSE AVATAR</label>
+              <div className={`flex flex-col items-center w-full transition-all duration-300 ${isKeyboardOpen ? 'gap-0.5' : 'gap-2'}`}>
+                <label className={`font-black text-[#8C8AA7] uppercase tracking-wider transition-all duration-300 ${isKeyboardOpen ? 'text-[10px]' : 'text-sm'}`}>CHOOSE AVATAR</label>
                 
                 <div className="flex items-center justify-between w-full relative max-w-[280px] sm:max-w-[320px]">
                   <button 
                     onClick={() => setAvatarIndex((prev) => (prev - 1 + AVATARS.length) % AVATARS.length)}
-                    className="w-11 h-11 bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer"
+                    className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-8 h-8' : 'w-11 h-11'}`}
                   >
-                    <ChevronLeft strokeWidth={3.5} className="w-5 h-5" />
+                    <ChevronLeft strokeWidth={3.5} className={isKeyboardOpen ? 'w-4 h-4' : 'w-5 h-5'} />
                   </button>
                   
                   <div className="relative group cursor-pointer" onClick={() => setShowAvatarGrid(true)}>
-                    <div className="w-[85px] h-[85px] [@media(min-height:600px)]:w-32 [@media(min-height:600px)]:h-32 sm:w-36 sm:h-36 rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-transform select-none overflow-hidden">
-                      <span className="text-[55px] [@media(min-height:600px)]:text-[80px] sm:text-[96px] translate-y-1 sm:translate-y-2 leading-none flex items-center justify-center select-none">{AVATARS[avatarIndex]}</span>
+                    <div className={`rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-all duration-300 select-none overflow-hidden ${
+                      isKeyboardOpen 
+                        ? "w-14 h-14" 
+                        : "w-[85px] h-[85px] [@media(min-height:600px)]:w-32 [@media(min-height:600px)]:h-32 sm:w-36 sm:h-36"
+                    }`}>
+                      <span className={`leading-none flex items-center justify-center select-none transition-all duration-300 ${
+                        isKeyboardOpen 
+                          ? "text-[38px] translate-y-0.5" 
+                          : "text-[55px] [@media(min-height:600px)]:text-[80px] sm:text-[96px] translate-y-1 sm:translate-y-2"
+                      }`}>{AVATARS[avatarIndex]}</span>
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full">
-                         <LayoutGrid className="text-white" size={28} />
+                         <LayoutGrid className="text-white" size={isKeyboardOpen ? 18 : 28} />
                       </div>
                     </div>
                     {/* Small grid badge */}
-                    <div className="absolute -bottom-1 -right-1 bg-[#38BDF8] p-2 rounded-full border-2 border-white text-white shadow-md transition-transform hover:scale-110 active:scale-95">
-                      <LayoutGrid size={16} strokeWidth={3} />
+                    <div className={`absolute -bottom-1 -right-1 bg-[#38BDF8] rounded-full border-2 border-white text-white shadow-md transition-all hover:scale-110 active:scale-95 ${isKeyboardOpen ? 'p-1' : 'p-2'}`}>
+                      <LayoutGrid size={isKeyboardOpen ? 12 : 16} strokeWidth={3} />
                     </div>
                   </div>
                   
                   <button 
                     onClick={() => setAvatarIndex((prev) => (prev + 1) % AVATARS.length)}
-                    className="w-11 h-11 bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer"
+                    className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-8 h-8' : 'w-11 h-11'}`}
                   >
-                    <ChevronRight strokeWidth={3.5} className="w-5 h-5" />
+                    <ChevronRight strokeWidth={3.5} className={isKeyboardOpen ? 'w-4 h-4' : 'w-5 h-5'} />
                   </button>
                 </div>
               </div>
               
-              <div className="w-full space-y-2 max-w-[280px] sm:max-w-[320px]">
-                <label className="text-xs font-black text-[#8C8AA7] uppercase tracking-wide">NICKNAME</label>
+              <div className={`w-full max-w-[280px] sm:max-w-[320px] transition-all duration-300 ${isKeyboardOpen ? 'space-y-0.5' : 'space-y-2'}`}>
+                <label className={`font-black text-[#8C8AA7] uppercase tracking-wide transition-all duration-300 ${isKeyboardOpen ? 'text-[9px]' : 'text-xs'}`}>NICKNAME</label>
                 <textarea 
                   maxLength={10}
                   rows={1}
@@ -321,6 +420,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                       handleGoToRooms();
                     }
                   }}
+                  onFocus={handleIOSFocusBypass}
                   placeholder="Enter your name..."
                   autoComplete="off"
                   autoCorrect="off"
@@ -329,7 +429,11 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   name="nickname_input_random_name"
                   data-form-type="other"
                   style={{ resize: 'none' }}
-                  className={`w-full h-12 [@media(min-height:600px)]:h-14 py-2 [@media(min-height:600px)]:py-3.5 bg-white text-[#2E2882] placeholder-[#8C8AA7]/50 border-2 rounded-2xl px-5 font-black text-sm [@media(min-height:600px)]:text-base outline-none transition-all focus:bg-white overflow-hidden whitespace-nowrap ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-[#2E2882]/10 focus:border-[#38BDF8]'}`}
+                  className={`w-full bg-white text-[#2E2882] placeholder-[#8C8AA7]/50 border-2 rounded-2xl px-5 font-black outline-none transition-all focus:bg-white overflow-hidden whitespace-nowrap ios-input-focus ${
+                    isKeyboardOpen
+                      ? 'h-10 py-1.5 text-xs'
+                      : 'h-12 [@media(min-height:600px)]:h-14 py-2 [@media(min-height:600px)]:py-3.5 text-sm [@media(min-height:600px)]:text-base'
+                  } ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-[#2E2882]/10 focus:border-[#38BDF8]'}`}
                 />
               </div>
             </div>
@@ -338,7 +442,11 @@ export default function Lobby({ onPlay }: LobbyProps) {
           {/* Bottom Rooms button OUTSIDE the white card */}
           <button 
             onClick={handleGoToRooms}
-            className="w-[85%] sm:w-[75%] max-w-[320px] mx-auto h-12 [@media(min-height:600px)]:h-14 sm:h-16 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-[24px] font-black text-base [@media(min-height:600px)]:text-lg sm:text-xl flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg mt-auto mb-2 shrink-0"
+            className={`w-[85%] sm:w-[75%] max-w-[320px] mx-auto bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-[24px] font-black flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg mt-auto mb-2 shrink-0 ${
+              isKeyboardOpen 
+                ? "h-11 text-sm mb-1" 
+                : "h-12 [@media(min-height:600px)]:h-14 sm:h-16 text-base [@media(min-height:600px)]:text-lg sm:text-xl"
+            }`}
           >
             <span>ROOMS</span>
           </button>
