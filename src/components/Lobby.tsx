@@ -94,8 +94,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
   // Keyboard and viewport scaling states for initial screen
   const lobbyContainerRef = React.useRef<HTMLDivElement>(null);
   const lobbyKeyboardHeightCache = React.useRef<number>(300);
-  const [maxViewportHeight, setMaxViewportHeight] = useState<number>(
-    typeof window !== 'undefined' ? window.innerHeight : 800
+  const [maxViewportHeight, setMaxViewportHeight] = useState<number | string>(
+    typeof window !== 'undefined' && window.innerHeight > 300 ? window.innerHeight : '100dvh'
   );
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
 
@@ -134,7 +134,9 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
   useEffect(() => {
     let currentMax = window.visualViewport?.height || window.innerHeight;
-    setMaxViewportHeight(currentMax);
+    if (currentMax > 300) {
+      setMaxViewportHeight(currentMax);
+    }
 
     const handleResize = () => {
       if (!window.visualViewport) return;
@@ -142,7 +144,9 @@ export default function Lobby({ onPlay }: LobbyProps) {
       if (currentHeight > currentMax) {
         currentMax = currentHeight;
       }
-      setMaxViewportHeight(currentHeight);
+      if (currentHeight > 300 || currentMax > 300) {
+        setMaxViewportHeight(currentHeight);
+      }
 
       const isKeyboardShowing = currentHeight < currentMax - 150;
       setIsKeyboardOpen(isKeyboardShowing);
@@ -166,11 +170,39 @@ export default function Lobby({ onPlay }: LobbyProps) {
     };
   }, []);
 
+  useEffect(() => {
+    const preventScroll = (e: TouchEvent) => {
+      if (screen !== 'home') return;
+      if (showAvatarGrid) return; // Allow scrolling the avatar grid modal
+
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('.scrollable-content') || 
+        target.tagName === 'TEXTAREA' || 
+        target.tagName === 'INPUT'
+      ) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    document.addEventListener('touchmove', preventScroll, { passive: false });
+    return () => {
+      document.removeEventListener('touchmove', preventScroll);
+    };
+  }, [screen, showAvatarGrid]);
+
   const handleIOSFocusBypass = () => {
     if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
       document.documentElement.style.setProperty("--lobby-keyboard-inset", `${lobbyKeyboardHeightCache.current}px`);
-      window.scrollTo(0, 0);
-      setTimeout(() => window.scrollTo(0, 0), 10);
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as any });
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      setTimeout(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' as any });
+        document.body.scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+      }, 50);
     }
   };
   const [afkWarning, setAfkWarning] = useState(() => {
@@ -357,58 +389,58 @@ export default function Lobby({ onPlay }: LobbyProps) {
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className={`w-[90%] max-w-[340px] bg-[#ECEBFC] rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col justify-center items-center text-[#2E2882] transition-all duration-300 min-h-0 ${
+            className={`w-[90%] max-w-[340px] bg-[#ECEBFC] rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col justify-center items-center text-[#2E2882] min-h-0 my-auto shrink-0 ${
               isKeyboardOpen 
-                ? "py-2 px-4 my-1 flex-1 shrink" 
-                : "py-4 [@media(min-height:600px)]:py-5 px-5 [@media(min-height:600px)]:px-6 sm:px-8 my-auto shrink-0"
+                ? "py-4 px-6" 
+                : "py-4 [@media(min-height:600px)]:py-5 px-5 [@media(min-height:600px)]:px-6 sm:px-8"
             }`}
           >
             {/* Content body wrapper */}
-            <div className={`flex flex-col items-center w-full transition-all duration-300 ${isKeyboardOpen ? 'space-y-1.5' : 'space-y-4'}`}>
+            <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'space-y-3' : 'space-y-4'}`}>
               {/* Avatar Selector */}
-              <div className={`flex flex-col items-center w-full transition-all duration-300 ${isKeyboardOpen ? 'gap-0.5' : 'gap-2'}`}>
-                <label className={`font-black text-[#8C8AA7] uppercase tracking-wider transition-all duration-300 ${isKeyboardOpen ? 'text-[10px]' : 'text-sm'}`}>CHOOSE AVATAR</label>
+              <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'gap-2' : 'gap-2'}`}>
+                <label className={`font-black text-[#8C8AA7] uppercase tracking-wider ${isKeyboardOpen ? 'text-[12px]' : 'text-sm'}`}>CHOOSE AVATAR</label>
                 
                 <div className="flex items-center justify-between w-full relative max-w-[280px] sm:max-w-[320px]">
                   <button 
                     onClick={() => setAvatarIndex((prev) => (prev - 1 + AVATARS.length) % AVATARS.length)}
-                    className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-8 h-8' : 'w-11 h-11'}`}
+                    className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-10 h-10' : 'w-11 h-11'}`}
                   >
-                    <ChevronLeft strokeWidth={3.5} className={isKeyboardOpen ? 'w-4 h-4' : 'w-5 h-5'} />
+                    <ChevronLeft strokeWidth={3.5} className={isKeyboardOpen ? 'w-5 h-5' : 'w-5 h-5'} />
                   </button>
                   
                   <div className="relative group cursor-pointer" onClick={() => setShowAvatarGrid(true)}>
-                    <div className={`rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-all duration-300 select-none overflow-hidden ${
+                    <div className={`rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-transform select-none overflow-hidden ${
                       isKeyboardOpen 
-                        ? "w-14 h-14" 
+                        ? "w-[85px] h-[85px]" 
                         : "w-[85px] h-[85px] [@media(min-height:600px)]:w-32 [@media(min-height:600px)]:h-32 sm:w-36 sm:h-36"
                     }`}>
-                      <span className={`leading-none flex items-center justify-center select-none transition-all duration-300 ${
+                      <span className={`leading-none flex items-center justify-center select-none ${
                         isKeyboardOpen 
-                          ? "text-[38px] translate-y-0.5" 
+                          ? "text-[55px] translate-y-1" 
                           : "text-[55px] [@media(min-height:600px)]:text-[80px] sm:text-[96px] translate-y-1 sm:translate-y-2"
                       }`}>{AVATARS[avatarIndex]}</span>
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full">
-                         <LayoutGrid className="text-white" size={isKeyboardOpen ? 18 : 28} />
+                         <LayoutGrid className="text-white" size={isKeyboardOpen ? 24 : 28} />
                       </div>
                     </div>
                     {/* Small grid badge */}
-                    <div className={`absolute -bottom-1 -right-1 bg-[#38BDF8] rounded-full border-2 border-white text-white shadow-md transition-all hover:scale-110 active:scale-95 ${isKeyboardOpen ? 'p-1' : 'p-2'}`}>
-                      <LayoutGrid size={isKeyboardOpen ? 12 : 16} strokeWidth={3} />
+                    <div className={`absolute -bottom-1 -right-1 bg-[#38BDF8] rounded-full border-2 border-white text-white shadow-md transition-all hover:scale-110 active:scale-95 ${isKeyboardOpen ? 'p-1.5' : 'p-2'}`}>
+                      <LayoutGrid size={isKeyboardOpen ? 14 : 16} strokeWidth={3} />
                     </div>
                   </div>
                   
                   <button 
                     onClick={() => setAvatarIndex((prev) => (prev + 1) % AVATARS.length)}
-                    className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-8 h-8' : 'w-11 h-11'}`}
+                    className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-10 h-10' : 'w-11 h-11'}`}
                   >
-                    <ChevronRight strokeWidth={3.5} className={isKeyboardOpen ? 'w-4 h-4' : 'w-5 h-5'} />
+                    <ChevronRight strokeWidth={3.5} className={isKeyboardOpen ? 'w-5 h-5' : 'w-5 h-5'} />
                   </button>
                 </div>
               </div>
               
-              <div className={`w-full max-w-[280px] sm:max-w-[320px] transition-all duration-300 ${isKeyboardOpen ? 'space-y-0.5' : 'space-y-2'}`}>
-                <label className={`font-black text-[#8C8AA7] uppercase tracking-wide transition-all duration-300 ${isKeyboardOpen ? 'text-[9px]' : 'text-xs'}`}>NICKNAME</label>
+              <div className={`w-full max-w-[280px] sm:max-w-[320px] ${isKeyboardOpen ? 'space-y-1' : 'space-y-2'}`}>
+                <label className={`font-black text-[#8C8AA7] uppercase tracking-wide ${isKeyboardOpen ? 'text-[11px]' : 'text-xs'}`}>NICKNAME</label>
                 <textarea 
                   maxLength={10}
                   rows={1}
@@ -431,7 +463,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   style={{ resize: 'none' }}
                   className={`w-full bg-white text-[#2E2882] placeholder-[#8C8AA7]/50 border-2 rounded-2xl px-5 font-black outline-none transition-all focus:bg-white overflow-hidden whitespace-nowrap ios-input-focus ${
                     isKeyboardOpen
-                      ? 'h-10 py-1.5 text-xs'
+                      ? 'h-12 py-3 text-sm'
                       : 'h-12 [@media(min-height:600px)]:h-14 py-2 [@media(min-height:600px)]:py-3.5 text-sm [@media(min-height:600px)]:text-base'
                   } ${nicknameError ? 'border-red-400 focus:border-red-400' : 'border-[#2E2882]/10 focus:border-[#38BDF8]'}`}
                 />

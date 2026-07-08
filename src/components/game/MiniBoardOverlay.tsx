@@ -247,9 +247,7 @@ export function MiniBoardOverlay({
       {/* 4. PODIUM STATE */}
       {gameState.status === "PODIUM" &&
         (() => {
-          const sorted = [...currentPlayers]
-            .sort((a, b) => (b.points || 0) - (a.points || 0))
-            .filter((p) => !p.isEmpty);
+          const sorted = currentPlayers.filter((p) => !p.isEmpty);
           const first = sorted[0];
           const second = sorted[1];
           const third = sorted[2];
