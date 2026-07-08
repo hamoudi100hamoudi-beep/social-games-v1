@@ -868,9 +868,11 @@ export default function GameRoom({
     }
   }, [isInputDisabled]);
 
-  const handleIOSPreLift = () => {
+  const handleIOSFocusBypass = () => {
     if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
       document.documentElement.style.setProperty("--keyboard-inset", "350px");
+      window.scrollTo(0, 0);
+      setTimeout(() => window.scrollTo(0, 0), 10);
     }
   };
 
@@ -1705,10 +1707,10 @@ export default function GameRoom({
                     }
                   }}
                   onFocus={() => {
+                    handleIOSFocusBypass();
                     setIsInputFocused(true);
                     setIsKeyboardOpen(true);
                   }}
-                  onTouchStart={handleIOSPreLift}
                   onBlur={() => {
                     setIsInputFocused(false);
                   }}
