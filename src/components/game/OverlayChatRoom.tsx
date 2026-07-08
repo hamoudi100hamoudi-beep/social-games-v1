@@ -248,6 +248,7 @@ interface OverlayChatRoomProps {
   chatInput: string;
   setChatInput: (val: string) => void;
   handleChatSubmit: (e: React.FormEvent) => void;
+  iosKeyboardHeightCache: React.MutableRefObject<number>;
 }
 
 export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
@@ -258,7 +259,8 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
   socketId,
   chatInput,
   setChatInput,
-  handleChatSubmit
+  handleChatSubmit,
+  iosKeyboardHeightCache
 }) => {
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
   const bgTouchStartTime = useRef<number>(0);
@@ -266,7 +268,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
 
   const handleIOSFocusBypass = () => {
     if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
-      document.documentElement.style.setProperty("--keyboard-inset", "300px");
+      document.documentElement.style.setProperty("--keyboard-inset", `${iosKeyboardHeightCache.current}px`);
       window.scrollTo(0, 0);
       setTimeout(() => window.scrollTo(0, 0), 10);
     }

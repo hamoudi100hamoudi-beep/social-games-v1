@@ -187,6 +187,7 @@ export default function GameRoom({
   const [isChatOpen, setIsChatOpen] = useState(false);
   const guessInputRef = React.useRef<HTMLTextAreaElement>(null);
   const mainContainerRef = React.useRef<HTMLDivElement>(null);
+  const iosKeyboardHeightCache = React.useRef<number>(350);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(
     typeof window !== "undefined" ? window.innerHeight : 800,
   );
@@ -790,6 +791,10 @@ export default function GameRoom({
          // and the container didn't shrink to accommodate it (iOS Safari behavior).
          const inset = Math.max(0, containerHeight - currentHeight);
          document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
+         
+         if (inset > 150) {
+           iosKeyboardHeightCache.current = inset + 25;
+         }
       }
 
       if (!isKeyboardShowing) {
@@ -870,7 +875,7 @@ export default function GameRoom({
 
   const handleIOSFocusBypass = () => {
     if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
-      document.documentElement.style.setProperty("--keyboard-inset", "300px");
+      document.documentElement.style.setProperty("--keyboard-inset", `${iosKeyboardHeightCache.current}px`);
       window.scrollTo(0, 0);
       setTimeout(() => window.scrollTo(0, 0), 10);
     }
@@ -1755,12 +1760,14 @@ export default function GameRoom({
       {/* Chat Overlay */}
       <OverlayChatRoom
         isChatOpen={isChatOpen}
+        viewportOffsetTop={0}
         closeChat={closeChat}
         chatMessages={filteredChatMessages}
         socketId={socketId}
         chatInput={chatInput}
         setChatInput={setChatInput}
         handleChatSubmit={handleChatSubmit}
+        iosKeyboardHeightCache={iosKeyboardHeightCache}
       />
 
       {/* Skip Confirm Modal */}
