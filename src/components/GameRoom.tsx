@@ -1091,29 +1091,67 @@ export default function GameRoom({
   };
 
   // --- Hardware Back Button Interceptor ---
+  const activeStatesRef = React.useRef({
+    isChatOpen,
+    showReportConfirm,
+    showSkipConfirm,
+    selectedProfilePlayer,
+    showExitConfirm,
+    showCooldownWarning
+  });
+
+  useEffect(() => {
+    activeStatesRef.current = {
+      isChatOpen,
+      showReportConfirm,
+      showSkipConfirm,
+      selectedProfilePlayer,
+      showExitConfirm,
+      showCooldownWarning
+    };
+  }, [
+    isChatOpen,
+    showReportConfirm,
+    showSkipConfirm,
+    selectedProfilePlayer,
+    showExitConfirm,
+    showCooldownWarning
+  ]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Unconditionally push a state so there is always a forward state to be popped
-    window.history.pushState({ trap: true }, "");
+    // Push an initial state to trap the back button
+    // We append a hash to ensure the browser registers a distinct history entry
+    if (!window.location.hash.includes("game")) {
+      window.history.pushState(null, "", window.location.pathname + window.location.search + "#game");
+    }
 
     const handlePopState = (e: PopStateEvent) => {
-      // Every time they try to go back, we add a new forward state to replace the one they popped
-      window.history.pushState({ trap: true }, "");
+      // The user pressed back, which popped the "#game" hash.
+      // We immediately push it back to trap the NEXT back press.
+      window.history.pushState(null, "", window.location.pathname + window.location.search + "#game");
 
-      // Check states via functional updates to always get latest without adding dependencies
-      setIsChatOpen((prevChatOpen) => {
-        if (prevChatOpen) {
-          // If chat is open, close it
-          const textarea = document.getElementById("chat-textarea");
-          if (textarea) textarea.blur();
-          return false;
-        } else {
-          // If chat is closed, toggle exit confirmation
-          setShowExitConfirm((prev) => !prev);
-          return prevChatOpen;
-        }
-      });
+      const current = activeStatesRef.current;
+
+      if (current.isChatOpen) {
+        setIsChatOpen(false);
+        const textarea = document.getElementById("chat-textarea");
+        if (textarea) textarea.blur();
+      } else if (current.showReportConfirm) {
+        setShowReportConfirm(false);
+      } else if (current.showSkipConfirm) {
+        setShowSkipConfirm(false);
+      } else if (current.selectedProfilePlayer) {
+        setSelectedProfilePlayer(null);
+      } else if (current.showCooldownWarning) {
+        setShowCooldownWarning(false);
+      } else if (current.showExitConfirm) {
+        setShowExitConfirm(false);
+      } else {
+        // If nothing is open, open the exit confirm modal
+        setShowExitConfirm(true);
+      }
     };
 
     window.addEventListener("popstate", handlePopState);
