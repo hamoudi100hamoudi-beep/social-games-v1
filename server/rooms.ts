@@ -1355,8 +1355,9 @@ class RoomManager {
     );
     let matchMethod = "persistentId";
     if (!existingPlayer) {
-      // fallback: find by name (even if technically online, it might be a ghost socket that hasn't timed out yet)
-      existingPlayer = room.players.find((p) => p.name === nickname);
+      // We ONLY fallback to nickname if the existing player DOES NOT have a persistentId
+      // (which shouldn't happen, but just in case for older clients)
+      existingPlayer = room.players.find((p) => p.name === nickname && !p.persistentId);
       if (existingPlayer) matchMethod = "nickname";
     }
 

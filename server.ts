@@ -144,6 +144,14 @@ async function startServer() {
         }
 
         const existingRoom = roomManager.getRoom(roomId);
+        if (existingRoom) {
+          const isNicknameTaken = existingRoom.players.some(p => p.name === nickname);
+          if (isNicknameTaken) {
+            if (callback) callback({ error: 'nickname_taken', success: false });
+            return;
+          }
+        }
+        
         const onlinePlayersCount = existingRoom ? existingRoom.players.filter(p => !p.isOffline).length : 0;
         if (existingRoom && onlinePlayersCount >= 5) {
           if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });

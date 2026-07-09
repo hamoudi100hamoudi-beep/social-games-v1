@@ -323,6 +323,7 @@ export default function GameRoom({
   const [votekicks, setVotekicks] = useState<Record<string, string[]>>({});
   const [isBanned, setIsBanned] = useState(false);
   const [isRoomFull, setIsRoomFull] = useState(false);
+  const [isNicknameTaken, setIsNicknameTaken] = useState(false);
   const [showCooldownWarning, setShowCooldownWarning] = useState(false);
   const lastVoteKickTimeRef = React.useRef<number>(0);
 
@@ -499,6 +500,10 @@ export default function GameRoom({
               }
             }
             onLeave?.();
+          } else if (res && res.error === "nickname_taken") {
+            console.warn("[GameRoom] Rejoin blocked: Nickname is already taken.");
+            setIsNicknameTaken(true);
+            setIsInitialLoadingRoom(false);
           } else if (res && res.error === "banned") {
             console.warn("[GameRoom] Rejoin blocked: Player is banned from room.");
             setIsBanned(true);
@@ -1084,6 +1089,39 @@ export default function GameRoom({
     );
     return player ? player.name : "";
   };
+
+  // --- Hardware Back Button Interceptor ---
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Unconditionally push a state so there is always a forward state to be popped
+    window.history.pushState({ trap: true }, "");
+
+    const handlePopState = (e: PopStateEvent) => {
+      // Every time they try to go back, we add a new forward state to replace the one they popped
+      window.history.pushState({ trap: true }, "");
+
+      // Check states via functional updates to always get latest without adding dependencies
+      setIsChatOpen((prevChatOpen) => {
+        if (prevChatOpen) {
+          // If chat is open, close it
+          const textarea = document.getElementById("chat-textarea");
+          if (textarea) textarea.blur();
+          return false;
+        } else {
+          // If chat is closed, toggle exit confirmation
+          setShowExitConfirm((prev) => !prev);
+          return prevChatOpen;
+        }
+      });
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
 
   const effectiveHeight = "100dvh";
 
@@ -2148,6 +2186,60 @@ export default function GameRoom({
         </h3>
         <p id="kicked-out-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
           تم طردك من هذه الغرفة بناءً على تصويت اللاعبين الآخرين.
+        </p>
+      </CinematicModal>
+
+      {/* Nickname Taken Warning Modal */}
+      <CinematicModal
+        isOpen={isNicknameTaken}
+        overlayClassName="bg-slate-950/100"
+        onClose={() => {
+          setIsNicknameTaken(false);
+          if (typeof window !== "undefined") {
+            safeLocalStorage.removeItem("gartic_player_room");
+          }
+          onLeave?.();
+        }}
+        titleType="report"
+        titleText="ERROR"
+        buttons={[
+          {
+            id: "nickname-taken-exit-btn",
+            text: "OK",
+            onClick: () => {
+              setIsNicknameTaken(false);
+              if (typeof window !== "undefined") {
+                safeLocalStorage.removeItem("gartic_player_room");
+              }
+              onLeave?.();
+            },
+            variant: "danger",
+          },
+        ]}
+      >
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+          <motion.div 
+            animate={{
+              rotate: [-4, 4, -4, 4, -4, 4, 0],
+              scale: [1, 1.05, 1, 1.05, 1]
+            }}
+            transition={{
+              delay: 1.5,
+              repeat: Infinity,
+              duration: 0.6,
+              repeatDelay: 1.8,
+              ease: "easeInOut"
+            }}
+          >
+            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+          </motion.div>
+        </div>
+
+        <h3 id="nickname-taken-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+          Name already in use
+        </h3>
+        <p id="nickname-taken-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+          يوجد شخص آخر في الغرفة بنفس الاسم، غيره لتتمكن من الدخول
         </p>
       </CinematicModal>
 
