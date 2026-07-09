@@ -1121,16 +1121,16 @@ export default function GameRoom({
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Push an initial state to trap the back button
-    // We append a hash to ensure the browser registers a distinct history entry
-    if (!window.location.hash.includes("game")) {
-      window.history.pushState(null, "", window.location.pathname + window.location.search + "#game");
+    // Create a very deep buffer (15 states) to completely absorb rapid back button presses.
+    // Even if the user taps back 5 times in a row very fast, they will only consume our dummy states,
+    // and our code will replenish them as the popstate events fire.
+    for (let i = 0; i < 15; i++) {
+      window.history.pushState({ gartic_trap: i }, "");
     }
 
     const handlePopState = (e: PopStateEvent) => {
-      // The user pressed back, which popped the "#game" hash.
-      // We immediately push it back to trap the NEXT back press.
-      window.history.pushState(null, "", window.location.pathname + window.location.search + "#game");
+      // Replenish the state immediately to maintain the deep buffer
+      window.history.pushState({ gartic_trap: 'replenish' }, "");
 
       const current = activeStatesRef.current;
 
@@ -1158,6 +1158,23 @@ export default function GameRoom({
     
     return () => {
       window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  // --- Browser Unload Protection (beforeunload) ---
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Modern browsers require setting returnValue or returning a string to show the prompt
+      e.returnValue = "Are you sure you want to leave the game?";
+      return "Are you sure you want to leave the game?";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, []);
 
