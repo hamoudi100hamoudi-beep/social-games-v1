@@ -144,48 +144,35 @@ export function MiniBoardOverlay({
           // 3.3. CANCELED STATE
           if (reason === "canceled") {
             return (
-              <motion.div key="round-end-canceled" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans border-2 border-red-500 rounded-3xl overflow-hidden shadow-2xl">
-                <div className="text-center w-full max-w-sm pb-2">
-                  <div className="mb-5">
+              <motion.div key="round-end-canceled" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass}>
+                <div className="text-center w-full max-w-sm pb-2 pt-6 sm:pt-10">
+                  <div className="mb-5 mt-4 sm:mt-8">
                     <GameTitle text="CANCELED TURN" type="miniboard" className="text-[20px] sm:text-[24px]" />
                   </div>
 
-                  <div className="relative w-24 h-28 mb-5 mx-auto flex flex-col items-center justify-end">
-                    <div className="w-20 h-20 bg-[#14A5CE] rounded-2xl border-4 border-[#0F3957] relative shadow-md flex flex-col overflow-hidden">
-                      <div className="w-full h-5 bg-[#C52B3C] border-b-4 border-[#0F3957] flex">
-                        <div className="w-1/3 h-full border-r-4 border-[#0F3957]"></div>
-                        <div className="w-1/3 h-full border-r-4 border-[#0F3957]"></div>
-                      </div>
-                      <div className="absolute top-6 left-1/2 -translate-x-1/2 flex gap-2">
-                        <div className="relative w-5 h-4">
-                          <div className="absolute top-0 left-0 w-6 h-1.5 bg-[#0F3957] rotate-[15deg] origin-left"></div>
-                          <div className="absolute bottom-0 left-1 w-3 h-3 bg-white border-2 border-[#0F3957] rounded-sm flex items-center justify-center">
-                            <div className="w-1.5 h-1.5 bg-[#0F3957] rounded-full"></div>
-                          </div>
-                        </div>
-                        <div className="relative w-5 h-4">
-                          <div className="absolute top-0 right-0 w-6 h-1.5 bg-[#0F3957] -rotate-[15deg] origin-right"></div>
-                          <div className="absolute bottom-0 right-1 w-3 h-3 bg-white border-2 border-[#0F3957] rounded-sm flex items-center justify-center">
-                            <div className="w-1.5 h-1.5 bg-[#0F3957] rounded-full"></div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 w-4 h-2 border-t-4 border-[#0F3957] rounded-full"></div>
-                    </div>
-                    <div className="flex gap-4 justify-center w-full mt-1.5 h-3 relative z-[1]">
-                      <div className="w-2 h-3 bg-[#14A5CE] border-l-4 border-r-4 border-[#0F3957] rounded-b-md"></div>
-                      <div className="w-2 h-3 bg-[#14A5CE] border-l-4 border-r-4 border-[#0F3957] rounded-b-md"></div>
-                    </div>
-                    <div className="absolute bottom-6 right-1 bg-white rounded-full p-0.5 shadow-sm border border-red-200">
-                      <AlertTriangle size={18} className="text-red-500 fill-red-100 animate-pulse" />
-                    </div>
+                  <div className="mb-6 flex justify-center">
+                    <motion.div
+                      animate={{
+                        rotate: [-4, 4, -4, 4, -4, 4, 0],
+                        scale: [1, 1.05, 1, 1.05, 1]
+                      }}
+                      transition={{
+                        delay: 1.5,
+                        repeat: Infinity,
+                        duration: 0.6,
+                        repeatDelay: 1.8,
+                        ease: "easeInOut"
+                      }}
+                    >
+                      <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
+                    </motion.div>
                   </div>
 
                   <p className="text-[#728299] text-sm sm:text-base font-bold mb-1" dir="auto">
                     Users score has been canceled
                   </p>
                   <p className="text-[#728299]/70 text-xs font-bold" dir="auto">
-                    لقد تم إلغاء نقاط ربع الدور
+                    لقد تم إلغاء نقاط الدور
                   </p>
                 </div>
               </motion.div>
