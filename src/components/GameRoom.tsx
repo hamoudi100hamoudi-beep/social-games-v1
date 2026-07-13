@@ -758,10 +758,7 @@ export default function GameRoom({
           setShowCorrectAnimation(true);
           
           // 🔊 Play distinct sound when I get the correct answer
-          // Delayed slightly to perfectly sync with the visual pop-out frame of the animation
-          setTimeout(() => {
-            soundManager.play('correctGuessSelf');
-          }, 80);
+          soundManager.play('correctGuessSelf');
           
           setTimeout(() => setShowCorrectAnimation(false), 1200);
         } else {

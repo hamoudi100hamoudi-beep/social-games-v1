@@ -1,31 +1,6 @@
 // src/utils/soundManager.ts
 
-export type SoundEvent =
-  | 'playerJoin'
-  | 'playerLeave'
-  | 'correctGuessSelf'
-  | 'correctGuessOther'
-  | 'wordSelectionShow'
-  | 'hintShow'
-  | 'roundStart'
-  | 'roundEnd'
-  | 'buttonClick'
-  | 'chatMessage'
-  | 'notification';
-
-export const SOUND_MANIFEST: Record<SoundEvent, string> = {
-  playerJoin: '/sounds/room/join.wav',
-  playerLeave: '/sounds/room/leave.wav',
-  correctGuessSelf: '/sounds/game/correct-self.wav',
-  correctGuessOther: '/sounds/game/correct-other.wav',
-  wordSelectionShow: '/sounds/game/word-selection.wav',
-  hintShow: '/sounds/game/hint.wav',
-  roundStart: '/sounds/game/round-start.wav',
-  roundEnd: '/sounds/game/round-end.wav',
-  buttonClick: '/sounds/ui/button.wav',
-  chatMessage: '/sounds/ui/chat.wav',
-  notification: '/sounds/ui/notification.wav',
-};
+import { SOUND_CONFIG, SoundEvent } from './soundConfig';
 
 class SoundManager {
   private context: AudioContext | null = null;
@@ -33,14 +8,6 @@ class SoundManager {
   private isMuted: boolean = false;
   private lastPlayTimes: Map<string, number> = new Map();
   private unlocked: boolean = false;
-
-  // Throttling configuration to prevent sound storms (ms)
-  private throttleTimes: Record<string, number> = {
-    chatMessage: 100,
-    playerJoin: 500,
-    playerLeave: 500,
-    buttonClick: 50,
-  };
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -108,11 +75,14 @@ class SoundManager {
   }
 
   /**
-   * Loads all sounds defined in SOUND_MANIFEST
+   * Loads all sounds defined in SOUND_CONFIG
    */
   public async loadAll() {
-    const promises = Object.entries(SOUND_MANIFEST).map(([name, url]) => {
-      return this.loadSound(name as SoundEvent, url);
+    const promises = Object.entries(SOUND_CONFIG).map(([name, settings]) => {
+      if (settings.enabled) {
+        return this.loadSound(name as SoundEvent, settings.path);
+      }
+      return Promise.resolve();
     });
     await Promise.all(promises);
   }
@@ -120,11 +90,14 @@ class SoundManager {
   /**
    * Plays a pre-loaded sound by name
    */
-  public play(name: SoundEvent, volume: number = 1.0) {
+  public play(name: SoundEvent) {
     if (this.isMuted || !this.context || !this.buffers.has(name)) return;
 
+    const settings = SOUND_CONFIG[name];
+    if (!settings || !settings.enabled) return;
+
     const now = Date.now();
-    const throttleTime = this.throttleTimes[name] || 50;
+    const throttleTime = settings.cooldown || 50;
     const lastPlay = this.lastPlayTimes.get(name) || 0;
 
     // Prevent sounds from overlapping too closely and causing a loud "storm"
@@ -134,23 +107,31 @@ class SoundManager {
 
     this.lastPlayTimes.set(name, now);
 
-    try {
-      if (this.context.state === 'suspended') {
-        this.context.resume();
+    const playAudio = () => {
+      try {
+        if (this.context!.state === 'suspended') {
+          this.context!.resume();
+        }
+
+        const source = this.context!.createBufferSource();
+        source.buffer = this.buffers.get(name)!;
+
+        const gainNode = this.context!.createGain();
+        gainNode.gain.value = settings.volume;
+
+        source.connect(gainNode);
+        gainNode.connect(this.context!.destination);
+
+        source.start(0);
+      } catch (e) {
+        console.error(`SoundManager: Error playing sound ${name}`, e);
       }
+    };
 
-      const source = this.context.createBufferSource();
-      source.buffer = this.buffers.get(name)!;
-
-      const gainNode = this.context.createGain();
-      gainNode.gain.value = volume;
-
-      source.connect(gainNode);
-      gainNode.connect(this.context.destination);
-
-      source.start(0);
-    } catch (e) {
-      console.error(`SoundManager: Error playing sound ${name}`, e);
+    if (settings.delayMs > 0) {
+      setTimeout(playAudio, settings.delayMs);
+    } else {
+      playAudio();
     }
   }
 
