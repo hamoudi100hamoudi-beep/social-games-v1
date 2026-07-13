@@ -50,7 +50,7 @@ export default function GameTitle({ text, type, className = "text-[34px]" }: Gam
           transform: "translate(0px, 2.5px)",
           WebkitTransform: "translate(0px, 2.5px)",
           pointerEvents: "none",
-        }}
+        } as any}
       >
         {text}
       </span>
@@ -67,7 +67,7 @@ export default function GameTitle({ text, type, className = "text-[34px]" }: Gam
           WebkitTextStroke: `3.5px ${stroke}`,
           textStroke: `3.5px ${stroke}`,
           paintOrder: "stroke fill",
-        }}
+        } as any}
       >
         {text}
       </span>

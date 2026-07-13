@@ -516,7 +516,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full bg-[#ECEBFC] p-4 sm:p-6 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col flex-1 my-auto mb-4 sm:mb-6 text-[#2E2882] overflow-hidden min-h-[250px] shrink-0"
+            className="w-full bg-[#ECEBFC] p-4 sm:p-6 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col flex-1 mt-10 mb-4 sm:mt-12 sm:mb-6 text-[#2E2882] overflow-hidden min-h-[250px] shrink-0"
           >
             {/* List - Positioned cleanly at the top of the white container */}
             <div className="flex-1 overflow-y-auto pr-1 space-y-4 no-scrollbar">

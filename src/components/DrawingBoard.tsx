@@ -6,7 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { 
   Pencil, Eraser, Undo2, Redo2, FileX, RefreshCcw, 
-  Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2,
+  Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2, ZoomIn,
   Check, X, AlertTriangle
 } from 'lucide-react';
 import { ToolType } from '../types/draw';
@@ -260,7 +260,7 @@ export default function DrawingBoard({
 
         {/* Overlay Tools Sub-Menu */}
         {!readOnly && activeMenu === 'tools' && (
-          <div className="absolute bottom-[58px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 z-20 animate-in fade-in slide-in-from-bottom-2">
+          <div className="absolute bottom-[58px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 z-20 pointer-events-auto animate-in fade-in slide-in-from-bottom-2">
             <SubToolBtn icon={<Pencil />} active={tool==='pencil'} onClick={() => changeTool('pencil')} />
             <SubToolBtn icon={<Eraser />} active={tool==='eraser'} onClick={() => changeTool('eraser')} />
             <SubToolBtn icon={<Square fill="currentColor" />} active={tool==='fillRect'} onClick={() => changeTool('fillRect')} />
@@ -271,45 +271,39 @@ export default function DrawingBoard({
             <SubToolBtn icon={<Minus />} active={tool==='line'} onClick={() => changeTool('line')} />
             <SubToolBtn icon={<Pipette />} active={tool==='pipette'} onClick={() => changeTool('pipette')} />
             <SubToolBtn icon={<FileX />} onClick={requestClearCanvas} className="text-white !bg-[#FB923C]/90 hover:!bg-[#FB923C] !border-orange-500" />
+            
+            {/* Divider spanning 2 columns, optional but good for separation */}
+            <div className="col-span-2 h-[1px] bg-white/10 my-1 rounded-full"></div>
+            
+            {/* Undo / Redo Row placed BELOW the tools list */}
+            <SubToolBtn 
+              icon={<Undo2 />} 
+              onClick={undo} 
+              disabled={historyState.index <= 0} 
+            />
+            <SubToolBtn 
+              icon={<Redo2 />} 
+              onClick={redo} 
+              disabled={historyState.index >= historyState.length - 1} 
+            />
           </div>
         )}
 
-        {/* Floating Action Buttons (Undo/Redo / Reset Zoom / Toggle Zoom) - Upper-Left */}
+        {/* Floating Action Buttons (Zoom) - Upper-Left */}
         {!readOnly && (
           <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-30 pointer-events-auto" dir="ltr">
-            <div className="flex gap-1.5">
-              <button 
-                type="button"
-                onClick={undo} 
-                disabled={historyState.index <= 0}
-                title="تراجع"
-                className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 transition-all ${historyState.index <= 0 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
-              >
-                <Undo2 size={16} strokeWidth={2.5} />
-              </button>
-              <button 
-                type="button"
-                onClick={redo} 
-                disabled={historyState.index >= historyState.length - 1}
-                title="إعادة"
-                className={`w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 transition-all ${historyState.index >= historyState.length - 1 ? 'opacity-30 pointer-events-none' : 'hover:bg-slate-100 hover:scale-105 active:scale-95'}`}
-              >
-                <Redo2 size={16} strokeWidth={2.5} />
-              </button>
-            </div>
-
             <div className="flex gap-1.5">
               {/* Toggle Zoom Mode */}
               <button 
                 type="button"
                 onClick={toggleZoom} 
                 title={zoomEnabled ? "تعطيل وضع التكبير والتنقل" : "تفعيل وضع التكبير والتنقل (بإصبعين)"}
-                className={`h-[32px] px-2 rounded-lg flex items-center justify-center border text-[10px] font-black tracking-wider transition-all select-none hover:scale-105 active:scale-95
+                className={`w-[32px] h-[32px] rounded-lg flex items-center justify-center border transition-all select-none hover:scale-105 active:scale-95
                   ${zoomEnabled 
                     ? 'bg-amber-500 text-white border-amber-400' 
-                    : 'bg-white text-slate-700 border-slate-300/40'}`}
+                    : 'bg-white text-slate-700 border-slate-300/40 hover:bg-slate-100'}`}
               >
-                ZOOM {zoomEnabled ? "ON" : "OFF"}
+                <ZoomIn size={16} strokeWidth={2.5} />
               </button>
 
               {/* Reset Zoom helper */}
@@ -475,12 +469,12 @@ const SwapIcon = ({ size = 22, strokeWidth = 2.5, className }: any) => {
       style={{ width: 40, height: 40 }}
     >
       {/* Pencil top-left */}
-      <div className="absolute top-[3px] left-[3px]">
+      <div className="absolute top-[1px] left-[1px]">
         <Pencil size={18} strokeWidth={strokeWidth} />
       </div>
 
       {/* Eraser bottom-right */}
-      <div className="absolute bottom-[3px] right-[3px]">
+      <div className="absolute bottom-[1px] right-[1px]">
         <Eraser size={18} strokeWidth={strokeWidth} />
       </div>
 
@@ -490,7 +484,7 @@ const SwapIcon = ({ size = 22, strokeWidth = 2.5, className }: any) => {
         viewBox="0 0 40 40"
         fill="none"
         stroke="currentColor"
-        strokeWidth={strokeWidth}
+        strokeWidth={1.75}
         strokeLinecap="round"
         strokeLinejoin="round"
       >
@@ -522,18 +516,20 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
   );
 }
 
-function SubToolBtn({ icon, active, onClick, className = '' }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string }) {
+function SubToolBtn({ icon, active, onClick, className = '', disabled = false }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string, disabled?: boolean }) {
   return (
     <button 
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={`w-11 h-11 flex items-center justify-center rounded-lg border transition-all
+        ${disabled ? 'opacity-30 pointer-events-none' : ''}
         ${active 
           ? 'bg-blue-600 border-blue-400 text-white scale-105' 
           : 'bg-white/10 border-transparent text-white hover:bg-white/20 ' + className
         }`}
     >
-      {React.cloneElement(icon as React.ReactElement, { size: 21, strokeWidth: 2.5 })}
+      {React.cloneElement(icon as React.ReactElement<any>, { size: 21, strokeWidth: 2.5 })}
     </button>
   );
 }

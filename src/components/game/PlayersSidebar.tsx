@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User as UserIcon, Check, Pencil } from 'lucide-react';
+import { User as UserIcon, Check, Pencil, EyeOff } from 'lucide-react';
 
 const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
   return (
@@ -71,6 +71,7 @@ export interface PlayerSlot {
   wins?: number;
   isOffline?: boolean;
   persistentId?: string;
+  isBlocked?: boolean;
 }
 
 interface PlayersSidebarProps {
@@ -232,12 +233,17 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
             >
               {/* Avatar with Gartic Trophy */}
               <div className="relative shrink-0 mr-1.5 sm:mr-2.5">
-                 <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-[3px] transition-colors duration-200
+                 <div className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-[3px] transition-colors duration-200
                    ${slot.isEmpty ? 'bg-black/20 border-white/10' : `bg-bg-dark-brand ${borderClass}`}`}>
                    {slot.isEmpty ? (
                      <UserIcon size={20} className="text-white/30" />
                    ) : (
                      <span className="text-2xl sm:text-3xl translate-y-[1px]">{slot.avatar}</span>
+                   )}
+                   {slot.isBlocked && (
+                     <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center pointer-events-none">
+                       <EyeOff className="w-5 h-5 text-white/90" strokeWidth={2.5} />
+                     </div>
                    )}
                  </div>
                  

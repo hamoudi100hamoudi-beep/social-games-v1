@@ -3,7 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
-import { roomManager } from './server/rooms.js';
+import { roomManager, normalizeArabic } from './server/rooms.js';
 
 const getJsonSafeHistory = (history: any[]) => {
   if (!Array.isArray(history)) return [];
@@ -77,6 +77,23 @@ async function startServer() {
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', time: Date.now() });
   });
+
+  // Rate limiting maps
+  const chatMessageLimits = new Map<string, number[]>();
+  const guessLimits = new Map<string, number[]>();
+
+  const checkRateLimit = (limitsMap: Map<string, number[]>, socketId: string, maxMessages: number, windowMs: number) => {
+    const now = Date.now();
+    const timestamps = limitsMap.get(socketId) || [];
+    // remove timestamps older than windowMs
+    const recent = timestamps.filter(ts => now - ts < windowMs);
+    if (recent.length >= maxMessages) {
+      return false; // Rate limited
+    }
+    recent.push(now);
+    limitsMap.set(socketId, recent);
+    return true; // Allowed
+  };
 
   io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
@@ -275,6 +292,9 @@ async function startServer() {
     socket.on('submit_guess', (data) => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {
+        if (!checkRateLimit(guessLimits, player.persistentId || socket.id, 5, 2000)) {
+          return; // Ignore if rate limited
+        }
         roomManager.submitGuess(player.roomId, socket.id, data.guess);
       }
     });
@@ -296,6 +316,27 @@ async function startServer() {
     socket.on('send_message', (data) => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {
+        if (!checkRateLimit(chatMessageLimits, player.persistentId || socket.id, 5, 2000)) {
+          return; // Ignore if rate limited
+        }
+
+        const room = roomManager.getRoom(player.roomId);
+        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentWord) {
+           const guess = data.text?.toLowerCase().trim() || "";
+           const target = room.gameState.currentWord.toLowerCase().trim();
+           const guessNorm = normalizeArabic(guess);
+           const targetNorm = normalizeArabic(target);
+           
+           if (guess && target && (guess.includes(target) || guessNorm.includes(targetNorm))) {
+              socket.emit('receive_message', {
+                id: 'sys-cheat-' + Date.now(),
+                text: '🚫 لا يمكنك كتابة الإجابة في الدردشة أثناء الرسم!',
+                type: 'warning'
+              });
+              return;
+           }
+        }
+
         const msg = {
           id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
           text: data.text,
@@ -410,6 +451,8 @@ async function startServer() {
         const announceMsg = {
           id: 'votekick-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
           text: `${player.name} voted to kick out ${targetPlayer.name}`,
+          voterName: player.name,
+          targetName: targetPlayer.name,
           type: 'votekick_alert'
         };
         roomManager.saveChatMessage(roomId, announceMsg);
@@ -443,7 +486,7 @@ async function startServer() {
 
           const kickedAnnounce = {
             id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-            text: `تم طرد ${kickedName} عن طريق التصويت!`,
+            text: `${kickedName} غادر الغرفة`,
             type: 'system'
           };
           roomManager.saveChatMessage(roomId, kickedAnnounce);

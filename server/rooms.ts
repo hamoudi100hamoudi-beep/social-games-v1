@@ -25,7 +25,7 @@ function getLevenshteinDistance(a: string, b: string): number {
   return matrix[b.length][a.length];
 }
 
-function normalizeArabic(str: string): string {
+export function normalizeArabic(str: string): string {
   return str
     .replace(/[أإآ]/g, "ا")
     .replace(/ة/g, "ه")

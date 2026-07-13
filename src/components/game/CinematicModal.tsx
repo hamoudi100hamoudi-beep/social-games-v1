@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import GameTitle from "./GameTitle";
 
 // 🎬 High-performance animation variants for low-end devices
-export const cinematicCardVariants = {
+export const cinematicCardVariants: any = {
   hidden: { opacity: 0, scale: 0.95 },
   visible: {
     opacity: 1,
@@ -24,7 +24,7 @@ export const cinematicCardVariants = {
   },
 };
 
-export const cinematicItemVariants = {
+export const cinematicItemVariants: any = {
   hidden: { opacity: 0, y: 5 },
   visible: {
     opacity: 1,

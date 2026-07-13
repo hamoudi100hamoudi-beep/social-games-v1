@@ -5,10 +5,10 @@ import GameTitle from "./GameTitle";
 
 interface Player {
   id: string;
-  persistentId: string;
+  persistentId?: string;
   name: string;
   avatar: string;
-  points: number;
+  points: number | null;
   isEmpty?: boolean;
 }
 

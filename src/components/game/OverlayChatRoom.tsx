@@ -7,9 +7,11 @@ export interface ChatMessage {
   senderId?: string;
   text: string;
   isSelf: boolean;
-  type: 'message' | 'system';
+  type: 'message' | 'system' | 'votekick_alert' | 'warning';
   avatar?: string;
   color?: string;
+  voterName?: string;
+  targetName?: string;
 }
 
 export const getSenderColor = (name: string): string => {
@@ -116,25 +118,10 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
         displayText = "You've skipped the turn";
     }
 
-    if (isKick) {
-      return (
-        <div className="flex justify-center mb-2">
-          <div 
-            className="bg-red-500/10 text-[#FF4D4D] border border-[#FF4D4D]/20 px-4 py-1.5 rounded-full text-xs font-semibold shadow-sm backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 flex items-center justify-center gap-1.5"
-            dir="auto"
-            style={{ unicodeBidi: 'plaintext' }}
-          >
-            <span>⚠</span>
-            <span>{displayText}</span>
-          </div>
-        </div>
-      );
-    }
-
     return (
       <div className="flex justify-center mb-2">
         <div 
-          className="bg-primary-brand/10 text-primary-brand border border-primary-brand/20 px-4 py-1.5 rounded-full text-xs font-semibold shadow-sm backdrop-blur-md flex items-center justify-center gap-1.5 animate-in fade-in duration-250"
+          className="bg-primary-brand/10 text-primary-brand border border-primary-brand/20 px-4 py-2 rounded-full text-[15px] font-semibold shadow-sm flex items-center justify-center gap-1.5 animate-in fade-in duration-250"
           dir="auto"
           style={{ unicodeBidi: 'plaintext' }}
         >
@@ -145,16 +132,24 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
     );
   }
 
-  if (msg.type === 'votekick_alert') {
+  if (msg.type === 'votekick_alert' || msg.type === 'warning') {
     return (
       <div className="flex justify-center mb-2">
         <div 
-          className="bg-red-500/10 text-[#FF4D4D] border border-[#FF4D4D]/20 px-4 py-1.5 rounded-full text-xs font-semibold shadow-sm backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 flex items-center justify-center gap-1.5"
-          dir="auto"
-          style={{ unicodeBidi: 'plaintext' }}
+          className="bg-red-500/10 border border-[#FF4D4D]/20 px-4 py-2 rounded-full text-[15px] font-semibold shadow-sm flex items-center justify-center gap-1.5 animate-in fade-in zoom-in-95 duration-200"
+          dir="rtl"
         >
-          <span>⚠</span>
-          <span>{msg.text}</span>
+          <span className="text-[#FF4D4D]">⚠</span>
+          {msg.type === 'votekick_alert' && msg.voterName && msg.targetName ? (
+            <div className="flex flex-wrap items-center gap-1 justify-center text-center">
+              <span className="text-[#FF4D4D]">قام</span>
+              <bdi className="text-[#FF4D4D] font-bold max-w-[120px] truncate inline-block">{msg.voterName}</bdi>
+              <span className="text-[#FF4D4D]">بالتصويت لطرد</span>
+              <bdi className="text-[#FF4D4D] font-bold max-w-[120px] truncate inline-block">{msg.targetName}</bdi>
+            </div>
+          ) : (
+            <span className="text-[#FF4D4D]" style={{ unicodeBidi: 'plaintext' }} dir="auto">{msg.text}</span>
+          )}
         </div>
       </div>
     );

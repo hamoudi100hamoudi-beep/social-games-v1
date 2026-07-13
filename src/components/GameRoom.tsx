@@ -28,6 +28,7 @@ import { MiniBoardOverlay } from "./game/MiniBoardOverlay";
 import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
 import CinematicModal from "./game/CinematicModal";
 import { safeLocalStorage } from "../utils/storage";
+import { soundManager } from "../utils/soundManager";
 
 interface GameRoomProps {
   nickname: string;
@@ -54,7 +55,7 @@ type PlayerSlot = {
   points: number | null;
   isCurrent: boolean;
   isEmpty?: boolean;
-  avatar?: string;
+  avatar: string;
   wins?: number;
   isOffline?: boolean;
   persistentId?: string;
@@ -63,6 +64,7 @@ type PlayerSlot = {
 interface HitNotification {
   id: string;
   name: string;
+  isReport?: boolean;
 }
 
 const SmoothTimer = ({
@@ -435,6 +437,52 @@ export default function GameRoom({
     }
   }, [gameState?.status, amIDrawer]);
 
+  // 🔊 Sound Hooks
+  const prevPlayersLengthRef = React.useRef<number>(0);
+  const prevGameStateStatusRef = React.useRef<string>("");
+  const prevHintsUsedRef = React.useRef<number>(0);
+  const prevCorrectGuessersRef = React.useRef<string[]>([]);
+
+  useEffect(() => {
+    // Player Join / Leave sounds
+    if (prevPlayersLengthRef.current > 0) {
+      if (currentPlayers.length > prevPlayersLengthRef.current) {
+        soundManager.play("playerJoin");
+      } else if (currentPlayers.length < prevPlayersLengthRef.current) {
+        soundManager.play("playerLeave");
+      }
+    }
+    prevPlayersLengthRef.current = currentPlayers.length;
+  }, [currentPlayers.length]);
+
+  useEffect(() => {
+    // Game Status sounds
+    const curr = gameState.status;
+    const prev = prevGameStateStatusRef.current;
+    
+    if (curr !== prev && curr) {
+      if (curr === "CHOOSING") {
+        if (amIDrawer) soundManager.play("wordSelectionShow");
+      } else if (curr === "DRAWING") {
+        soundManager.play("roundStart");
+      } else if (curr === "ROUND_END") {
+        soundManager.play("roundEnd");
+      }
+    }
+    prevGameStateStatusRef.current = curr || "";
+  }, [gameState.status, amIDrawer]);
+
+  useEffect(() => {
+    // Hint sounds
+    const currHints = gameState.hintsUsed || 0;
+    const prevHints = prevHintsUsedRef.current;
+    
+    if (currHints > prevHints && currHints > 0) {
+      soundManager.play("hintShow");
+    }
+    prevHintsUsedRef.current = currHints;
+  }, [gameState.hintsUsed]);
+
   const isDrawingMode = gameState.status === "DRAWING" && amIDrawer;
 
   const hasAlreadyReported = React.useMemo(() => {
@@ -658,6 +706,13 @@ export default function GameRoom({
     };
 
     const onReceiveMessage = (msg: any) => {
+      // 🔊 Play chat message sound (skip if it's from self or if it's a system message)
+      if (msg.type !== "system" && msg.senderId !== socket.id) {
+        soundManager.play('chatMessage');
+      } else if (msg.type === "system") {
+        soundManager.play('notification');
+      }
+
       setChatMessages((prev) => {
         if (prev.some((m) => m.id === msg.id)) {
           return prev;
@@ -701,7 +756,17 @@ export default function GameRoom({
             guessInputRef.current.blur();
           }
           setShowCorrectAnimation(true);
+          
+          // 🔊 Play distinct sound when I get the correct answer
+          // Delayed slightly to perfectly sync with the visual pop-out frame of the animation
+          setTimeout(() => {
+            soundManager.play('correctGuessSelf');
+          }, 80);
+          
           setTimeout(() => setShowCorrectAnimation(false), 1200);
+        } else {
+          // 🔊 Play different sound when someone else gets the correct answer
+          soundManager.play('correctGuessOther');
         }
 
         const hitId = Date.now().toString() + Math.random().toString();
@@ -1051,13 +1116,20 @@ export default function GameRoom({
   };
 
   const slots: PlayerSlot[] = Array.from({ length: 5 }).map((_, index) => {
-    if (index < currentPlayers.length) return currentPlayers[index];
+    if (index < currentPlayers.length) {
+      const p = currentPlayers[index];
+      return {
+        ...p,
+        isBlocked: (p.persistentId && blockedUsers.includes(p.persistentId)) || blockedUsers.includes(p.id) || false,
+      };
+    }
     return {
       id: `empty-${index}`,
       name: "Empty",
       points: null,
       isCurrent: false,
       isEmpty: true,
+      avatar: "",
     };
   });
 
@@ -1406,8 +1478,8 @@ export default function GameRoom({
                   initial={{ scale: 0 }}
                   animate={{ scale: [0, 1.2, 1, 1, 1.1, 0] }}
                   transition={{
-                    duration: 1,
-                    times: [0, 0.2, 0.3, 0.75, 0.85, 1],
+                    duration: 1.2,
+                    times: [0, 0.08, 0.15, 0.85, 0.92, 1],
                     ease: [
                       "easeOut",
                       "easeInOut",
@@ -1435,8 +1507,8 @@ export default function GameRoom({
                         opacity: [0, 0, 1, 1, 0],
                       }}
                       transition={{
-                        duration: 1,
-                        times: [0, 0.15, 0.3, 0.85, 1],
+                        duration: 1.2,
+                        times: [0, 0.05, 0.15, 0.85, 1],
                         ease: "linear",
                       }}
                     />
@@ -2120,11 +2192,11 @@ export default function GameRoom({
                       className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
                         isBlocked 
                           ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
-                          : "bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 shadow-sm"
+                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
                       }`}
                     >
-                      {isBlocked ? <Volume2 className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
-                      {isBlocked ? "UNMUTE" : "MUTE"}
+                      <EyeOff className="w-5 h-5" />
+                      {isBlocked ? "UNBLOCK" : "BLOCK"}
                     </button>
                   </div>
 
@@ -2138,12 +2210,12 @@ export default function GameRoom({
                       }}
                       className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
                         alreadyVoted
-                          ? "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
-                          : "bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-2 border-white/80 active:scale-95 shadow-sm"
+                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
+                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
                       }`}
                     >
                       <UserIcon className="w-5 h-5" />
-                      {alreadyVoted ? `REMOVE VOTE (${votesList.length})` : "VOTEKICK"}
+                      {alreadyVoted ? "REMOVE VOTE" : "VOTEKICK"}
                     </button>
                   </div>
                 </div>
