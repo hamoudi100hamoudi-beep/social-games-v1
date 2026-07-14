@@ -37,14 +37,14 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   correctGuessSelf: {
     path: '/sounds/game/correct-self.wav',
     volume: 1.0,
-    delayMs: 90,
+    delayMs: 100,
     cooldown: 200,
     enabled: true,
   },
   correctGuessOther: {
     path: '/sounds/game/correct-other.wav',
     volume: 0.9,
-    delayMs:80,
+    delayMs:95,
     cooldown: 200,
     enabled: true,
   },
