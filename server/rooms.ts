@@ -874,10 +874,20 @@ class RoomManager {
     if (room.gameState.currentDrawerId !== pId) return;
 
     const word = room.gameState.currentWord || "";
-    const charCount = word.replace(/\s/g, "").length;
-    let maxHints = charCount < 3 ? 1 : 2;
-    if (charCount >= 5) {
-      maxHints = 3;
+const words = word.split(" ").filter(w => w.length > 0);
+    let maxHints = 0;
+    if (words.length <= 1) {
+      const charCount = word.replace(/\s/g, "").length;
+      maxHints = charCount < 3 ? 1 : 2;
+      if (charCount >= 5) {
+        maxHints = 3;
+      }
+    } else {
+      maxHints = 1;
+      for (const w of words) {
+        if (w.length >= 5) maxHints += 2;
+        else if (w.length >= 3) maxHints += 1;
+      }
     }
 
     room.gameState.hintsUsed = room.gameState.hintsUsed || 0;
@@ -891,15 +901,49 @@ class RoomManager {
       room.gameState.hintsUsed >= 2 ||
       (maxHints === 1 && room.gameState.hintsUsed === 1)
     ) {
-      const unrevealed = [];
-      for (let i = 0; i < word.length; i++) {
-        if (word[i] !== " " && !room.gameState.revealedIndices.includes(i)) {
-          unrevealed.push(i);
+      const validIndices = [];
+      const wordsArray = word.split(" ");
+      let charIndex = 0;
+      
+      for (let w = 0; w < wordsArray.length; w++) {
+        const wStr = wordsArray[w];
+        if (wStr.length === 0) {
+          charIndex++;
+          continue;
+        }
+        
+        let limit = 0;
+        if (wStr.length >= 5) limit = 2;
+        else if (wStr.length >= 3) limit = 1;
+        
+        const wordIndices = [];
+        for (let i = 0; i < wStr.length; i++) {
+           wordIndices.push(charIndex + i);
+        }
+        charIndex += wStr.length + 1;
+        
+        const revealedInWord = wordIndices.filter(idx => room.gameState.revealedIndices.includes(idx)).length;
+        
+        if (revealedInWord < limit) {
+           const unrevealedInWord = wordIndices.filter(idx => !room.gameState.revealedIndices.includes(idx));
+           validIndices.push(...unrevealedInWord);
         }
       }
-      if (unrevealed.length > 0) {
-        const pick = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+
+      if (validIndices.length > 0) {
+        const pick = validIndices[Math.floor(Math.random() * validIndices.length)];
         room.gameState.revealedIndices.push(pick);
+      } else {
+        const unrevealed = [];
+        for (let i = 0; i < word.length; i++) {
+          if (word[i] !== " " && !room.gameState.revealedIndices.includes(i)) {
+            unrevealed.push(i);
+          }
+        }
+        if (unrevealed.length > 0) {
+          const pick = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+          room.gameState.revealedIndices.push(pick);
+        }
       }
     }
 
@@ -988,6 +1032,7 @@ class RoomManager {
       const isDrawer =
         p.id === room.gameState.currentDrawerId ||
         (p.persistentId && p.persistentId === room.gameState.currentDrawerId);
+      const isRTL = /[\u0600-\u06FF]/.test(word);
       const { drawHistory, ...publicGameState } = room.gameState;
       this.io.to(p.id).emit("room_state_update", {
         roomId: room.id,
@@ -998,6 +1043,7 @@ class RoomManager {
           currentWord: isDrawer ? room.gameState.currentWord : null,
           wordOptions: isDrawer ? room.gameState.wordOptions : [],
           maskedWordArray: maskedWordArray,
+          isRTL: isRTL,
         },
       });
     }

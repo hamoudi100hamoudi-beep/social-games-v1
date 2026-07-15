@@ -58,7 +58,7 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   hintShow: {
     path: '/sounds/game/hint.wav',
     volume: 1.0,
-    delayMs: 0,
+    delayMs: 70,
     cooldown: 200,
     enabled: true,
   },

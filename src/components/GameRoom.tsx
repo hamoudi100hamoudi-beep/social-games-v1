@@ -1059,12 +1059,7 @@ export default function GameRoom({
             );
           } else {
             if (!maskedArray || maskedArray.length === 0) return null;
-            const fullWordStr = maskedArray
-              .map((m: any) => m.char || "")
-              .join("");
-            const isRTL = /[\u0600-\u06FF]/.test(
-              fullWordStr || gameState.currentWord || "",
-            );
+            const isRTL = gameState.isRTL || false;
 
             return (
               <div
@@ -1385,9 +1380,21 @@ export default function GameRoom({
                   isDrawingMode
                     ? (() => {
                         const word = gameState.currentWord || "";
-                        const charCount = word.replace(/\s/g, "").length;
-                        let maxHints = charCount < 3 ? 1 : 2;
-                        if (charCount >= 5) maxHints = 3;
+                        const words = word.split(" ").filter((w: string) => w.length > 0);
+                        let maxHints = 0;
+                        if (words.length <= 1) {
+                          const charCount = word.replace(/\s/g, "").length;
+                          maxHints = charCount < 3 ? 1 : 2;
+                          if (charCount >= 5) {
+                            maxHints = 3;
+                          }
+                        } else {
+                          maxHints = 1;
+                          for (const w of words) {
+                            if (w.length >= 5) maxHints += 2;
+                            else if (w.length >= 3) maxHints += 1;
+                          }
+                        }
                         return Math.max(0, maxHints - (gameState.hintsUsed || 0));
                       })()
                     : 0
