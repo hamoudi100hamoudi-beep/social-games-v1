@@ -30,7 +30,7 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   playerLeave: {
     path: '/sounds/room/leave.wav',
     volume: 1.0,
-    delayMs: 0,
+    delayMs: 70,
     cooldown: 500,
     enabled: true,
   },
