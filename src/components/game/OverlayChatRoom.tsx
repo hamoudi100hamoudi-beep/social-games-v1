@@ -119,7 +119,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
     }
 
     return (
-      <div className="flex justify-center mb-2">
+      <div className="flex justify-center mb-2 animate-message-pop">
         <div 
           className="bg-primary-brand/10 text-primary-brand border border-primary-brand/20 px-4 py-2 rounded-full text-[15px] font-semibold shadow-sm flex items-center justify-center gap-1.5 animate-in fade-in duration-250"
           dir="auto"
@@ -134,7 +134,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 
   if (msg.type === 'votekick_alert' || msg.type === 'warning') {
     return (
-      <div className="flex justify-center mb-2">
+      <div className="flex justify-center mb-2 animate-message-pop">
         <div 
           className="bg-red-500/10 border border-[#FF4D4D]/20 px-4 py-2 rounded-full text-[15px] font-semibold shadow-sm flex items-center justify-center gap-1.5 animate-in fade-in zoom-in-95 duration-200"
           dir="rtl"
@@ -157,7 +157,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
 
   if (msg.isSelf) {
     return (
-      <div className="flex justify-end items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none">
+      <div className="flex justify-end items-end gap-2 w-full animate-message-pop select-none">
         <div 
           className="flex flex-col items-end max-w-[80%] relative"
           onPointerDown={handlePointerDown}
@@ -196,7 +196,7 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   }
 
   return (
-    <div className="flex justify-start items-end gap-2 w-full animate-in slide-in-from-bottom-2 select-none">
+    <div className="flex justify-start items-end gap-2 w-full animate-message-pop select-none">
       <div className="w-16 h-16 rounded-full bg-bg-panel-brand border-[3px] border-accent-brand flex items-center justify-center shrink-0 shadow-lg relative bottom-1">
         <span className="text-4xl translate-y-[1px]">{msg.avatar || '?'}</span>
       </div>

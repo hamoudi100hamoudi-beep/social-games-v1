@@ -1332,6 +1332,13 @@ const words = word.split(" ").filter(w => w.length > 0);
       if (!room.gameState.turnQueue.includes(pId)) {
         room.gameState.turnQueue.push(pId);
       }
+      this.broadcastMessage(room, {
+        id: "sys-join-" + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        text: `${player.name} انضم للغرفة`,
+        type: "system",
+        subType: "join",
+        color: "#00E540"
+      });
     }
 
     this.broadcastState(room);
@@ -1355,6 +1362,13 @@ const words = word.split(" ").filter(w => w.length > 0);
 
         if (player) {
           player.roomId = null;
+          this.broadcastMessage(room, {
+            id: "sys-leave-" + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            text: `${player.name} غادر الغرفة`,
+            type: "system",
+            subType: "leave",
+            color: "#EF4444"
+          });
         }
 
         if (room.players.length === 0) {

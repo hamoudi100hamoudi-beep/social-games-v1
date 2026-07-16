@@ -224,7 +224,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                 transition: 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease',
                 zIndex: zIndex,
               }}
-              className={`absolute inset-x-0 flex items-center pl-1.5 pr-1 py-1.5 sm:pl-3 sm:pr-2.5 sm:py-3 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''}`}
+              className={`absolute inset-x-0 flex items-center pl-1.5 pr-1 py-1.5 sm:pl-3 sm:pr-2.5 sm:py-3 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10 animate-avatar-pop' : ''}`}
               onClick={() => {
                 if (!slot.isEmpty && onPlayerClick) {
                   onPlayerClick(slot);
