@@ -28,6 +28,17 @@ export function MiniBoardOverlay({
   // We use this z-index to overlay inside the DrawingBoard
   const containerClass = "absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-none p-4 select-none font-sans";
 
+  const wasPodium = React.useRef(false);
+  const playPodiumAnimations = React.useRef(true);
+  
+  if (gameState.status === "PODIUM" && !wasPodium.current) {
+    // Only play intro animations if we entered the podium phase early enough (e.g. at the very start)
+    playPodiumAnimations.current = gameState.timeLeft >= 13;
+  }
+  wasPodium.current = gameState.status === "PODIUM";
+
+  const getAnimClass = (className: string) => playPodiumAnimations.current ? className : "";
+
   return (
     <AnimatePresence mode="wait">
       {/* 1. WAITING FOR PLAYERS */}
@@ -318,19 +329,19 @@ export function MiniBoardOverlay({
                   <div className="w-[31%] flex flex-col items-center justify-end relative h-[85%] group z-20">
                     {second ? (
                       <>
-                        <div className="relative mb-1.5 animate-podium-pop w-fit mx-auto" style={{ animationDelay: '2.4s' }}>
+                        <div className={`relative mb-1.5 w-fit mx-auto ${getAnimClass("animate-podium-pop")}`} style={{ animationDelay: '2.4s' }}>
                           <div className="w-16 h-16 sm:w-22 sm:h-22 rounded-full bg-[#E2E8F0] flex items-center justify-center text-3xl sm:text-5xl border-[3px] sm:border-[5px] border-[#0A2540] shadow-md overflow-hidden relative">
                             <span className="select-none">{second.avatar}</span>
                           </div>
                           <div 
-                            className="absolute -bottom-1.5 sm:-bottom-2 inset-x-0 mx-auto w-5 h-5 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-[#F1F5F9] via-[#CBD5E1] to-[#64748B] border-[2px] sm:border-[2.5px] border-[#0A2540] flex items-center justify-center shadow-md text-[#0A2540] font-extrabold text-[10px] sm:text-sm z-20 overflow-hidden animate-badge-pop"
+                            className={`absolute -bottom-1.5 sm:-bottom-2 inset-x-0 mx-auto w-5 h-5 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-[#F1F5F9] via-[#CBD5E1] to-[#64748B] border-[2px] sm:border-[2.5px] border-[#0A2540] flex items-center justify-center shadow-md text-[#0A2540] font-extrabold text-[10px] sm:text-sm z-20 overflow-hidden ${getAnimClass("animate-badge-pop")}`}
                             style={{ animationDelay: '2.9s' }}
                           >
                             2
                             <div className="absolute inset-0 bg-white/40 animate-medal-shine z-10" />
                           </div>
                         </div>
-                        <div className="text-center mb-1 px-0.5 w-full animate-pop" style={{ animationDelay: '2.6s' }}>
+                        <div className={`text-center mb-1 px-0.5 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '2.6s' }}>
                           <span className="text-[#0A2540] font-black text-[14px] sm:text-[16px] truncate block w-full">
                             {second.name}
                           </span>
@@ -348,10 +359,10 @@ export function MiniBoardOverlay({
                   <div className="w-[38%] flex flex-col items-center justify-end relative h-[118%] group z-30">
                     {first ? (
                       <>
-                        <div className="relative mb-2 animate-podium-pop w-fit mx-auto" style={{ animationDelay: '1.0s' }}>
+                        <div className={`relative mb-2 w-fit mx-auto ${getAnimClass("animate-podium-pop")}`} style={{ animationDelay: '1.0s' }}>
                           {/* Crown - inside relative avatar wrapper for perfect centering */}
                           <div 
-                            className="absolute -top-[24px] sm:-top-[32px] inset-x-0 mx-auto w-fit z-40 animate-crown-fall drop-shadow-md flex justify-center" 
+                            className={`absolute -top-[24px] sm:-top-[32px] inset-x-0 mx-auto w-fit z-40 ${getAnimClass("animate-crown-fall")} drop-shadow-md flex justify-center`} 
                             style={{ animationDelay: crownDelay }}
                           >
                             <span className="text-[20px] sm:text-[28px] select-none">👑</span>
@@ -361,14 +372,14 @@ export function MiniBoardOverlay({
                             <span className="select-none">{first.avatar}</span>
                           </div>
                           <div 
-                            className="absolute -bottom-2 inset-x-0 mx-auto w-6 h-6 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-[#FFF3C2] via-[#FFD700] to-[#B8860B] border-[2px] sm:border-[2.5px] border-[#0A2540] flex items-center justify-center shadow-xl text-white font-black text-xs sm:text-sm z-20 overflow-hidden animate-badge-pop"
+                            className={`absolute -bottom-2 inset-x-0 mx-auto w-6 h-6 sm:w-9 sm:h-9 rounded-full bg-gradient-to-b from-[#FFF3C2] via-[#FFD700] to-[#B8860B] border-[2px] sm:border-[2.5px] border-[#0A2540] flex items-center justify-center shadow-xl text-white font-black text-xs sm:text-sm z-20 overflow-hidden ${getAnimClass("animate-badge-pop")}`}
                             style={{ animationDelay: '1.5s' }}
                           >
                             1
                             <div className="absolute inset-0 bg-white/50 animate-medal-shine z-10" />
                           </div>
                         </div>
-                        <div className="text-center mb-0.5 px-1 w-full animate-pop" style={{ animationDelay: '1.2s' }}>
+                        <div className={`text-center mb-0.5 px-1 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '1.2s' }}>
                           <span className="text-[#0A2540] font-black text-[16px] sm:text-[20px] truncate block w-full drop-shadow-sm">
                             {first.name}
                           </span>
@@ -386,19 +397,19 @@ export function MiniBoardOverlay({
                   <div className="w-[31%] flex flex-col items-center justify-end relative h-[85%] group z-10">
                     {third ? (
                       <>
-                        <div className="relative mb-1.5 animate-podium-pop w-fit mx-auto" style={{ animationDelay: '3.6s' }}>
+                        <div className={`relative mb-1.5 w-fit mx-auto ${getAnimClass("animate-podium-pop")}`} style={{ animationDelay: '3.6s' }}>
                           <div className="w-16 h-16 sm:w-22 sm:h-22 rounded-full bg-[#FFB074] flex items-center justify-center text-3xl sm:text-5xl border-[3px] sm:border-[5px] border-[#0A2540] shadow-md overflow-hidden relative">
                             <span className="select-none">{third.avatar}</span>
                           </div>
                           <div 
-                            className="absolute -bottom-1.5 sm:-bottom-2 inset-x-0 mx-auto w-5 h-5 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-[#FFEDD5] via-[#FB923C] to-[#C2410C] border-[2px] sm:border-[2.5px] border-[#0A2540] flex items-center justify-center shadow-lg text-white font-extrabold text-[10px] sm:text-sm z-20 overflow-hidden animate-badge-pop"
+                            className={`absolute -bottom-1.5 sm:-bottom-2 inset-x-0 mx-auto w-5 h-5 sm:w-8 sm:h-8 rounded-full bg-gradient-to-b from-[#FFEDD5] via-[#FB923C] to-[#C2410C] border-[2px] sm:border-[2.5px] border-[#0A2540] flex items-center justify-center shadow-lg text-white font-extrabold text-[10px] sm:text-sm z-20 overflow-hidden ${getAnimClass("animate-badge-pop")}`}
                             style={{ animationDelay: '4.1s' }}
                           >
                             3
                             <div className="absolute inset-0 bg-white/30 animate-medal-shine z-10" />
                           </div>
                         </div>
-                        <div className="text-center mb-1 px-0.5 w-full animate-pop" style={{ animationDelay: '3.8s' }}>
+                        <div className={`text-center mb-1 px-0.5 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '3.8s' }}>
                           <span className="text-[#0A2540] font-black text-[14px] sm:text-[16px] truncate block w-full">
                             {third.name}
                           </span>

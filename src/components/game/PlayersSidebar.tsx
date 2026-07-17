@@ -101,6 +101,15 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
   const prevRanksRef = React.useRef<{ [key: string]: number }>({});
+  const initializedRef = React.useRef(false);
+
+  // Initialize prevRanksRef on first render with real players to prevent avatar jump on join
+  if (!initializedRef.current && slots.some(s => !s.isEmpty)) {
+    slots.forEach((slot, index) => {
+      prevRanksRef.current[slot.id] = index;
+    });
+    initializedRef.current = true;
+  }
 
   // Create a stable-sorted copy for rendering so DOM elements never re-order or mount/unmount mid-transition
   const stableSlots = React.useMemo(() => {

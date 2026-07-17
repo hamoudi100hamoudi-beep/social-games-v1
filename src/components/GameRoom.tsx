@@ -438,6 +438,7 @@ export default function GameRoom({
   }, [gameState?.status, amIDrawer]);
 
   // 🔊 Sound Hooks
+  const isFirstSyncRef = React.useRef<boolean>(true);
   const prevPlayersLengthRef = React.useRef<number>(0);
   const prevGameStateStatusRef = React.useRef<string>("");
   const prevHintsUsedRef = React.useRef<number>(0);
@@ -642,6 +643,14 @@ export default function GameRoom({
       const isActiveRound =
         state.gameState?.status === "DRAWING" ||
         state.gameState?.status === "CHOOSING";
+
+      if (isFirstSyncRef.current) {
+        prevPlayersLengthRef.current = state.players.length;
+        prevGameStateStatusRef.current = state.gameState?.status || "";
+        prevHintsUsedRef.current = state.gameState?.hintsUsed || 0;
+        prevCorrectGuessersRef.current = state.gameState?.correctGuessers || [];
+        isFirstSyncRef.current = false;
+      }
 
       setCurrentPlayers((prevPlayers) => {
         const mapped = state.players.map((p) => ({
