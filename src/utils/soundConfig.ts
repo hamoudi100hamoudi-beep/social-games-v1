@@ -30,7 +30,7 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   playerLeave: {
     path: '/sounds/room/leave.wav',
     volume: 1.0,
-    delayMs: 70,
+    delayMs: 80,
     cooldown: 500,
     enabled: true,
   },
@@ -58,7 +58,7 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   hintShow: {
     path: '/sounds/game/hint.wav',
     volume: 1.0,
-    delayMs: 70,
+    delayMs: 80,
     cooldown: 200,
     enabled: true,
   },
@@ -72,7 +72,7 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   roundEnd: {
     path: '/sounds/game/round-end.wav',
     volume: 1.0,
-    delayMs: 0,
+    delayMs: 80,
     cooldown: 200,
     enabled: true,
   },
