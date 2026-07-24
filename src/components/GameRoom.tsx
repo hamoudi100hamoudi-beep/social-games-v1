@@ -951,13 +951,23 @@ export default function GameRoom({
   }, []);
 
 
+  const hasGuessedCorrectly = React.useMemo(() => {
+    if (!gameState.correctGuessers || gameState.correctGuessers.length === 0) return false;
+    const sId = socketId || socket?.id || "";
+    const pId = persistentPlayerId || "";
+    return (
+      (sId ? gameState.correctGuessers.includes(sId) : false) ||
+      (pId ? gameState.correctGuessers.includes(pId) : false)
+    );
+  }, [gameState.correctGuessers, socketId, socket?.id, persistentPlayerId]);
+
   const isInputDisabled =
     gameState.status === "WAITING" ||
     gameState.status === "ROUND_END" ||
     gameState.status === "PODIUM" ||
     gameState.status === "CHOOSING" ||
     amIDrawer ||
-    gameState.correctGuessers?.includes(socketId || "");
+    hasGuessedCorrectly;
 
   useEffect(() => {
     if (isInputDisabled) {
@@ -980,7 +990,7 @@ export default function GameRoom({
     e.preventDefault();
     if (
       !guessInput.trim() ||
-      gameState.correctGuessers?.includes(socketId || "") ||
+      hasGuessedCorrectly ||
       amIDrawer
     )
       return;
@@ -1909,7 +1919,7 @@ export default function GameRoom({
                   spellCheck="false"
                   name="guess_input_random_name"
                   data-form-type="other"
-                  disabled={isInputDisabled && !isInputFocused}
+                  disabled={isInputDisabled}
                   value={isInputDisabled ? "" : guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -1921,6 +1931,10 @@ export default function GameRoom({
                     }
                   }}
                   onFocus={() => {
+                    if (isInputDisabled) {
+                      guessInputRef.current?.blur();
+                      return;
+                    }
                     handleIOSFocusBypass();
                     setIsInputFocused(true);
                     setIsKeyboardOpen(true);
@@ -1943,9 +1957,7 @@ export default function GameRoom({
                             ? "Waiting for the drawing"
                             : amIDrawer
                               ? "You are drawing!"
-                              : gameState.correctGuessers?.includes(
-                                    socketId || "",
-                                  )
+                              : hasGuessedCorrectly
                                 ? "You've found the answer!"
                                 : "Answer here..."
                   }
