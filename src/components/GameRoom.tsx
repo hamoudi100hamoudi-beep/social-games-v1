@@ -188,7 +188,7 @@ export default function GameRoom({
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const guessInputRef = React.useRef<HTMLTextAreaElement>(null);
+  const guessInputRef = React.useRef<HTMLInputElement>(null);
   const mainContainerRef = React.useRef<HTMLDivElement>(null);
   const iosKeyboardHeightCache = React.useRef<number>(350);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(
@@ -1903,27 +1903,33 @@ export default function GameRoom({
               style={{ paddingBottom: 'calc(0.5rem + var(--keyboard-inset, 0px))' }}
             >
               <form onSubmit={handleGuessSubmit} className="relative">
-                <div
-                  className={`absolute left-4 top-1/2 -translate-y-1/2 transition-opacity duration-200 ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
-                >
-                  <Pencil size={18} />
-                </div>
-                <textarea
+                {!isInputFocused && (
+                  <div
+                    className={`absolute left-4 top-1/2 -translate-y-1/2 transition-opacity duration-200 pointer-events-none ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
+                  >
+                    <Pencil size={18} />
+                  </div>
+                )}
+                <input
                   ref={guessInputRef}
-                  id="guess-textarea"
+                  type="search"
+                  inputMode="text"
+                  enterKeyHint="send"
+                  id="guess-input"
                   dir="auto"
-                  rows={1}
-                  autoComplete="off"
+                  autoComplete="one-time-code"
                   autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck="false"
-                  name="guess_input_random_name"
+                  name="search"
+                  data-1p-ignore="true"
+                  data-lpignore="true"
                   data-form-type="other"
                   disabled={isInputDisabled}
                   value={isInputDisabled ? "" : guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    if (e.key === "Enter") {
                       e.preventDefault();
                       if (guessInput.trim() && !isInputDisabled) {
                         handleGuessSubmit(e as any);
@@ -1961,17 +1967,9 @@ export default function GameRoom({
                                 ? "You've found the answer!"
                                 : "Answer here..."
                   }
-                  className={`w-full h-12 border-2 border-transparent rounded-[24px] pl-11 pr-14 py-[13px] resize-none overflow-hidden text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm whitespace-nowrap ios-input-focus ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
+                  className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused ? "pl-4" : "pl-11"} pr-4 py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
                   style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                 />
-                <button
-                  type="submit"
-                  onPointerDown={(e) => e.preventDefault()}
-                  disabled={!guessInput.trim() || isInputDisabled}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-bg-dark-brand disabled:opacity-0 bg-primary-brand rounded-full hover:bg-white transition-all shadow-md"
-                >
-                  <Send size={16} className="-ml-0.5" />
-                </button>
               </form>
             </div>
           </div>

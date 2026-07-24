@@ -144,6 +144,15 @@ html, body, #root {
   animation: ios_focus_bypass 0.1s forwards;
 }
 
+/* Remove native search input decorations on iOS/Webkit */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  display: none;
+}
+
 @keyframes message-pop-in {
   0% { transform: scale(0.9) translateY(10px); opacity: 0; }
   60% { transform: scale(1.02) translateY(-2px); opacity: 1; }
