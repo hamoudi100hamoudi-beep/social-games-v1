@@ -6,6 +6,7 @@ import {
   MessageSquare,
   AlertTriangle,
   Volume2,
+  VolumeX,
   Info,
   X,
   User as UserIcon,
@@ -199,6 +200,7 @@ export default function GameRoom({
 
   const [isAfkPopupOpen, setIsAfkPopupOpen] = useState(false);
   const [showReportConfirm, setShowReportConfirm] = useState(false);
+  const [isMuted, setIsMuted] = useState(soundManager.getMuted());
   const [afkCountdown, setAfkCountdown] = useState(90);
   const lastActiveRef = React.useRef(Date.now());
   const afkCountdownIntervalRef = React.useRef<any>(null);
@@ -207,6 +209,11 @@ export default function GameRoom({
     setIsAfkPopupOpen(false);
     lastActiveRef.current = Date.now();
     socket?.emit("ping_activity");
+  };
+
+  const toggleMute = () => {
+    const newMuted = soundManager.toggleMuted();
+    setIsMuted(newMuted);
   };
 
   const persistentPlayerId = React.useMemo(() => {
@@ -463,11 +470,15 @@ export default function GameRoom({
     
     if (curr !== prev && curr) {
       if (curr === "CHOOSING") {
-        if (amIDrawer) soundManager.play("wordSelectionShow");
-      } else if (curr === "DRAWING") {
-        soundManager.play("roundStart");
+        if (amIDrawer) {
+          soundManager.play("wordSelectionShow");
+        } else {
+          soundManager.play("roundStart");
+        }
       } else if (curr === "ROUND_END") {
         soundManager.play("roundEnd");
+      } else if (curr === "PODIUM") {
+        soundManager.play("applause");
       }
     }
     prevGameStateStatusRef.current = curr || "";
@@ -1583,8 +1594,20 @@ export default function GameRoom({
                   >
                     <AlertTriangle size={16} />
                   </button>
-                  <button className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-white transition-all shadow-md">
-                    <Volume2 size={16} />
+                  <button 
+                    onClick={toggleMute}
+                    className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all shadow-md relative overflow-hidden ${
+                      isMuted ? "bg-slate-400 hover:bg-slate-500" : "bg-yellow-400 hover:bg-yellow-500"
+                    }`}
+                  >
+                    {isMuted ? (
+                      <VolumeX size={16} className="text-white drop-shadow-md z-10" />
+                    ) : (
+                      <Volume2 size={16} className="text-white drop-shadow-md z-10" />
+                    )}
+                    {isMuted && (
+                      <div className="absolute inset-0 m-auto w-[2px] h-[70%] bg-white/70 -rotate-45 z-0 animate-in fade-in zoom-in duration-200"></div>
+                    )}
                   </button>
                   <button className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-white transition-all shadow-md">
                     <Info size={16} />

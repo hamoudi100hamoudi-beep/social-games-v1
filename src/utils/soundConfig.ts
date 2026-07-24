@@ -7,6 +7,7 @@ export type SoundEvent =
   | 'hintShow'
   | 'roundStart'
   | 'roundEnd'
+  | 'applause'
   | 'buttonClick'
   | 'chatMessage'
   | 'notification';
@@ -51,7 +52,7 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   wordSelectionShow: {
     path: '/sounds/game/word-selection.wav',
     volume: 1.0,
-    delayMs: 0,
+    delayMs: 80,
     cooldown: 200,
     enabled: true,
   },
@@ -65,12 +66,19 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   roundStart: {
     path: '/sounds/game/round-start.wav',
     volume: 1.0,
-    delayMs: 0,
+    delayMs: 80,
     cooldown: 200,
     enabled: true,
   },
   roundEnd: {
     path: '/sounds/game/round-end.wav',
+    volume: 1.0,
+    delayMs: 80,
+    cooldown: 200,
+    enabled: true,
+  },
+  applause: {
+    path: '/sounds/game/applause.mp3',
     volume: 1.0,
     delayMs: 80,
     cooldown: 200,
