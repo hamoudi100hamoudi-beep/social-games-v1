@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check, WifiOff, AlertTriangle } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 import { motion, AnimatePresence } from 'motion/react';
 import CinematicModal from './game/CinematicModal';
+import CustomEmojiModal from './game/CustomEmojiModal';
 import { safeLocalStorage } from '../utils/storage';
 import GameTitle from './game/GameTitle';
 
@@ -63,17 +64,46 @@ export default function Lobby({ onPlay }: LobbyProps) {
     }
     return '';
   });
-  const [avatarIndex, setAvatarIndex] = useState(() => {
+
+  // Custom Emojis state saved in localStorage (max 5)
+  const [customEmojis, setCustomEmojis] = useState<string[]>(() => {
     if (typeof window !== 'undefined') {
-      const saved = safeLocalStorage.getItem('gartic_player_avatar_index');
-      if (saved !== null) {
-        const val = parseInt(saved, 10);
+      try {
+        const saved = safeLocalStorage.getItem('gartic_custom_emojis');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            return parsed.slice(0, 5);
+          }
+        }
+      } catch {
+        // fallback
+      }
+    }
+    return [];
+  });
+
+  // Combine custom emojis at the front with default AVATARS
+  const allAvatars = useMemo(() => {
+    const uniqueCustom = customEmojis.filter((e) => !AVATARS.includes(e));
+    return [...uniqueCustom, ...AVATARS];
+  }, [customEmojis]);
+
+  // Selected Avatar Emoji
+  const [selectedEmoji, setSelectedEmoji] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const savedEmoji = safeLocalStorage.getItem('gartic_player_avatar_emoji');
+      if (savedEmoji) return savedEmoji;
+
+      const savedIdx = safeLocalStorage.getItem('gartic_player_avatar_index');
+      if (savedIdx !== null) {
+        const val = parseInt(savedIdx, 10);
         if (!isNaN(val) && val >= 0 && val < AVATARS.length) {
-          return val;
+          return AVATARS[val];
         }
       }
     }
-    return Math.floor(Math.random() * AVATARS.length);
+    return AVATARS[Math.floor(Math.random() * AVATARS.length)];
   });
 
   useEffect(() => {
@@ -84,12 +114,30 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      safeLocalStorage.setItem('gartic_player_avatar_index', avatarIndex.toString());
+      safeLocalStorage.setItem('gartic_player_avatar_emoji', selectedEmoji);
+      const idx = allAvatars.indexOf(selectedEmoji);
+      if (idx >= 0) {
+        safeLocalStorage.setItem('gartic_player_avatar_index', idx.toString());
+      }
     }
-  }, [avatarIndex]);
+  }, [selectedEmoji, allAvatars]);
+
   const [showAvatarGrid, setShowAvatarGrid] = useState(false);
+  const [showCustomEmojiModal, setShowCustomEmojiModal] = useState(false);
   const [nicknameError, setNicknameError] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
+
+  const handleAddCustomEmoji = (newEmoji: string) => {
+    setCustomEmojis((prev) => {
+      const filtered = prev.filter((e) => e !== newEmoji);
+      const updated = [newEmoji, ...filtered].slice(0, 5);
+      if (typeof window !== 'undefined') {
+        safeLocalStorage.setItem('gartic_custom_emojis', JSON.stringify(updated));
+      }
+      return updated;
+    });
+    setSelectedEmoji(newEmoji);
+  };
 
   // Keyboard and viewport scaling states for initial screen
   const lobbyContainerRef = React.useRef<HTMLDivElement>(null);
@@ -314,6 +362,20 @@ export default function Lobby({ onPlay }: LobbyProps) {
     setJoinError(null);
   };
 
+  const handlePrevAvatar = () => {
+    const currentIdx = allAvatars.indexOf(selectedEmoji);
+    const safeIdx = currentIdx >= 0 ? currentIdx : 0;
+    const nextIdx = (safeIdx - 1 + allAvatars.length) % allAvatars.length;
+    setSelectedEmoji(allAvatars[nextIdx]);
+  };
+
+  const handleNextAvatar = () => {
+    const currentIdx = allAvatars.indexOf(selectedEmoji);
+    const safeIdx = currentIdx >= 0 ? currentIdx : 0;
+    const nextIdx = (safeIdx + 1) % allAvatars.length;
+    setSelectedEmoji(allAvatars[nextIdx]);
+  };
+
   const handlePlay = () => {
     if (!nickname.trim()) {
       setNicknameError(true);
@@ -328,15 +390,14 @@ export default function Lobby({ onPlay }: LobbyProps) {
         if (data && data.count >= 5) {
           setJoinError('عذراً، هذه الغرفة ممتلئة بالكامل!');
           if (!selectedRoom) {
-            // Also show it on home screen if they just clicked PLAY from there
-             setNicknameError(false); // Can reuse or create specific error state, but joinError is fine
+             setNicknameError(false);
           }
         } else {
-          onPlay(finalName, finalRoom, AVATARS[avatarIndex]);
+          onPlay(finalName, finalRoom, selectedEmoji);
         }
       });
     } else {
-      onPlay(finalName, finalRoom, AVATARS[avatarIndex]);
+      onPlay(finalName, finalRoom, selectedEmoji);
     }
   };
 
@@ -398,15 +459,15 @@ export default function Lobby({ onPlay }: LobbyProps) {
             {/* Content body wrapper */}
             <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'space-y-3' : 'space-y-4'}`}>
               {/* Avatar Selector */}
-              <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'gap-2' : 'gap-2'}`}>
+              <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'gap-1.5' : 'gap-2'}`}>
                 <label className={`font-black text-[#8C8AA7] uppercase tracking-wider ${isKeyboardOpen ? 'text-[12px]' : 'text-sm'}`}>CHOOSE AVATAR</label>
                 
                 <div className="flex items-center justify-between w-full relative max-w-[280px] sm:max-w-[320px]">
                   <button 
-                    onClick={() => setAvatarIndex((prev) => (prev - 1 + AVATARS.length) % AVATARS.length)}
+                    onClick={handlePrevAvatar}
                     className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-10 h-10' : 'w-11 h-11'}`}
                   >
-                    <ChevronLeft strokeWidth={3.5} className={isKeyboardOpen ? 'w-5 h-5' : 'w-5 h-5'} />
+                    <ChevronLeft strokeWidth={3.5} className="w-5 h-5" />
                   </button>
                   
                   <div className="relative group cursor-pointer" onClick={() => setShowAvatarGrid(true)}>
@@ -419,7 +480,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                         isKeyboardOpen 
                           ? "text-[55px] translate-y-1" 
                           : "text-[55px] [@media(min-height:600px)]:text-[80px] sm:text-[96px] translate-y-1 sm:translate-y-2"
-                      }`}>{AVATARS[avatarIndex]}</span>
+                      }`}>{selectedEmoji}</span>
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full">
                          <LayoutGrid className="text-white" size={isKeyboardOpen ? 24 : 28} />
                       </div>
@@ -431,10 +492,10 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   </div>
                   
                   <button 
-                    onClick={() => setAvatarIndex((prev) => (prev + 1) % AVATARS.length)}
+                    onClick={handleNextAvatar}
                     className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-10 h-10' : 'w-11 h-11'}`}
                   >
-                    <ChevronRight strokeWidth={3.5} className={isKeyboardOpen ? 'w-5 h-5' : 'w-5 h-5'} />
+                    <ChevronRight strokeWidth={3.5} className="w-5 h-5" />
                   </button>
                 </div>
               </div>
@@ -731,21 +792,34 @@ export default function Lobby({ onPlay }: LobbyProps) {
       {/* Avatar Grid Overlay */}
       {showAvatarGrid && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40  cursor-pointer" onClick={() => setShowAvatarGrid(false)} />
-          <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 border border-white/40 shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="absolute inset-0 bg-black/40 cursor-pointer" onClick={() => setShowAvatarGrid(false)} />
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 border border-white/40 shadow-2xl animate-in zoom-in-95 duration-200" dir="rtl">
             <div className="flex justify-between items-center mb-4">
-              <span className="text-sm font-black text-[#38BDF8]">ALL AVATARS</span>
+              <span className="text-sm font-black text-[#38BDF8]">اختر أفاتار</span>
               <button onClick={() => setShowAvatarGrid(false)} className="text-[#8C8AA7] hover:text-[#2E2882] bg-slate-100 p-1.5 rounded-full transition-colors active:scale-90">
                 <X size={18} strokeWidth={3} />
               </button>
             </div>
             <div className="grid grid-cols-6 gap-2 overflow-y-auto max-h-[300px] sm:max-h-[400px] no-scrollbar">
-              {AVATARS.map((emoji, idx) => (
+              {/* Add Custom Emoji Button as First Grid Item */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAvatarGrid(false);
+                  setShowCustomEmojiModal(true);
+                }}
+                className="h-12 w-12 rounded-2xl bg-[#38BDF8]/10 hover:bg-[#38BDF8]/20 border-2 border-dashed border-[#38BDF8] flex items-center justify-center text-[#38BDF8] active:scale-95 transition-all cursor-pointer shadow-xs"
+                title="أضف إيموجي مخصص"
+              >
+                <Plus size={22} strokeWidth={3.5} />
+              </button>
+
+              {allAvatars.map((emoji, idx) => (
                 <button
-                  key={idx}
+                  key={`${emoji}-${idx}`}
                   type="button"
-                  onClick={() => { setAvatarIndex(idx); setShowAvatarGrid(false); }}
-                  className={`text-3xl h-12 w-12 flex items-center justify-center hover:scale-125 transition-transform ${idx === avatarIndex ? 'bg-[#38BDF8]/15 rounded-xl scale-110 border border-[#38BDF8]/30 font-black shadow-inner' : ''}`}
+                  onClick={() => { setSelectedEmoji(emoji); setShowAvatarGrid(false); }}
+                  className={`text-3xl h-12 w-12 flex items-center justify-center hover:scale-125 transition-transform ${emoji === selectedEmoji ? 'bg-[#38BDF8]/15 rounded-2xl scale-110 border-2 border-[#38BDF8] font-black shadow-inner' : ''}`}
                 >
                   {emoji}
                 </button>
@@ -754,6 +828,13 @@ export default function Lobby({ onPlay }: LobbyProps) {
           </div>
         </div>
       )}
+
+      {/* Custom Emoji Picker Modal */}
+      <CustomEmojiModal
+        isOpen={showCustomEmojiModal}
+        onClose={() => setShowCustomEmojiModal(false)}
+        onAddEmoji={handleAddCustomEmoji}
+      />
 
       {/* Background decoration */}
       <div className="absolute -top-40 -left-40 w-96 h-96 bg-primary-brand rounded-full mix-blend-overlay filter blur-[100px] opacity-20 pointer-events-none" />
