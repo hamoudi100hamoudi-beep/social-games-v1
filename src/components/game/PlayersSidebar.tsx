@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { User as UserIcon, Check, Pencil, EyeOff } from 'lucide-react';
 
 const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
+  const [imgError, setImgError] = React.useState(false);
+
   return (
     <div 
       id="gartic-trophy-container"
       key={wins}
-      className="absolute -left-2.5 -bottom-2 z-20 flex items-center justify-center select-none overflow-visible"
+      className="absolute -left-1 -bottom-3.5 z-20 flex items-center justify-center select-none overflow-visible"
     >
       <style>{`
         @keyframes trophyPopCelebrate {
@@ -21,41 +23,39 @@ const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
           transform-origin: center;
         }
       `}</style>
-      <div className="w-7 h-7 flex items-center justify-center relative">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-7 h-7 animate-trophy-celebrate drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]" fill="none">
-          {/* Base bottom stand */}
-          <path d="M6 21H18" stroke="black" strokeWidth="1.5" strokeLinecap="round"/>
-          <path d="M9 21L10 17H14L15 21" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinejoin="round"/>
-          
-          {/* Left Handle */}
-          <path d="M7 8H4V11C4 12.5 5.5 13 7 13" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          
-          {/* Right Handle */}
-          <path d="M17 8H20V11C20 12.5 18.5 13 17 13" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          
-          {/* Cup Bowl */}
-          <path d="M7 5H17V12C17 14.76 14.76 17 12 17C9.24 17 7 14.76 7 12V5Z" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinejoin="round"/>
-          
-          {/* Specular shine */}
-          <path d="M8.5 6.5V11" stroke="white" strokeWidth="1" strokeLinecap="round"/>
-
-          {/* Centered count text when there is more than 1 win */}
-          {wins > 1 && (
-            <text 
-              x="12" 
-              y="12.5" 
-              fontFamily="sans-serif" 
-              fontWeight="900" 
-              fontSize="6.5" 
-              fill="black" 
-              textAnchor="middle" 
-              dominantBaseline="middle"
-              className="select-none font-bold"
-            >
-              {wins}
-            </text>
-          )}
-        </svg>
+      <div className="w-[26px] h-[26px] sm:w-[30px] sm:h-[30px] flex items-center justify-center relative animate-trophy-celebrate">
+        {!imgError ? (
+          <img 
+            src="/trophy.png" 
+            alt="Trophy" 
+            className="w-full h-full object-contain drop-shadow-[1px_2px_1px_rgba(0,0,0,0.5)]"
+            referrerPolicy="no-referrer"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-7 h-7 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]" fill="none">
+            {/* Base bottom stand */}
+            <path d="M6 21H18" stroke="black" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M9 21L10 17H14L15 21" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinejoin="round"/>
+            {/* Handles */}
+            <path d="M7 8H4V11C4 12.5 5.5 13 7 13" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M17 8H20V11C20 12.5 18.5 13 17 13" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            {/* Cup Bowl */}
+            <path d="M7 5H17V12C17 14.76 14.76 17 12 17C9.24 17 7 14.76 7 12V5Z" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinejoin="round"/>
+            <path d="M8.5 6.5V11" stroke="white" strokeWidth="1" strokeLinecap="round"/>
+          </svg>
+        )}
+        {/* Centered count text inside the cup bowl */}
+        {wins > 0 && (
+          <span 
+            className={`absolute top-[44%] left-1/2 -translate-x-1/2 -translate-y-1/2 font-black text-[#2C1800] select-none pointer-events-none leading-none z-10 ${
+              wins >= 10 ? 'text-[8px] sm:text-[9px]' : 'text-[9.5px] sm:text-[10.5px]'
+            }`}
+            style={{ fontFamily: 'system-ui, sans-serif' }}
+          >
+            {wins}
+          </span>
+        )}
       </div>
     </div>
   );
