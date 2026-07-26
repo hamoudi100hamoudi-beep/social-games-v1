@@ -285,10 +285,10 @@ export function MiniBoardOverlay({
                   animation: podiumPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
                 }
                 @keyframes badgePop {
-                  0% { transform: translateX(-50%) scale(0); opacity: 0; }
-                  70% { transform: translateX(-50%) scale(1.35); }
-                  90% { transform: translateX(-50%) scale(0.97); }
-                  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+                  0% { transform: scale(0); opacity: 0; }
+                  70% { transform: scale(1.35); }
+                  90% { transform: scale(0.97); }
+                  100% { transform: scale(1); opacity: 1; }
                 }
                 .animate-badge-pop {
                   animation: badgePop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -332,16 +332,19 @@ export function MiniBoardOverlay({
                           <div className="w-14 h-14 sm:w-22 sm:h-22 rounded-full bg-[#E2E8F0] flex items-center justify-center text-3xl sm:text-5xl border-[3px] sm:border-[4px] border-[#0A2540] shadow-md overflow-hidden relative">
                             <span className="select-none">{second.avatar}</span>
                           </div>
-                          <div 
-                            className={`absolute left-1/2 -translate-x-1/2 -bottom-2.5 sm:-bottom-3.5 w-5.5 h-5.5 sm:w-8 sm:h-8 flex items-center justify-center z-20 ${getAnimClass("animate-badge-pop")}`}
-                            style={{ animationDelay: '2.9s' }}
-                          >
-                            <img 
-                              src="/medal2.png" 
-                              alt="2nd Place" 
-                              className="w-full h-full object-contain filter drop-shadow-[0_2px_3px_rgba(0,0,0,0.35)]"
-                              referrerPolicy="no-referrer"
-                            />
+                          <div className="absolute left-1/2 -translate-x-1/2 -bottom-2.5 sm:-bottom-3.5 z-20 pointer-events-none flex items-center justify-center">
+                            <div 
+                              className={`relative rounded-full border-[1.5px] sm:border-[2px] border-[#0A2540] overflow-hidden shadow-md w-5.5 h-5.5 sm:w-8 sm:h-8 flex items-center justify-center ${getAnimClass("animate-badge-pop")}`}
+                              style={{ animationDelay: '2.9s' }}
+                            >
+                              <img 
+                                src="/medal2.png" 
+                                alt="2nd Place" 
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-medal-shine pointer-events-none z-10" />
+                            </div>
                           </div>
                         </div>
                         <div className={`text-center mt-2.5 sm:mt-3.5 mb-0.5 px-0.5 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '2.6s' }}>
@@ -374,16 +377,19 @@ export function MiniBoardOverlay({
                           <div className="w-18 h-18 sm:w-26 sm:h-26 rounded-full bg-[#FFD13B] flex items-center justify-center text-4xl sm:text-6xl border-[3px] sm:border-[5px] border-[#0A2540] shadow-lg overflow-hidden relative group-hover:scale-105 transition-transform duration-300">
                             <span className="select-none">{first.avatar}</span>
                           </div>
-                          <div 
-                            className={`absolute left-1/2 -translate-x-1/2 -bottom-3 sm:-bottom-4 w-7.5 h-7.5 sm:w-11 sm:h-11 flex items-center justify-center z-20 ${getAnimClass("animate-badge-pop")}`}
-                            style={{ animationDelay: '1.5s' }}
-                          >
-                            <img 
-                              src="/medal1.png" 
-                              alt="1st Place" 
-                              className="w-full h-full object-contain filter drop-shadow-[0_3px_5px_rgba(0,0,0,0.4)]"
-                              referrerPolicy="no-referrer"
-                            />
+                          <div className="absolute left-1/2 -translate-x-1/2 -bottom-3 sm:-bottom-4 z-20 pointer-events-none flex items-center justify-center">
+                            <div 
+                              className={`relative rounded-full border-[1.5px] sm:border-[2px] border-[#0A2540] overflow-hidden shadow-lg w-7.5 h-7.5 sm:w-11 sm:h-11 flex items-center justify-center ${getAnimClass("animate-badge-pop")}`}
+                              style={{ animationDelay: '1.5s' }}
+                            >
+                              <img 
+                                src="/medal1.png" 
+                                alt="1st Place" 
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-medal-shine pointer-events-none z-10" />
+                            </div>
                           </div>
                         </div>
                         <div className={`text-center mt-3 sm:mt-4 mb-0.5 px-0.5 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '1.2s' }}>
@@ -408,16 +414,19 @@ export function MiniBoardOverlay({
                           <div className="w-14 h-14 sm:w-22 sm:h-22 rounded-full bg-[#FFB074] flex items-center justify-center text-3xl sm:text-5xl border-[3px] sm:border-[4px] border-[#0A2540] shadow-md overflow-hidden relative">
                             <span className="select-none">{third.avatar}</span>
                           </div>
-                          <div 
-                            className={`absolute left-1/2 -translate-x-1/2 -bottom-2.5 sm:-bottom-3.5 w-5.5 h-5.5 sm:w-8 sm:h-8 flex items-center justify-center z-20 ${getAnimClass("animate-badge-pop")}`}
-                            style={{ animationDelay: '4.1s' }}
-                          >
-                            <img 
-                              src="/medal3.png" 
-                              alt="3rd Place" 
-                              className="w-full h-full object-contain filter drop-shadow-[0_2px_3px_rgba(0,0,0,0.35)]"
-                              referrerPolicy="no-referrer"
-                            />
+                          <div className="absolute left-1/2 -translate-x-1/2 -bottom-2.5 sm:-bottom-3.5 z-20 pointer-events-none flex items-center justify-center">
+                            <div 
+                              className={`relative rounded-full border-[1.5px] sm:border-[2px] border-[#0A2540] overflow-hidden shadow-md w-5.5 h-5.5 sm:w-8 sm:h-8 flex items-center justify-center ${getAnimClass("animate-badge-pop")}`}
+                              style={{ animationDelay: '4.1s' }}
+                            >
+                              <img 
+                                src="/medal3.png" 
+                                alt="3rd Place" 
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-medal-shine pointer-events-none z-10" />
+                            </div>
                           </div>
                         </div>
                         <div className={`text-center mt-2.5 sm:mt-3.5 mb-0.5 px-0.5 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '3.8s' }}>
