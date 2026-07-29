@@ -26,7 +26,7 @@ export function MiniBoardOverlay({
   getCurrentDrawerName,
 }: MiniBoardOverlayProps) {
   // We use this z-index to overlay inside the DrawingBoard
-  const containerClass = "absolute inset-0 z-[40] flex flex-col items-center justify-center bg-white pointer-events-auto p-2 sm:p-4 select-none font-sans overflow-y-auto min-h-0";
+  const containerClass = "absolute inset-0 z-[40] flex flex-col items-center justify-between bg-white pointer-events-auto p-2 sm:p-4 select-none font-sans overflow-y-auto min-h-0";
 
   const wasPodium = React.useRef(false);
   const playPodiumAnimations = React.useRef(true);
@@ -50,17 +50,27 @@ export function MiniBoardOverlay({
           exit={{ opacity: 0 }}
           className={containerClass}
         >
-          <div className="text-center w-full max-w-sm my-auto py-2">
-            <div className="mb-2 sm:mb-4">
-              <GameTitle text="WAITING" type="miniboard" className="text-[20px] sm:text-[26px]" />
+          <div className="text-center w-full max-w-sm my-auto flex flex-col items-center justify-between py-1 sm:py-2 min-h-[85%]">
+            {/* Top Title */}
+            <div className="pt-0.5 sm:pt-1 mb-1 sm:mb-2">
+              <GameTitle text="WAITING" type="miniboard" className="text-[17px] sm:text-[22px]" />
             </div>
-            <div className="relative w-16 h-16 sm:w-20 sm:h-20 mb-3 mx-auto bg-sky-100 rounded-full flex items-center justify-center border-3 sm:border-4 border-[#0B2E5C]/10 shadow-inner">
-              <span className="text-3xl sm:text-5xl animate-pulse">⏳</span>
-              <span className="absolute -top-1 -right-1 text-base sm:text-xl animate-bounce">⏰</span>
+
+            {/* Middle Frameless Image */}
+            <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[160px] sm:max-h-[220px]">
+              <img 
+                src="/waiting.jpg" 
+                alt="Waiting illustration" 
+                className="max-h-full max-w-[130px] sm:max-w-[180px] object-contain drop-shadow-sm pointer-events-none select-none"
+              />
             </div>
-            <p className="text-[#728299] text-sm sm:text-base font-bold tracking-wide">
-              Waiting for players
-            </p>
+
+            {/* Bottom Text */}
+            <div className="pb-0.5 sm:pb-1">
+              <p className="text-[#728299] text-xs sm:text-sm font-bold tracking-wide">
+                Waiting for players
+              </p>
+            </div>
           </div>
         </motion.div>
       )}
@@ -74,14 +84,14 @@ export function MiniBoardOverlay({
           exit={{ opacity: 0 }}
           className={containerClass}
         >
-          <div className="text-center w-full max-w-sm my-auto py-2">
-            <div className="mb-2 sm:mb-4">
-              <GameTitle text="NEW TURN!" type="miniboard" className="text-[20px] sm:text-[26px]" />
+          <div className="text-center w-full max-w-sm my-auto flex flex-col items-center justify-between py-1 sm:py-2 min-h-[85%]">
+            <div className="pt-0.5 sm:pt-1 mb-1 sm:mb-2">
+              <GameTitle text="NEW TURN!" type="miniboard" className="text-[17px] sm:text-[22px]" />
             </div>
 
-            <div className="relative w-max mx-auto mb-3 sm:mb-4">
-              <div className="w-18 h-18 sm:w-24 sm:h-24 bg-[#FFD13B] border-[4px] sm:border-[5px] border-[#0A2540] rounded-full flex items-center justify-center shadow-lg overflow-hidden">
-                <span className="text-4xl sm:text-6xl">
+            <div className="relative w-max mx-auto my-2 sm:my-3">
+              <div className="w-16 h-16 sm:w-22 sm:h-22 bg-[#FFD13B] border-[4px] sm:border-[5px] border-[#0A2540] rounded-full flex items-center justify-center shadow-lg overflow-hidden">
+                <span className="text-3xl sm:text-5xl">
                   {
                     currentPlayers.find(
                       (p) =>
@@ -93,12 +103,14 @@ export function MiniBoardOverlay({
               </div>
             </div>
 
-            <p className="text-[#728299] text-xs sm:text-base font-bold mb-0.5">
-              It's the turn of
-            </p>
-            <h3 className="text-[#0B2E5C] font-black text-base sm:text-2xl tracking-wide">
-              {getCurrentDrawerName()}
-            </h3>
+            <div className="pb-0.5 sm:pb-1">
+              <p className="text-[#728299] text-xs sm:text-sm font-bold mb-0.5">
+                It's the turn of
+              </p>
+              <h3 className="text-[#0B2E5C] font-black text-sm sm:text-xl tracking-wide">
+                {getCurrentDrawerName()}
+              </h3>
+            </div>
           </div>
         </motion.div>
       )}
@@ -115,17 +127,19 @@ export function MiniBoardOverlay({
           if (reason === "skipped") {
             return (
               <motion.div key="round-end-skipped" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass}>
-                <div className="text-center w-full max-w-sm my-auto py-2">
-                  <div className="mb-2 sm:mb-4">
-                    <GameTitle text="SKIPPED!" type="miniboard" className="text-[20px] sm:text-[26px]" />
+                <div className="text-center w-full max-w-sm my-auto flex flex-col items-center justify-between py-1 sm:py-2 min-h-[85%]">
+                  <div className="pt-0.5 sm:pt-1 mb-1 sm:mb-2">
+                    <GameTitle text="SKIPPED!" type="miniboard" className="text-[17px] sm:text-[22px]" />
                   </div>
-                  <div className="relative w-16 h-16 sm:w-22 sm:h-22 mx-auto bg-green-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-green-100 shadow-sm mb-3 sm:mb-4">
-                    <span className="text-4xl sm:text-6xl animate-bounce">✏️</span>
-                    <span className="absolute -bottom-1 -right-1 text-xl sm:text-2xl animate-spin">💫</span>
+                  <div className="relative w-14 h-14 sm:w-20 sm:h-20 mx-auto my-2 bg-green-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-green-100 shadow-sm">
+                    <span className="text-3xl sm:text-5xl animate-bounce">✏️</span>
+                    <span className="absolute -bottom-1 -right-1 text-lg sm:text-xl animate-spin">💫</span>
                   </div>
-                  <h3 className="text-[#728299] font-bold text-xs sm:text-base tracking-wide mb-0.5" dir="auto">
-                    {amIDrawer ? "You've skipped the turn" : `${drawerName} skipped the turn`}
-                  </h3>
+                  <div className="pb-0.5 sm:pb-1">
+                    <h3 className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5" dir="auto">
+                      {amIDrawer ? "You've skipped the turn" : `${drawerName} skipped the turn`}
+                    </h3>
+                  </div>
                 </div>
               </motion.div>
             );
@@ -135,17 +149,19 @@ export function MiniBoardOverlay({
           if (reason === "turn_lost") {
             return (
               <motion.div key="round-end-lost" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass}>
-                <div className="text-center w-full max-w-sm my-auto py-2">
-                  <div className="mb-2 sm:mb-4">
-                    <GameTitle text="INACTIVE" type="miniboard" className="text-[20px] sm:text-[26px]" />
+                <div className="text-center w-full max-w-sm my-auto flex flex-col items-center justify-between py-1 sm:py-2 min-h-[85%]">
+                  <div className="pt-0.5 sm:pt-1 mb-1 sm:mb-2">
+                    <GameTitle text="INACTIVE" type="miniboard" className="text-[17px] sm:text-[22px]" />
                   </div>
-                  <div className="relative w-16 h-16 sm:w-22 sm:h-22 mx-auto bg-amber-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-amber-100 shadow-sm mb-3 sm:mb-4">
-                    <span className="text-4xl sm:text-6xl animate-pulse">💤</span>
-                    <span className="absolute -bottom-1 -right-1 text-xl sm:text-2xl">⏰</span>
+                  <div className="relative w-14 h-14 sm:w-20 sm:h-20 mx-auto my-2 bg-amber-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-amber-100 shadow-sm">
+                    <span className="text-3xl sm:text-5xl animate-pulse">💤</span>
+                    <span className="absolute -bottom-1 -right-1 text-lg sm:text-xl">⏰</span>
                   </div>
-                  <h3 className="text-[#728299] font-bold text-xs sm:text-base tracking-wide mb-0.5" dir="auto">
-                    {amIDrawer ? "You've lost your turn :(" : `${drawerName} has lost the turn`}
-                  </h3>
+                  <div className="pb-0.5 sm:pb-1">
+                    <h3 className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5" dir="auto">
+                      {amIDrawer ? "You've lost your turn :(" : `${drawerName} has lost the turn`}
+                    </h3>
+                  </div>
                 </div>
               </motion.div>
             );
@@ -155,12 +171,12 @@ export function MiniBoardOverlay({
           if (reason === "canceled") {
             return (
               <motion.div key="round-end-canceled" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass}>
-                <div className="text-center w-full max-w-sm my-auto py-2">
-                  <div className="mb-2 sm:mb-4">
-                    <GameTitle text="CANCELED TURN" type="miniboard" className="text-[18px] sm:text-[24px]" />
+                <div className="text-center w-full max-w-sm my-auto flex flex-col items-center justify-between py-1 sm:py-2 min-h-[85%]">
+                  <div className="pt-0.5 sm:pt-1 mb-1 sm:mb-2">
+                    <GameTitle text="CANCELED TURN" type="miniboard" className="text-[16px] sm:text-[20px]" />
                   </div>
 
-                  <div className="mb-3 sm:mb-4 flex justify-center">
+                  <div className="my-2 flex justify-center">
                     <motion.div
                       animate={{
                         rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -174,16 +190,18 @@ export function MiniBoardOverlay({
                         ease: "easeInOut"
                       }}
                     >
-                      <AlertTriangle className="w-14 h-14 sm:w-20 sm:h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
+                      <AlertTriangle className="w-12 h-12 sm:w-16 sm:h-16 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
                     </motion.div>
                   </div>
 
-                  <p className="text-[#728299] text-xs sm:text-base font-bold mb-0.5" dir="auto">
-                    Users score has been canceled
-                  </p>
-                  <p className="text-[#728299]/70 text-[11px] sm:text-xs font-bold" dir="auto">
-                    لقد تم إلغاء نقاط الدور
-                  </p>
+                  <div className="pb-0.5 sm:pb-1">
+                    <p className="text-[#728299] text-xs sm:text-sm font-bold mb-0.5" dir="auto">
+                      Users score has been canceled
+                    </p>
+                    <p className="text-[#728299]/70 text-[10px] sm:text-xs font-bold" dir="auto">
+                      لقد تم إلغاء نقاط الدور
+                    </p>
+                  </div>
                 </div>
               </motion.div>
             );
@@ -204,38 +222,39 @@ export function MiniBoardOverlay({
 
           return (
             <motion.div key="round-end-interval" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass}>
-              <div className="text-center w-full max-w-sm my-auto py-2">
-                <div className={subTitle ? "mb-1" : "mb-2 sm:mb-4"}>
-                  <GameTitle text={titleText} type="miniboard" className="text-[20px] sm:text-[26px]" />
+              <div className="text-center w-full max-w-sm my-auto flex flex-col items-center justify-between py-1 sm:py-2 min-h-[85%]">
+                <div className="pt-0.5 sm:pt-1 mb-1">
+                  <GameTitle text={titleText} type="miniboard" className="text-[17px] sm:text-[22px]" />
+                  {subTitle && (
+                    <p className="text-[#728299] text-[11px] sm:text-xs font-bold mt-1" dir="auto">
+                      {subTitle}
+                    </p>
+                  )}
                 </div>
 
-                {subTitle && (
-                  <p className="text-[#728299] text-xs sm:text-base font-bold mb-2 sm:mb-4" dir="auto">
-                    {subTitle}
-                  </p>
-                )}
-
-                <div className="relative w-16 h-16 sm:w-22 sm:h-22 mx-auto bg-sky-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-sky-150 shadow-sm mb-3 sm:mb-4">
-                  <span className="text-4xl sm:text-6xl animate-bounce">🎨</span>
-                  <span className="absolute -top-1 -right-1 text-xl sm:text-2xl">✨</span>
+                <div className="relative w-14 h-14 sm:w-20 sm:h-20 mx-auto my-2 bg-sky-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-sky-150 shadow-sm">
+                  <span className="text-3xl sm:text-5xl animate-bounce">🎨</span>
+                  <span className="absolute -top-1 -right-1 text-lg sm:text-xl">✨</span>
                 </div>
 
-                {bottomText && (
-                  <p className="text-[#728299] text-xs sm:text-base font-bold mb-2" dir="auto">
-                    {bottomText}
-                  </p>
-                )}
+                <div className="pb-0.5 sm:pb-1">
+                  {bottomText && (
+                    <p className="text-[#728299] text-xs sm:text-sm font-bold mb-1" dir="auto">
+                      {bottomText}
+                    </p>
+                  )}
 
-                {word && hasSucceeded && reason !== "all_guessed" && (
-                  <div className="text-center">
-                    <span className="text-[#728299] text-[12px] sm:text-sm font-bold block mb-0.5">
-                      The answer was:
-                    </span>
-                    <span className="text-[#0B2E5C] text-base sm:text-2xl font-black tracking-wide inline-block drop-shadow-sm" dir="auto">
-                      {word}
-                    </span>
-                  </div>
-                )}
+                  {word && hasSucceeded && reason !== "all_guessed" && (
+                    <div className="text-center">
+                      <span className="text-[#728299] text-[11px] sm:text-xs font-bold block mb-0.5">
+                        The answer was:
+                      </span>
+                      <span className="text-[#0B2E5C] text-sm sm:text-xl font-black tracking-wide inline-block drop-shadow-sm" dir="auto">
+                        {word}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </motion.div>
           );
@@ -334,16 +353,18 @@ export function MiniBoardOverlay({
                           </div>
                           <div className="absolute left-1/2 -translate-x-1/2 -bottom-2.5 sm:-bottom-3.5 z-20 pointer-events-none flex items-center justify-center">
                             <div 
-                              className={`relative rounded-full border-[1.5px] sm:border-[2px] border-[#0A2540] overflow-hidden shadow-md w-5.5 h-5.5 sm:w-8 sm:h-8 flex items-center justify-center ${getAnimClass("animate-badge-pop")}`}
+                              className={`relative w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] ${getAnimClass("animate-badge-pop")}`}
                               style={{ animationDelay: '2.9s' }}
                             >
                               <img 
-                                src="/medal2.png" 
+                                src="/medal2.webp" 
                                 alt="2nd Place" 
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain"
                                 referrerPolicy="no-referrer"
                               />
-                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-medal-shine pointer-events-none z-10" />
+                              <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none z-10">
+                                <div className="w-full h-full bg-gradient-to-r from-transparent via-white/60 to-transparent animate-medal-shine" />
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -379,16 +400,18 @@ export function MiniBoardOverlay({
                           </div>
                           <div className="absolute left-1/2 -translate-x-1/2 -bottom-3 sm:-bottom-4 z-20 pointer-events-none flex items-center justify-center">
                             <div 
-                              className={`relative rounded-full border-[1.5px] sm:border-[2px] border-[#0A2540] overflow-hidden shadow-lg w-7.5 h-7.5 sm:w-11 sm:h-11 flex items-center justify-center ${getAnimClass("animate-badge-pop")}`}
+                              className={`relative w-9 h-9 sm:w-13 sm:h-13 flex items-center justify-center drop-shadow-[0_3px_5px_rgba(0,0,0,0.5)] ${getAnimClass("animate-badge-pop")}`}
                               style={{ animationDelay: '1.5s' }}
                             >
                               <img 
-                                src="/medal1.png" 
+                                src="/medal1.webp" 
                                 alt="1st Place" 
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain"
                                 referrerPolicy="no-referrer"
                               />
-                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-medal-shine pointer-events-none z-10" />
+                              <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none z-10">
+                                <div className="w-full h-full bg-gradient-to-r from-transparent via-white/60 to-transparent animate-medal-shine" />
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -416,16 +439,18 @@ export function MiniBoardOverlay({
                           </div>
                           <div className="absolute left-1/2 -translate-x-1/2 -bottom-2.5 sm:-bottom-3.5 z-20 pointer-events-none flex items-center justify-center">
                             <div 
-                              className={`relative rounded-full border-[1.5px] sm:border-[2px] border-[#0A2540] overflow-hidden shadow-md w-5.5 h-5.5 sm:w-8 sm:h-8 flex items-center justify-center ${getAnimClass("animate-badge-pop")}`}
+                              className={`relative w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] ${getAnimClass("animate-badge-pop")}`}
                               style={{ animationDelay: '4.1s' }}
                             >
                               <img 
-                                src="/medal3.png" 
+                                src="/medal3.webp" 
                                 alt="3rd Place" 
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain"
                                 referrerPolicy="no-referrer"
                               />
-                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent animate-medal-shine pointer-events-none z-10" />
+                              <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none z-10">
+                                <div className="w-full h-full bg-gradient-to-r from-transparent via-white/60 to-transparent animate-medal-shine" />
+                              </div>
                             </div>
                           </div>
                         </div>

@@ -32,7 +32,7 @@ const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
       {/* Preloader element to ensure image is cached/ready before triggering animation */}
       {!isReady && (
         <img 
-          src="/trophy.png" 
+          src="/trophy.webp" 
           alt="" 
           className="hidden" 
           onLoad={() => setImgLoaded(true)}
@@ -44,12 +44,9 @@ const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
         <div className="w-[26px] h-[26px] sm:w-[30px] sm:h-[30px] flex items-center justify-center relative animate-trophy-celebrate">
           {!imgError ? (
             <img 
-              src="/trophy.png" 
+              src="/trophy.webp" 
               alt="Trophy" 
-              className="w-full h-full object-contain"
-              style={{
-                filter: 'drop-shadow(1px 0 0 #FFFFFF) drop-shadow(-1px 0 0 #FFFFFF) drop-shadow(0 1px 0 #FFFFFF) drop-shadow(0 -1px 0 #FFFFFF) drop-shadow(1px 2px 1px rgba(0,0,0,0.5))'
-              }}
+              className="w-full h-full object-contain drop-shadow-[1px_2px_1px_rgba(0,0,0,0.5)]"
               referrerPolicy="no-referrer"
             />
           ) : (

@@ -21,6 +21,7 @@ import {
   LogOut,
   DoorOpen,
   ArrowRight,
+  Zap,
 } from "lucide-react";
 import { useSocket } from "./SocketProvider";
 import { motion, AnimatePresence } from "motion/react";
@@ -1654,7 +1655,7 @@ export default function GameRoom({
                           key={msg.id}
                           className="flex items-center gap-2 text-amber-500 font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                         >
-                          <span className="text-amber-500 font-black shrink-0">⚡</span>
+                          <Zap size={15} className="text-amber-500 fill-amber-500 shrink-0" />
                           <span dir="auto" className="flex items-center gap-1">
                             <span className="text-amber-500 font-extrabold">{displayWord}</span>
                             <span className="text-amber-500/90 font-normal">is close!</span>
