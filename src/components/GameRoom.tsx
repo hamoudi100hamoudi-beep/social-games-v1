@@ -31,6 +31,7 @@ import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
 import CinematicModal from "./game/CinematicModal";
 import { safeLocalStorage } from "../utils/storage";
 import { soundManager } from "../utils/soundManager";
+import { useRoomEventGate } from "../hooks/useRoomEventGate";
 
 interface GameRoomProps {
   nickname: string;
@@ -61,6 +62,7 @@ type PlayerSlot = {
   wins?: number;
   isOffline?: boolean;
   persistentId?: string;
+  isNew?: boolean;
 };
 
 interface HitNotification {
@@ -446,15 +448,24 @@ export default function GameRoom({
   }, [gameState?.status, amIDrawer]);
 
   // 🔊 Sound Hooks
-  const isFirstSyncRef = React.useRef<boolean>(true);
+  const eventGate = useRoomEventGate();
+  const canPlaySoundRef = React.useRef<boolean>(false);
   const prevPlayersLengthRef = React.useRef<number>(0);
   const prevGameStateStatusRef = React.useRef<string>("");
   const prevHintsUsedRef = React.useRef<number>(0);
   const prevCorrectGuessersRef = React.useRef<string[]>([]);
 
   useEffect(() => {
+    // Prevent sounds from playing immediately after joining (to avoid notification spam)
+    const timer = setTimeout(() => {
+      canPlaySoundRef.current = true;
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     // Player Join / Leave sounds
-    if (prevPlayersLengthRef.current > 0) {
+    if (eventGate.isLive() && canPlaySoundRef.current && prevPlayersLengthRef.current > 0) {
       if (currentPlayers.length > prevPlayersLengthRef.current) {
         soundManager.play("playerJoin");
       } else if (currentPlayers.length < prevPlayersLengthRef.current) {
@@ -462,14 +473,14 @@ export default function GameRoom({
       }
     }
     prevPlayersLengthRef.current = currentPlayers.length;
-  }, [currentPlayers.length]);
+  }, [currentPlayers.length, eventGate]);
 
   useEffect(() => {
     // Game Status sounds
     const curr = gameState.status;
     const prev = prevGameStateStatusRef.current;
     
-    if (curr !== prev && curr) {
+    if (eventGate.isLive() && canPlaySoundRef.current && curr !== prev && curr) {
       if (curr === "CHOOSING") {
         if (amIDrawer) {
           soundManager.play("wordSelectionShow");
@@ -483,18 +494,18 @@ export default function GameRoom({
       }
     }
     prevGameStateStatusRef.current = curr || "";
-  }, [gameState.status, amIDrawer]);
+  }, [gameState.status, amIDrawer, eventGate]);
 
   useEffect(() => {
     // Hint sounds
     const currHints = gameState.hintsUsed || 0;
     const prevHints = prevHintsUsedRef.current;
     
-    if (currHints > prevHints && currHints > 0) {
+    if (eventGate.isLive() && canPlaySoundRef.current && currHints > prevHints && currHints > 0) {
       soundManager.play("hintShow");
     }
     prevHintsUsedRef.current = currHints;
-  }, [gameState.hintsUsed]);
+  }, [gameState.hintsUsed, eventGate]);
 
   const isDrawingMode = gameState.status === "DRAWING" && amIDrawer;
 
@@ -656,12 +667,18 @@ export default function GameRoom({
         state.gameState?.status === "DRAWING" ||
         state.gameState?.status === "CHOOSING";
 
-      if (isFirstSyncRef.current) {
+      const newPlayersMap = new Map();
+      if (!eventGate.isLive()) {
+        eventGate.hydrateGate(state.players);
         prevPlayersLengthRef.current = state.players.length;
         prevGameStateStatusRef.current = state.gameState?.status || "";
         prevHintsUsedRef.current = state.gameState?.hintsUsed || 0;
         prevCorrectGuessersRef.current = state.gameState?.correctGuessers || [];
-        isFirstSyncRef.current = false;
+      } else {
+        // Calculate isNew for each player before the state updater
+        state.players.forEach((p) => {
+          newPlayersMap.set(p.id, eventGate.isNewPlayer(p.id));
+        });
       }
 
       setCurrentPlayers((prevPlayers) => {
@@ -677,6 +694,7 @@ export default function GameRoom({
           avatar: p.avatar,
           isEmpty: false,
           persistentId: p.persistentId,
+          isNew: newPlayersMap.get(p.id) || false,
         }));
 
         mapped.sort((a, b) => {
@@ -728,10 +746,12 @@ export default function GameRoom({
 
     const onReceiveMessage = (msg: any) => {
       // 🔊 Play chat message sound (skip if it's from self or if it's a system message)
-      if (msg.type !== "system" && msg.senderId !== socket.id) {
-        soundManager.play('chatMessage');
-      } else if (msg.type === "system") {
-        soundManager.play('notification');
+      if (eventGate.isLive() && canPlaySoundRef.current) {
+        if (msg.type !== "system" && msg.senderId !== socket.id) {
+          soundManager.play('chatMessage');
+        } else if (msg.type === "system") {
+          soundManager.play('notification');
+        }
       }
 
       setChatMessages((prev) => {
@@ -779,12 +799,12 @@ export default function GameRoom({
           setShowCorrectAnimation(true);
           
           // 🔊 Play distinct sound when I get the correct answer
-          soundManager.play('correctGuessSelf');
+          if (eventGate.isLive() && canPlaySoundRef.current) soundManager.play('correctGuessSelf');
           
           setTimeout(() => setShowCorrectAnimation(false), 1200);
         } else {
           // 🔊 Play different sound when someone else gets the correct answer
-          soundManager.play('correctGuessOther');
+          if (eventGate.isLive() && canPlaySoundRef.current) soundManager.play('correctGuessOther');
         }
 
         const hitId = Date.now().toString() + Math.random().toString();

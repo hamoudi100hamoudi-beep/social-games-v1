@@ -90,6 +90,7 @@ export interface PlayerSlot {
   isOffline?: boolean;
   persistentId?: string;
   isBlocked?: boolean;
+  isNew?: boolean;
 }
 
 interface PlayersSidebarProps {
@@ -130,6 +131,12 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   }
 
   // Create a stable-sorted copy for rendering so DOM elements never re-order or mount/unmount mid-transition
+  const initialPlayersRef = React.useRef<Set<string> | null>(null);
+
+  if (initialPlayersRef.current === null && slots.some(s => !s.isEmpty)) {
+    initialPlayersRef.current = new Set(slots.filter(s => !s.isEmpty).map(s => s.id));
+  }
+
   const stableSlots = React.useMemo(() => {
     return [...slots].sort((a, b) => a.id.localeCompare(b.id));
   }, [slots]);
@@ -251,7 +258,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                 transition: 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease',
                 zIndex: zIndex,
               }}
-              className={`absolute inset-x-0 flex items-center pl-1.5 pr-1 py-1.5 sm:pl-3 sm:pr-2.5 sm:py-3 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10 animate-avatar-pop' : ''}`}
+              className={`absolute inset-x-0 flex items-center pl-1.5 pr-1 py-1.5 sm:pl-3 sm:pr-2.5 sm:py-3 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''} ${(!slot.isEmpty && initialPlayersRef.current && !initialPlayersRef.current.has(slot.id)) ? 'animate-avatar-pop' : ''}`}
               onClick={() => {
                 if (!slot.isEmpty && onPlayerClick) {
                   onPlayerClick(slot);

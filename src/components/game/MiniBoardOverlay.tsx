@@ -29,8 +29,8 @@ export function MiniBoardOverlay({
   const containerClass = "absolute inset-0 z-[40] flex flex-col items-center justify-between bg-white pointer-events-auto p-2 sm:p-4 select-none font-sans overflow-y-auto min-h-0";
 
   const wasPodium = React.useRef(false);
-  const playPodiumAnimations = React.useRef(true);
-  
+  const playPodiumAnimations = React.useRef(false);
+
   if (gameState.status === "PODIUM" && !wasPodium.current) {
     // Only play intro animations if we entered the podium phase early enough (e.g. at the very start)
     playPodiumAnimations.current = gameState.timeLeft >= 13;
@@ -57,11 +57,12 @@ export function MiniBoardOverlay({
             </div>
 
             {/* Middle Frameless Image */}
-            <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[160px] sm:max-h-[220px]">
+            <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
               <img 
-                src="/waiting.jpg" 
+                src="/waiting.webp" 
                 alt="Waiting illustration" 
-                className="max-h-full max-w-[130px] sm:max-w-[180px] object-contain drop-shadow-sm pointer-events-none select-none"
+                referrerPolicy="no-referrer"
+                className="max-h-[110px] sm:max-h-[150px] max-w-[110px] sm:max-w-[150px] object-contain drop-shadow-sm pointer-events-none select-none"
               />
             </div>
 
