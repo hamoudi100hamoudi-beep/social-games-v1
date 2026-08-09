@@ -130,12 +130,52 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     initializedRef.current = true;
   }
 
-  // Create a stable-sorted copy for rendering so DOM elements never re-order or mount/unmount mid-transition
-  const initialPlayersRef = React.useRef<Set<string> | null>(null);
+  const [newlyJoinedIds, setNewlyJoinedIds] = React.useState<Set<string>>(new Set());
+  const prevPlayerIdsRef = React.useRef<Set<string> | null>(null);
 
-  if (initialPlayersRef.current === null && slots.some(s => !s.isEmpty)) {
-    initialPlayersRef.current = new Set(slots.filter(s => !s.isEmpty).map(s => s.id));
-  }
+  // Track player joins dynamically and trigger pop animation cleanly
+  React.useEffect(() => {
+    const currentActiveIds = new Set(slots.filter((s) => !s.isEmpty).map((s) => s.id));
+
+    if (prevPlayerIdsRef.current === null) {
+      prevPlayerIdsRef.current = currentActiveIds;
+      if (currentActiveIds.size > 0) {
+        setNewlyJoinedIds(new Set(currentActiveIds));
+        const timer = setTimeout(() => {
+          setNewlyJoinedIds(new Set());
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+      return;
+    }
+
+    const freshNewIds: string[] = [];
+    currentActiveIds.forEach((id) => {
+      if (!prevPlayerIdsRef.current!.has(id)) {
+        freshNewIds.push(id);
+      }
+    });
+
+    prevPlayerIdsRef.current = currentActiveIds;
+
+    if (freshNewIds.length > 0) {
+      setNewlyJoinedIds((prev) => {
+        const next = new Set(prev);
+        freshNewIds.forEach((id) => next.add(id));
+        return next;
+      });
+
+      const timer = setTimeout(() => {
+        setNewlyJoinedIds((prev) => {
+          const next = new Set(prev);
+          freshNewIds.forEach((id) => next.delete(id));
+          return next;
+        });
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [slots]);
 
   const stableSlots = React.useMemo(() => {
     return [...slots].sort((a, b) => a.id.localeCompare(b.id));
@@ -258,7 +298,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                 transition: 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease',
                 zIndex: zIndex,
               }}
-              className={`absolute inset-x-0 flex items-center pl-1.5 pr-1 py-1.5 sm:pl-3 sm:pr-2.5 sm:py-3 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''} ${(!slot.isEmpty && initialPlayersRef.current && !initialPlayersRef.current.has(slot.id)) ? 'animate-avatar-pop' : ''}`}
+              className={`absolute inset-x-0 flex items-center pl-1.5 pr-1 py-1.5 sm:pl-3 sm:pr-2.5 sm:py-3 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''}`}
               onClick={() => {
                 if (!slot.isEmpty && onPlayerClick) {
                   onPlayerClick(slot);
@@ -268,7 +308,8 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
               {/* Avatar with Gartic Trophy */}
               <div className="relative shrink-0 mr-1.5 sm:mr-2.5">
                  <div className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-[3px] transition-colors duration-200
-                   ${slot.isEmpty ? 'bg-black/20 border-white/10' : `bg-bg-dark-brand ${borderClass}`}`}>
+                   ${slot.isEmpty ? 'bg-black/20 border-white/10' : `bg-bg-dark-brand ${borderClass}`}
+                   ${(!slot.isEmpty && newlyJoinedIds.has(slot.id)) ? 'animate-avatar-pop' : ''}`}>
                    {slot.isEmpty ? (
                      <UserIcon size={20} className="text-white/30" />
                    ) : (

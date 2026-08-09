@@ -2,6 +2,9 @@ import React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Clock, Pencil, User as UserIcon, AlertTriangle } from "lucide-react";
 import GameTitle from "./GameTitle";
+import WaitingSprite from "./WaitingSprite";
+import AllGuessedSprite from "./AllGuessedSprite";
+import TurnLostSprite from "./TurnLostSprite";
 
 interface Player {
   id: string;
@@ -56,14 +59,9 @@ export function MiniBoardOverlay({
               <GameTitle text="WAITING" type="miniboard" className="text-[17px] sm:text-[22px]" />
             </div>
 
-            {/* Middle Frameless Image */}
+            {/* Middle Frameless Animated Sprite */}
             <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
-              <img 
-                src="/waiting.webp" 
-                alt="Waiting illustration" 
-                referrerPolicy="no-referrer"
-                className="max-h-[110px] sm:max-h-[150px] max-w-[110px] sm:max-w-[150px] object-contain drop-shadow-sm pointer-events-none select-none"
-              />
+              <WaitingSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm" />
             </div>
 
             {/* Bottom Text */}
@@ -154,9 +152,8 @@ export function MiniBoardOverlay({
                   <div className="pt-0.5 sm:pt-1 mb-1 sm:mb-2">
                     <GameTitle text="INACTIVE" type="miniboard" className="text-[17px] sm:text-[22px]" />
                   </div>
-                  <div className="relative w-14 h-14 sm:w-20 sm:h-20 mx-auto my-2 bg-amber-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-amber-100 shadow-sm">
-                    <span className="text-3xl sm:text-5xl animate-pulse">💤</span>
-                    <span className="absolute -bottom-1 -right-1 text-lg sm:text-xl">⏰</span>
+                  <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
+                    <TurnLostSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm" />
                   </div>
                   <div className="pb-0.5 sm:pb-1">
                     <h3 className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5" dir="auto">
@@ -233,10 +230,16 @@ export function MiniBoardOverlay({
                   )}
                 </div>
 
-                <div className="relative w-14 h-14 sm:w-20 sm:h-20 mx-auto my-2 bg-sky-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-sky-150 shadow-sm">
-                  <span className="text-3xl sm:text-5xl animate-bounce">🎨</span>
-                  <span className="absolute -top-1 -right-1 text-lg sm:text-xl">✨</span>
-                </div>
+                {reason === "all_guessed" ? (
+                  <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
+                    <AllGuessedSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm" />
+                  </div>
+                ) : (
+                  <div className="relative w-14 h-14 sm:w-20 sm:h-20 mx-auto my-2 bg-sky-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-sky-150 shadow-sm">
+                    <span className="text-3xl sm:text-5xl animate-bounce">🎨</span>
+                    <span className="absolute -top-1 -right-1 text-lg sm:text-xl">✨</span>
+                  </div>
+                )}
 
                 <div className="pb-0.5 sm:pb-1">
                   {bottomText && (
