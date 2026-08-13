@@ -801,7 +801,7 @@ export default function GameRoom({
           // 🔊 Play distinct sound when I get the correct answer
           if (eventGate.isLive() && canPlaySoundRef.current) soundManager.play('correctGuessSelf');
           
-          setTimeout(() => setShowCorrectAnimation(false), 1200);
+          setTimeout(() => setShowCorrectAnimation(false), 1500);
         } else {
           // 🔊 Play different sound when someone else gets the correct answer
           if (eventGate.isLive() && canPlaySoundRef.current) soundManager.play('correctGuessOther');
@@ -1530,41 +1530,37 @@ export default function GameRoom({
             {showCorrectAnimation && (
               <div className="absolute inset-0 pointer-events-none z-[60] flex items-center justify-center">
                 <motion.div
+                  key="correct-guess-overlay"
                   initial={{ scale: 0 }}
-                  animate={{ scale: [0, 1.2, 1, 1, 1.1, 0] }}
-                  transition={{
-                    duration: 1.2,
-                    times: [0, 0.08, 0.15, 0.85, 0.92, 1],
-                    ease: [
-                      "easeOut",
-                      "easeInOut",
-                      "linear",
-                      "easeInOut",
-                      "easeIn",
-                    ],
+                  animate={{
+                    scale: [0, 1.3, 1, 1, 1.15, 0],
                   }}
-                  className="w-20 h-20 sm:w-26 sm:h-26 bg-[#00E540] rounded-full border-[4px] border-white flex items-center justify-center shadow-[0_6px_24px_rgba(0,229,64,0.5)]"
+                  transition={{
+                    duration: 1.4,
+                    times: [0, 0.12, 0.20, 0.82, 0.90, 1],
+                    ease: ["easeOut", "easeInOut", "linear", "easeOut", "easeIn"],
+                  }}
+                  className="w-20 h-20 sm:w-24 sm:h-24 bg-[#00E540] rounded-full border-[3px] border-white flex items-center justify-center shadow-none"
                 >
                   <motion.svg
                     viewBox="0 0 50 50"
-                    className="w-11 h-11 sm:w-14 sm:h-14 text-white drop-shadow-sm"
+                    className="w-14 h-14 sm:w-16 sm:h-16 text-white"
                   >
                     <motion.path
-                      d="M 14 27 L 22 35 L 38 15"
+                      d="M 12 26 L 21 35 L 39 16"
                       fill="transparent"
                       strokeWidth="6"
                       stroke="currentColor"
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      initial={{ pathLength: 0, opacity: 0 }}
+                      initial={{ pathLength: 0 }}
                       animate={{
-                        pathLength: [0, 0, 1, 1, 0],
-                        opacity: [0, 0, 1, 1, 0],
+                        pathLength: [0, 1, 1, 0],
                       }}
                       transition={{
-                        duration: 1.2,
-                        times: [0, 0.05, 0.15, 0.85, 1],
-                        ease: "linear",
+                        duration: 1.4,
+                        times: [0, 0.20, 0.90, 1],
+                        ease: ["easeOut", "linear", "easeIn"],
                       }}
                     />
                   </motion.svg>

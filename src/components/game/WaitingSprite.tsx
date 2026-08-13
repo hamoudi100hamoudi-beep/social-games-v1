@@ -47,7 +47,14 @@ export const WaitingSprite: React.FC<WaitingSpriteProps> = ({ className = "" }) 
       }, delay);
     };
 
-    runFrame();
+    const img = new Image();
+    img.src = '/waiting.webp';
+    if (img.complete) {
+      runFrame();
+    } else {
+      img.onload = () => { if (isMounted) runFrame(); };
+      img.onerror = () => { if (isMounted) runFrame(); };
+    }
 
     return () => {
       isMounted = false;

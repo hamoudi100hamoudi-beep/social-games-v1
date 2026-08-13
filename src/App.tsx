@@ -4,13 +4,15 @@ import GameRoom from './components/GameRoom';
 import Lobby from './components/Lobby';
 import { safeLocalStorage } from './utils/storage';
 import { soundManager } from './utils/soundManager';
+import { preloadGameSprites } from './utils/preloadAssets';
 
 export default function App() {
   const { isConnected } = useSocket();
 
   useEffect(() => {
-    // Load all pre-defined sounds from the manifest immediately
+    // Load all pre-defined sounds and game sprites immediately
     soundManager.loadAll();
+    preloadGameSprites();
 
     // 🔊 Unlock audio context on first user interaction for iOS Safari compatibility
     const handleInteraction = () => {

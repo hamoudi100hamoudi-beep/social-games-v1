@@ -230,16 +230,12 @@ export function MiniBoardOverlay({
                   )}
                 </div>
 
-                {reason === "all_guessed" ? (
-                  <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
-                    <AllGuessedSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm" />
-                  </div>
-                ) : (
-                  <div className="relative w-14 h-14 sm:w-20 sm:h-20 mx-auto my-2 bg-sky-50 rounded-full flex items-center justify-center border-3 sm:border-4 border-sky-150 shadow-sm">
-                    <span className="text-3xl sm:text-5xl animate-bounce">🎨</span>
-                    <span className="absolute -top-1 -right-1 text-lg sm:text-xl">✨</span>
-                  </div>
-                )}
+                <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
+                  <AllGuessedSprite
+                    mode={reason === "all_guessed" || hasSucceeded ? "all_guessed" : "no_one_guessed"}
+                    className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm"
+                  />
+                </div>
 
                 <div className="pb-0.5 sm:pb-1">
                   {bottomText && (

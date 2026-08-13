@@ -40,7 +40,14 @@ export const TurnLostSprite: React.FC<TurnLostSpriteProps> = ({ className = "" }
       }, delay);
     };
 
-    scheduleNextFrame(frameIndex);
+    const img = new Image();
+    img.src = '/turn_lost.webp';
+    if (img.complete) {
+      scheduleNextFrame(frameIndex);
+    } else {
+      img.onload = () => { if (isMounted) scheduleNextFrame(frameIndex); };
+      img.onerror = () => { if (isMounted) scheduleNextFrame(frameIndex); };
+    }
 
     return () => {
       isMounted = false;
