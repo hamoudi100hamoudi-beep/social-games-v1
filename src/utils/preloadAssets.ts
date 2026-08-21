@@ -3,7 +3,9 @@
 
 const GAME_ASSETS = [
   '/all_guessed.webp',
+  '/partial_guessed.webp',
   '/turn_lost.webp',
+  '/skipped.webp',
   '/waiting.webp',
   '/trophy.webp',
   '/medal1.webp',
