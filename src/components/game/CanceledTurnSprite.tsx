@@ -14,15 +14,6 @@ interface FrameStep {
   delay: number; // Delay duration in ms
 }
 
-// Module-level preload and GPU texture decode
-if (typeof window !== "undefined") {
-  const preloadImg = new Image();
-  preloadImg.src = "/canceled_turn.webp";
-  if ("decode" in preloadImg && typeof preloadImg.decode === "function") {
-    preloadImg.decode().catch(() => {});
-  }
-}
-
 // Full animation sequence:
 // 1) Frame 1 to Frame 30 (reaches frame 30 for the 1st time, easing on 27 and 30)
 // 2) Bounces back to Frame 27 (easing on 27), then goes forward to Frame 30 (reaches frame 30 for the 2nd time, easing on 30)
@@ -83,24 +74,29 @@ export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ classNam
   useEffect(() => {
     let isMounted = true;
 
-    const playStep = (stepIndex: number) => {
-      if (!isMounted) return;
-
+    const scheduleNextStep = (stepIndex: number) => {
       const currentStep = ANIMATION_SEQUENCE[stepIndex];
-      setFrameIndex(currentStep.frame);
-
-      // If there's a next step and current delay > 0, schedule it
-      if (stepIndex < ANIMATION_SEQUENCE.length - 1 && currentStep.delay > 0) {
-        timerRef.current = setTimeout(() => {
-          if (isMounted) {
-            playStep(stepIndex + 1);
-          }
-        }, currentStep.delay);
+      // Stop scheduling when reaching the end or if delay is 0
+      if (stepIndex >= ANIMATION_SEQUENCE.length - 1 || currentStep.delay <= 0) {
+        return;
       }
+
+      timerRef.current = setTimeout(() => {
+        if (!isMounted) return;
+        const nextStepIndex = stepIndex + 1;
+        setFrameIndex(ANIMATION_SEQUENCE[nextStepIndex].frame);
+        scheduleNextStep(nextStepIndex);
+      }, currentStep.delay);
     };
 
-    // Start playing immediately
-    playStep(0);
+    const img = new Image();
+    img.src = '/canceled_turn.webp';
+    if (img.complete) {
+      scheduleNextStep(0);
+    } else {
+      img.onload = () => { if (isMounted) scheduleNextStep(0); };
+      img.onerror = () => { if (isMounted) scheduleNextStep(0); };
+    }
 
     return () => {
       isMounted = false;
@@ -118,15 +114,6 @@ export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ classNam
 
   return (
     <div className={`relative flex items-center justify-center ${className}`}>
-      {/* Hidden pre-decoded img to keep texture active in GPU pipeline */}
-      <img
-        src="/canceled_turn.webp"
-        alt=""
-        aria-hidden="true"
-        className="sr-only opacity-0 absolute w-0 h-0 pointer-events-none"
-        loading="eager"
-        decoding="sync"
-      />
       <div
         className="w-full h-full aspect-[241/300] bg-no-repeat pointer-events-none select-none relative z-10"
         style={{
