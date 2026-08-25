@@ -6,6 +6,7 @@ const GAME_ASSETS = [
   '/partial_guessed.webp',
   '/turn_lost.webp',
   '/skipped.webp',
+  '/canceled_turn.webp',
   '/waiting.webp',
   '/trophy.webp',
   '/medal1.webp',
@@ -22,9 +23,17 @@ export function preloadGameSprites(): void {
     if (!preloadedSet.has(src)) {
       const img = new Image();
       img.src = src;
-      img.onload = () => {
-        preloadedSet.add(src);
-      };
+      if ('decode' in img && typeof img.decode === 'function') {
+        img.decode().then(() => {
+          preloadedSet.add(src);
+        }).catch(() => {
+          preloadedSet.add(src);
+        });
+      } else {
+        img.onload = () => {
+          preloadedSet.add(src);
+        };
+      }
       img.onerror = () => {
         // Retry once on failure
         setTimeout(() => {

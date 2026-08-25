@@ -6,26 +6,30 @@ interface CanceledTurnSpriteProps {
 
 const COLS = 5;
 const ROWS = 6;
-const BASE_DELAY = 100; // Base delay in ms
+const BASE_DELAY = 100; // Base delay in ms for normal frames
+const EASE_DELAY = 220; // Slower delay for frames 27 and 30 for smooth head-turn easing
 
 interface FrameStep {
   frame: number; // 0-based frame index (0..29)
   delay: number; // Delay duration in ms
 }
 
-// Module-level preload to ensure zero-latency decoding
+// Module-level preload and GPU texture decode
 if (typeof window !== "undefined") {
   const preloadImg = new Image();
   preloadImg.src = "/canceled_turn.webp";
+  if ("decode" in preloadImg && typeof preloadImg.decode === "function") {
+    preloadImg.decode().catch(() => {});
+  }
 }
 
 // Full animation sequence:
-// 1) Frame 1 to Frame 30 (reaches frame 30 for the 1st time)
-// 2) Bounces back to Frame 27, then goes forward to Frame 30 (reaches frame 30 for the 2nd time)
-// 3) On the 2nd time, returns back from Frame 30 to Frame 25 and freezes there until the turn ends
+// 1) Frame 1 to Frame 30 (reaches frame 30 for the 1st time, easing on 27 and 30)
+// 2) Bounces back to Frame 27 (easing on 27), then goes forward to Frame 30 (reaches frame 30 for the 2nd time, easing on 30)
+// 3) On the 2nd time, returns back from Frame 30 to Frame 25 (easing through 27) and freezes at Frame 25 until the turn ends
 const ANIMATION_SEQUENCE: FrameStep[] = [
   // --- 1. INTRO (Frame 1 -> Frame 30) ---
-  { frame: 0, delay: BASE_DELAY },     // Frame 1 (starts immediately)
+  { frame: 0, delay: BASE_DELAY },     // Frame 1
   { frame: 1, delay: BASE_DELAY },     // Frame 2
   { frame: 2, delay: BASE_DELAY },     // Frame 3
   { frame: 3, delay: BASE_DELAY },     // Frame 4
@@ -51,25 +55,25 @@ const ANIMATION_SEQUENCE: FrameStep[] = [
   { frame: 23, delay: BASE_DELAY },    // Frame 24
   { frame: 24, delay: BASE_DELAY * 6 },// Frame 25 (hold 6x)
   { frame: 25, delay: BASE_DELAY },    // Frame 26
-  { frame: 26, delay: BASE_DELAY },    // Frame 27
+  { frame: 26, delay: EASE_DELAY },    // Frame 27 (easing / lingering slightly)
   { frame: 27, delay: BASE_DELAY },    // Frame 28
   { frame: 28, delay: BASE_DELAY },    // Frame 29
-  { frame: 29, delay: BASE_DELAY },    // Frame 30 (1st arrival at Frame 30)
+  { frame: 29, delay: EASE_DELAY },    // Frame 30 (1st arrival at Frame 30, easing / lingering slightly)
 
   // --- 2. BOUNCE (Frame 30 -> 29 -> 28 -> 27 -> 28 -> 29 -> 30) ---
   { frame: 28, delay: BASE_DELAY },    // Frame 29
   { frame: 27, delay: BASE_DELAY },    // Frame 28
-  { frame: 26, delay: BASE_DELAY },    // Frame 27
+  { frame: 26, delay: EASE_DELAY },    // Frame 27 (turning point, easing / lingering slightly)
   { frame: 27, delay: BASE_DELAY },    // Frame 28
   { frame: 28, delay: BASE_DELAY },    // Frame 29
-  { frame: 29, delay: BASE_DELAY },    // Frame 30 (2nd arrival at Frame 30)
+  { frame: 29, delay: EASE_DELAY },    // Frame 30 (2nd arrival at Frame 30, turning point, easing / lingering)
 
   // --- 3. FINAL RETURN (Frame 30 -> 29 -> 28 -> 27 -> 26 -> 25) & FREEZE ---
   { frame: 28, delay: BASE_DELAY },    // Frame 29
   { frame: 27, delay: BASE_DELAY },    // Frame 28
-  { frame: 26, delay: BASE_DELAY },    // Frame 27
+  { frame: 26, delay: EASE_DELAY },    // Frame 27 (easing smoothly as he heads back)
   { frame: 25, delay: BASE_DELAY },    // Frame 26
-  { frame: 24, delay: 0 },             // Frame 25 (stops and freezes here)
+  { frame: 24, delay: 0 },             // Frame 25 (stops and freezes here permanently)
 ];
 
 export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ className = "" }) => {
@@ -95,7 +99,7 @@ export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ classNam
       }
     };
 
-    // Start playing immediately without any network wait
+    // Start playing immediately
     playStep(0);
 
     return () => {
@@ -114,6 +118,15 @@ export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ classNam
 
   return (
     <div className={`relative flex items-center justify-center ${className}`}>
+      {/* Hidden pre-decoded img to keep texture active in GPU pipeline */}
+      <img
+        src="/canceled_turn.webp"
+        alt=""
+        aria-hidden="true"
+        className="sr-only opacity-0 absolute w-0 h-0 pointer-events-none"
+        loading="eager"
+        decoding="sync"
+      />
       <div
         className="w-full h-full aspect-[241/300] bg-no-repeat pointer-events-none select-none relative z-10"
         style={{
