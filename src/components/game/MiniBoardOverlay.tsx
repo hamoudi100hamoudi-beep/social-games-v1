@@ -7,6 +7,7 @@ import AllGuessedSprite from "./AllGuessedSprite";
 import TurnLostSprite from "./TurnLostSprite";
 import SkippedSprite from "./SkippedSprite";
 import PartialGuessedSprite from "./PartialGuessedSprite";
+import CanceledTurnSprite from "./CanceledTurnSprite";
 
 interface Player {
   id: string;
@@ -172,25 +173,11 @@ export function MiniBoardOverlay({
               <motion.div key="round-end-canceled" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass}>
                 <div className="text-center w-full max-w-sm my-auto flex flex-col items-center justify-between py-1 sm:py-2 min-h-[85%]">
                   <div className="pt-0.5 sm:pt-1 mb-1 sm:mb-2">
-                    <GameTitle text="CANCELED TURN" type="miniboard" className="text-[16px] sm:text-[20px]" />
+                    <GameTitle text="CANCELED TURN" type="miniboard" className="text-[17px] sm:text-[22px]" />
                   </div>
 
-                  <div className="my-2 flex justify-center">
-                    <motion.div
-                      animate={{
-                        rotate: [-4, 4, -4, 4, -4, 4, 0],
-                        scale: [1, 1.05, 1, 1.05, 1]
-                      }}
-                      transition={{
-                        delay: 1.5,
-                        repeat: Infinity,
-                        duration: 0.6,
-                        repeatDelay: 1.8,
-                        ease: "easeInOut"
-                      }}
-                    >
-                      <AlertTriangle className="w-12 h-12 sm:w-16 sm:h-16 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
-                    </motion.div>
+                  <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
+                    <CanceledTurnSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm" />
                   </div>
 
                   <div className="pb-0.5 sm:pb-1">

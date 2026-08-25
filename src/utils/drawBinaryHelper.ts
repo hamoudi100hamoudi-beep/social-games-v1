@@ -1,7 +1,7 @@
 import { ToolType, PooledPoint } from '../types/draw';
 
-export const TOP_COLORS = ['#000000', '#595959', '#0022ff', '#ffffff', '#bcbcbc', '#00d3ff', '#009e24', '#a21818', '#7e4419', '#00ff22', '#ff0000', '#ff7c00'];
-export const BOT_COLORS = ['#c17a14', '#93003a', '#a56a56', '#ffc700', '#ff0084', '#ffc0b0', '#12cca2', '#91cc00', '#7900ff', '#0d2c54', '#b17dfd', '#ffff00'];
+export const TOP_COLORS = ['#000000', '#666666', '#0018F6', '#FFFFFF', '#AAAAAA', '#25C8FF', '#008D25', '#A9220C', '#954112', '#00FF4C', '#FF0012', '#FF7729'];
+export const BOT_COLORS = ['#B1701C', '#99014E', '#946867', '#FFCA26', '#FF018F', '#FEAFA8', '#00D9A4', '#85B200', '#7F00FF', '#052C6D', '#BA73FF', '#FFF63F'];
 
 export const compressPayload = (data: any): any => {
   if (!data) return data;

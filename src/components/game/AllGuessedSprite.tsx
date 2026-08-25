@@ -98,13 +98,13 @@ const FAILED_INTRO_SEQUENCE: { frame: number; delay: number }[] = [
   { frame: 7, delay: 120 },
   { frame: 8, delay: 120 },
   { frame: 9, delay: 520 }, // Frame 10 (index 9)
-  // 11 to 16 (10 -> 15)
+  // 11 to 16 (10 -> 15), pause at frame 16 (index 15) for 720ms
   { frame: 10, delay: 120 },
   { frame: 11, delay: 120 },
   { frame: 12, delay: 120 },
   { frame: 13, delay: 120 },
   { frame: 14, delay: 120 },
-  { frame: 15, delay: 120 }, // Frame 16 (index 15)
+  { frame: 15, delay: 720 }, // Frame 16 (index 15) pause 720ms
   // Jump directly from frame 16 to frame 23 (index 22) -> 27 (index 26) with 320ms pause
   { frame: 22, delay: 120 }, // Frame 23
   { frame: 23, delay: 120 }, // Frame 24

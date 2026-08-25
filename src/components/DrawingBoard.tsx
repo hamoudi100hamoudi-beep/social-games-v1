@@ -15,6 +15,7 @@ import {
   BOT_COLORS
 } from '../utils/drawBinaryHelper';
 import DrawingCanvasCore, { DrawingCanvasCoreRef } from './game/DrawingCanvasCore';
+import FlipaClipControls from './game/FlipaClipControls';
 import { motion } from 'motion/react';
 import CinematicModal from './game/CinematicModal';
 import { safeLocalStorage } from '../utils/storage';
@@ -57,7 +58,6 @@ export default function DrawingBoard({
   const [eraserWidth, setEraserWidth] = useState(40);
   const [eraserOpacity, setEraserOpacity] = useState(1);
   const [bucketOpacity, setBucketOpacity] = useState(1);
-  const [previewSize, setPreviewSize] = useState<number | null>(null);
   const [historyState, setHistoryState] = useState({ index: 0, length: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -245,14 +245,23 @@ export default function DrawingBoard({
           onSyncStateChange={onSyncStateChange}
         />
 
-        {/* Brush Size Preview Bubble */}
-        {previewSize !== null && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-50 touch-none">
-            <div 
-              className="rounded-full border border-black ring-1 ring-white/80"
-              style={{
-                width: previewSize * baseScale,
-                height: previewSize * baseScale,
+        {/* FlipaClip Brush Controls (Size Circle & Opacity Square) on the Right */}
+        {!readOnly && (
+          <div className="absolute bottom-2.5 right-2.5 z-20 pointer-events-auto">
+            <FlipaClipControls
+              tool={tool}
+              color={color}
+              currentWidth={currentWidth}
+              currentOpacity={currentOpacity}
+              baseScale={baseScale}
+              onWidthChange={(w) => {
+                if (tool === 'eraser') setEraserWidth(w);
+                else setPenWidth(w);
+              }}
+              onOpacityChange={(op) => {
+                if (tool === 'eraser') setEraserOpacity(op);
+                else if (tool === 'bucket') setBucketOpacity(op);
+                else setPenOpacity(op);
               }}
             />
           </div>
@@ -260,7 +269,7 @@ export default function DrawingBoard({
 
         {/* Overlay Tools Sub-Menu */}
         {!readOnly && activeMenu === 'tools' && (
-          <div className="absolute bottom-[58px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 z-20 pointer-events-auto animate-in fade-in slide-in-from-bottom-2">
+          <div className="absolute bottom-[56px] left-[6px] grid grid-cols-2 gap-2 bg-black/80 p-2.5 rounded-xl border border-white/20 z-20 pointer-events-auto animate-in fade-in slide-in-from-bottom-2">
             <SubToolBtn icon={<Pencil />} active={tool==='pencil'} onClick={() => changeTool('pencil')} />
             <SubToolBtn icon={<Eraser />} active={tool==='eraser'} onClick={() => changeTool('eraser')} />
             <SubToolBtn icon={<Square fill="currentColor" />} active={tool==='fillRect'} onClick={() => changeTool('fillRect')} />
@@ -318,51 +327,6 @@ export default function DrawingBoard({
                 </button>
               )}
             </div>
-          </div>
-        )}
-
-        {/* Brush Sliders Panel */}
-        {!readOnly && (
-          <div className="absolute bottom-[2px] left-0 right-0 w-full flex items-center justify-center px-4 gap-4 z-40 pointer-events-none" dir="ltr">
-            
-            {/* Stroke Width Slider */}
-            <div className="flex-1 relative flex items-center h-4 max-w-[45%] group pointer-events-auto" dir="ltr">
-               <div className="absolute inset-x-0 top-1/2 -mt-[2px] h-[4px] rounded-full bg-slate-200 pointer-events-none" />
-               <div 
-                  className="absolute left-0 top-1/2 -mt-[2px] h-[4px] rounded-l-full bg-primary-brand pointer-events-none"
-                  style={{ width: `${((currentWidth - 1) / ((tool === 'eraser' ? (typeof window !== 'undefined' ? window.innerWidth / 2 : 200) : 40) - 1)) * 100}%` }} 
-               />
-               <input 
-                  type="range" min="1" max={tool === 'eraser' ? (typeof window !== 'undefined' ? window.innerWidth / 2 : 200) : 40} value={currentWidth} 
-                  onChange={(e) => {
-                     const val = Number(e.target.value);
-                     if (tool === 'eraser') setEraserWidth(val);
-                     else setPenWidth(val);
-                     setPreviewSize(val);
-                  }}
-                  onPointerUp={() => setPreviewSize(null)}
-                  onPointerLeave={() => setPreviewSize(null)}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300/80 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300/80"
-                />
-            </div>
-
-            {/* Opacity Slider */}
-            <div className="flex-1 relative flex items-center h-4 max-w-[45%] group pointer-events-auto" dir="ltr">
-               <div className="absolute inset-x-0 top-1/2 -mt-[2px] h-[4px] rounded-full bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4IiBoZWlnaHQ9IjgiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjY2NjIi8+CjxyZWN0IHg9IjQiIHk9IjQiIHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiNjY2MiLz4KPC9zdmc+')] pointer-events-none overflow-hidden border border-slate-300/30 block">
-                  <div className="absolute inset-0 w-full h-full" style={{ background: `linear-gradient(to right, transparent, ${tool === 'eraser' ? '#ffffff' : color})` }} />
-               </div>
-               <input 
-                  type="range" min="10" max="100" value={currentOpacity * 100} 
-                  onChange={(e) => {
-                     const val = Number(e.target.value) / 100;
-                     if (tool === 'eraser') setEraserOpacity(val);
-                     else if (tool === 'bucket') setBucketOpacity(val);
-                     else setPenOpacity(val);
-                  }}
-                  className="absolute inset-0 w-full h-full cursor-pointer appearance-none bg-transparent outline-none m-0 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-slate-300/80 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-slate-300/80"
-                />
-            </div>
-
           </div>
         )}
 
