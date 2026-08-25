@@ -13,9 +13,19 @@ interface FrameStep {
   delay: number; // Delay duration in ms
 }
 
-// Initial playthrough from Frame 1 to Frame 30
-const INTRO_SEQUENCE: FrameStep[] = [
-  { frame: 0, delay: BASE_DELAY * 2 }, // Frame 1 (holds 2 frames)
+// Module-level preload to ensure zero-latency decoding
+if (typeof window !== "undefined") {
+  const preloadImg = new Image();
+  preloadImg.src = "/canceled_turn.webp";
+}
+
+// Full animation sequence:
+// 1) Frame 1 to Frame 30 (reaches frame 30 for the 1st time)
+// 2) Bounces back to Frame 27, then goes forward to Frame 30 (reaches frame 30 for the 2nd time)
+// 3) On the 2nd time, returns back from Frame 30 to Frame 25 and freezes there until the turn ends
+const ANIMATION_SEQUENCE: FrameStep[] = [
+  // --- 1. INTRO (Frame 1 -> Frame 30) ---
+  { frame: 0, delay: BASE_DELAY },     // Frame 1 (starts immediately)
   { frame: 1, delay: BASE_DELAY },     // Frame 2
   { frame: 2, delay: BASE_DELAY },     // Frame 3
   { frame: 3, delay: BASE_DELAY },     // Frame 4
@@ -23,13 +33,13 @@ const INTRO_SEQUENCE: FrameStep[] = [
   { frame: 5, delay: BASE_DELAY },     // Frame 6
   { frame: 6, delay: BASE_DELAY },     // Frame 7
   { frame: 7, delay: BASE_DELAY },     // Frame 8
-  { frame: 8, delay: BASE_DELAY * 6 }, // Frame 9 (holds 6 frames)
+  { frame: 8, delay: BASE_DELAY * 6 }, // Frame 9 (hold 6x)
   { frame: 9, delay: BASE_DELAY },     // Frame 10
   { frame: 10, delay: BASE_DELAY },    // Frame 11
   { frame: 11, delay: BASE_DELAY },    // Frame 12
   { frame: 12, delay: BASE_DELAY },    // Frame 13
   { frame: 13, delay: BASE_DELAY },    // Frame 14
-  { frame: 14, delay: BASE_DELAY * 5 }, // Frame 15 (holds 5 frames)
+  { frame: 14, delay: BASE_DELAY * 5 },// Frame 15 (hold 5x)
   { frame: 15, delay: BASE_DELAY },    // Frame 16
   { frame: 16, delay: BASE_DELAY },    // Frame 17
   { frame: 17, delay: BASE_DELAY },    // Frame 18
@@ -39,23 +49,27 @@ const INTRO_SEQUENCE: FrameStep[] = [
   { frame: 21, delay: BASE_DELAY },    // Frame 22
   { frame: 22, delay: BASE_DELAY },    // Frame 23
   { frame: 23, delay: BASE_DELAY },    // Frame 24
-  { frame: 24, delay: BASE_DELAY * 6 }, // Frame 25 (holds 6 frames)
+  { frame: 24, delay: BASE_DELAY * 6 },// Frame 25 (hold 6x)
   { frame: 25, delay: BASE_DELAY },    // Frame 26
   { frame: 26, delay: BASE_DELAY },    // Frame 27
   { frame: 27, delay: BASE_DELAY },    // Frame 28
   { frame: 28, delay: BASE_DELAY },    // Frame 29
-  { frame: 29, delay: BASE_DELAY },    // Frame 30
-];
+  { frame: 29, delay: BASE_DELAY },    // Frame 30 (1st arrival at Frame 30)
 
-// Continuous ping-pong loop between Frame 27 and Frame 30 (indices 26..29)
-// 30 -> 29 -> 28 -> 27 -> 28 -> 29 -> 30 ...
-const LOOP_SEQUENCE: FrameStep[] = [
-  { frame: 28, delay: BASE_DELAY }, // Frame 29
-  { frame: 27, delay: BASE_DELAY }, // Frame 28
-  { frame: 26, delay: BASE_DELAY }, // Frame 27
-  { frame: 27, delay: BASE_DELAY }, // Frame 28
-  { frame: 28, delay: BASE_DELAY }, // Frame 29
-  { frame: 29, delay: BASE_DELAY }, // Frame 30
+  // --- 2. BOUNCE (Frame 30 -> 29 -> 28 -> 27 -> 28 -> 29 -> 30) ---
+  { frame: 28, delay: BASE_DELAY },    // Frame 29
+  { frame: 27, delay: BASE_DELAY },    // Frame 28
+  { frame: 26, delay: BASE_DELAY },    // Frame 27
+  { frame: 27, delay: BASE_DELAY },    // Frame 28
+  { frame: 28, delay: BASE_DELAY },    // Frame 29
+  { frame: 29, delay: BASE_DELAY },    // Frame 30 (2nd arrival at Frame 30)
+
+  // --- 3. FINAL RETURN (Frame 30 -> 29 -> 28 -> 27 -> 26 -> 25) & FREEZE ---
+  { frame: 28, delay: BASE_DELAY },    // Frame 29
+  { frame: 27, delay: BASE_DELAY },    // Frame 28
+  { frame: 26, delay: BASE_DELAY },    // Frame 27
+  { frame: 25, delay: BASE_DELAY },    // Frame 26
+  { frame: 24, delay: 0 },             // Frame 25 (stops and freezes here)
 ];
 
 export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ className = "" }) => {
@@ -64,47 +78,25 @@ export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ classNam
 
   useEffect(() => {
     let isMounted = true;
-    let inLoop = false;
-    let stepIndex = 0;
 
-    const playNextStep = () => {
-      if (!inLoop) {
-        if (stepIndex < INTRO_SEQUENCE.length) {
-          const step = INTRO_SEQUENCE[stepIndex];
-          setFrameIndex(step.frame);
-          stepIndex++;
-          timerRef.current = setTimeout(() => {
-            if (isMounted) playNextStep();
-          }, step.delay);
-        } else {
-          // Switch to ping-pong loop
-          inLoop = true;
-          stepIndex = 0;
-          const step = LOOP_SEQUENCE[stepIndex];
-          setFrameIndex(step.frame);
-          stepIndex = (stepIndex + 1) % LOOP_SEQUENCE.length;
-          timerRef.current = setTimeout(() => {
-            if (isMounted) playNextStep();
-          }, step.delay);
-        }
-      } else {
-        const step = LOOP_SEQUENCE[stepIndex];
-        setFrameIndex(step.frame);
-        stepIndex = (stepIndex + 1) % LOOP_SEQUENCE.length;
+    const playStep = (stepIndex: number) => {
+      if (!isMounted) return;
+
+      const currentStep = ANIMATION_SEQUENCE[stepIndex];
+      setFrameIndex(currentStep.frame);
+
+      // If there's a next step and current delay > 0, schedule it
+      if (stepIndex < ANIMATION_SEQUENCE.length - 1 && currentStep.delay > 0) {
         timerRef.current = setTimeout(() => {
-          if (isMounted) playNextStep();
-        }, step.delay);
+          if (isMounted) {
+            playStep(stepIndex + 1);
+          }
+        }, currentStep.delay);
       }
     };
 
-    const img = new Image();
-    img.src = '/canceled_turn.webp';
-    if (img.complete) {
-      playNextStep();
-    } else {
-      img.onload = () => { if (isMounted) playNextStep(); };
-      img.onerror = () => { if (isMounted) playNextStep(); };
-    }
+    // Start playing immediately without any network wait
+    playStep(0);
 
     return () => {
       isMounted = false;
