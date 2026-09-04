@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { roomManager, normalizeArabic } from './server/rooms.js';
+import { getRoomConfig } from './src/types/game.js';
 
 const getJsonSafeHistory = (history: any[]) => {
   if (!Array.isArray(history)) return [];
@@ -111,10 +112,15 @@ async function startServer() {
     socket.on('get_room_info', (roomId, callback) => {
       try {
         const room = roomManager.getRoom(roomId);
-        if (callback) callback({ count: room ? room.players.length : 0, max: 5 });
+        const config = getRoomConfig(roomId);
+        const count = room ? room.players.filter(p => !p.isOffline).length : 0;
+        const max = room?.maxPlayers ?? config.maxPlayers;
+        const winningScore = room?.winningScore ?? config.winningScore;
+        const theme = room?.theme ?? config.theme;
+        if (callback) callback({ count, max, winningScore, theme });
       } catch (e) {
         console.error(e);
-        if (callback) callback({ count: 0, max: 5 });
+        if (callback) callback({ count: 0, max: 5, winningScore: 30, theme: 'General' });
       }
     });
 
@@ -169,8 +175,9 @@ async function startServer() {
           }
         }
         
+        const maxCapacity = existingRoom?.maxPlayers || getRoomConfig(roomId).maxPlayers;
         const onlinePlayersCount = existingRoom ? existingRoom.players.filter(p => !p.isOffline).length : 0;
-        if (existingRoom && onlinePlayersCount >= 5) {
+        if (existingRoom && onlinePlayersCount >= maxCapacity) {
           if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
           return;
         }

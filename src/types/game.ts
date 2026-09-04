@@ -10,6 +10,9 @@ export interface GameState {
   revealedIndices: number[];
   roundEndReason?: 'timeout' | 'all_guessed' | 'drawer_left' | 'turn_lost' | 'skipped' | 'canceled';
   roundEndWord?: string;
+  isFastAllGuessed?: boolean;
+  noOneGuessedVariant?: 1 | 2;
+  drawingStartTime?: number;
   drawHistory?: {event: string, data: any}[];
   reports?: string[]; // Player persistentIds/socketIds who reported the current turn
   isDrawingActive?: boolean; // GATEKEEPER FLAG FOR UNDO SAFETY
@@ -42,4 +45,60 @@ export interface Room {
   turnStartScores?: Record<string, number>; // Backup of scores to roll back on report/cancellation
   bannedUsers?: string[];
   votekicks?: Record<string, string[]>;
+  maxPlayers?: number;
+  winningScore?: number;
+  theme?: string;
+}
+
+export interface RoomConfig {
+  id: string;
+  name: string;
+  tag: string;
+  theme: string;
+  maxPlayers: number;
+  winningScore: number;
+}
+
+export const ROOM_PRESETS: RoomConfig[] = [
+  {
+    id: 'General #Test',
+    name: 'General',
+    tag: '#Test',
+    theme: 'General',
+    maxPlayers: 5,
+    winningScore: 30,
+  },
+  {
+    id: '10P',
+    name: '10P',
+    tag: '#General',
+    theme: 'General',
+    maxPlayers: 10,
+    winningScore: 120,
+  },
+];
+
+export function getRoomConfig(roomId: string): RoomConfig {
+  const normalized = (roomId || '').trim().toLowerCase();
+  const found = ROOM_PRESETS.find(
+    (r) => r.id.toLowerCase() === normalized
+  );
+  if (found) return found;
+
+  if (normalized === 'general' || normalized === 'general #test') {
+    return ROOM_PRESETS[0];
+  }
+
+  if (normalized === '10p' || normalized.includes('10p')) {
+    return ROOM_PRESETS[1];
+  }
+
+  return {
+    id: roomId,
+    name: roomId,
+    tag: '#Custom',
+    theme: 'General',
+    maxPlayers: 5,
+    winningScore: 30,
+  };
 }

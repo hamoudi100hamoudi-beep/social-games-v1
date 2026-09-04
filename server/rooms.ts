@@ -1,5 +1,5 @@
 import { Server } from "socket.io";
-import { Player, Room, GameState } from "../src/types/game.js";
+import { Player, Room, GameState, getRoomConfig } from "../src/types/game.js";
 
 function getLevenshteinDistance(a: string, b: string): number {
   const matrix: number[][] = [];
@@ -387,6 +387,9 @@ class RoomManager {
     room.gameState.redoStack = [];
     room.gameState.timeLeft = 100;
     room.gameState.reports = [];
+    room.gameState.isFastAllGuessed = false;
+    room.gameState.noOneGuessedVariant = undefined;
+    room.gameState.drawingStartTime = undefined;
 
     // Snapshot scores to enable rollback if the round gets reported/canceled
     room.turnStartScores = {};
@@ -452,7 +455,8 @@ class RoomManager {
       return;
     }
 
-    const winner = room.players.find((p) => p.score >= 40);
+    const targetWinningScore = room.winningScore || 40;
+    const winner = room.players.find((p) => p.score >= targetWinningScore);
     if (winner && reason !== "canceled") {
       return this.transitionToPodium(room);
     }
@@ -488,6 +492,10 @@ class RoomManager {
         color: "#EF4444",
       });
     } else if (reason === "all_guessed") {
+      const elapsedSeconds = room.gameState.drawingStartTime
+        ? (Date.now() - room.gameState.drawingStartTime) / 1000
+        : 999;
+      room.gameState.isFastAllGuessed = elapsedSeconds <= 30;
       this.broadcastGuess(room, {
         id: "sys-" + Date.now() + "-all-guessed",
         text: `Everybody hit the answer!`,
@@ -497,6 +505,11 @@ class RoomManager {
       });
     } else if (reason === "timeout" || reason === "drawer_left") {
       const hasSucceeded = (room.gameState.correctGuessers || []).length > 0;
+      if (!hasSucceeded) {
+        room.gameState.noOneGuessedVariant = Math.random() < 0.5 ? 2 : 1;
+      } else {
+        room.gameState.noOneGuessedVariant = undefined;
+      }
       this.broadcastGuess(room, {
         id: "sys-" + Date.now() + "-timeover",
         text: hasSucceeded ? `Time's Up!` : `Nobody hit the answer`,
@@ -577,6 +590,9 @@ class RoomManager {
     room.gameState.currentWord = word;
     room.gameState.status = "DRAWING";
     room.gameState.wordOptions = [];
+    room.gameState.drawingStartTime = Date.now();
+    room.gameState.isFastAllGuessed = false;
+    room.gameState.noOneGuessedVariant = undefined;
     console.log(`[Room ${room.id}] Transitioning to DRAWING. Word: ${word}`);
     this.broadcastState(room);
   }
@@ -906,8 +922,12 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   createRoom(roomId: string): Room {
     if (!this.rooms.has(roomId)) {
+      const config = getRoomConfig(roomId);
       this.rooms.set(roomId, {
         id: roomId,
+        maxPlayers: config.maxPlayers,
+        winningScore: config.winningScore,
+        theme: config.theme,
         players: [],
         gameState: {
           status: "WAITING",

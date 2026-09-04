@@ -19,8 +19,6 @@ import {
   Eye,
   EyeOff,
   LogOut,
-  DoorOpen,
-  ArrowRight,
   Zap,
 } from "lucide-react";
 import { useSocket } from "./SocketProvider";
@@ -29,9 +27,11 @@ import { PlayersSidebar } from "./game/PlayersSidebar";
 import { MiniBoardOverlay } from "./game/MiniBoardOverlay";
 import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
 import CinematicModal from "./game/CinematicModal";
+import ExitSprite from "./game/ExitSprite";
 import { safeLocalStorage } from "../utils/storage";
 import { soundManager } from "../utils/soundManager";
 import { useRoomEventGate } from "../hooks/useRoomEventGate";
+import { getRoomConfig } from "../types/game";
 
 interface GameRoomProps {
   nickname: string;
@@ -1158,7 +1158,8 @@ export default function GameRoom({
     );
   };
 
-  const slots: PlayerSlot[] = Array.from({ length: 5 }).map((_, index) => {
+  const roomCapacity = Math.max(currentPlayers.length, getRoomConfig(room).maxPlayers);
+  const slots: PlayerSlot[] = Array.from({ length: roomCapacity }).map((_, index) => {
     if (index < currentPlayers.length) {
       const p = currentPlayers[index];
       return {
@@ -1342,35 +1343,13 @@ export default function GameRoom({
             },
           ]}
         >
-          {/* Professional Static Door with Cartoon Anticipation Arrow */}
-          <div className="w-full flex items-center justify-center mb-8 mt-4 relative h-24">
-            {/* The Arrow */}
-            <motion.div
-              animate={{
-                x: [0, -10, 20],
-                scale: [1, 0.85, 0.6],
-                opacity: [0, 1, 0],
-              }}
-              transition={{
-                duration: 1.6,
-                repeat: Infinity,
-                repeatDelay: 0.3,
-                times: [0, 0.35, 1],
-                ease: [0.25, 1, 0.3, 1], // Custom easing for the pullback then dart
-              }}
-              className="absolute left-[calc(50%-45px)] top-1/2 -translate-y-1/2 z-20 drop-shadow-md"
-            >
-              <ArrowRight className="w-10 h-10 text-[#2E2882] stroke-[4]" />
-            </motion.div>
-            
-            {/* The Door */}
-            <div className="absolute left-[calc(50%-20px)] top-1/2 -translate-y-1/2 flex items-center justify-center z-10">
-              <DoorOpen className="w-28 h-28 text-[#8C8AA7] stroke-[1.5]" />
-            </div>
+          {/* Animated Exit Character Sprite */}
+          <div className="w-full flex items-center justify-center mb-4 mt-2">
+            <ExitSprite className="w-28 sm:w-32 h-auto drop-shadow-sm" />
           </div>
 
           {/* Question */}
-          <h3 id="exit-confirm-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-4">
+          <h3 id="exit-confirm-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-4 text-center">
             Do you want to leave the game?
           </h3>
         </CinematicModal>

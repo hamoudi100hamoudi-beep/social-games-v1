@@ -319,6 +319,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const isZoomPinchingRef = useRef(false);
   const redrawRequestedRef = useRef(false);
 
+  // Safe Edge Stroke Entry refs (تتبع الرسم عند البدء من خارج حدود اللوحة وسحب الإصبع لداخلها)
+  const lastOutsideTouchRef = useRef<{ clientX: number; clientY: number } | null>(null);
+  const touchStartedOutsideRef = useRef(false);
+  const touchDrawingActiveFromOutsideRef = useRef(false);
+  const exitedOutsideWhilePointerDownRef = useRef(false);
+  const strokeHandlerRef = useRef<{
+    start: (x: number, y: number) => void;
+    move: (x: number, y: number) => void;
+    end: () => void;
+  } | null>(null);
+  const shapeHandlerRef = useRef<{
+    start: (rawX: number, rawY: number) => void;
+    move: (rawX: number, rawY: number) => void;
+    end: (rawX: number, rawY: number) => void;
+  } | null>(null);
+  const outsideShapeStartCoordsRef = useRef<{ x: number; y: number } | null>(null);
+
   // Force re-centering instantly when user drawing status / role updates
   useEffect(() => {
     hasInitializedTransform.current = false;
@@ -413,6 +430,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       activeTouchCountRef.current = e.touches.length;
 
       if (e.touches.length >= 2) {
+        touchStartedOutsideRef.current = false;
+        touchDrawingActiveFromOutsideRef.current = false;
+        lastOutsideTouchRef.current = null;
         preventBucketRef.current = true;
         if (bucketTimeoutRef.current) {
           clearTimeout(bucketTimeoutRef.current);
@@ -422,6 +442,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       // Immediately cancel any active solo-touch stroke if user introduces a second touch (pinch zoom start)
       if (e.touches.length >= 2 && isDrawingRef.current) {
+        touchDrawingActiveFromOutsideRef.current = false;
         isDrawingRef.current = false;
         
         if (tempCtxRef.current) {
@@ -437,6 +458,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           isCancelled: true
         });
         emitDrawCommand('draw_cancel', {});
+      }
+
+      if (e.touches.length === 1 && !propsRef.current.readOnly) {
+        const t = e.touches[0];
+        lastOutsideTouchRef.current = { clientX: t.clientX, clientY: t.clientY };
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect();
+          const isInside = t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom;
+          touchStartedOutsideRef.current = !isInside;
+          if (!isInside) {
+            const rawCoords = getLogicalCoords(t.clientX, t.clientY, canvas, false);
+            outsideShapeStartCoordsRef.current = { x: rawCoords.x, y: rawCoords.y };
+          }
+        }
       }
 
       if (!isZoomEnabled || propsRef.current.readOnly) return;
@@ -468,10 +504,82 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       activeTouchCountRef.current = e.touches.length;
 
       if (e.touches.length >= 2) {
+        touchStartedOutsideRef.current = false;
+        touchDrawingActiveFromOutsideRef.current = false;
+        lastOutsideTouchRef.current = null;
+        outsideShapeStartCoordsRef.current = null;
         preventBucketRef.current = true;
         if (bucketTimeoutRef.current) {
           clearTimeout(bucketTimeoutRef.current);
           bucketTimeoutRef.current = null;
+        }
+      }
+
+      // Safe Edge Stroke Entry for Mobile (سحب الإصبع من خارج حافة الشاشة إلى داخل اللوحة)
+      if (
+        e.touches.length === 1 &&
+        touchStartedOutsideRef.current &&
+        !propsRef.current.readOnly &&
+        !isZoomPinchingRef.current &&
+        isCanvasResizeObserverReadyRef.current
+      ) {
+        const activeTool = propsRef.current.tool;
+        const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+        const canvas = canvasRef.current;
+
+        if (isShape && canvas) {
+          const t = e.touches[0];
+          lastOutsideTouchRef.current = { clientX: t.clientX, clientY: t.clientY };
+          const raw = getLogicalCoords(t.clientX, t.clientY, canvas, false);
+          if (!isDrawingRef.current) {
+            const startPt = outsideShapeStartCoordsRef.current || raw;
+            shapeHandlerRef.current?.start(startPt.x, startPt.y);
+            touchDrawingActiveFromOutsideRef.current = true;
+          } else if (touchDrawingActiveFromOutsideRef.current) {
+            shapeHandlerRef.current?.move(raw.x, raw.y);
+            if (e.cancelable) e.preventDefault();
+          }
+        } else if ((activeTool === 'pencil' || activeTool === 'eraser') && canvas) {
+          const rect = canvas.getBoundingClientRect();
+          const t = e.touches[0];
+          const isInside = t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom;
+
+          if (!isDrawingRef.current) {
+            if (isInside) {
+              let entryX = 0;
+              let entryY = 0;
+              if (lastOutsideTouchRef.current) {
+                const entryCoords = getLogicalCoords(lastOutsideTouchRef.current.clientX, lastOutsideTouchRef.current.clientY, canvas, true);
+                entryX = entryCoords.x;
+                entryY = entryCoords.y;
+              } else {
+                const curCoords = getLogicalCoords(t.clientX, t.clientY, canvas, true);
+                entryX = curCoords.x;
+                entryY = curCoords.y;
+              }
+              strokeHandlerRef.current?.start(entryX, entryY);
+              touchDrawingActiveFromOutsideRef.current = true;
+
+              const curCoords = getLogicalCoords(t.clientX, t.clientY, canvas, true);
+              strokeHandlerRef.current?.move(curCoords.x, curCoords.y);
+              if (e.cancelable) e.preventDefault();
+            } else {
+              lastOutsideTouchRef.current = { clientX: t.clientX, clientY: t.clientY };
+            }
+          } else if (touchDrawingActiveFromOutsideRef.current) {
+            if (isInside) {
+              const curCoords = getLogicalCoords(t.clientX, t.clientY, canvas, true);
+              strokeHandlerRef.current?.move(curCoords.x, curCoords.y);
+              if (e.cancelable) e.preventDefault();
+            } else {
+              const clamped = getLogicalCoords(t.clientX, t.clientY, canvas, true);
+              strokeHandlerRef.current?.move(clamped.x, clamped.y);
+              strokeHandlerRef.current?.end();
+              touchDrawingActiveFromOutsideRef.current = false;
+              lastOutsideTouchRef.current = { clientX: t.clientX, clientY: t.clientY };
+              if (e.cancelable) e.preventDefault();
+            }
+          }
         }
       }
 
@@ -530,6 +638,27 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       if (e.touches.length === 0) {
         preventBucketRef.current = false;
+        if (touchDrawingActiveFromOutsideRef.current) {
+          touchDrawingActiveFromOutsideRef.current = false;
+          touchStartedOutsideRef.current = false;
+          const activeTool = propsRef.current.tool;
+          const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+          const canvas = canvasRef.current;
+          if (isShape && canvas && lastOutsideTouchRef.current) {
+            const raw = getLogicalCoords(lastOutsideTouchRef.current.clientX, lastOutsideTouchRef.current.clientY, canvas, false);
+            shapeHandlerRef.current?.end(raw.x, raw.y);
+          } else if (isShape) {
+            shapeHandlerRef.current?.end(startXRef.current, startYRef.current);
+          } else {
+            strokeHandlerRef.current?.end();
+          }
+          lastOutsideTouchRef.current = null;
+          outsideShapeStartCoordsRef.current = null;
+        } else {
+          touchStartedOutsideRef.current = false;
+          lastOutsideTouchRef.current = null;
+          outsideShapeStartCoordsRef.current = null;
+        }
       }
 
       if (isPinching) {
@@ -750,11 +879,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   // --- Logical Coordinate Conversion ---
-  const getLogicalCoords = (clientX: number, clientY: number, canvas: HTMLCanvasElement) => {
+  const getLogicalCoords = (clientX: number, clientY: number, canvas: HTMLCanvasElement, clamp: boolean = true) => {
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
-    const x = ((clientX - rect.left) / rect.width) * LOGICAL_WIDTH;
-    const y = ((clientY - rect.top) / rect.height) * LOGICAL_HEIGHT;
+    let x = ((clientX - rect.left) / rect.width) * LOGICAL_WIDTH;
+    let y = ((clientY - rect.top) / rect.height) * LOGICAL_HEIGHT;
+    if (clamp) {
+      x = Math.max(0, Math.min(LOGICAL_WIDTH, x));
+      y = Math.max(0, Math.min(LOGICAL_HEIGHT, y));
+    }
     return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
   };
 
@@ -928,6 +1061,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // Reset local/remote paths & sessions
     isDrawingRef.current = false;
+    exitedOutsideWhilePointerDownRef.current = false;
     currentPathRef.current = [];
     activeSessionsRef.current = {};
     moveBatchRef.current = [];
@@ -1610,113 +1744,46 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   }, []);
 
-  // --- Drawing Pointer Events Hooks ---
+  // --- Drawing Pointer Events Hooks & Stroke Pipeline ---
 
-  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const startPencilOrEraserStroke = (logicalX: number, logicalY: number) => {
     if (propsRef.current.readOnly) return;
     if (isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
-    
-    // STRICT GUARD: Prevent drawing before Canvas layout and ResizeObserver are fully ready.
-    // If the canvas width/height are 0 during early mount, getLogicalCoords produces Infinity,
-    // which causes catastrophic GPU lag when passed to ctx.stroke().
     if (!isCanvasResizeObserverReadyRef.current) return;
-    
-    const canvas = canvasRef.current;
-    const tempCanvas = tempCanvasRef.current;
-    const ctx = ctxRef.current;
-    const tempCtx = tempCtxRef.current;
-    if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
-
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 
     const activeTool = propsRef.current.tool;
+    if (activeTool !== 'pencil' && activeTool !== 'eraser') return;
+
     const activeColor = propsRef.current.color;
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
 
-    const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas);
-    startXRef.current = x;
-    startYRef.current = y;
-
-    if (activeTool === 'bucket') {
-      const runBucket = () => {
-        floodFill(ctx, x, y, activeColor, activeOpacity);
-        emitDrawCommand('draw_action', {
-          tool: 'bucket',
-          color: activeColor,
-          opacity: activeOpacity,
-          x: x / LOGICAL_WIDTH,
-          y: y / LOGICAL_HEIGHT
-        });
-        saveSnapshot();
-      };
-
-      if (e.pointerType === 'touch') {
-        preventBucketRef.current = false;
-        if (bucketTimeoutRef.current) clearTimeout(bucketTimeoutRef.current);
-        bucketTimeoutRef.current = setTimeout(() => {
-          if (!preventBucketRef.current && activeTouchCountRef.current < 2 && !isZoomPinchingRef.current) {
-            runBucket();
-          }
-        }, 70);
-      } else {
-        runBucket();
-      }
-      return;
-    }
-
     isDrawingRef.current = true;
+    startXRef.current = logicalX;
+    startYRef.current = logicalY;
 
-    if (activeTool === 'pipette') {
-      const offscreen = document.createElement('canvas');
-      offscreen.width = canvas.width;
-      offscreen.height = canvas.height;
-      const oCtx = offscreen.getContext('2d', { willReadFrequently: true });
-      if (oCtx) {
-        oCtx.drawImage(canvas, 0, 0);
-        const rx = Math.floor(x * DPR);
-        const ry = Math.floor(y * DPR);
-        const pixel = oCtx.getImageData(rx, ry, 1, 1).data;
-        const hex = "#" + ("000000" + ((pixel[0] << 16) | (pixel[1] << 8) | pixel[2]).toString(16)).slice(-6);
-        onPipetteColorPicked?.(hex);
-      }
-      isDrawingRef.current = false;
-      
-      return;
-    }
-
-    currentPathRef.current = [{ x, y }];
+    currentPathRef.current = [{ x: logicalX, y: logicalY }];
     emitDrawCommand('draw_start', {
       tool: activeTool,
       color: activeColor,
       width: activeWidth,
       opacity: activeOpacity,
-      x: x / LOGICAL_WIDTH,
-      y: y / LOGICAL_HEIGHT
+      x: logicalX / LOGICAL_WIDTH,
+      y: logicalY / LOGICAL_HEIGHT
     });
 
-    if (activeTool === 'pencil' || activeTool === 'eraser') {
-      redrawTempLayer();
-    } else {
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-      drawShape(tempCtx, x, y, x, y, activeTool, activeColor, activeWidth, activeOpacity);
-    }
+    redrawTempLayer();
   };
 
-  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+  const processStrokeMove = (logicalX: number, logicalY: number) => {
     if (!isDrawingRef.current) return;
-
-    const canvas = canvasRef.current;
-    const tempCanvas = tempCanvasRef.current;
-    const ctx = ctxRef.current;
-    const tempCtx = tempCtxRef.current;
-    if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
-
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
       isDrawingRef.current = false;
-      
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      const tempCtx = tempCtxRef.current;
+      if (tempCtx) {
+        tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      }
       moveBatchRef.current = [];
       emitDrawCommand('draw_end', {
         tool: propsRef.current.tool,
@@ -1730,82 +1797,71 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       return;
     }
 
-    const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas);
     const activeTool = propsRef.current.tool;
+    if (activeTool !== 'pencil' && activeTool !== 'eraser') return;
+
     const activeColor = propsRef.current.color;
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
 
-    if (activeTool === 'pencil' || activeTool === 'eraser') {
-      // Maintain exact 1 decimal place format to optimize performance
-      const roundedX = Math.round(x * 10) / 10;
-      const roundedY = Math.round(y * 10) / 10;
+    const roundedX = Math.round(logicalX * 10) / 10;
+    const roundedY = Math.round(logicalY * 10) / 10;
+    const path = currentPathRef.current;
 
-      const path = currentPathRef.current;
-      
-      // Compute Dynamic Distance Threshold to protect socket bandwidth and match user resolution
-      const brushSize = activeWidth;
-      const currentThreshold = brushSize < 6 ? 0.5 : (brushSize > 10 ? 3.5 : 1.5);
+    const brushSize = activeWidth;
+    const currentThreshold = brushSize < 6 ? 0.5 : (brushSize > 10 ? 3.5 : 1.5);
 
-      // Point Compression and Lightweight Micro-Linear Interpolation (Lerp) for fast movements
-      if (path.length > 0) {
-        const lastPt = path[path.length - 1];
-        const dist = Math.hypot(roundedX - lastPt.x, roundedY - lastPt.y);
-        
-        if (dist < currentThreshold) {
-          return;
-        }
+    if (path.length > 0) {
+      const lastPt = path[path.length - 1];
+      const dist = Math.hypot(roundedX - lastPt.x, roundedY - lastPt.y);
 
-        // Lightweight interpolation if distance is greater than 8 pixels to smooth fast polygonal arcs
-        if (dist > 8) {
-          const stepSize = 6;
-          const stepsCount = Math.floor(dist / stepSize);
-          if (stepsCount > 1) {
-            for (let i = 1; i < stepsCount; i++) {
-              const t = i / stepsCount;
-              const lerpX = Math.round((lastPt.x + (roundedX - lastPt.x) * t) * 10) / 10;
-              const lerpY = Math.round((lastPt.y + (roundedY - lastPt.y) * t) * 10) / 10;
-              path.push({ x: lerpX, y: lerpY });
-              moveBatchRef.current.push({ x: lerpX / LOGICAL_WIDTH, y: lerpY / LOGICAL_HEIGHT });
-            }
+      if (dist < currentThreshold) {
+        return;
+      }
+
+      if (dist > 8) {
+        const stepSize = 6;
+        const stepsCount = Math.floor(dist / stepSize);
+        if (stepsCount > 1) {
+          for (let i = 1; i < stepsCount; i++) {
+            const t = i / stepsCount;
+            const lerpX = Math.round((lastPt.x + (roundedX - lastPt.x) * t) * 10) / 10;
+            const lerpY = Math.round((lastPt.y + (roundedY - lastPt.y) * t) * 10) / 10;
+            path.push({ x: lerpX, y: lerpY });
+            moveBatchRef.current.push({ x: lerpX / LOGICAL_WIDTH, y: lerpY / LOGICAL_HEIGHT });
           }
         }
       }
+    }
 
-      path.push({ x: roundedX, y: roundedY });
-      redrawTempLayer();
+    path.push({ x: roundedX, y: roundedY });
+    redrawTempLayer();
 
-      const normX = roundedX / LOGICAL_WIDTH;
-      const normY = roundedY / LOGICAL_HEIGHT;
+    const normX = roundedX / LOGICAL_WIDTH;
+    const normY = roundedY / LOGICAL_HEIGHT;
 
-      moveBatchRef.current.push({ x: normX, y: normY });
+    moveBatchRef.current.push({ x: normX, y: normY });
 
-      const intervalMs = IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16);
+    const intervalMs = IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16);
 
-      if (!throttleTimeoutRef.current) {
-        throttleTimeoutRef.current = setTimeout(() => {
-          if (moveBatchRef.current.length > 0) {
-            emitDrawCommand('draw_move', {
-              tool: activeTool,
-              color: activeColor,
-              width: activeWidth,
-              opacity: activeOpacity,
-              moves: moveBatchRef.current
-            });
-            moveBatchRef.current = [];
-          }
-          throttleTimeoutRef.current = null;
-        }, intervalMs);
-      }
-    } else {
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-      drawShape(tempCtx, startXRef.current, startYRef.current, x, y, activeTool, activeColor, activeWidth, activeOpacity);
+    if (!throttleTimeoutRef.current) {
+      throttleTimeoutRef.current = setTimeout(() => {
+        if (moveBatchRef.current.length > 0) {
+          emitDrawCommand('draw_move', {
+            tool: activeTool,
+            color: activeColor,
+            width: activeWidth,
+            opacity: activeOpacity,
+            moves: moveBatchRef.current
+          });
+          moveBatchRef.current = [];
+        }
+        throttleTimeoutRef.current = null;
+      }, intervalMs);
     }
   };
 
-  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    e.currentTarget.releasePointerCapture(e.pointerId);
-
+  const finishCurrentStroke = () => {
     const canvas = canvasRef.current;
     const tempCanvas = tempCanvasRef.current;
     const ctx = ctxRef.current;
@@ -1814,14 +1870,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (!isDrawingRef.current) return;
 
-    const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas);
     const activeTool = propsRef.current.tool;
     const activeColor = propsRef.current.color;
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
 
     isDrawingRef.current = false;
-    
 
     if (throttleTimeoutRef.current) {
       clearTimeout(throttleTimeoutRef.current);
@@ -1866,40 +1920,274 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         opacity: activeOpacity,
         isShape: false
       });
-    } else {
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-      drawShape(ctx, startXRef.current, startYRef.current, x, y, activeTool, activeColor, activeWidth, activeOpacity);
-
-      // Send complete stroke object for shapes (straight lines, rectangles, circles, etc.)
-      const normalizedPoints = [
-        { x: startXRef.current / LOGICAL_WIDTH, y: startYRef.current / LOGICAL_HEIGHT },
-        { x: x / LOGICAL_WIDTH, y: y / LOGICAL_HEIGHT }
-      ];
-      emitDrawCommand('draw_stroke', {
-        tool: activeTool,
-        color: activeColor,
-        width: activeWidth,
-        opacity: activeOpacity,
-        points: normalizedPoints
-      });
-
-      emitDrawCommand('draw_end', {
-        tool: activeTool,
-        color: activeColor,
-        width: activeWidth,
-        opacity: activeOpacity,
-        isShape: true,
-        startX: startXRef.current / LOGICAL_WIDTH,
-        startY: startYRef.current / LOGICAL_HEIGHT,
-        endX: x / LOGICAL_WIDTH,
-        endY: y / LOGICAL_HEIGHT,
-        x: x / LOGICAL_WIDTH,
-        y: y / LOGICAL_HEIGHT
-      });
     }
 
     currentPathRef.current = [];
     saveSnapshot();
+  };
+
+  const startShapeDrawing = (rawX: number, rawY: number) => {
+    const tempCanvas = tempCanvasRef.current;
+    const tempCtx = tempCtxRef.current;
+    if (!tempCanvas || !tempCtx) return;
+
+    startXRef.current = rawX;
+    startYRef.current = rawY;
+    isDrawingRef.current = true;
+    currentPathRef.current = [{ x: rawX, y: rawY }];
+
+    const activeTool = propsRef.current.tool;
+    const activeColor = propsRef.current.color;
+    const activeWidth = propsRef.current.thickness;
+    const activeOpacity = propsRef.current.opacity;
+
+    emitDrawCommand('draw_start', {
+      tool: activeTool,
+      color: activeColor,
+      width: activeWidth,
+      opacity: activeOpacity,
+      x: rawX / LOGICAL_WIDTH,
+      y: rawY / LOGICAL_HEIGHT
+    });
+
+    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    drawShape(tempCtx, rawX, rawY, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity);
+  };
+
+  const processShapeMove = (rawX: number, rawY: number) => {
+    const tempCanvas = tempCanvasRef.current;
+    const tempCtx = tempCtxRef.current;
+    if (!tempCanvas || !tempCtx || !isDrawingRef.current) return;
+
+    const activeTool = propsRef.current.tool;
+    const activeColor = propsRef.current.color;
+    const activeWidth = propsRef.current.thickness;
+    const activeOpacity = propsRef.current.opacity;
+
+    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    drawShape(tempCtx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity);
+  };
+
+  const finishShapeDrawing = (rawX: number, rawY: number) => {
+    const canvas = canvasRef.current;
+    const tempCanvas = tempCanvasRef.current;
+    const ctx = ctxRef.current;
+    const tempCtx = tempCtxRef.current;
+    if (!canvas || !tempCanvas || !ctx || !tempCtx || !isDrawingRef.current) return;
+
+    isDrawingRef.current = false;
+
+    if (throttleTimeoutRef.current) {
+      clearTimeout(throttleTimeoutRef.current);
+      throttleTimeoutRef.current = null;
+    }
+
+    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+
+    const activeTool = propsRef.current.tool;
+    const activeColor = propsRef.current.color;
+    const activeWidth = propsRef.current.thickness;
+    const activeOpacity = propsRef.current.opacity;
+
+    // Draw shape to the primary canvas context (hardware-clipped naturally at canvas bounds)
+    drawShape(ctx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity);
+
+    // Send complete stroke object for shapes (straight lines, rectangles, circles, etc.)
+    const normalizedPoints = [
+      { x: startXRef.current / LOGICAL_WIDTH, y: startYRef.current / LOGICAL_HEIGHT },
+      { x: rawX / LOGICAL_WIDTH, y: rawY / LOGICAL_HEIGHT }
+    ];
+    emitDrawCommand('draw_stroke', {
+      tool: activeTool,
+      color: activeColor,
+      width: activeWidth,
+      opacity: activeOpacity,
+      points: normalizedPoints
+    });
+
+    emitDrawCommand('draw_end', {
+      tool: activeTool,
+      color: activeColor,
+      width: activeWidth,
+      opacity: activeOpacity,
+      isShape: true,
+      startX: startXRef.current / LOGICAL_WIDTH,
+      startY: startYRef.current / LOGICAL_HEIGHT,
+      endX: rawX / LOGICAL_WIDTH,
+      endY: rawY / LOGICAL_HEIGHT,
+      x: rawX / LOGICAL_WIDTH,
+      y: rawY / LOGICAL_HEIGHT
+    });
+
+    currentPathRef.current = [];
+    saveSnapshot();
+  };
+
+  strokeHandlerRef.current = {
+    start: startPencilOrEraserStroke,
+    move: processStrokeMove,
+    end: finishCurrentStroke
+  };
+
+  shapeHandlerRef.current = {
+    start: startShapeDrawing,
+    move: processShapeMove,
+    end: finishShapeDrawing
+  };
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (propsRef.current.readOnly) return;
+    if (isDrawingRef.current) return;
+    if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
+    
+    // STRICT GUARD: Prevent drawing before Canvas layout and ResizeObserver are fully ready.
+    // If the canvas width/height are 0 during early mount, getLogicalCoords produces Infinity,
+    // which causes catastrophic GPU lag when passed to ctx.stroke().
+    if (!isCanvasResizeObserverReadyRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const tempCanvas = tempCanvasRef.current;
+    const ctx = ctxRef.current;
+    const tempCtx = tempCtxRef.current;
+    if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
+
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    exitedOutsideWhilePointerDownRef.current = false;
+
+    const activeTool = propsRef.current.tool;
+    const activeColor = propsRef.current.color;
+    const activeWidth = propsRef.current.thickness;
+    const activeOpacity = propsRef.current.opacity;
+
+    const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas, true);
+    startXRef.current = x;
+    startYRef.current = y;
+
+    if (activeTool === 'bucket') {
+      const runBucket = () => {
+        floodFill(ctx, x, y, activeColor, activeOpacity);
+        emitDrawCommand('draw_action', {
+          tool: 'bucket',
+          color: activeColor,
+          opacity: activeOpacity,
+          x: x / LOGICAL_WIDTH,
+          y: y / LOGICAL_HEIGHT
+        });
+        saveSnapshot();
+      };
+
+      if (e.pointerType === 'touch') {
+        preventBucketRef.current = false;
+        if (bucketTimeoutRef.current) clearTimeout(bucketTimeoutRef.current);
+        bucketTimeoutRef.current = setTimeout(() => {
+          if (!preventBucketRef.current && activeTouchCountRef.current < 2 && !isZoomPinchingRef.current) {
+            runBucket();
+          }
+        }, 70);
+      } else {
+        runBucket();
+      }
+      return;
+    }
+
+    if (activeTool === 'pipette') {
+      const offscreen = document.createElement('canvas');
+      offscreen.width = canvas.width;
+      offscreen.height = canvas.height;
+      const oCtx = offscreen.getContext('2d', { willReadFrequently: true });
+      if (oCtx) {
+        oCtx.drawImage(canvas, 0, 0);
+        const rx = Math.floor(x * DPR);
+        const ry = Math.floor(y * DPR);
+        const pixel = oCtx.getImageData(rx, ry, 1, 1).data;
+        const hex = "#" + ("000000" + ((pixel[0] << 16) | (pixel[1] << 8) | pixel[2]).toString(16)).slice(-6);
+        onPipetteColorPicked?.(hex);
+      }
+      return;
+    }
+
+    if (activeTool === 'pencil' || activeTool === 'eraser') {
+      startPencilOrEraserStroke(x, y);
+      return;
+    }
+
+    const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+    startShapeDrawing(rawCoords.x, rawCoords.y);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+
+    const canvas = canvasRef.current;
+    const tempCanvas = tempCanvasRef.current;
+    const ctx = ctxRef.current;
+    const tempCtx = tempCtxRef.current;
+    if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
+
+    if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
+      isDrawingRef.current = false;
+      
+      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      moveBatchRef.current = [];
+      emitDrawCommand('draw_end', {
+        tool: propsRef.current.tool,
+        color: propsRef.current.color,
+        width: propsRef.current.thickness,
+        opacity: propsRef.current.opacity,
+        isShape: false,
+        isCancelled: true
+      });
+      emitDrawCommand('draw_cancel', {});
+      return;
+    }
+
+    const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+    const isInside = rawCoords.x >= 0 && rawCoords.x <= LOGICAL_WIDTH && rawCoords.y >= 0 && rawCoords.y <= LOGICAL_HEIGHT;
+    const activeTool = propsRef.current.tool;
+
+    if (activeTool === 'pencil' || activeTool === 'eraser') {
+      if (isDrawingRef.current) {
+        if (isInside) {
+          processStrokeMove(rawCoords.x, rawCoords.y);
+        } else {
+          // Moved outside canvas: reach the edge boundary point and end stroke cleanly
+          const clamped = getLogicalCoords(e.clientX, e.clientY, canvas, true);
+          processStrokeMove(clamped.x, clamped.y);
+          finishCurrentStroke();
+          exitedOutsideWhilePointerDownRef.current = true;
+        }
+      } else if (exitedOutsideWhilePointerDownRef.current) {
+        // Was outside while holding down, now re-entered canvas: start new stroke cleanly
+        if (isInside) {
+          exitedOutsideWhilePointerDownRef.current = false;
+          startPencilOrEraserStroke(rawCoords.x, rawCoords.y);
+        }
+      }
+    } else {
+      processShapeMove(rawCoords.x, rawCoords.y);
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    exitedOutsideWhilePointerDownRef.current = false;
+
+    const canvas = canvasRef.current;
+    const tempCanvas = tempCanvasRef.current;
+    const ctx = ctxRef.current;
+    const tempCtx = tempCtxRef.current;
+    if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
+
+    if (!isDrawingRef.current) return;
+
+    const activeTool = propsRef.current.tool;
+
+    if (activeTool === 'pencil' || activeTool === 'eraser') {
+      finishCurrentStroke();
+    } else {
+      const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+      finishShapeDrawing(rawCoords.x, rawCoords.y);
+    }
   };
 
   return (
@@ -1910,6 +2198,65 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       style={{
         width: '100%',
         height: '100%',
+      }}
+      onPointerDown={(e) => {
+        if (propsRef.current.readOnly) return;
+        if (isDrawingRef.current) return;
+        if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
+        if (!isCanvasResizeObserverReadyRef.current) return;
+        const activeTool = propsRef.current.tool;
+        const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+        if (isShape && e.target === containerRef.current) {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          try {
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          } catch (err) {}
+          const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+          startShapeDrawing(raw.x, raw.y);
+        }
+      }}
+      onPointerMove={(e) => {
+        if (isDrawingRef.current) {
+          const activeTool = propsRef.current.tool;
+          const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+          if (isShape) {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+            processShapeMove(raw.x, raw.y);
+          }
+        }
+      }}
+      onPointerUp={(e) => {
+        if (isDrawingRef.current) {
+          try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          } catch (err) {}
+          const activeTool = propsRef.current.tool;
+          const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+          if (isShape) {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+            finishShapeDrawing(raw.x, raw.y);
+          }
+        }
+      }}
+      onPointerCancel={(e) => {
+        if (isDrawingRef.current) {
+          try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          } catch (err) {}
+          const activeTool = propsRef.current.tool;
+          const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+          if (isShape) {
+            const canvas = canvasRef.current;
+            if (!canvas) return;
+            const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+            finishShapeDrawing(raw.x, raw.y);
+          }
+        }
       }}
     >
       <div
@@ -1939,6 +2286,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onPointerEnter={(e) => {
+            if (propsRef.current.readOnly) return;
+            if (isDrawingRef.current) return;
+            if (e.pointerType === 'mouse' && e.buttons === 1) {
+              const tool = propsRef.current.tool;
+              if (tool === 'pencil' || tool === 'eraser') {
+                if (!isCanvasResizeObserverReadyRef.current) return;
+                try {
+                  (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                } catch (err) {}
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas, true);
+                strokeHandlerRef.current?.start(x, y);
+              }
+            }
+          }}
         />
         <canvas
           id="drawing-board-layer-shapes-preview"

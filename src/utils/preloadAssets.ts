@@ -3,10 +3,13 @@
 
 const GAME_ASSETS = [
   '/all_guessed.webp',
+  '/all_guessed_rare.webp',
+  '/no_one_guessed_2.webp',
   '/partial_guessed.webp',
   '/turn_lost.webp',
   '/skipped.webp',
   '/canceled_turn.webp',
+  '/exit.webp',
   '/waiting.webp',
   '/trophy.webp',
   '/medal1.webp',
@@ -15,6 +18,7 @@ const GAME_ASSETS = [
 ];
 
 const preloadedSet = new Set<string>();
+const globalPreloadedImages: HTMLImageElement[] = [];
 
 export function preloadGameSprites(): void {
   if (typeof window === 'undefined') return;
@@ -23,6 +27,8 @@ export function preloadGameSprites(): void {
     if (!preloadedSet.has(src)) {
       const img = new Image();
       img.src = src;
+      img.decoding = 'sync';
+      globalPreloadedImages.push(img);
       if ('decode' in img && typeof img.decode === 'function') {
         img.decode().then(() => {
           preloadedSet.add(src);
@@ -39,6 +45,8 @@ export function preloadGameSprites(): void {
         setTimeout(() => {
           const retryImg = new Image();
           retryImg.src = src;
+          retryImg.decoding = 'sync';
+          globalPreloadedImages.push(retryImg);
         }, 1000);
       };
     }

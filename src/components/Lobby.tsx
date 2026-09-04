@@ -6,6 +6,7 @@ import CinematicModal from './game/CinematicModal';
 import CustomEmojiModal from './game/CustomEmojiModal';
 import { safeLocalStorage } from '../utils/storage';
 import GameTitle from './game/GameTitle';
+import { ROOM_PRESETS, getRoomConfig } from '../types/game';
 
 interface LobbyProps {
   onPlay: (nickname: string, room: string, avatar: string) => void;
@@ -327,35 +328,53 @@ export default function Lobby({ onPlay }: LobbyProps) {
     }
   }, [socket]);
   
-  const [roomCount, setRoomCount] = useState<number>(0);
-  const [testRoomCount, setTestRoomCount] = useState<number>(0);
+  const [roomStats, setRoomStats] = useState<Record<string, { count: number; max: number; winningScore: number; theme: string }>>({});
   const [joinError, setJoinError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    const fetchCounts = () => {
+      ROOM_PRESETS.forEach((preset) => {
+        socket.emit('get_room_info', preset.id, (data: any) => {
+          if (data && typeof data.count === 'number') {
+            setRoomStats((prev) => ({
+              ...prev,
+              [preset.id]: {
+                count: data.count,
+                max: data.max || preset.maxPlayers,
+                winningScore: data.winningScore || preset.winningScore,
+                theme: data.theme || preset.theme,
+              },
+            }));
+          }
+        });
+      });
+    };
+    
+    fetchCounts();
+    const interval = setInterval(fetchCounts, 3000);
+    return () => clearInterval(interval);
+  }, [socket]);
 
   useEffect(() => {
     if (selectedRoom && socket) {
       socket.emit('get_room_info', selectedRoom, (data: any) => {
         if (data && typeof data.count === 'number') {
-          setRoomCount(data.count);
+          const cfg = getRoomConfig(selectedRoom);
+          setRoomStats((prev) => ({
+            ...prev,
+            [selectedRoom]: {
+              count: data.count,
+              max: data.max || cfg.maxPlayers,
+              winningScore: data.winningScore || cfg.winningScore,
+              theme: data.theme || cfg.theme,
+            },
+          }));
         }
       });
     }
   }, [selectedRoom, socket]);
-
-  useEffect(() => {
-    if (!socket) return;
-    
-    const fetchCount = () => {
-      socket.emit('get_room_info', 'General #Test', (data: any) => {
-        if (data && typeof data.count === 'number') {
-          setTestRoomCount(data.count);
-        }
-      });
-    };
-    
-    fetchCount();
-    const interval = setInterval(fetchCount, 4000);
-    return () => clearInterval(interval);
-  }, [socket]);
 
   const handleRoomClick = (roomId: string) => {
     setSelectedRoom(roomId);
@@ -383,11 +402,13 @@ export default function Lobby({ onPlay }: LobbyProps) {
     }
     const finalName = nickname.trim();
     const finalRoom = selectedRoom || 'general';
+    const config = getRoomConfig(finalRoom);
     
     if (socket) {
       // Check again right before playing
       socket.emit('get_room_info', finalRoom, (data: any) => {
-        if (data && data.count >= 5) {
+        const maxCapacity = data?.max || config.maxPlayers;
+        if (data && data.count >= maxCapacity) {
           setJoinError('عذراً، هذه الغرفة ممتلئة بالكامل!');
           if (!selectedRoom) {
              setNicknameError(false);
@@ -581,22 +602,27 @@ export default function Lobby({ onPlay }: LobbyProps) {
           >
             {/* List - Positioned cleanly at the top of the white container */}
             <div className="flex-1 overflow-y-auto pr-1 space-y-4 no-scrollbar">
-              {/* Dummy Room Item - Enlarged for premium layout */}
-              <button 
-                onClick={() => handleRoomClick('General #Test')}
-                className="w-full bg-white hover:bg-slate-50 border border-[#2E2882]/5 hover:border-[#38BDF8]/20 p-5 sm:p-6 rounded-[28px] flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer shadow-md group"
-              >
-                <div className="flex flex-col items-start">
-                  <span className="font-black text-lg sm:text-xl text-[#2E2882] group-hover:text-[#38BDF8] transition-colors flex items-center gap-2">
-                    General <span className="text-[#8C8AA7]/70 font-semibold text-xs sm:text-sm">#Test</span>
-                  </span>
-                </div>
-                {/* Style optimized: No blue frame, dark blue text & icon */}
-                <div className="flex items-center gap-1.5 text-[#2E2882] font-black text-base sm:text-lg px-1">
-                  <Users size={20} strokeWidth={3.5} className="text-[#2E2882]" />
-                  <span>{testRoomCount}/5</span>
-                </div>
-              </button>
+              {ROOM_PRESETS.map((preset) => {
+                const currentCount = roomStats[preset.id]?.count ?? 0;
+                const max = roomStats[preset.id]?.max ?? preset.maxPlayers;
+                return (
+                  <button 
+                    key={preset.id}
+                    onClick={() => handleRoomClick(preset.id)}
+                    className="w-full bg-white hover:bg-slate-50 border border-[#2E2882]/5 hover:border-[#38BDF8]/20 p-5 sm:p-6 rounded-[28px] flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer shadow-md group"
+                  >
+                    <div className="flex flex-col items-start">
+                      <span className="font-black text-lg sm:text-xl text-[#2E2882] group-hover:text-[#38BDF8] transition-colors flex items-center gap-2">
+                        {preset.name} <span className="text-[#8C8AA7]/70 font-semibold text-xs sm:text-sm">{preset.tag}</span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[#2E2882] font-black text-base sm:text-lg px-1">
+                      <Users size={20} strokeWidth={3.5} className="text-[#2E2882]" />
+                      <span>{currentCount}/{max}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </motion.div>
 
@@ -624,28 +650,44 @@ export default function Lobby({ onPlay }: LobbyProps) {
           },
         ]}
       >
-        <div className="flex flex-col items-center">
-          <div className="w-20 h-20 rounded-full bg-[#FB923C]/10 flex items-center justify-center mb-6 mt-2 relative">
-            <Settings size={40} className="text-[#FB923C] animate-spin-slow" strokeWidth={3} />
-          </div>
-          
-          <h3 className="text-2xl font-black text-[#2E2882] mb-6 text-center">{selectedRoom}</h3>
+        {selectedRoom && (() => {
+          const config = getRoomConfig(selectedRoom);
+          const currentCount = roomStats[selectedRoom]?.count ?? 0;
+          const max = roomStats[selectedRoom]?.max ?? config.maxPlayers;
+          const toWin = roomStats[selectedRoom]?.winningScore ?? config.winningScore;
+          const theme = roomStats[selectedRoom]?.theme ?? config.theme;
 
-          <div className="grid grid-cols-3 gap-2.5 w-full mb-4">
-            <div className="text-center bg-white border border-[#2E2882]/10 p-2.5 rounded-2xl flex flex-col justify-center shadow-sm">
-              <div className="text-[#8C8AA7] text-[10px] font-black uppercase tracking-wider mb-1">Players</div>
-              <div className="text-[#2E2882] font-black text-base">{roomCount}/5</div>
+          return (
+            <div className="flex flex-col items-center">
+              <div className="w-20 h-20 rounded-full bg-[#FB923C]/10 flex items-center justify-center mb-6 mt-2 relative">
+                <Settings size={40} className="text-[#FB923C] animate-spin-slow" strokeWidth={3} />
+              </div>
+              
+              <h3 className="text-2xl font-black text-[#2E2882] mb-6 text-center">{selectedRoom}</h3>
+
+              {joinError && (
+                <div className="mb-4 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl text-center">
+                  {joinError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-3 gap-2.5 w-full mb-4">
+                <div className="text-center bg-white border border-[#2E2882]/10 p-2.5 rounded-2xl flex flex-col justify-center shadow-sm">
+                  <div className="text-[#8C8AA7] text-[10px] font-black uppercase tracking-wider mb-1">Players</div>
+                  <div className="text-[#2E2882] font-black text-base">{currentCount}/{max}</div>
+                </div>
+                <div className="text-center bg-white border border-[#2E2882]/10 p-2.5 rounded-2xl flex flex-col justify-center shadow-sm">
+                  <div className="text-[#8C8AA7] text-[10px] font-black uppercase tracking-wider mb-1">Theme</div>
+                  <div className="text-[#2E2882] font-bold text-[13px] leading-relaxed truncate">{theme}</div>
+                </div>
+                <div className="text-center bg-white border border-[#2E2882]/10 p-2.5 rounded-2xl flex flex-col justify-center shadow-sm">
+                  <div className="text-[#8C8AA7] text-[10px] font-black uppercase tracking-wider mb-1">To Win</div>
+                  <div className="text-[#FB923C] font-extrabold text-[13px] leading-relaxed justify-center">{toWin} pts</div>
+                </div>
+              </div>
             </div>
-            <div className="text-center bg-white border border-[#2E2882]/10 p-2.5 rounded-2xl flex flex-col justify-center shadow-sm">
-              <div className="text-[#8C8AA7] text-[10px] font-black uppercase tracking-wider mb-1">Theme</div>
-              <div className="text-[#2E2882] font-bold text-[13px] leading-relaxed truncate">General</div>
-            </div>
-            <div className="text-center bg-white border border-[#2E2882]/10 p-2.5 rounded-2xl flex flex-col justify-center shadow-sm">
-              <div className="text-[#8C8AA7] text-[10px] font-black uppercase tracking-wider mb-1">To Win</div>
-              <div className="text-[#FB923C] font-extrabold text-[13px] leading-relaxed justify-center">30 pts</div>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
       </CinematicModal>
 
       {/* Global Settings Modal */}

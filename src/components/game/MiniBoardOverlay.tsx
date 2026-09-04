@@ -4,6 +4,8 @@ import { Clock, Pencil, User as UserIcon, AlertTriangle } from "lucide-react";
 import GameTitle from "./GameTitle";
 import WaitingSprite from "./WaitingSprite";
 import AllGuessedSprite from "./AllGuessedSprite";
+import AllGuessedRareSprite from "./AllGuessedRareSprite";
+import NoOneGuessed2Sprite from "./NoOneGuessed2Sprite";
 import TurnLostSprite from "./TurnLostSprite";
 import SkippedSprite from "./SkippedSprite";
 import PartialGuessedSprite from "./PartialGuessedSprite";
@@ -220,13 +222,21 @@ export function MiniBoardOverlay({
 
                 <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
                   {reason === "all_guessed" ? (
-                    <AllGuessedSprite
-                      mode="all_guessed"
-                      className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]"
-                    />
+                    gameState?.isFastAllGuessed ? (
+                      <AllGuessedRareSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" />
+                    ) : (
+                      <AllGuessedSprite
+                        mode="all_guessed"
+                        className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]"
+                      />
+                    )
                   ) : hasSucceeded ? (
                     <PartialGuessedSprite
                       className="h-[110px] sm:h-[150px] max-w-[130px] sm:max-w-[180px]"
+                    />
+                  ) : gameState?.noOneGuessedVariant === 2 ? (
+                    <NoOneGuessed2Sprite
+                      className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]"
                     />
                   ) : (
                     <AllGuessedSprite

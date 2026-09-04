@@ -159,10 +159,10 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     const opacityVal = Math.min(100, Math.max(0, Math.round((data.opacity !== undefined ? data.opacity : 1) * 100)));
     view.setUint8(13, opacityVal);
     
-    const scaledX = Math.min(10000, Math.max(0, Math.round((data.x || 0) * 10000)));
-    const scaledY = Math.min(10000, Math.max(0, Math.round((data.y || 0) * 10000)));
-    view.setUint16(14, scaledX, true);
-    view.setUint16(16, scaledY, true);
+    const scaledX = Math.min(30000, Math.max(-30000, Math.round((data.x || 0) * 10000)));
+    const scaledY = Math.min(30000, Math.max(-30000, Math.round((data.y || 0) * 10000)));
+    view.setInt16(14, scaledX, true);
+    view.setInt16(16, scaledY, true);
     
     return buffer;
   }
@@ -206,15 +206,17 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     const opacityVal = Math.min(100, Math.max(0, Math.round((data.opacity !== undefined ? data.opacity : 1) * 100)));
     view.setUint8(13, opacityVal);
     
-    const scaledSX = Math.min(10000, Math.max(0, Math.round((data.startX || 0) * 10000)));
-    const scaledSY = Math.min(10000, Math.max(0, Math.round((data.startY || 0) * 10000)));
-    view.setUint16(14, scaledSX, true);
-    view.setUint16(16, scaledSY, true);
+    const scaledSX = Math.min(30000, Math.max(-30000, Math.round((data.startX || 0) * 10000)));
+    const scaledSY = Math.min(30000, Math.max(-30000, Math.round((data.startY || 0) * 10000)));
+    view.setInt16(14, scaledSX, true);
+    view.setInt16(16, scaledSY, true);
     
-    const scaledX = Math.min(10000, Math.max(0, Math.round((data.x || 0) * 10000)));
-    const scaledY = Math.min(10000, Math.max(0, Math.round((data.y || 0) * 10000)));
-    view.setUint16(18, scaledX, true);
-    view.setUint16(20, scaledY, true);
+    const endX = data.endX !== undefined ? data.endX : data.x;
+    const endY = data.endY !== undefined ? data.endY : data.y;
+    const scaledX = Math.min(30000, Math.max(-30000, Math.round((endX || 0) * 10000)));
+    const scaledY = Math.min(30000, Math.max(-30000, Math.round((endY || 0) * 10000)));
+    view.setInt16(18, scaledX, true);
+    view.setInt16(20, scaledY, true);
     
     view.setUint8(22, data.isCancelled ? 1 : 0);
     
@@ -263,10 +265,10 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     view.setUint16(14, pointsLength, true);
     for (let i = 0; i < pointsLength; i++) {
       const pt = points[i];
-      const scaledPtX = Math.min(10000, Math.max(0, Math.round((pt.x || 0) * 10000)));
-      const scaledPtY = Math.min(10000, Math.max(0, Math.round((pt.y || 0) * 10000)));
-      view.setUint16(16 + i * 4, scaledPtX, true);
-      view.setUint16(18 + i * 4, scaledPtY, true);
+      const scaledPtX = Math.min(30000, Math.max(-30000, Math.round((pt.x || 0) * 10000)));
+      const scaledPtY = Math.min(30000, Math.max(-30000, Math.round((pt.y || 0) * 10000)));
+      view.setInt16(16 + i * 4, scaledPtX, true);
+      view.setInt16(18 + i * 4, scaledPtY, true);
     }
     return buffer;
   }
@@ -330,8 +332,8 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       const color = formatRGBToHex(r, g, b);
       const width = view.getUint8(12);
       const opacity = view.getUint8(13) / 100;
-      const x = view.getUint16(14, true) / 10000;
-      const y = view.getUint16(16, true) / 10000;
+      const x = view.getInt16(14, true) / 10000;
+      const y = view.getInt16(16, true) / 10000;
       
       return {
         event: 'draw_start',
@@ -369,16 +371,16 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       const color = formatRGBToHex(r, g, b);
       const width = view.getUint8(12);
       const opacity = view.getUint8(13) / 100;
-      const startX = view.getUint16(14, true) / 10000;
-      const startY = view.getUint16(16, true) / 10000;
-      const x = view.getUint16(18, true) / 10000;
-      const y = view.getUint16(20, true) / 10000;
+      const startX = view.getInt16(14, true) / 10000;
+      const startY = view.getInt16(16, true) / 10000;
+      const x = view.getInt16(18, true) / 10000;
+      const y = view.getInt16(20, true) / 10000;
       
       const isCancelled = view.byteLength >= 23 ? (view.getUint8(22) === 1) : false;
       
       return {
         event: 'draw_end',
-        data: { instanceId: instId, tool, color, width, opacity, startX, startY, x, y, isCancelled }
+        data: { instanceId: instId, tool, color, width, opacity, startX, startY, x, y, endX: x, endY: y, isCancelled }
       };
     }
     
@@ -409,8 +411,8 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       const pointsLength = view.getUint16(14, true);
       const points = [];
       for (let i = 0; i < pointsLength; i++) {
-        const x = view.getUint16(16 + i * 4, true) / 10000;
-        const y = view.getUint16(18 + i * 4, true) / 10000;
+        const x = view.getInt16(16 + i * 4, true) / 10000;
+        const y = view.getInt16(18 + i * 4, true) / 10000;
         points.push({ x, y });
       }
       return {
