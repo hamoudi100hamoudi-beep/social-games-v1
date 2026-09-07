@@ -9,6 +9,7 @@ const GAME_ASSETS = [
   '/turn_lost.webp',
   '/skipped.webp',
   '/canceled_turn.webp',
+  '/afk_warning.webp',
   '/exit.webp',
   '/waiting.webp',
   '/trophy.webp',

@@ -30,7 +30,8 @@ export default function DrawingBoard({
   timerBarNode,
   currentDrawerId,
   status,
-  onSyncStateChange
+  onSyncStateChange,
+  isFreeDraw = false,
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -42,6 +43,7 @@ export default function DrawingBoard({
   status?: string;
   key?: any;
   onSyncStateChange?: (syncing: boolean) => void;
+  isFreeDraw?: boolean;
 }) {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
 
@@ -200,16 +202,16 @@ export default function DrawingBoard({
         titleText="CLEAN"
         buttons={[
           {
-            id: "clean-confirm-yes-btn",
-            text: <span className="text-white font-black">YES</span>,
-            onClick: confirmClear,
-            variant: "danger",
-          },
-          {
             id: "clean-confirm-no-btn",
             text: <span className="text-white font-black">NO</span>,
             onClick: () => setShowClearConfirm(false),
             variant: "primary",
+          },
+          {
+            id: "clean-confirm-yes-btn",
+            text: <span className="text-white font-black">YES</span>,
+            onClick: confirmClear,
+            variant: "danger",
           },
         ]}
       >
@@ -254,6 +256,13 @@ export default function DrawingBoard({
               currentWidth={currentWidth}
               currentOpacity={currentOpacity}
               baseScale={baseScale}
+              isFreeDraw={isFreeDraw}
+              onColorChange={(newColor) => {
+                setColor(newColor);
+                if (tool === 'eraser') {
+                  changeTool(previousTool.current || 'pencil');
+                }
+              }}
               onWidthChange={(w) => {
                 if (tool === 'eraser') setEraserWidth(w);
                 else setPenWidth(w);

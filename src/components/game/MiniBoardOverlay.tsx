@@ -25,6 +25,10 @@ interface MiniBoardOverlayProps {
   amIDrawer: boolean;
   currentPlayers: Player[];
   getCurrentDrawerName: () => string;
+  isFreeDraw?: boolean;
+  onStartFreeDraw?: () => void;
+  activeDrawersCount?: number;
+  hasEnteredFreeDraw?: boolean;
 }
 
 export function MiniBoardOverlay({
@@ -32,6 +36,10 @@ export function MiniBoardOverlay({
   amIDrawer,
   currentPlayers,
   getCurrentDrawerName,
+  isFreeDraw = false,
+  onStartFreeDraw,
+  activeDrawersCount = 0,
+  hasEnteredFreeDraw = false,
 }: MiniBoardOverlayProps) {
   // We use this z-index to overlay inside the DrawingBoard
   const containerClass = "absolute inset-0 z-[40] flex flex-col items-center justify-between bg-white pointer-events-auto p-2 sm:p-4 select-none font-sans overflow-y-auto min-h-0";
@@ -47,10 +55,15 @@ export function MiniBoardOverlay({
 
   const getAnimClass = (className: string) => playPodiumAnimations.current ? className : "";
 
+  // If Free Draw mode: hide overlay once player has drawn, or if someone is already drawing, so spectator sees live drawing
+  if (isFreeDraw && (hasEnteredFreeDraw || activeDrawersCount > 0 || amIDrawer)) {
+    return null;
+  }
+
   return (
     <AnimatePresence mode="wait">
-      {/* 1. WAITING FOR PLAYERS */}
-      {gameState.status === "WAITING" && (
+      {/* 1. FREE DRAW START SCREEN OR WAITING FOR PLAYERS */}
+      {(isFreeDraw ? (!hasEnteredFreeDraw && activeDrawersCount === 0 && !amIDrawer) : gameState.status === "WAITING") && (
         <motion.div
           key="waiting-overlay"
           initial={{ opacity: 0 }}
@@ -61,7 +74,7 @@ export function MiniBoardOverlay({
           <div className="text-center w-full max-w-sm my-auto flex flex-col items-center justify-between py-1 sm:py-2 min-h-[85%]">
             {/* Top Title */}
             <div className="pt-0.5 sm:pt-1 mb-1 sm:mb-2">
-              <GameTitle text="WAITING" type="miniboard" className="text-[17px] sm:text-[22px]" />
+              <GameTitle text={isFreeDraw ? "FREE DRAW" : "WAITING"} type="miniboard" className="text-[17px] sm:text-[22px]" />
             </div>
 
             {/* Middle Frameless Animated Sprite */}
@@ -69,11 +82,27 @@ export function MiniBoardOverlay({
               <WaitingSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm" />
             </div>
 
-            {/* Bottom Text */}
-            <div className="pb-0.5 sm:pb-1">
-              <p className="text-[#728299] text-xs sm:text-sm font-bold tracking-wide">
-                Waiting for players
-              </p>
+            {/* Bottom Text / Start Button */}
+            <div className="pb-0.5 sm:pb-1 flex flex-col items-center gap-2 sm:gap-2.5">
+              {isFreeDraw ? (
+                <>
+                  <p className="text-[#64748B] text-xs sm:text-[13px] font-semibold tracking-tight text-center max-w-[280px] leading-relaxed">
+                    Draw whatever you want. No timer, no prompt.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={onStartFreeDraw}
+                    className="px-6 py-2.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-95 text-white font-black text-sm sm:text-base shadow-lg transition-all border-2 border-white/60 flex items-center gap-2 cursor-pointer mx-auto"
+                  >
+                    <Pencil size={18} />
+                    <span>ابدأ الرسم</span>
+                  </button>
+                </>
+              ) : (
+                <p className="text-[#728299] text-xs sm:text-sm font-bold tracking-wide">
+                  Waiting for players
+                </p>
+              )}
             </div>
           </div>
         </motion.div>

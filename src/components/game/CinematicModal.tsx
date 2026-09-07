@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
 import GameTitle from "./GameTitle";
@@ -108,7 +109,9 @@ export default function CinematicModal({
     }
   };
 
-  return (
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -117,7 +120,7 @@ export default function CinematicModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className={`fixed inset-0 z-[350] flex items-center justify-center p-4 ${overlayClassName || "bg-slate-900/80"}`}
+          className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 ${overlayClassName || "bg-slate-900/80"}`}
           onClick={(e) => {
             if (e.target === e.currentTarget && onClose) {
               onClose();
@@ -194,6 +197,7 @@ export default function CinematicModal({
           </div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

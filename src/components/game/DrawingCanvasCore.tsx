@@ -1264,6 +1264,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             path.length = 0;
             delete replaySessions[instId];
           } else if (event === 'draw_clear') {
+            Object.keys(replayPaths).forEach((k) => delete replayPaths[k]);
+            Object.keys(replaySessions).forEach((k) => delete replaySessions[k]);
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
             saveSnapshot(); // Bypassed during replay
@@ -1528,6 +1530,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 path.length = 0;
                 delete replaySessions[instId];
               } else if (event === 'draw_clear') {
+                Object.keys(replayPaths).forEach((k) => delete replayPaths[k]);
+                Object.keys(replaySessions).forEach((k) => delete replaySessions[k]);
                 ctx.fillStyle = '#ffffff';
                 ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
               } else if (event === 'draw_action') {

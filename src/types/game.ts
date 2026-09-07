@@ -48,6 +48,8 @@ export interface Room {
   maxPlayers?: number;
   winningScore?: number;
   theme?: string;
+  isFreeDraw?: boolean;
+  activeDrawers?: string[];
 }
 
 export interface RoomConfig {
@@ -57,6 +59,7 @@ export interface RoomConfig {
   theme: string;
   maxPlayers: number;
   winningScore: number;
+  isFreeDraw?: boolean;
 }
 
 export const ROOM_PRESETS: RoomConfig[] = [
@@ -69,12 +72,21 @@ export const ROOM_PRESETS: RoomConfig[] = [
     winningScore: 30,
   },
   {
-    id: '10P',
-    name: '10P',
-    tag: '#General',
+    id: 'General #10P',
+    name: 'General',
+    tag: '#10P',
     theme: 'General',
     maxPlayers: 10,
     winningScore: 120,
+  },
+  {
+    id: 'Free Draw',
+    name: 'Free Draw',
+    tag: '',
+    theme: 'Free Draw',
+    maxPlayers: 5,
+    winningScore: 0,
+    isFreeDraw: true,
   },
 ];
 
@@ -85,12 +97,29 @@ export function getRoomConfig(roomId: string): RoomConfig {
   );
   if (found) return found;
 
-  if (normalized === 'general' || normalized === 'general #test') {
+  if (normalized === 'general' || normalized === 'general #test' || normalized === 'test' || normalized === '#test') {
     return ROOM_PRESETS[0];
   }
 
-  if (normalized === '10p' || normalized.includes('10p')) {
+  if (
+    normalized === '10p' ||
+    normalized === '#10p' ||
+    normalized === 'p10' ||
+    normalized === '#p10' ||
+    normalized.includes('10p') ||
+    normalized.includes('p10')
+  ) {
     return ROOM_PRESETS[1];
+  }
+
+  if (
+    normalized === 'free' ||
+    normalized === '#free' ||
+    normalized === 'freedraw' ||
+    normalized.includes('free') ||
+    normalized.includes('حر')
+  ) {
+    return ROOM_PRESETS[2];
   }
 
   return {

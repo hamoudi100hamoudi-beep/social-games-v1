@@ -4,20 +4,41 @@ interface NoOneGuessed2SpriteProps {
   className?: string;
 }
 
-const TOTAL_FRAMES = 27; // 27 frames (index 0 to 26)
 const COLS = 4;
 const ROWS = 7;
-const BASE_DELAY = 100; // Base delay in ms for normal frames
 
-const getFrameDelay = (frameIndex: number): number => {
-  if (frameIndex === 0) {
-    return 1400; // Frame 0: Looks at camera/players disappointed for 1.4 seconds (1400ms)
-  }
-  if (frameIndex === 12) {
-    return 500; // Frame 12: Pauses after turning head before sighing
-  }
-  return BASE_DELAY; // Natural smooth transition for all other frames (100ms)
-};
+interface AnimationStep {
+  frame: number;
+  delay: number;
+}
+
+// Total 27 frames: Frame 1 (index 0) to Frame 27 (index 26)
+// Grid: 4 columns x 7 rows = 28 cells (index 26 is the 27th frame, cell 28 is empty)
+const ANIMATION_SEQUENCE: AnimationStep[] = [
+  // 1. التوقف عند الإطار الأول نصف ثانية (500ms)
+  { frame: 0, delay: 500 },
+
+  // 2. الرمشة الأولى: التحرك للإطار 3 (index 2) والعودة للإطار الأول
+  { frame: 1, delay: 75 },
+  { frame: 2, delay: 80 }, // الإطار 3 (إغلاق العينين)
+  { frame: 1, delay: 75 },
+  // التوقف عند الإطار الأول نصف ثانية (500ms)
+  { frame: 0, delay: 500 },
+
+  // 3. الرمشة الثانية: نتقدم مرة أخرى للإطار 3 ونعود للإطار 1
+  { frame: 1, delay: 75 },
+  { frame: 2, delay: 80 }, // الإطار 3 (إغلاق العينين)
+  { frame: 1, delay: 75 },
+  // التوقف عند الإطار الأول ثانية كاملة (1000ms)
+  { frame: 0, delay: 1000 },
+
+  // 4. تشغيل بقية الإطارات للأنيميشن الأساسي وصولاً إلى الإطار الـ 27 والتجمد عنده
+  ...Array.from({ length: 26 }, (_, i) => {
+    const f = i + 1; // من الإطار 2 (index 1) إلى الإطار 27 (index 26)
+    const delay = f === 12 ? 500 : 100; // الإطار 13 (index 12): وقفة 500ms بعد الالتفات
+    return { frame: f, delay };
+  }),
+];
 
 // Module-level preload and GPU texture decode
 if (typeof window !== "undefined") {
@@ -37,31 +58,31 @@ export const NoOneGuessed2Sprite: React.FC<NoOneGuessed2SpriteProps> = ({
   useEffect(() => {
     let isMounted = true;
 
-    const scheduleNextFrame = (currentFrame: number) => {
-      // Freeze / Stop at the last frame (frame index 26)
-      if (currentFrame >= TOTAL_FRAMES - 1) {
+    const playStep = (stepIndex: number) => {
+      // Reached the final step (frame 26) - freeze at the end
+      if (stepIndex >= ANIMATION_SEQUENCE.length - 1) {
         return;
       }
 
-      const delay = getFrameDelay(currentFrame);
+      const currentStep = ANIMATION_SEQUENCE[stepIndex];
       timerRef.current = setTimeout(() => {
         if (!isMounted) return;
-        const nextFrame = currentFrame + 1;
-        setFrameIndex(nextFrame);
-        scheduleNextFrame(nextFrame);
-      }, delay);
+        const nextStepIndex = stepIndex + 1;
+        setFrameIndex(ANIMATION_SEQUENCE[nextStepIndex].frame);
+        playStep(nextStepIndex);
+      }, currentStep.delay);
     };
 
     const img = new Image();
     img.src = "/no_one_guessed_2.webp";
     if (img.complete) {
-      scheduleNextFrame(0);
+      playStep(0);
     } else {
       img.onload = () => {
-        if (isMounted) scheduleNextFrame(0);
+        if (isMounted) playStep(0);
       };
       img.onerror = () => {
-        if (isMounted) scheduleNextFrame(0);
+        if (isMounted) playStep(0);
       };
     }
 

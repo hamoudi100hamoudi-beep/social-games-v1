@@ -612,8 +612,9 @@ export default function Lobby({ onPlay }: LobbyProps) {
                     className="w-full bg-white hover:bg-slate-50 border border-[#2E2882]/5 hover:border-[#38BDF8]/20 p-5 sm:p-6 rounded-[28px] flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer shadow-md group"
                   >
                     <div className="flex flex-col items-start">
-                      <span className="font-black text-lg sm:text-xl text-[#2E2882] group-hover:text-[#38BDF8] transition-colors flex items-center gap-2">
-                        {preset.name} <span className="text-[#8C8AA7]/70 font-semibold text-xs sm:text-sm">{preset.tag}</span>
+                      <span className="text-lg sm:text-xl text-[#2E2882] group-hover:text-[#38BDF8] transition-colors flex items-center gap-2">
+                        <span className="font-black">{preset.name}</span>
+                        <span className="font-medium">{preset.tag}</span>
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 text-[#2E2882] font-black text-base sm:text-lg px-1">
@@ -656,14 +657,15 @@ export default function Lobby({ onPlay }: LobbyProps) {
           const max = roomStats[selectedRoom]?.max ?? config.maxPlayers;
           const toWin = roomStats[selectedRoom]?.winningScore ?? config.winningScore;
           const theme = roomStats[selectedRoom]?.theme ?? config.theme;
+          const roomDisplayName = config.tag ? `${config.name} ${config.tag}` : (config.name || selectedRoom);
 
           return (
             <div className="flex flex-col items-center">
-              <div className="w-20 h-20 rounded-full bg-[#FB923C]/10 flex items-center justify-center mb-6 mt-2 relative">
+              <div className="w-20 h-20 rounded-full bg-[#FB923C]/10 flex items-center justify-center mb-5 mt-2 relative">
                 <Settings size={40} className="text-[#FB923C] animate-spin-slow" strokeWidth={3} />
               </div>
               
-              <h3 className="text-2xl font-black text-[#2E2882] mb-6 text-center">{selectedRoom}</h3>
+              <h3 className="text-2xl sm:text-3xl font-black text-[#2E2882] mb-6 text-center">{roomDisplayName}</h3>
 
               {joinError && (
                 <div className="mb-4 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl text-center">
@@ -671,18 +673,20 @@ export default function Lobby({ onPlay }: LobbyProps) {
                 </div>
               )}
 
-              <div className="grid grid-cols-3 gap-2.5 w-full mb-4">
-                <div className="text-center bg-white border border-[#2E2882]/10 p-2.5 rounded-2xl flex flex-col justify-center shadow-sm">
-                  <div className="text-[#8C8AA7] text-[10px] font-black uppercase tracking-wider mb-1">Players</div>
-                  <div className="text-[#2E2882] font-black text-base">{currentCount}/{max}</div>
+              <div className="grid grid-cols-3 gap-2 sm:gap-4 w-full mb-6 py-1">
+                <div className="text-center flex flex-col items-center justify-center">
+                  <div className="text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1.5">Players</div>
+                  <div className="text-[#2E2882] font-black text-xl sm:text-2xl">{currentCount}/{max}</div>
                 </div>
-                <div className="text-center bg-white border border-[#2E2882]/10 p-2.5 rounded-2xl flex flex-col justify-center shadow-sm">
-                  <div className="text-[#8C8AA7] text-[10px] font-black uppercase tracking-wider mb-1">Theme</div>
-                  <div className="text-[#2E2882] font-bold text-[13px] leading-relaxed truncate">{theme}</div>
+                <div className="text-center flex flex-col items-center justify-center">
+                  <div className="text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1.5">Theme</div>
+                  <div className="text-[#2E2882] font-black text-lg sm:text-xl leading-snug truncate max-w-full">{theme}</div>
                 </div>
-                <div className="text-center bg-white border border-[#2E2882]/10 p-2.5 rounded-2xl flex flex-col justify-center shadow-sm">
-                  <div className="text-[#8C8AA7] text-[10px] font-black uppercase tracking-wider mb-1">To Win</div>
-                  <div className="text-[#FB923C] font-extrabold text-[13px] leading-relaxed justify-center">{toWin} pts</div>
+                <div className="text-center flex flex-col items-center justify-center">
+                  <div className="text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1.5">To Win</div>
+                  <div className="text-[#FB923C] font-black text-lg sm:text-xl leading-snug">
+                    {config.isFreeDraw ? "مفتوح" : `${toWin} pts`}
+                  </div>
                 </div>
               </div>
             </div>

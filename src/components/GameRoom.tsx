@@ -20,6 +20,8 @@ import {
   EyeOff,
   LogOut,
   Zap,
+  ArrowRight,
+  ArrowLeft,
 } from "lucide-react";
 import { useSocket } from "./SocketProvider";
 import { motion, AnimatePresence } from "motion/react";
@@ -28,6 +30,7 @@ import { MiniBoardOverlay } from "./game/MiniBoardOverlay";
 import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
 import CinematicModal from "./game/CinematicModal";
 import ExitSprite from "./game/ExitSprite";
+import AfkWarningSprite from "./game/AfkWarningSprite";
 import { safeLocalStorage } from "../utils/storage";
 import { soundManager } from "../utils/soundManager";
 import { useRoomEventGate } from "../hooks/useRoomEventGate";
@@ -248,6 +251,30 @@ export default function GameRoom({
 
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
+  // --- Free Draw Room Engine ---
+  const roomConfig = getRoomConfig(room);
+  const [isFreeDrawRoom, setIsFreeDrawRoom] = useState(Boolean(roomConfig?.isFreeDraw));
+  const [activeDrawers, setActiveDrawers] = useState<string[]>([]);
+  const [hasEnteredFreeDraw, setHasEnteredFreeDraw] = useState(false);
+  const isFreeDraw = Boolean(roomConfig?.isFreeDraw || gameState?.isFreeDraw || isFreeDrawRoom);
+
+  const handleStartFreeDraw = () => {
+    if (!socket) return;
+    setHasEnteredFreeDraw(true);
+    socket.emit("start_free_draw");
+    const myId = persistentPlayerId || socketId;
+    if (myId) {
+      setActiveDrawers((prev) => (prev.includes(myId) ? prev : [...prev, myId]));
+    }
+  };
+
+  const handleStopFreeDraw = () => {
+    if (!socket) return;
+    socket.emit("stop_free_draw");
+    const myId = persistentPlayerId || socketId;
+    setActiveDrawers((prev) => prev.filter((id) => id !== myId && id !== socketId && id !== persistentPlayerId));
+  };
+
   const openChat = () => {
     setIsChatOpen(true);
     setUnreadCount(0);
@@ -402,6 +429,12 @@ export default function GameRoom({
   }, [currentPlayers.length, isCanvasSyncing]);
 
   const amIDrawer = React.useMemo(() => {
+    if (isFreeDraw) {
+      return Boolean(
+        (persistentPlayerId && activeDrawers.includes(persistentPlayerId)) ||
+        (socketId && activeDrawers.includes(socketId))
+      );
+    }
     if (!gameState.currentDrawerId) return false;
     if (gameState.currentDrawerId === persistentPlayerId) return true;
 
@@ -425,7 +458,7 @@ export default function GameRoom({
       return true;
     }
     return gameState.currentDrawerId === socketId;
-  }, [gameState.currentDrawerId, currentPlayers, persistentPlayerId, socketId]);
+  }, [isFreeDraw, activeDrawers, gameState.currentDrawerId, currentPlayers, persistentPlayerId, socketId]);
 
   const drawerPersistentId = React.useMemo(() => {
     if (!gameState.currentDrawerId) return "lobby";
@@ -507,7 +540,7 @@ export default function GameRoom({
     prevHintsUsedRef.current = currHints;
   }, [gameState.hintsUsed, eventGate]);
 
-  const isDrawingMode = gameState.status === "DRAWING" && amIDrawer;
+  const isDrawingMode = isFreeDraw ? amIDrawer : (gameState.status === "DRAWING" && amIDrawer);
 
   const hasAlreadyReported = React.useMemo(() => {
     if (!gameState.reports) return false;
@@ -639,8 +672,6 @@ export default function GameRoom({
           console.log("[Visibility API] Socket disconnected. Reconnecting cleanly...");
           socket.connect();
         }
-        // Force an immediate activity ping to prevent false-positive AFK kick
-        socket.emit("ping_activity");
       }
     };
 
@@ -658,8 +689,16 @@ export default function GameRoom({
       roomId: string;
       players: any[];
       votekicks?: any;
+      isFreeDraw?: boolean;
+      activeDrawers?: string[];
       gameState: any;
     }) => {
+      if (typeof state.isFreeDraw !== "undefined") {
+        setIsFreeDrawRoom(Boolean(state.isFreeDraw));
+      }
+      if (state.activeDrawers) {
+        setActiveDrawers(state.activeDrawers);
+      }
       if (state.votekicks) {
         setVotekicks(state.votekicks);
       }
@@ -983,6 +1022,7 @@ export default function GameRoom({
   }, [gameState.correctGuessers, socketId, socket?.id, persistentPlayerId]);
 
   const isInputDisabled =
+    isFreeDraw ||
     gameState.status === "WAITING" ||
     gameState.status === "ROUND_END" ||
     gameState.status === "PODIUM" ||
@@ -1368,8 +1408,20 @@ export default function GameRoom({
           <div 
             className={`w-full max-w-full h-auto max-h-full aspect-[740/430] shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative ${morphMode ? "rounded-bl-[6px] sm:rounded-bl-[8px]" : ""}`}
           >
-            {/* Hint/Word Overlay Overlay for spectator view */}
-            {!isDrawingMode && renderWordOverlay()}
+            {/* Floating button for Free Draw: shown when player returned to room, or new player entering active room */}
+            {isFreeDraw && !isDrawingMode && (hasEnteredFreeDraw || activeDrawers.length > 0) && (
+              <button
+                type="button"
+                onClick={handleStartFreeDraw}
+                className="absolute top-2 left-2 z-[60] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer pointer-events-auto border border-white/40"
+              >
+                <Pencil size={14} className="stroke-[2.5]" />
+                <span>{hasEnteredFreeDraw ? "العودة للرسم" : (activeDrawers.length > 0 ? "انضم للرسم" : "ابدأ الرسم")}</span>
+              </button>
+            )}
+
+            {/* Hint/Word Overlay Overlay for spectator view (normal rooms only) */}
+            {!isDrawingMode && !isFreeDraw && renderWordOverlay()}
 
             {/* Unified Adaptive Drawing Canvas Container */}
             <div
@@ -1379,26 +1431,66 @@ export default function GameRoom({
                   : "w-full h-full relative flex flex-col"
               }
             >
-              {isDrawingMode && renderWordOverlay(true)}
+              {isDrawingMode && !isFreeDraw && renderWordOverlay(true)}
+              
+              {/* Free Draw Top Bar: Return to room arrow button and Quick Chat button */}
+              {isDrawingMode && isFreeDraw && (
+                <div 
+                  className="absolute left-0 right-0 flex items-center justify-between px-3 sm:px-4 z-[150] pointer-events-none"
+                  style={{ top: 'clamp(8px, 2vw, 16px)' }}
+                  dir="ltr"
+                >
+                  {/* Left: Return to Room / Spectator button (shifted to the right of zoom controls, pointing left) */}
+                  <div className="flex items-center pointer-events-auto ml-[88px] sm:ml-[96px]">
+                    <button
+                      type="button"
+                      onClick={handleStopFreeDraw}
+                      title="العودة للروم"
+                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/95 hover:bg-white text-slate-800 flex items-center justify-center shadow-md active:scale-95 transition-all border border-slate-300/80 cursor-pointer"
+                    >
+                      <ArrowLeft size={18} className="stroke-[2.5]" />
+                    </button>
+                  </div>
+
+                  {/* Right: Chat button (shifted left with mr-12 sm:mr-16 so it never collides with exit X button) */}
+                  <div className="flex items-center pointer-events-auto mr-12 sm:mr-16">
+                    <button
+                      type="button"
+                      onClick={openChat}
+                      title="الدردشة"
+                      className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all shadow-md relative cursor-pointer"
+                    >
+                      <MessageSquare size={18} />
+                      {unreadCount > 0 && (
+                        <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full shadow-md border-2 border-slate-200">
+                          {unreadCount > 9 ? "+9" : unreadCount}
+                        </div>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <DrawingBoard
                 key={`shared-board-${room || ""}`}
                 currentDrawerId={gameState.currentDrawerId}
                 status={gameState.status}
                 readOnly={!isDrawingMode}
+                isFreeDraw={isFreeDraw}
                 onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
                 onSkipTurn={
-                  isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
+                  !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
                     ? () => setShowSkipConfirm(true)
                     : undefined
                 }
                 onRequestHint={
-                  isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
+                  !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
                     ? () => socket?.emit("request_hint")
                     : undefined
                 }
-                timerPercentage={timerPercentage}
+                timerPercentage={isFreeDraw ? 100 : timerPercentage}
                 timerBarNode={
-                  isDrawingMode ? (
+                  !isFreeDraw && isDrawingMode ? (
                     <SmoothTimer
                       gameState={gameState}
                       maxTime={getMaxTime()}
@@ -1407,7 +1499,7 @@ export default function GameRoom({
                   ) : undefined
                 }
                 hintsRemaining={
-                  isDrawingMode
+                  !isFreeDraw && isDrawingMode
                     ? (() => {
                         const word = gameState.currentWord || "";
                         const words = word.split(" ").filter((w: string) => w.length > 0);
@@ -1552,15 +1644,21 @@ export default function GameRoom({
               amIDrawer={amIDrawer} 
               currentPlayers={currentPlayers}
               getCurrentDrawerName={getCurrentDrawerName}
+              isFreeDraw={isFreeDraw}
+              onStartFreeDraw={handleStartFreeDraw}
+              activeDrawersCount={activeDrawers.length}
+              hasEnteredFreeDraw={hasEnteredFreeDraw}
             />
           </div>
 
-          {/* Timer Bar */}
-          <SmoothTimer
-            gameState={gameState}
-            maxTime={getMaxTime()}
-            isFullScreen={false}
-          />
+          {/* Timer Bar (hidden in Free Draw mode) */}
+          {!isFreeDraw && (
+            <SmoothTimer
+              gameState={gameState}
+              maxTime={getMaxTime()}
+              isFullScreen={false}
+            />
+          )}
         </div>
 
         {/* Left: Players Sidebar */}
@@ -1585,21 +1683,23 @@ export default function GameRoom({
             >
               <div className="overflow-hidden">
                 <div className="flex gap-2 sm:gap-4 p-2 sm:p-3 justify-around">
-                  <button
-                    id="report-draw-btn"
-                    disabled={!canReport}
-                    onClick={handleReport}
-                    title={hasAlreadyReported ? "You reported this draw" : "Report drawing"}
-                    className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white transition-all shadow-md active:scale-95 cursor-pointer
-                      ${hasAlreadyReported 
-                        ? "bg-red-600 border border-red-500 opacity-90 cursor-not-allowed" 
-                        : canReport 
-                          ? "bg-orange-400 hover:bg-orange-500 cursor-pointer" 
-                          : "bg-slate-500/40 opacity-40 cursor-not-allowed"
-                      }`}
-                  >
-                    <AlertTriangle size={16} />
-                  </button>
+                  {!isFreeDraw && (
+                    <button
+                      id="report-draw-btn"
+                      disabled={!canReport}
+                      onClick={handleReport}
+                      title={hasAlreadyReported ? "You reported this draw" : "Report drawing"}
+                      className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white transition-all shadow-md active:scale-95 cursor-pointer
+                        ${hasAlreadyReported 
+                          ? "bg-red-600 border border-red-500 opacity-90 cursor-not-allowed" 
+                          : canReport 
+                            ? "bg-orange-400 hover:bg-orange-500 cursor-pointer" 
+                            : "bg-slate-500/40 opacity-40 cursor-not-allowed"
+                        }`}
+                    >
+                      <AlertTriangle size={16} />
+                    </button>
+                  )}
                   <button 
                     onClick={toggleMute}
                     className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all shadow-md relative overflow-hidden ${
@@ -1945,23 +2045,25 @@ export default function GameRoom({
                     setIsInputFocused(false);
                   }}
                   placeholder={
-                    gameState.status === "WAITING"
-                      ? "Waiting..."
-                      : gameState.status === "ROUND_END"
-                        ? gameState.roundEndReason === "skipped"
-                          ? "Skipped"
-                          : gameState.roundEndReason === "turn_lost"
-                            ? "Inactive"
-                            : "Interval"
-                        : gameState.status === "PODIUM"
-                          ? "Game Over"
-                          : gameState.status === "CHOOSING"
-                            ? "Waiting for the drawing"
-                            : amIDrawer
-                              ? "You are drawing!"
-                              : hasGuessedCorrectly
-                                ? "You've found the answer!"
-                                : "Answer here..."
+                    isFreeDraw
+                      ? (amIDrawer ? "أنت ترسم الآن..." : "رسم حر (استخدم زر الدردشة للتحدث)")
+                      : gameState.status === "WAITING"
+                        ? "Waiting..."
+                        : gameState.status === "ROUND_END"
+                          ? gameState.roundEndReason === "skipped"
+                            ? "Skipped"
+                            : gameState.roundEndReason === "turn_lost"
+                              ? "Inactive"
+                              : "Interval"
+                          : gameState.status === "PODIUM"
+                            ? "Game Over"
+                            : gameState.status === "CHOOSING"
+                              ? "Waiting for the drawing"
+                              : amIDrawer
+                                ? "You are drawing!"
+                                : hasGuessedCorrectly
+                                  ? "You've found the answer!"
+                                  : "Answer here..."
                   }
                   className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused ? "pl-4" : "pl-11"} pr-4 py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
                   style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
@@ -2029,30 +2131,33 @@ export default function GameRoom({
           },
         ]}
       >
-        {/* Question */}
+        {/* Animated Warning Sprite */}
+        <div className="flex justify-center mb-2">
+          <AfkWarningSprite className="w-28 sm:w-32 aspect-[256/326]" />
+        </div>
+
+        {/* Question & Subtext in the same line (RTL reading order) */}
         <h3 
           id="afk-title" 
-          className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-4 px-2"
+          dir="rtl"
+          className="text-[15px] sm:text-[16px] font-black text-[#2E2882] leading-snug mb-3 px-1 text-center"
         >
-          هل ما زلت معنا؟
+          <span>هل ما زلت هنا؟ </span>
+          <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
         </h3>
 
-        <p 
-          id="afk-description" 
-          className="text-[#8C8AA7] text-base font-bold mb-5 leading-normal"
-        >
-          اضغط موافق للاستمرار في اللعب
-        </p>
-
-        {/* Remainder Countdown Badge */}
+        {/* Compact Remainder Countdown Badge */}
         <div 
-          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-5 py-2 inline-flex items-center gap-2 mb-6 text-sm font-black text-[#EF4444] select-none"
+          dir="rtl"
+          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 text-xs sm:text-sm font-black text-[#EF4444] select-none"
         >
           <span className="flex h-2 w-2 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]"></span>
           </span>
-          سيتم طردك بعد: <span className="font-extrabold font-mono text-base">{afkCountdown}</span> ثانية
+          <span>
+            سيتم فصل الاتصال بعد: <span className="font-extrabold font-mono text-sm sm:text-base">{afkCountdown}</span> ثانية
+          </span>
         </div>
       </CinematicModal>
 

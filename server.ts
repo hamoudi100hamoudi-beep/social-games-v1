@@ -42,6 +42,9 @@ const getJsonSafeHistory = (history: any[]) => {
         } else {
           console.log(`[Sanitizer] Filtered out orphaned end/cancel packet (type 3/6) on transport sync`);
         }
+      } else if (binaryType === 4 || binaryType === 5 || binaryType === 10) {
+        inDrawingMode = false;
+        safeList.push({ event, data: safeData });
       } else {
         safeList.push({ event, data: safeData });
       }
@@ -99,8 +102,14 @@ async function startServer() {
   io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
 
+    const PASSIVE_BACKGROUND_EVENTS = new Set([
+      'request_round_sync',
+      'get_room_info',
+    ]);
+
     socket.onAny((eventName) => {
       try {
+        if (PASSIVE_BACKGROUND_EVENTS.has(eventName)) return;
         const player = roomManager.getPlayer(socket.id);
         if (player) {
           player.lastActivity = Date.now();
@@ -266,8 +275,8 @@ async function startServer() {
         const type = buf[0];
         if (roomId) {
           if (type === 5) {
-            roomManager.clearDrawHistory(roomId);
-            io.to(roomId).emit('draw_binary', buf);
+            roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+            socket.broadcast.to(roomId).emit('draw_binary', buf);
           } else if (type === 7) {
             roomManager.undoLastDrawing(roomId);
             io.to(roomId).emit('draw_binary', buf);
@@ -279,6 +288,20 @@ async function startServer() {
             socket.broadcast.to(roomId).emit('draw_binary', buf);
           }
         }
+      }
+    });
+
+    socket.on('start_free_draw', () => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        roomManager.startFreeDraw(player.roomId, socket.id);
+      }
+    });
+
+    socket.on('stop_free_draw', () => {
+      const player = roomManager.getPlayer(socket.id);
+      if (player && player.roomId) {
+        roomManager.stopFreeDraw(player.roomId, socket.id);
       }
     });
 

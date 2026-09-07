@@ -174,8 +174,12 @@ class RoomManager {
   }
 
   private kickIdlePlayers(room: Room) {
-    const idleTimeout = (180 + 90) * 1000; // 4.5 minutes
-    const warningThreshold = 180 * 1000; // 3 minutes (180 seconds)
+    // Inactivity / AFK Timing:
+    // warningThreshold: Inactivity period before the warning popup appears (140s)
+    // countdownSeconds: Countdown duration inside the modal before kicking (fixed at 90s)
+    const warningThreshold = 140 * 1000; // 140 seconds before AFK warning popup appears
+    const countdownSeconds = 90; // 90 seconds countdown in modal
+    const idleTimeout = warningThreshold + (countdownSeconds * 1000); // 140s + 90s = 230s total until kick
     const now = Date.now();
     const playersToKick: Player[] = [];
 
@@ -225,6 +229,10 @@ class RoomManager {
   }
 
   private processRoomTick(room: Room) {
+    if (room.isFreeDraw) {
+      // In Free Draw mode: time is unlimited, no automatic round timeouts or word selection
+      return;
+    }
     const { gameState } = room;
 
     if (gameState.status === "WAITING") {
@@ -894,13 +902,16 @@ const words = word.split(" ").filter(w => w.length > 0);
 
       const isDrawer =
         p.id === room.gameState.currentDrawerId ||
-        (p.persistentId && p.persistentId === room.gameState.currentDrawerId);
+        (p.persistentId && p.persistentId === room.gameState.currentDrawerId) ||
+        (Boolean(room.isFreeDraw) && Boolean(room.activeDrawers?.includes(p.id) || (p.persistentId && room.activeDrawers?.includes(p.persistentId))));
       const isRTL = /[\u0600-\u06FF]/.test(word);
       const { drawHistory, ...publicGameState } = room.gameState;
       this.io.to(p.id).emit("room_state_update", {
         roomId: room.id,
         players: room.players,
         votekicks: room.votekicks || {},
+        isFreeDraw: !!room.isFreeDraw,
+        activeDrawers: room.activeDrawers || [],
         gameState: {
           ...publicGameState,
           currentWord: isDrawer ? room.gameState.currentWord : null,
@@ -928,9 +939,11 @@ const words = word.split(" ").filter(w => w.length > 0);
         maxPlayers: config.maxPlayers,
         winningScore: config.winningScore,
         theme: config.theme,
+        isFreeDraw: !!config.isFreeDraw,
+        activeDrawers: [],
         players: [],
         gameState: {
-          status: "WAITING",
+          status: config.isFreeDraw ? "DRAWING" : "WAITING",
           currentDrawerId: null,
           currentWord: null,
           timeLeft: 0,
@@ -949,6 +962,33 @@ const words = word.split(" ").filter(w => w.length > 0);
       });
     }
     return this.rooms.get(roomId)!;
+  }
+
+  public startFreeDraw(roomId: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room || !room.isFreeDraw) return;
+    const player = this.players.get(socketId);
+    const pId = player?.persistentId || socketId;
+    if (!room.activeDrawers) room.activeDrawers = [];
+    if (!room.activeDrawers.includes(pId)) {
+      room.activeDrawers.push(pId);
+    }
+    if (!room.activeDrawers.includes(socketId)) {
+      room.activeDrawers.push(socketId);
+    }
+    room.gameState.status = "DRAWING";
+    this.broadcastState(room);
+  }
+
+  public stopFreeDraw(roomId: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room || !room.isFreeDraw) return;
+    const player = this.players.get(socketId);
+    const pId = player?.persistentId || socketId;
+    if (room.activeDrawers) {
+      room.activeDrawers = room.activeDrawers.filter((id) => id !== pId && id !== socketId);
+    }
+    this.broadcastState(room);
   }
 
   public saveChatMessage(roomId: string, message: any) {
@@ -1229,12 +1269,16 @@ const words = word.split(" ").filter(w => w.length > 0);
           return undefined; // Room deleted
         }
 
-        if (room.players.length < 2) {
+        if (room.activeDrawers) {
+          room.activeDrawers = room.activeDrawers.filter((id) => id !== pId && id !== socketId);
+        }
+
+        if (room.players.length < 2 && !room.isFreeDraw) {
           room.players.forEach((p) => (p.score = 0));
         }
 
         // Handle if current drawer leaves
-        if (room.gameState.currentDrawerId === pId) {
+        if (!room.isFreeDraw && room.gameState.currentDrawerId === pId) {
           if (
             room.gameState.correctGuessers.length === 0 &&
             room.players.length > 0
