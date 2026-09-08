@@ -102,6 +102,7 @@ interface PlayersSidebarProps {
   morphMode: boolean;
   socketId: string | null;
   onPlayerClick?: (player: PlayerSlot) => void;
+  isFreeDraw?: boolean;
 }
 
 interface FloatingPoints {
@@ -115,7 +116,8 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   gameState,
   morphMode,
   socketId,
-  onPlayerClick
+  onPlayerClick,
+  isFreeDraw = false,
 }) => {
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
@@ -345,7 +347,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                   <div className={`font-bold text-[13px] sm:text-[15.5px] truncate transition-colors duration-200 leading-tight ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
                      {slot.name}
                   </div>
-                  {!slot.isEmpty && (
+                  {!slot.isEmpty && !isFreeDraw && (
                     <div className={`text-[11px] sm:text-[13px] font-bold transition-colors duration-200 mt-0.5 leading-none ${ptsClass}`}>
                       {slot.points} pts
                     </div>

@@ -32,6 +32,7 @@ export default function DrawingBoard({
   status,
   onSyncStateChange,
   isFreeDraw = false,
+  onHistoryLengthChange,
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -44,6 +45,7 @@ export default function DrawingBoard({
   key?: any;
   onSyncStateChange?: (syncing: boolean) => void;
   isFreeDraw?: boolean;
+  onHistoryLengthChange?: (hasStrokes: boolean) => void;
 }) {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
 
@@ -63,14 +65,16 @@ export default function DrawingBoard({
   const [historyState, setHistoryState] = useState({ index: 0, length: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // Track readOnly and status transitions to reset tools/colors instantly when the user starts drawing
+  // Track readOnly and status transitions to reset tools/colors instantly when the user starts drawing in standard game rounds
   const prevReadOnlyRef = useRef(true);
   const prevStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     const becameDrawer = prevReadOnlyRef.current === true && readOnly === false;
     const drawingStartedAsArtist = status === 'DRAWING' && prevStatusRef.current !== 'DRAWING' && !readOnly;
 
-    if (becameDrawer || drawingStartedAsArtist) {
+    // In Free Draw mode, preserve user's chosen tool, color, thickness, opacity, eraser when toggling views.
+    // They only reset when the user completely leaves the room (unmounting the component).
+    if (!isFreeDraw && (becameDrawer || drawingStartedAsArtist)) {
       setTool('pencil');
       setColor('#000000');
       setPenWidth(3);
@@ -82,7 +86,7 @@ export default function DrawingBoard({
     }
     prevReadOnlyRef.current = readOnly;
     prevStatusRef.current = status;
-  }, [readOnly, status]);
+  }, [readOnly, status, isFreeDraw]);
 
   // Persistent Zoom & Pan preference
   const [zoomEnabled, setZoomEnabled] = useState(() => {
@@ -237,7 +241,10 @@ export default function DrawingBoard({
           currentDrawerId={currentDrawerId}
           status={status}
           isZoomEnabled={zoomEnabled}
-          onHistoryStateChange={(idx, len) => setHistoryState({ index: idx, length: len })}
+          onHistoryStateChange={(idx, len) => {
+            setHistoryState({ index: idx, length: len });
+            onHistoryLengthChange?.(idx > 0);
+          }}
           onPipetteColorPicked={(hex) => {
             setColor(hex);
             if (tool === 'pipette') {

@@ -75,63 +75,109 @@ interface HitNotification {
 }
 
 const SmoothTimer = ({
-  gameState,
+  status: propStatus,
+  initialTimeLeft: propInitialTimeLeft,
   maxTime,
   isFullScreen = false,
+  socket,
+  gameState,
 }: {
-  gameState: { status: string; timeLeft: number; currentWord?: string | null };
+  status?: string;
+  initialTimeLeft?: number;
   maxTime: number;
   isFullScreen?: boolean;
+  socket?: any;
+  gameState?: { status: string; timeLeft: number; currentWord?: string | null };
 }) => {
+  const currentStatus = propStatus || gameState?.status || "WAITING";
+  const currentInitialTimeLeft = propInitialTimeLeft ?? gameState?.timeLeft ?? 0;
+
   const barRef = React.useRef<HTMLDivElement>(null);
-  const lastTimeLeftRef = React.useRef(gameState.timeLeft);
+  const lastTimeLeftRef = React.useRef(currentInitialTimeLeft);
   const lastUpdateRef = React.useRef(Date.now());
-  const statusRef = React.useRef(gameState.status);
+  const statusRef = React.useRef(currentStatus);
+  const lastColorClassRef = React.useRef<string>("");
+  const lastWidthPctRef = React.useRef<number>(-1);
 
   React.useEffect(() => {
-    if (gameState.status !== statusRef.current) {
-      statusRef.current = gameState.status;
-      lastTimeLeftRef.current = gameState.timeLeft;
+    if (currentStatus !== statusRef.current) {
+      statusRef.current = currentStatus;
+      lastTimeLeftRef.current = currentInitialTimeLeft;
       lastUpdateRef.current = Date.now();
-    } else if (gameState.timeLeft !== lastTimeLeftRef.current) {
-      lastTimeLeftRef.current = gameState.timeLeft;
-      lastUpdateRef.current = Date.now();
+      lastColorClassRef.current = "";
+      lastWidthPctRef.current = -1;
     }
-  }, [gameState.timeLeft, gameState.status]);
+  }, [currentStatus, currentInitialTimeLeft]);
+
+  // Listen directly to timer_tick to update the local timer smoothly without triggering GameRoom re-renders!
+  React.useEffect(() => {
+    if (!socket) return;
+    const onTick = (data: { timeLeft: number; status: string }) => {
+      lastTimeLeftRef.current = data.timeLeft;
+      lastUpdateRef.current = Date.now();
+      if (data.status !== statusRef.current) {
+        statusRef.current = data.status;
+        lastColorClassRef.current = "";
+        lastWidthPctRef.current = -1;
+      }
+    };
+
+    socket.on("timer_tick", onTick);
+    return () => {
+      socket.off("timer_tick", onTick);
+    };
+  }, [socket]);
 
   React.useEffect(() => {
     let requestId: number;
-    const updateTimer = () => {
-      const now = Date.now();
-      const elapsed = (now - lastUpdateRef.current) / 1000;
-      let visualTimeLeft = lastTimeLeftRef.current - elapsed;
-      if (visualTimeLeft < 0) visualTimeLeft = 0;
-      let pct = (visualTimeLeft / maxTime) * 100;
-      pct = Math.max(0, Math.min(100, pct));
+    let lastFrameTime = 0;
 
-      if (barRef.current) {
-        barRef.current.style.width = `${pct}%`;
-        let timerColorClass =
-          "bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]";
-        if (gameState.status !== "DRAWING" && gameState.status !== "CHOOSING") {
-          timerColorClass =
-            "bg-[#1AD2FF] shadow-[0_0_8px_rgba(26,210,255,0.5)]";
-        } else {
-          if (pct <= 20) {
-            timerColorClass = "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]";
-          } else if (pct <= 50) {
+    const updateTimer = (currentTime: number) => {
+      // Throttle rAF frame rate to ~60fps max (skip duplicate frames on 90Hz/120Hz displays)
+      if (currentTime - lastFrameTime >= 16) {
+        lastFrameTime = currentTime;
+        const now = Date.now();
+        const elapsed = (now - lastUpdateRef.current) / 1000;
+        let visualTimeLeft = lastTimeLeftRef.current - elapsed;
+        if (visualTimeLeft < 0) visualTimeLeft = 0;
+        let pct = (visualTimeLeft / maxTime) * 100;
+        pct = Math.max(0, Math.min(100, pct));
+
+        if (barRef.current) {
+          // Only update style.width when visual delta is meaningful (>= 0.05%) or boundary (0, 100)
+          if (Math.abs(pct - lastWidthPctRef.current) >= 0.05 || pct <= 0 || pct >= 100) {
+            lastWidthPctRef.current = pct;
+            barRef.current.style.width = `${pct.toFixed(2)}%`;
+          }
+
+          let timerColorClass =
+            "bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]";
+          if (statusRef.current !== "DRAWING" && statusRef.current !== "CHOOSING") {
             timerColorClass =
-              "bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]";
+              "bg-[#1AD2FF] shadow-[0_0_8px_rgba(26,210,255,0.5)]";
+          } else {
+            if (pct <= 20) {
+              timerColorClass = "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]";
+            } else if (pct <= 50) {
+              timerColorClass =
+                "bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]";
+            }
+          }
+
+          // Crucial performance optimization: ONLY write to className if the color class actually changed!
+          if (lastColorClassRef.current !== timerColorClass) {
+            lastColorClassRef.current = timerColorClass;
+            barRef.current.className = `h-full rounded-full ${timerColorClass}`;
           }
         }
-        barRef.current.className = `h-full rounded-full ${timerColorClass}`;
       }
 
       requestId = requestAnimationFrame(updateTimer);
     };
+
     requestId = requestAnimationFrame(updateTimer);
     return () => cancelAnimationFrame(requestId);
-  }, [maxTime, gameState.status]);
+  }, [maxTime, currentStatus]);
 
   return (
     <div
@@ -244,6 +290,11 @@ export default function GameRoom({
     wordOptions: [],
   });
 
+  const gameStateRef = React.useRef(gameState);
+  React.useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+
   const [showCorrectAnimation, setShowCorrectAnimation] = useState(false);
   const [hitNotifications, setHitNotifications] = useState<HitNotification[]>(
     [],
@@ -256,6 +307,7 @@ export default function GameRoom({
   const [isFreeDrawRoom, setIsFreeDrawRoom] = useState(Boolean(roomConfig?.isFreeDraw));
   const [activeDrawers, setActiveDrawers] = useState<string[]>([]);
   const [hasEnteredFreeDraw, setHasEnteredFreeDraw] = useState(false);
+  const [hasDrawHistory, setHasDrawHistory] = useState(false);
   const isFreeDraw = Boolean(roomConfig?.isFreeDraw || gameState?.isFreeDraw || isFreeDrawRoom);
 
   const handleStartFreeDraw = () => {
@@ -542,6 +594,22 @@ export default function GameRoom({
 
   const isDrawingMode = isFreeDraw ? amIDrawer : (gameState.status === "DRAWING" && amIDrawer);
 
+  // ⏱️ Single Unified SmoothTimer Slot targets & active container
+  const [drawerTimerSlotEl, setDrawerTimerSlotEl] = useState<HTMLDivElement | null>(null);
+  const [spectatorTimerSlotEl, setSpectatorTimerSlotEl] = useState<HTMLDivElement | null>(null);
+
+  const handleDrawerSlotRef = React.useCallback((el: HTMLDivElement | null) => {
+    setDrawerTimerSlotEl((prev) => (prev !== el ? el : prev));
+  }, []);
+
+  const handleSpectatorSlotRef = React.useCallback((el: HTMLDivElement | null) => {
+    setSpectatorTimerSlotEl((prev) => (prev !== el ? el : prev));
+  }, []);
+
+  const activeTimerContainer = !isFreeDraw
+    ? (isDrawingMode && drawerTimerSlotEl ? drawerTimerSlotEl : spectatorTimerSlotEl)
+    : null;
+
   const hasAlreadyReported = React.useMemo(() => {
     if (!gameState.reports) return false;
     return (
@@ -692,12 +760,18 @@ export default function GameRoom({
       isFreeDraw?: boolean;
       activeDrawers?: string[];
       gameState: any;
+      hasDrawHistory?: boolean;
     }) => {
       if (typeof state.isFreeDraw !== "undefined") {
         setIsFreeDrawRoom(Boolean(state.isFreeDraw));
       }
       if (state.activeDrawers) {
         setActiveDrawers(state.activeDrawers);
+      }
+      if (typeof state.hasDrawHistory !== "undefined") {
+        setHasDrawHistory(Boolean(state.hasDrawHistory));
+      } else if (state.gameState && typeof state.gameState.hasDrawHistory !== "undefined") {
+        setHasDrawHistory(Boolean(state.gameState.hasDrawHistory));
       }
       if (state.votekicks) {
         setVotekicks(state.votekicks);
@@ -776,11 +850,24 @@ export default function GameRoom({
     };
 
     const onTimerTick = (data: { timeLeft: number; status: string }) => {
-      setGameState((prev) => ({
-        ...prev,
-        timeLeft: data.timeLeft,
-        status: data.status,
-      }));
+      // 1. Keep gameStateRef.current.timeLeft synchronously up to date without re-rendering GameRoom
+      if (gameStateRef.current) {
+        gameStateRef.current.timeLeft = data.timeLeft;
+      }
+
+      // 2. Only trigger GameRoom state update / re-render if the game phase status changed
+      // (e.g. WAITING -> CHOOSING -> DRAWING -> ROUND_END -> PODIUM)
+      // or if round countdown reached zero (boundary transition)
+      const statusChanged = data.status !== gameStateRef.current?.status;
+      const reachedZero = data.timeLeft <= 0 && (gameStateRef.current?.timeLeft ?? 0) > 0;
+
+      if (statusChanged || reachedZero) {
+        setGameState((prev: any) => ({
+          ...prev,
+          status: data.status,
+          timeLeft: data.timeLeft,
+        }));
+      }
     };
 
     const onReceiveMessage = (msg: any) => {
@@ -897,6 +984,13 @@ export default function GameRoom({
       setIsInitialLoadingRoom(false);
     };
 
+    const onDrawBinary = () => {
+      setHasDrawHistory(true);
+    };
+    const onDrawHistorySync = (history: any[]) => {
+      setHasDrawHistory(Boolean(history && history.length > 0));
+    };
+
     socket.on("room_state_update", onRoomStateUpdate);
     socket.on("receive_message", onReceiveMessage);
     socket.on("receive_guess", onReceiveGuess);
@@ -904,6 +998,8 @@ export default function GameRoom({
     socket.on("session_expired", onSessionExpired);
     socket.on("afk_warning", onAfkWarning);
     socket.on("banned_from_room", onBannedFromRoom);
+    socket.on("draw_binary", onDrawBinary);
+    socket.on("draw_history_sync", onDrawHistorySync);
 
     return () => {
       socket.off("room_state_update", onRoomStateUpdate);
@@ -913,6 +1009,8 @@ export default function GameRoom({
       socket.off("session_expired", onSessionExpired);
       socket.off("afk_warning", onAfkWarning);
       socket.off("banned_from_room", onBannedFromRoom);
+      socket.off("draw_binary", onDrawBinary);
+      socket.off("draw_history_sync", onDrawHistorySync);
     };
   }, [socket]);
 
@@ -1409,14 +1507,14 @@ export default function GameRoom({
             className={`w-full max-w-full h-auto max-h-full aspect-[740/430] shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative ${morphMode ? "rounded-bl-[6px] sm:rounded-bl-[8px]" : ""}`}
           >
             {/* Floating button for Free Draw: shown when player returned to room, or new player entering active room */}
-            {isFreeDraw && !isDrawingMode && (hasEnteredFreeDraw || activeDrawers.length > 0) && (
+            {isFreeDraw && !isDrawingMode && (hasEnteredFreeDraw || activeDrawers.length > 0 || hasDrawHistory) && (
               <button
                 type="button"
                 onClick={handleStartFreeDraw}
                 className="absolute top-2 left-2 z-[60] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer pointer-events-auto border border-white/40"
               >
                 <Pencil size={14} className="stroke-[2.5]" />
-                <span>{hasEnteredFreeDraw ? "العودة للرسم" : (activeDrawers.length > 0 ? "انضم للرسم" : "ابدأ الرسم")}</span>
+                <span>{hasEnteredFreeDraw ? "العودة للرسم" : (activeDrawers.length > 0 || hasDrawHistory ? "انضم للرسم" : "ابدأ الرسم")}</span>
               </button>
             )}
 
@@ -1478,6 +1576,9 @@ export default function GameRoom({
                 readOnly={!isDrawingMode}
                 isFreeDraw={isFreeDraw}
                 onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
+                onHistoryLengthChange={(hasStrokes) => {
+                  setHasDrawHistory(hasStrokes);
+                }}
                 onSkipTurn={
                   !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
                     ? () => setShowSkipConfirm(true)
@@ -1490,11 +1591,11 @@ export default function GameRoom({
                 }
                 timerPercentage={isFreeDraw ? 100 : timerPercentage}
                 timerBarNode={
-                  !isFreeDraw && isDrawingMode ? (
-                    <SmoothTimer
-                      gameState={gameState}
-                      maxTime={getMaxTime()}
-                      isFullScreen={true}
+                  !isFreeDraw ? (
+                    <div
+                      id="timer-slot-drawer"
+                      ref={handleDrawerSlotRef}
+                      className="w-full shrink-0"
                     />
                   ) : undefined
                 }
@@ -1648,17 +1749,32 @@ export default function GameRoom({
               onStartFreeDraw={handleStartFreeDraw}
               activeDrawersCount={activeDrawers.length}
               hasEnteredFreeDraw={hasEnteredFreeDraw}
+              hasDrawHistory={hasDrawHistory}
             />
           </div>
 
-          {/* Timer Bar (hidden in Free Draw mode) */}
+          {/* Spectator Timer Slot (hidden in Free Draw mode) */}
           {!isFreeDraw && (
-            <SmoothTimer
-              gameState={gameState}
-              maxTime={getMaxTime()}
-              isFullScreen={false}
+            <div
+              id="timer-slot-spectator"
+              ref={handleSpectatorSlotRef}
+              className="w-full shrink-0"
             />
           )}
+
+          {/* ⏱️ Single Unified SmoothTimer Instance: Moves cleanly between spectator & drawer slots */}
+          {activeTimerContainer &&
+            createPortal(
+              <SmoothTimer
+                key="single-unified-game-timer"
+                status={gameState.status}
+                initialTimeLeft={gameState.timeLeft}
+                maxTime={getMaxTime()}
+                isFullScreen={isDrawingMode}
+                socket={socket}
+              />,
+              activeTimerContainer
+            )}
         </div>
 
         {/* Left: Players Sidebar */}
@@ -1668,6 +1784,7 @@ export default function GameRoom({
           morphMode={morphMode}
           socketId={socketId}
           onPlayerClick={setSelectedProfilePlayer}
+          isFreeDraw={isFreeDraw}
         />
 
         {/* Right: Actions & Guess Input */}
@@ -1986,10 +2103,12 @@ export default function GameRoom({
                     </div>
                   );
                 })}
-                <div className="flex items-center gap-1.5 text-primary-brand font-normal text-sm sm:text-base">
-                  <Info size={14} />
-                  Waiting for players
-                </div>
+                {!isFreeDraw && (
+                  <div className="flex items-center gap-1.5 text-primary-brand font-normal text-sm sm:text-base">
+                    <Info size={14} />
+                    Waiting for players
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1999,7 +2118,7 @@ export default function GameRoom({
               style={{ paddingBottom: 'calc(0.5rem + var(--keyboard-inset, 0px))' }}
             >
               <form onSubmit={handleGuessSubmit} className="relative">
-                {!isInputFocused && (
+                {!isInputFocused && !isFreeDraw && (
                   <div
                     className={`absolute left-4 top-1/2 -translate-y-1/2 transition-opacity duration-200 pointer-events-none ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
                   >
@@ -2021,19 +2140,19 @@ export default function GameRoom({
                   data-1p-ignore="true"
                   data-lpignore="true"
                   data-form-type="other"
-                  disabled={isInputDisabled}
-                  value={isInputDisabled ? "" : guessInput}
+                  disabled={isInputDisabled || isFreeDraw}
+                  value={isInputDisabled || isFreeDraw ? "" : guessInput}
                   onChange={(e) => setGuessInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      if (guessInput.trim() && !isInputDisabled) {
+                      if (guessInput.trim() && !isInputDisabled && !isFreeDraw) {
                         handleGuessSubmit(e as any);
                       }
                     }
                   }}
                   onFocus={() => {
-                    if (isInputDisabled) {
+                    if (isInputDisabled || isFreeDraw) {
                       guessInputRef.current?.blur();
                       return;
                     }
@@ -2046,7 +2165,7 @@ export default function GameRoom({
                   }}
                   placeholder={
                     isFreeDraw
-                      ? (amIDrawer ? "أنت ترسم الآن..." : "رسم حر (استخدم زر الدردشة للتحدث)")
+                      ? ""
                       : gameState.status === "WAITING"
                         ? "Waiting..."
                         : gameState.status === "ROUND_END"
@@ -2065,7 +2184,7 @@ export default function GameRoom({
                                   ? "You've found the answer!"
                                   : "Answer here..."
                   }
-                  className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused ? "pl-4" : "pl-11"} pr-4 py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
+                  className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused || isFreeDraw ? "pl-4" : "pl-11"} pr-4 py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled || isFreeDraw ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
                   style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                 />
               </form>

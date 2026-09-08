@@ -906,14 +906,17 @@ const words = word.split(" ").filter(w => w.length > 0);
         (Boolean(room.isFreeDraw) && Boolean(room.activeDrawers?.includes(p.id) || (p.persistentId && room.activeDrawers?.includes(p.persistentId))));
       const isRTL = /[\u0600-\u06FF]/.test(word);
       const { drawHistory, ...publicGameState } = room.gameState;
+      const hasHistory = Boolean(room.gameState.drawHistory && room.gameState.drawHistory.length > 0);
       this.io.to(p.id).emit("room_state_update", {
         roomId: room.id,
         players: room.players,
         votekicks: room.votekicks || {},
         isFreeDraw: !!room.isFreeDraw,
         activeDrawers: room.activeDrawers || [],
+        hasDrawHistory: hasHistory,
         gameState: {
           ...publicGameState,
+          hasDrawHistory: hasHistory,
           currentWord: isDrawer ? room.gameState.currentWord : null,
           wordOptions: isDrawer ? room.gameState.wordOptions : [],
           maskedWordArray: maskedWordArray,
@@ -1265,6 +1268,12 @@ const words = word.split(" ").filter(w => w.length > 0);
         }
 
         if (room.players.length === 0) {
+          // Immediately purge drawing history, redo stack, and chat to free memory
+          if (room.gameState) {
+            room.gameState.drawHistory = [];
+            room.gameState.redoStack = [];
+          }
+          room.chatMessages = [];
           this.rooms.delete(roomId);
           return undefined; // Room deleted
         }
@@ -1383,6 +1392,17 @@ const words = word.split(" ").filter(w => w.length > 0);
       room.guessMessages.forEach((msg) => {
         if (msg.senderId === oldSocketId) msg.senderId = newSocketId;
       });
+    }
+
+    // Preserve activeDrawers mapping for reconnected player in Free Draw
+    if (room.activeDrawers) {
+      if (oldSocketId && room.activeDrawers.includes(oldSocketId)) {
+        room.activeDrawers = room.activeDrawers.map((id) => (id === oldSocketId ? newSocketId : id));
+      }
+      const playerPid = existingPlayer.persistentId;
+      if (playerPid && room.activeDrawers.includes(playerPid) && !room.activeDrawers.includes(newSocketId)) {
+        room.activeDrawers.push(newSocketId);
+      }
     }
 
     this.broadcastState(room);

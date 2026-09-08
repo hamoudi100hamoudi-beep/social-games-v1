@@ -29,6 +29,7 @@ interface MiniBoardOverlayProps {
   onStartFreeDraw?: () => void;
   activeDrawersCount?: number;
   hasEnteredFreeDraw?: boolean;
+  hasDrawHistory?: boolean;
 }
 
 export function MiniBoardOverlay({
@@ -40,6 +41,7 @@ export function MiniBoardOverlay({
   onStartFreeDraw,
   activeDrawersCount = 0,
   hasEnteredFreeDraw = false,
+  hasDrawHistory = false,
 }: MiniBoardOverlayProps) {
   // We use this z-index to overlay inside the DrawingBoard
   const containerClass = "absolute inset-0 z-[40] flex flex-col items-center justify-between bg-white pointer-events-auto p-2 sm:p-4 select-none font-sans overflow-y-auto min-h-0";
@@ -55,15 +57,27 @@ export function MiniBoardOverlay({
 
   const getAnimClass = (className: string) => playPodiumAnimations.current ? className : "";
 
-  // If Free Draw mode: hide overlay once player has drawn, or if someone is already drawing, so spectator sees live drawing
-  if (isFreeDraw && (hasEnteredFreeDraw || activeDrawersCount > 0 || amIDrawer)) {
+  // If Free Draw mode: hide overlay if player has drawn, if someone is drawing, or if draw history exists
+  const historyPresent = Boolean(hasDrawHistory || gameState?.hasDrawHistory);
+  if (
+    isFreeDraw &&
+    (hasEnteredFreeDraw ||
+      activeDrawersCount > 0 ||
+      amIDrawer ||
+      historyPresent)
+  ) {
     return null;
   }
 
   return (
     <AnimatePresence mode="wait">
       {/* 1. FREE DRAW START SCREEN OR WAITING FOR PLAYERS */}
-      {(isFreeDraw ? (!hasEnteredFreeDraw && activeDrawersCount === 0 && !amIDrawer) : gameState.status === "WAITING") && (
+      {(isFreeDraw
+        ? !hasEnteredFreeDraw &&
+          activeDrawersCount === 0 &&
+          !amIDrawer &&
+          !historyPresent
+        : gameState.status === "WAITING") && (
         <motion.div
           key="waiting-overlay"
           initial={{ opacity: 0 }}
