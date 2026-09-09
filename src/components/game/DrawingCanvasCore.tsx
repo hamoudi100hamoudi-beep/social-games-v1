@@ -359,13 +359,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Dynamic references to read props values directly in listeners without re-binding
   const propsRef = useRef({ tool, color, thickness, opacity, readOnly });
+  propsRef.current = { tool, color, thickness, opacity, readOnly };
   useEffect(() => {
     propsRef.current = { tool, color, thickness, opacity, readOnly };
   }, [tool, color, thickness, opacity, readOnly]);
 
-  const applyTransform = (overrideBaseScale?: number) => {
+  const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
+  applyTransformRef.current = (overrideBaseScale?: number) => {
     if (transformWrapperRef.current) {
-      if (readOnly) {
+      if (propsRef.current.readOnly) {
         transformWrapperRef.current.style.transform = 'none';
         return;
       }
@@ -374,6 +376,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       transformWrapperRef.current.style.transform = `translate(${x}px, ${y}px) scale(${currentBaseScale * scale})`;
     }
   };
+  const applyTransform = (overrideBaseScale?: number) => applyTransformRef.current(overrideBaseScale);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -590,7 +593,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }
 
-      if (!isZoomEnabled || propsRef.current.readOnly || !isPinching) return;
+      if (!isZoomEnabled || propsRef.current.readOnly) return;
 
       if (e.touches.length === 2) {
         e.preventDefault();
@@ -599,39 +602,58 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const t2 = e.touches[1];
 
         const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-        if (touchStartDist > 0) {
-          const rect = container.getBoundingClientRect();
+        const rect = container.getBoundingClientRect();
+
+        // If touchStart was missed, interrupted, or zero-distance, re-anchor cleanly
+        if ((!isPinching || touchStartDist <= 0) && dist > 0) {
+          isPinching = true;
+          isZoomPinchingRef.current = true;
+          touchStartDist = dist;
+          touchStartScale = (transformRef.current.scale && isFinite(transformRef.current.scale) && transformRef.current.scale > 0) ? transformRef.current.scale : 1;
+          touchStartCenterX = (t1.clientX + t2.clientX) / 2 - rect.left;
+          touchStartCenterY = (t1.clientY + t2.clientY) / 2 - rect.top;
+          touchStartX = isFinite(transformRef.current.x) ? transformRef.current.x : 0;
+          touchStartY = isFinite(transformRef.current.y) ? transformRef.current.y : 0;
+        }
+
+        if (touchStartDist > 0 && dist > 0) {
           const containerW = rect.width;
           const containerH = rect.height;
 
           // Dynamically compute perfect fit scale so mobile user can see full drawing stage
-          const fitWidthScale = containerW / (LOGICAL_WIDTH * baseScaleRef.current);
-          const fitHeightScale = containerH / (LOGICAL_HEIGHT * baseScaleRef.current);
+          const currentBase = (baseScaleRef.current && isFinite(baseScaleRef.current) && baseScaleRef.current > 0) ? baseScaleRef.current : 1;
+          const fitWidthScale = containerW / (LOGICAL_WIDTH * currentBase);
+          const fitHeightScale = containerH / (LOGICAL_HEIGHT * currentBase);
           const perfectFitScale = Math.min(fitWidthScale, fitHeightScale);
-          const minScaleLimit = Math.max(0.3, Math.min(1.0, perfectFitScale * 0.9));
+          const minScaleLimit = Math.max(0.3, Math.min(1.0, (isFinite(perfectFitScale) && perfectFitScale > 0 ? perfectFitScale : 1) * 0.9));
 
           let scaleFactor = dist / touchStartDist;
-          let nextScale = Math.max(minScaleLimit, Math.min(4.0, touchStartScale * scaleFactor));
+          if (!isFinite(scaleFactor) || scaleFactor <= 0) scaleFactor = 1;
+          const safeStartScale = (touchStartScale && isFinite(touchStartScale) && touchStartScale > 0) ? touchStartScale : 1;
+          let nextScale = Math.max(minScaleLimit, Math.min(4.0, safeStartScale * scaleFactor));
+          if (!isFinite(nextScale)) nextScale = 1;
 
           const clientMidX = (t1.clientX + t2.clientX) / 2;
           const clientMidY = (t1.clientY + t2.clientY) / 2;
           const currentCenterX = clientMidX - rect.left;
           const currentCenterY = clientMidY - rect.top;
 
-          let nextX = currentCenterX - ((touchStartCenterX - touchStartX) / touchStartScale) * nextScale;
-          let nextY = currentCenterY - ((touchStartCenterY - touchStartY) / touchStartScale) * nextScale;
+          let nextX = currentCenterX - ((touchStartCenterX - touchStartX) / safeStartScale) * nextScale;
+          let nextY = currentCenterY - ((touchStartCenterY - touchStartY) / safeStartScale) * nextScale;
+          if (!isFinite(nextX)) nextX = transformRef.current.x || 0;
+          if (!isFinite(nextY)) nextY = transformRef.current.y || 0;
 
           // Apply boundary buffers to prevent the canvas from getting lost offscreen
-          const dispW = LOGICAL_WIDTH * baseScaleRef.current * nextScale;
-          const dispH = LOGICAL_HEIGHT * baseScaleRef.current * nextScale;
+          const dispW = LOGICAL_WIDTH * currentBase * nextScale;
+          const dispH = LOGICAL_HEIGHT * currentBase * nextScale;
 
           const minX = -dispW + 100;
           const maxX = containerW - 100;
           const minY = -dispH + 100;
           const maxY = containerH - 100;
 
-          nextX = Math.max(minX, Math.min(maxX, nextX));
-          nextY = Math.max(minY, Math.min(maxY, nextY));
+          if (minX <= maxX) nextX = Math.max(minX, Math.min(maxX, nextX));
+          if (minY <= maxY) nextY = Math.max(minY, Math.min(maxY, nextY));
 
           transformRef.current = { scale: nextScale, x: nextX, y: nextY };
           hasManuallyZoomedOrPanned.current = true;
@@ -689,7 +711,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [isZoomEnabled]);
+  }, [isZoomEnabled, readOnly]);
 
   // --- Desktop Wheel / Pinch Zoom ---
   useEffect(() => {
@@ -741,7 +763,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     return () => {
       container.removeEventListener('wheel', handleWheel);
     };
-  }, [isZoomEnabled]);
+  }, [isZoomEnabled, readOnly]);
 
   // --- Desktop Click-Drag To Pan (Right Click / Middle Click-Drag) ---
   useEffect(() => {
@@ -827,7 +849,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       container.removeEventListener('pointercancel', handlePointerUp);
       container.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [isZoomEnabled]);
+  }, [isZoomEnabled, readOnly]);
 
   // Expose handles to Parent Component
   useImperativeHandle(ref, () => ({

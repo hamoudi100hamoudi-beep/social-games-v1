@@ -328,12 +328,18 @@ export default function GameRoom({
   };
 
   const openChat = () => {
+    if (chatMessagesRef.current.length > 0 && chatMessagesRef.current !== chatMessages) {
+      setChatMessages(chatMessagesRef.current);
+    }
     setIsChatOpen(true);
+    isChatOpenRef.current = true;
     setUnreadCount(0);
+    unreadCountRef.current = 0;
   };
 
   const closeChat = () => {
     setIsChatOpen(false);
+    isChatOpenRef.current = false;
     const textarea = document.getElementById("chat-textarea");
     if (textarea) {
       textarea.blur();
@@ -345,6 +351,33 @@ export default function GameRoom({
   const [guesses, setGuesses] = useState<Message[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
+
+  // 🛡️ High-Performance Synchronous Mirrors to buffer background updates during active drawing
+  const chatMessagesRef = React.useRef<Message[]>([]);
+  const guessesRef = React.useRef<Message[]>([]);
+  const currentPlayersRef = React.useRef<PlayerSlot[]>([]);
+  const unreadCountRef = React.useRef<number>(0);
+  const isChatOpenRef = React.useRef<boolean>(false);
+
+  React.useEffect(() => {
+    chatMessagesRef.current = chatMessages;
+  }, [chatMessages]);
+
+  React.useEffect(() => {
+    guessesRef.current = guesses;
+  }, [guesses]);
+
+  React.useEffect(() => {
+    currentPlayersRef.current = currentPlayers;
+  }, [currentPlayers]);
+
+  React.useEffect(() => {
+    unreadCountRef.current = unreadCount;
+  }, [unreadCount]);
+
+  React.useEffect(() => {
+    isChatOpenRef.current = isChatOpen;
+  }, [isChatOpen]);
 
   const confettis = React.useMemo(() => {
     if (gameState.status !== "PODIUM") return [];
@@ -549,18 +582,6 @@ export default function GameRoom({
   }, []);
 
   useEffect(() => {
-    // Player Join / Leave sounds
-    if (eventGate.isLive() && canPlaySoundRef.current && prevPlayersLengthRef.current > 0) {
-      if (currentPlayers.length > prevPlayersLengthRef.current) {
-        soundManager.play("playerJoin");
-      } else if (currentPlayers.length < prevPlayersLengthRef.current) {
-        soundManager.play("playerLeave");
-      }
-    }
-    prevPlayersLengthRef.current = currentPlayers.length;
-  }, [currentPlayers.length, eventGate]);
-
-  useEffect(() => {
     // Game Status sounds
     const curr = gameState.status;
     const prev = prevGameStateStatusRef.current;
@@ -593,6 +614,29 @@ export default function GameRoom({
   }, [gameState.hintsUsed, eventGate]);
 
   const isDrawingMode = isFreeDraw ? amIDrawer : (gameState.status === "DRAWING" && amIDrawer);
+  const isDrawingModeRef = React.useRef<boolean>(isDrawingMode);
+
+  React.useEffect(() => {
+    isDrawingModeRef.current = isDrawingMode;
+  }, [isDrawingMode]);
+
+  // 🛡️ When active drawing mode finishes, flush any buffered background data cleanly to React state
+  React.useEffect(() => {
+    if (!isDrawingMode) {
+      if (chatMessagesRef.current.length > 0 && chatMessagesRef.current !== chatMessages) {
+        setChatMessages(chatMessagesRef.current);
+      }
+      if (unreadCountRef.current > 0 && unreadCountRef.current !== unreadCount) {
+        setUnreadCount(unreadCountRef.current);
+      }
+      if (guessesRef.current.length > 0 && guessesRef.current !== guesses) {
+        setGuesses(guessesRef.current);
+      }
+      if (currentPlayersRef.current.length > 0 && currentPlayersRef.current !== currentPlayers) {
+        setCurrentPlayers(currentPlayersRef.current);
+      }
+    }
+  }, [isDrawingMode]);
 
   // ⏱️ Single Unified SmoothTimer Slot targets & active container
   const [drawerTimerSlotEl, setDrawerTimerSlotEl] = useState<HTMLDivElement | null>(null);
@@ -788,59 +832,73 @@ export default function GameRoom({
         prevHintsUsedRef.current = state.gameState?.hintsUsed || 0;
         prevCorrectGuessersRef.current = state.gameState?.correctGuessers || [];
       } else {
+        // 🔊 Player Join / Leave sounds: trigger immediately for all players (including the active drawer)
+        if (canPlaySoundRef.current && prevPlayersLengthRef.current > 0) {
+          if (state.players.length > prevPlayersLengthRef.current) {
+            soundManager.play("playerJoin");
+          } else if (state.players.length < prevPlayersLengthRef.current) {
+            soundManager.play("playerLeave");
+          }
+        }
+        prevPlayersLengthRef.current = state.players.length;
+
         // Calculate isNew for each player before the state updater
         state.players.forEach((p) => {
           newPlayersMap.set(p.id, eventGate.isNewPlayer(p.id));
         });
       }
 
-      setCurrentPlayers((prevPlayers) => {
-        const mapped = state.players.map((p) => ({
-          id: p.id,
-          name: p.name,
-          points: p.score || 0,
-          wins: p.wins || 0,
-          isCurrent:
-            isActiveRound &&
-            state.gameState?.currentDrawerId === (p.persistentId || p.id),
-          isOffline: p.isOffline || false,
-          avatar: p.avatar,
-          isEmpty: false,
-          persistentId: p.persistentId,
-          isNew: newPlayersMap.get(p.id) || false,
-        }));
+      const prevPlayers = currentPlayersRef.current;
+      const mapped = state.players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        points: p.score || 0,
+        wins: p.wins || 0,
+        isCurrent:
+          isActiveRound &&
+          state.gameState?.currentDrawerId === (p.persistentId || p.id),
+        isOffline: p.isOffline || false,
+        avatar: p.avatar,
+        isEmpty: false,
+        persistentId: p.persistentId,
+        isNew: newPlayersMap.get(p.id) || false,
+      }));
 
-        mapped.sort((a, b) => {
-          // If points are different, sort by points descending
-          if (b.points !== a.points) {
-            return b.points - a.points;
-          }
+      mapped.sort((a, b) => {
+        // If points are different, sort by points descending
+        if (b.points !== a.points) {
+          return b.points - a.points;
+        }
 
-          // If points are identical and > 0, use the exact same tie-breaker as the server
-          // (which is the join order, reflected by their index in state.players)
-          if (b.points > 0) {
-            const indexA_server = state.players.findIndex((p) => p.id === a.id);
-            const indexB_server = state.players.findIndex((p) => p.id === b.id);
-            return indexA_server - indexB_server;
-          }
+        // If points are identical and > 0, use the exact same tie-breaker as the server
+        // (which is the join order, reflected by their index in state.players)
+        if (b.points > 0) {
+          const indexA_server = state.players.findIndex((p) => p.id === a.id);
+          const indexB_server = state.players.findIndex((p) => p.id === b.id);
+          return indexA_server - indexB_server;
+        }
 
-          // If points are identical (such as a round-end score reset or tie), preserve their previous ranking order
-          const indexA = prevPlayers.findIndex((p) => p.id === a.id);
-          const indexB = prevPlayers.findIndex((p) => p.id === b.id);
+        // If points are identical (such as a round-end score reset or tie), preserve their previous ranking order
+        const indexA = prevPlayers.findIndex((p) => p.id === a.id);
+        const indexB = prevPlayers.findIndex((p) => p.id === b.id);
 
-          if (indexA !== -1 && indexB !== -1) {
-            return indexA - indexB;
-          }
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        }
 
-          // Fallback if one is new
-          if (indexA !== -1) return -1;
-          if (indexB !== -1) return 1;
+        // Fallback if one is new
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
 
-          return a.name.localeCompare(b.name);
-        });
-
-        return mapped;
+        return a.name.localeCompare(b.name);
       });
+
+      currentPlayersRef.current = mapped;
+
+      // 🛡️ Only update currentPlayers state when NOT drawing or on initial hydration to avoid heavy sidebar re-renders
+      if (!isDrawingModeRef.current || prevPlayers.length === 0) {
+        setCurrentPlayers(mapped);
+      }
 
       if (state.gameState) {
         setGameState((prev: any) => {
@@ -871,52 +929,60 @@ export default function GameRoom({
     };
 
     const onReceiveMessage = (msg: any) => {
-      // 🔊 Play chat message sound (skip if it's from self or if it's a system message)
+      // 🔊 Play notification sound for system messages (chatMessage sound is completely removed)
       if (eventGate.isLive() && canPlaySoundRef.current) {
-        if (msg.type !== "system" && msg.senderId !== socket.id) {
-          soundManager.play('chatMessage');
-        } else if (msg.type === "system") {
+        if (msg.type === "system") {
           soundManager.play('notification');
         }
       }
 
-      setChatMessages((prev) => {
-        if (prev.some((m) => m.id === msg.id)) {
-          return prev;
-        }
-        const updated = [
-          ...prev,
-          {
-            ...msg,
-            isSelf: msg.senderId === socket.id,
-          },
-        ];
-        return updated.slice(-40);
-      });
+      if (chatMessagesRef.current.some((m) => m.id === msg.id)) {
+        return;
+      }
 
-      setIsChatOpen((currentOpenState) => {
-        if (!currentOpenState) {
-          setUnreadCount((prevCount) => prevCount + 1);
+      const updated = [
+        ...chatMessagesRef.current,
+        {
+          ...msg,
+          isSelf: msg.senderId === socket.id,
+        },
+      ].slice(-40);
+
+      chatMessagesRef.current = updated;
+
+      if (!isChatOpenRef.current) {
+        unreadCountRef.current += 1;
+      }
+
+      // 🛡️ If not in drawing mode OR if chat overlay is currently open, update React state immediately
+      if (!isDrawingModeRef.current || isChatOpenRef.current) {
+        setChatMessages(updated);
+        if (!isChatOpenRef.current) {
+          setUnreadCount(unreadCountRef.current);
         }
-        return currentOpenState;
-      });
+      }
     };
 
     const onReceiveGuess = (msg: any) => {
-      setGuesses((prev) => {
-        if (prev.some((m) => m.id === msg.id)) {
-          return prev;
-        }
+      // 1. Synchronously buffer every guess into guessesRef (0% data loss)
+      if (!guessesRef.current.some((m) => m.id === msg.id)) {
         const updated = [
-          ...prev,
+          ...guessesRef.current,
           {
             ...msg,
             isSelf: msg.senderId === socket.id,
           },
-        ];
-        return updated.slice(-40);
-      });
+        ].slice(-40);
 
+        guessesRef.current = updated;
+
+        // 🛡️ Only trigger React state update for the hidden guess list if NOT in active drawing mode
+        if (!isDrawingModeRef.current) {
+          setGuesses(updated);
+        }
+      }
+
+      // 2. Instant Drawer Feedback & Sounds (NEVER delayed)
       if (msg.subType === "hit") {
         if (msg.senderId === socket.id) {
           if (guessInputRef.current) {
@@ -929,7 +995,7 @@ export default function GameRoom({
           
           setTimeout(() => setShowCorrectAnimation(false), 1500);
         } else {
-          // 🔊 Play different sound when someone else gets the correct answer
+          // 🔊 Play sound when someone else gets the correct answer (CRITICAL for active drawer)
           if (eventGate.isLive() && canPlaySoundRef.current) soundManager.play('correctGuessOther');
         }
 
