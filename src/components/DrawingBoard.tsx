@@ -33,6 +33,7 @@ export default function DrawingBoard({
   onSyncStateChange,
   isFreeDraw = false,
   onHistoryLengthChange,
+  amIDrawer = false,
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -46,6 +47,7 @@ export default function DrawingBoard({
   onSyncStateChange?: (syncing: boolean) => void;
   isFreeDraw?: boolean;
   onHistoryLengthChange?: (hasStrokes: boolean) => void;
+  amIDrawer?: boolean;
 }) {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
 
@@ -65,16 +67,23 @@ export default function DrawingBoard({
   const [historyState, setHistoryState] = useState({ index: 0, length: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  // Track readOnly and status transitions to reset tools/colors instantly when the user starts drawing in standard game rounds
+  // Track readOnly, status, and amIDrawer transitions to reset tools/colors cleanly.
+  // Pre-initialization happens during CHOOSING if the player is designated as drawer,
+  // relieving the main thread during the critical DRAWING transition.
   const prevReadOnlyRef = useRef(true);
   const prevStatusRef = useRef<string | undefined>(undefined);
-  useEffect(() => {
-    const becameDrawer = prevReadOnlyRef.current === true && readOnly === false;
-    const drawingStartedAsArtist = status === 'DRAWING' && prevStatusRef.current !== 'DRAWING' && !readOnly;
+  const hasResetForCurrentTurnRef = useRef(false);
 
+  useEffect(() => {
     // In Free Draw mode, preserve user's chosen tool, color, thickness, opacity, eraser when toggling views.
     // They only reset when the user completely leaves the room (unmounting the component).
-    if (!isFreeDraw && (becameDrawer || drawingStartedAsArtist)) {
+    if (isFreeDraw) {
+      prevReadOnlyRef.current = readOnly;
+      prevStatusRef.current = status;
+      return;
+    }
+
+    const resetToolsToDefault = () => {
       setTool('pencil');
       setColor('#000000');
       setPenWidth(3);
@@ -83,10 +92,30 @@ export default function DrawingBoard({
       setEraserOpacity(1);
       setBucketOpacity(1);
       setActiveMenu(null);
+      previousTool.current = 'pencil';
+      hasResetForCurrentTurnRef.current = true;
+    };
+
+    // 1. Pre-initialization during CHOOSING if the local player is designated as the drawer
+    if (status === 'CHOOSING' && amIDrawer && !hasResetForCurrentTurnRef.current) {
+      resetToolsToDefault();
     }
+
+    // 2. Safety fallback: if player transitioned directly into DRAWING without a CHOOSING step (e.g., reconnect)
+    const becameDrawer = prevReadOnlyRef.current === true && readOnly === false;
+    const drawingStartedAsArtist = status === 'DRAWING' && prevStatusRef.current !== 'DRAWING' && !readOnly;
+    if ((becameDrawer || drawingStartedAsArtist) && !hasResetForCurrentTurnRef.current) {
+      resetToolsToDefault();
+    }
+
+    // 3. Reset turn guard flag when leaving the drawing/choosing round phases
+    if (status === 'ROUND_END' || status === 'PODIUM' || status === 'WAITING') {
+      hasResetForCurrentTurnRef.current = false;
+    }
+
     prevReadOnlyRef.current = readOnly;
     prevStatusRef.current = status;
-  }, [readOnly, status, isFreeDraw]);
+  }, [readOnly, status, isFreeDraw, amIDrawer]);
 
   // Persistent Zoom & Pan preference
   const [zoomEnabled, setZoomEnabled] = useState(() => {

@@ -74,6 +74,21 @@ interface HitNotification {
   isReport?: boolean;
 }
 
+const getMaxTimeForStatus = (status: string, fallbackMaxTime: number) => {
+  switch (status) {
+    case "DRAWING":
+    case "CHOOSING":
+      return 100;
+    case "ROUND_END":
+      return 8;
+    case "PODIUM":
+    case "WAITING":
+      return 15;
+    default:
+      return fallbackMaxTime > 0 ? fallbackMaxTime : 15;
+  }
+};
+
 const SmoothTimer = ({
   status: propStatus,
   initialTimeLeft: propInitialTimeLeft,
@@ -93,91 +108,96 @@ const SmoothTimer = ({
   const currentInitialTimeLeft = propInitialTimeLeft ?? gameState?.timeLeft ?? 0;
 
   const barRef = React.useRef<HTMLDivElement>(null);
-  const lastTimeLeftRef = React.useRef(currentInitialTimeLeft);
-  const lastUpdateRef = React.useRef(Date.now());
   const statusRef = React.useRef(currentStatus);
+  const maxTimeRef = React.useRef(maxTime);
+  const lastTimeLeftRef = React.useRef(currentInitialTimeLeft);
   const lastColorClassRef = React.useRef<string>("");
-  const lastWidthPctRef = React.useRef<number>(-1);
+  const isMountedRef = React.useRef(false);
 
-  React.useEffect(() => {
-    if (currentStatus !== statusRef.current) {
-      statusRef.current = currentStatus;
-      lastTimeLeftRef.current = currentInitialTimeLeft;
-      lastUpdateRef.current = Date.now();
-      lastColorClassRef.current = "";
-      lastWidthPctRef.current = -1;
+  maxTimeRef.current = maxTime;
+
+  // Helper to compute and apply color class smoothly
+  const applyColor = (pct: number, status: string) => {
+    if (!barRef.current) return;
+    let timerColorClass = "bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]";
+    if (status !== "DRAWING" && status !== "CHOOSING") {
+      timerColorClass = "bg-[#1AD2FF] shadow-[0_0_8px_rgba(26,210,255,0.5)]";
+    } else {
+      if (pct <= 20) {
+        timerColorClass = "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]";
+      } else if (pct <= 50) {
+        timerColorClass = "bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]";
+      }
     }
-  }, [currentStatus, currentInitialTimeLeft]);
 
-  // Listen directly to timer_tick to update the local timer smoothly without triggering GameRoom re-renders!
+    if (lastColorClassRef.current !== timerColorClass) {
+      lastColorClassRef.current = timerColorClass;
+      barRef.current.className = `h-full rounded-full transition-colors duration-500 ${timerColorClass}`;
+    }
+  };
+
+  // Synchronize CSS bar with target time
+  const syncBar = React.useCallback((timeLeft: number, status: string, isStatusChange: boolean = false) => {
+    const bar = barRef.current;
+    if (!bar) return;
+
+    const mTime = getMaxTimeForStatus(status, maxTimeRef.current);
+    const clampedTime = Math.max(0, Math.min(mTime, timeLeft));
+    const currentPct = (clampedTime / mTime) * 100;
+
+    applyColor(currentPct, status);
+
+    if (clampedTime <= 0) {
+      bar.style.transition = "width 0.25s linear";
+      bar.style.width = "0%";
+      lastTimeLeftRef.current = 0;
+      return;
+    }
+
+    const isBigDiscrepancy =
+      lastTimeLeftRef.current > 0 &&
+      Math.abs(lastTimeLeftRef.current - 1 - clampedTime) > 3;
+
+    if (isStatusChange || isBigDiscrepancy) {
+      bar.style.transition = "none";
+      bar.style.width = `${currentPct.toFixed(2)}%`;
+      // Force layout flush so browser commits the starting position before transition begins
+      void bar.offsetWidth;
+    }
+
+    // Target percentage for next 1-second interval
+    const targetPct = Math.max(0, ((clampedTime - 1) / mTime) * 100);
+    bar.style.transition = "width 1s linear";
+    bar.style.width = `${targetPct.toFixed(2)}%`;
+
+    lastTimeLeftRef.current = clampedTime;
+  }, []);
+
+  // Reset or initialize on status or phase change
+  React.useEffect(() => {
+    const statusChanged = currentStatus !== statusRef.current;
+    statusRef.current = currentStatus;
+    syncBar(currentInitialTimeLeft, currentStatus, statusChanged || !isMountedRef.current);
+    isMountedRef.current = true;
+  }, [currentStatus, currentInitialTimeLeft, syncBar]);
+
+  // Listen directly to timer_tick to drive the CSS transition once per second (0% CPU rAF loop)
   React.useEffect(() => {
     if (!socket) return;
     const onTick = (data: { timeLeft: number; status: string }) => {
-      lastTimeLeftRef.current = data.timeLeft;
-      lastUpdateRef.current = Date.now();
-      if (data.status !== statusRef.current) {
-        statusRef.current = data.status;
-        lastColorClassRef.current = "";
-        lastWidthPctRef.current = -1;
-      }
+      const statusChanged = data.status !== statusRef.current;
+      statusRef.current = data.status;
+      syncBar(data.timeLeft, data.status, statusChanged);
     };
 
     socket.on("timer_tick", onTick);
     return () => {
       socket.off("timer_tick", onTick);
     };
-  }, [socket]);
+  }, [socket, syncBar]);
 
-  React.useEffect(() => {
-    let requestId: number;
-    let lastFrameTime = 0;
-
-    const updateTimer = (currentTime: number) => {
-      // Throttle rAF frame rate to ~60fps max (skip duplicate frames on 90Hz/120Hz displays)
-      if (currentTime - lastFrameTime >= 16) {
-        lastFrameTime = currentTime;
-        const now = Date.now();
-        const elapsed = (now - lastUpdateRef.current) / 1000;
-        let visualTimeLeft = lastTimeLeftRef.current - elapsed;
-        if (visualTimeLeft < 0) visualTimeLeft = 0;
-        let pct = (visualTimeLeft / maxTime) * 100;
-        pct = Math.max(0, Math.min(100, pct));
-
-        if (barRef.current) {
-          // Only update style.width when visual delta is meaningful (>= 0.05%) or boundary (0, 100)
-          if (Math.abs(pct - lastWidthPctRef.current) >= 0.05 || pct <= 0 || pct >= 100) {
-            lastWidthPctRef.current = pct;
-            barRef.current.style.width = `${pct.toFixed(2)}%`;
-          }
-
-          let timerColorClass =
-            "bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]";
-          if (statusRef.current !== "DRAWING" && statusRef.current !== "CHOOSING") {
-            timerColorClass =
-              "bg-[#1AD2FF] shadow-[0_0_8px_rgba(26,210,255,0.5)]";
-          } else {
-            if (pct <= 20) {
-              timerColorClass = "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]";
-            } else if (pct <= 50) {
-              timerColorClass =
-                "bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]";
-            }
-          }
-
-          // Crucial performance optimization: ONLY write to className if the color class actually changed!
-          if (lastColorClassRef.current !== timerColorClass) {
-            lastColorClassRef.current = timerColorClass;
-            barRef.current.className = `h-full rounded-full ${timerColorClass}`;
-          }
-        }
-      }
-
-      requestId = requestAnimationFrame(updateTimer);
-    };
-
-    requestId = requestAnimationFrame(updateTimer);
-    return () => cancelAnimationFrame(requestId);
-  }, [maxTime, currentStatus]);
+  const effectiveMaxTime = getMaxTimeForStatus(currentStatus, maxTime || 100);
+  const initialPct = Math.max(0, Math.min(100, (currentInitialTimeLeft / effectiveMaxTime) * 100));
 
   return (
     <div
@@ -185,7 +205,11 @@ const SmoothTimer = ({
       dir="ltr"
     >
       <div className="w-full h-1.5 sm:h-2 bg-black/40 rounded-full overflow-hidden shadow-inner flex justify-start">
-        <div ref={barRef} className="h-full rounded-full bg-[#1AD2FF]" />
+        <div
+          ref={barRef}
+          className="h-full rounded-full transition-colors duration-500 bg-[#1AD2FF]"
+          style={{ width: `${initialPct.toFixed(2)}%` }}
+        />
       </div>
     </div>
   );
@@ -1641,6 +1665,7 @@ export default function GameRoom({
                 status={gameState.status}
                 readOnly={!isDrawingMode}
                 isFreeDraw={isFreeDraw}
+                amIDrawer={amIDrawer}
                 onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
                 onHistoryLengthChange={(hasStrokes) => {
                   setHasDrawHistory(hasStrokes);
