@@ -2599,7 +2599,6 @@ export default function GameRoom({
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
-            className="w-full h-full flex items-center justify-center"
           >
             <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
           </motion.div>
@@ -2647,7 +2646,6 @@ export default function GameRoom({
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
-            className="w-full h-full flex items-center justify-center"
           >
             <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
           </motion.div>
@@ -2703,7 +2701,6 @@ export default function GameRoom({
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
-            className="w-full h-full flex items-center justify-center"
           >
             <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
@@ -2757,7 +2754,6 @@ export default function GameRoom({
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
-            className="w-full h-full flex items-center justify-center"
           >
             <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>

@@ -87,11 +87,16 @@
   }
 }
 
-/* Responsive Modal Scaling for Proportional Room/Screen Harmony */
+/* Responsive Modal Scaling for Short Viewports (Landscape or ultra-short screens) */
 .responsive-modal-scale {
   transform-origin: center center;
-  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform;
+  transition: transform 0.2s ease-out;
+}
+
+@media (max-height: 500px) {
+  .responsive-modal-scale {
+    transform: scale(0.85);
+  }
 }
 
 html, body, #root {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
@@ -53,7 +53,7 @@ export interface CinematicModalProps {
   titleText: string;
   children?: React.ReactNode;
   buttons?: CinematicModalButton[];
-  maxWidthClass?: string; // default max-w-sm
+  maxWidthClass?: string;
   overlayClassName?: string;
 }
 
@@ -64,41 +64,9 @@ export default function CinematicModal({
   titleText,
   children,
   buttons,
-  maxWidthClass = "max-w-sm",
+  maxWidthClass,
   overlayClassName,
 }: CinematicModalProps) {
-  const [modalScale, setModalScale] = useState(1);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const computeScale = () => {
-      const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-      const vw = window.visualViewport ? window.visualViewport.width : window.innerWidth;
-
-      // Golden reference dimensions for ~50% modal height proportion in game rooms:
-      // Golden design height is 820px, card width is 384px (max-w-sm)
-      const referenceHeight = 820;
-      const referenceWidth = 384;
-
-      const heightScale = vh < referenceHeight ? vh / referenceHeight : 1;
-      const widthScale = vw < referenceWidth + 32 ? (vw - 24) / referenceWidth : 1;
-
-      // Maintain uniform aspect ratio scaling, bounded between 0.62 and 1.0
-      const targetScale = Math.max(0.62, Math.min(1, Math.min(heightScale, widthScale)));
-      setModalScale(Number(targetScale.toFixed(3)));
-    };
-
-    computeScale();
-    window.addEventListener("resize", computeScale, { passive: true });
-    window.visualViewport?.addEventListener("resize", computeScale, { passive: true });
-
-    return () => {
-      window.removeEventListener("resize", computeScale);
-      window.visualViewport?.removeEventListener("resize", computeScale);
-    };
-  }, [isOpen]);
-
   // Translate the titleType to standard cartoon classes defined in CSS
   const getTitleClass = () => {
     switch (titleType) {
@@ -121,7 +89,7 @@ export default function CinematicModal({
   const getButtonStyles = (btn: CinematicModalButton) => {
     if (btn.className) return btn.className;
 
-    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-base sm:text-lg font-black py-3.5 sm:py-4 px-4 sm:px-5 rounded-[20px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-2 whitespace-nowrap shadow-md";
+    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-4 rounded-[18px] sm:rounded-[20px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shadow-md";
     
     switch (btn.variant) {
       case "primary":
@@ -152,55 +120,50 @@ export default function CinematicModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className={`fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 ${overlayClassName || "bg-slate-900/80"}`}
+          className={`fixed inset-0 z-[9999] flex items-center justify-center ${overlayClassName || "bg-slate-900/80"}`}
           onClick={(e) => {
             if (e.target === e.currentTarget && onClose) {
               onClose();
             }
           }}
         >
-          <div className="w-full flex justify-center pointer-events-none">
-            <div 
-              className={`responsive-modal-scale pointer-events-auto flex justify-center w-full ${maxWidthClass}`}
-              style={{
-                transform: `scale(${modalScale})`,
-                transformOrigin: "center center",
-              }}
-            >
-              <motion.div
-                key="cinematic-modal-card"
-                variants={cinematicCardVariants}
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                style={{ willChange: "transform, opacity" }}
-                className="cinematic-modal-card bg-[#ECEBFC] pt-6 pb-8 px-6 sm:px-8 rounded-[30px] sm:rounded-[34px] w-full max-h-[92dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col h-auto"
-              >
-            {/* Minimalist Top Corner Close Button - No circle, no border, no shadow, completely static relative to card */}
+          <motion.div
+            key="cinematic-modal-card"
+            variants={cinematicCardVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            style={{ willChange: "transform, opacity" }}
+            className={`cinematic-modal-card bg-[#ECEBFC] pt-5 pb-7 px-5 sm:px-7 rounded-[28px] sm:rounded-[32px] w-[80%] max-w-[400px] h-auto max-h-[90dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col pointer-events-auto ${maxWidthClass || ""}`}
+          >
+            {/* Minimalist Top Corner Close Button */}
             {onClose && (
               <button
                 type="button"
                 onClick={onClose}
-                className="absolute top-3 sm:top-4 right-3 sm:right-4 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
+                className="absolute top-3.5 right-3.5 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
                 aria-label="Close"
               >
-                <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
+                <X className="w-5 h-5 stroke-[3]" />
               </button>
             )}
+
+            {/* Little Spacer to balance aesthetic padding of the card */}
+            <motion.div variants={cinematicItemVariants} className="h-1.5 sm:h-2 w-full" />
 
             {/* Structured Title Label */}
             <motion.div
               variants={cinematicItemVariants}
-              className="relative select-none mb-4 mx-auto py-1 px-2 flex justify-center w-full"
+              className="relative select-none mb-3 sm:mb-4 mx-auto py-1 sm:py-1.5 px-2 flex justify-center w-full"
             >
               <GameTitle
                 text={titleText}
                 type={titleType}
-                className="text-[30px] sm:text-[34px]"
+                className="text-[26px] sm:text-[32px]"
               />
             </motion.div>
 
-            {/* Main Interactive Slot Body (Guaranteed to be h-auto as requested) */}
+            {/* Main Interactive Slot Body (Guaranteed to be h-auto) */}
             <motion.div
               variants={cinematicItemVariants}
               className="w-full text-center h-auto dynamic-modal-content"
@@ -212,7 +175,7 @@ export default function CinematicModal({
             {buttons && buttons.length > 0 && (
               <motion.div
                 variants={cinematicItemVariants}
-                className="flex items-center gap-2 sm:gap-3 w-full mt-5"
+                className="flex items-center gap-2.5 sm:gap-3 w-full mt-4 sm:mt-5"
               >
                 {buttons.map((btn) => (
                   <button
@@ -228,8 +191,6 @@ export default function CinematicModal({
               </motion.div>
             )}
           </motion.div>
-            </div>
-          </div>
         </motion.div>
       )}
     </AnimatePresence>,

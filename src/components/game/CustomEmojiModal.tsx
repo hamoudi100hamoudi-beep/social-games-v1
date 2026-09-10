@@ -86,7 +86,7 @@ export default function CustomEmojiModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-hidden">
           {/* Normal Dark Overlay without blur */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -98,11 +98,11 @@ export default function CustomEmojiModal({
 
           {/* Modal Container with flexible max height and scroll to stay inside viewport */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-full max-w-sm bg-white rounded-[28px] sm:rounded-[32px] p-4 sm:p-6 border border-white/40 shadow-2xl z-10 flex flex-col items-center text-center max-h-[85dvh] overflow-y-auto no-scrollbar my-auto"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            className="relative w-[80%] max-w-[400px] h-auto max-h-[88dvh] overflow-y-auto no-scrollbar bg-white rounded-[28px] sm:rounded-[32px] p-5 sm:p-6 border border-white/40 shadow-2xl z-10 flex flex-col items-center text-center"
             dir="rtl"
           >
             {/* Close Button */}
