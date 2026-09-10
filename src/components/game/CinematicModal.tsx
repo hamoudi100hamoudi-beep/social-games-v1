@@ -89,7 +89,7 @@ export default function CinematicModal({
   const getButtonStyles = (btn: CinematicModalButton) => {
     if (btn.className) return btn.className;
 
-    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-base sm:text-lg font-black py-4 px-5 rounded-[22px] tracking-wide flex items-center justify-center gap-2";
+    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-5 rounded-[18px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap";
     
     switch (btn.variant) {
       case "primary":
@@ -136,7 +136,7 @@ export default function CinematicModal({
                 animate="visible"
                 exit="exit"
                 style={{ willChange: "transform, opacity" }}
-                className={`bg-[#ECEBFC] pt-5 pb-8 px-6 sm:px-8 rounded-[32px] w-full shadow-xl text-center relative overflow-visible border border-white/40 flex flex-col h-auto`}
+                className={`bg-[#ECEBFC] pt-5 pb-7 sm:pb-8 px-5 sm:px-8 rounded-[28px] sm:rounded-[32px] w-full max-h-[92dvh] overflow-y-auto no-scrollbar shadow-xl text-center relative border border-white/40 flex flex-col h-auto`}
               >
             {/* Minimalist Top Corner Close Button - No circle, no border, no shadow, completely static relative to card */}
             {onClose && (
@@ -177,7 +177,7 @@ export default function CinematicModal({
             {buttons && buttons.length > 0 && (
               <motion.div
                 variants={cinematicItemVariants}
-                className="flex items-center gap-3 w-full mt-6"
+                className="flex items-center gap-2.5 sm:gap-3 w-full mt-5 sm:mt-6"
               >
                 {buttons.map((btn) => (
                   <button

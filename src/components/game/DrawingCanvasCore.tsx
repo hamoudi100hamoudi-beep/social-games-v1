@@ -324,6 +324,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const touchStartedOutsideRef = useRef(false);
   const touchDrawingActiveFromOutsideRef = useRef(false);
   const exitedOutsideWhilePointerDownRef = useRef(false);
+  const lastOutsidePointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const strokeHandlerRef = useRef<{
     start: (x: number, y: number) => void;
     move: (x: number, y: number) => void;
@@ -526,6 +527,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
 
       // Safe Edge Stroke Entry for Mobile (سحب الإصبع من خارج حافة الشاشة إلى داخل اللوحة)
+      if (
+        e.touches.length === 1 &&
+        !propsRef.current.readOnly &&
+        !isZoomPinchingRef.current &&
+        isCanvasResizeObserverReadyRef.current &&
+        canvasRef.current
+      ) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const t = e.touches[0];
+        const isInside = t.clientX >= rect.left && t.clientX <= rect.right && t.clientY >= rect.top && t.clientY <= rect.bottom;
+        if (!isInside) {
+          touchStartedOutsideRef.current = true;
+          lastOutsideTouchRef.current = { clientX: t.clientX, clientY: t.clientY };
+        }
+      }
+
       if (
         e.touches.length === 1 &&
         touchStartedOutsideRef.current &&
@@ -1091,6 +1108,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     // Reset local/remote paths & sessions
     isDrawingRef.current = false;
     exitedOutsideWhilePointerDownRef.current = false;
+    lastOutsidePointerRef.current = null;
     currentPathRef.current = [];
     activeSessionsRef.current = {};
     moveBatchRef.current = [];
@@ -1148,6 +1166,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const list = localCommandsRef.current;
     const canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
     if (!canUndo) return;
+
+    if (isDrawingRef.current) {
+      isDrawingRef.current = false;
+      moveBatchRef.current = [];
+    }
+    exitedOutsideWhilePointerDownRef.current = false;
+    lastOutsidePointerRef.current = null;
 
     const removed = list.pop();
     if (removed) {
@@ -2084,8 +2109,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCtx = tempCtxRef.current;
     if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
 
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch (err) {}
     exitedOutsideWhilePointerDownRef.current = false;
+    lastOutsidePointerRef.current = null;
 
     const activeTool = propsRef.current.tool;
     const activeColor = propsRef.current.color;
@@ -2149,7 +2177,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingRef.current) return;
+    if (!isDrawingRef.current && !exitedOutsideWhilePointerDownRef.current) return;
 
     const canvas = canvasRef.current;
     const tempCanvas = tempCanvasRef.current;
@@ -2159,6 +2187,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
       isDrawingRef.current = false;
+      exitedOutsideWhilePointerDownRef.current = false;
+      lastOutsidePointerRef.current = null;
       
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       moveBatchRef.current = [];
@@ -2188,12 +2218,25 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           processStrokeMove(clamped.x, clamped.y);
           finishCurrentStroke();
           exitedOutsideWhilePointerDownRef.current = true;
+          lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
         }
       } else if (exitedOutsideWhilePointerDownRef.current) {
         // Was outside while holding down, now re-entered canvas: start new stroke cleanly
         if (isInside) {
           exitedOutsideWhilePointerDownRef.current = false;
-          startPencilOrEraserStroke(rawCoords.x, rawCoords.y);
+          let entryX = rawCoords.x;
+          let entryY = rawCoords.y;
+          if (lastOutsidePointerRef.current) {
+            const entryCoords = getLogicalCoords(lastOutsidePointerRef.current.clientX, lastOutsidePointerRef.current.clientY, canvas, true);
+            entryX = entryCoords.x;
+            entryY = entryCoords.y;
+          }
+          lastOutsidePointerRef.current = null;
+          startPencilOrEraserStroke(entryX, entryY);
+          processStrokeMove(rawCoords.x, rawCoords.y);
+        } else {
+          // Still outside canvas while dragging: keep tracking last outside pointer position for precise entry
+          lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
         }
       }
     } else {
@@ -2202,8 +2245,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {}
     exitedOutsideWhilePointerDownRef.current = false;
+    lastOutsidePointerRef.current = null;
 
     const canvas = canvasRef.current;
     const tempCanvas = tempCanvasRef.current;
@@ -2247,25 +2293,61 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           } catch (err) {}
           const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
           startShapeDrawing(raw.x, raw.y);
+        } else if ((activeTool === 'pencil' || activeTool === 'eraser') && e.target === containerRef.current) {
+          exitedOutsideWhilePointerDownRef.current = true;
+          lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+          try {
+            (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+          } catch (err) {}
         }
       }}
       onPointerMove={(e) => {
-        if (isDrawingRef.current) {
-          const activeTool = propsRef.current.tool;
-          const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
-          if (isShape) {
-            const canvas = canvasRef.current;
-            if (!canvas) return;
-            const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
-            processShapeMove(raw.x, raw.y);
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const activeTool = propsRef.current.tool;
+        const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+        if (isDrawingRef.current && isShape) {
+          const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+          processShapeMove(raw.x, raw.y);
+        } else if (activeTool === 'pencil' || activeTool === 'eraser') {
+          const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+          const isInside = rawCoords.x >= 0 && rawCoords.x <= LOGICAL_WIDTH && rawCoords.y >= 0 && rawCoords.y <= LOGICAL_HEIGHT;
+          if (isDrawingRef.current) {
+            if (isInside) {
+              processStrokeMove(rawCoords.x, rawCoords.y);
+            } else {
+              const clamped = getLogicalCoords(e.clientX, e.clientY, canvas, true);
+              processStrokeMove(clamped.x, clamped.y);
+              finishCurrentStroke();
+              exitedOutsideWhilePointerDownRef.current = true;
+              lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+            }
+          } else if (exitedOutsideWhilePointerDownRef.current) {
+            if (isInside) {
+              exitedOutsideWhilePointerDownRef.current = false;
+              let entryX = rawCoords.x;
+              let entryY = rawCoords.y;
+              if (lastOutsidePointerRef.current) {
+                const entryCoords = getLogicalCoords(lastOutsidePointerRef.current.clientX, lastOutsidePointerRef.current.clientY, canvas, true);
+                entryX = entryCoords.x;
+                entryY = entryCoords.y;
+              }
+              lastOutsidePointerRef.current = null;
+              startPencilOrEraserStroke(entryX, entryY);
+              processStrokeMove(rawCoords.x, rawCoords.y);
+            } else {
+              lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+            }
           }
         }
       }}
       onPointerUp={(e) => {
+        try {
+          (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch (err) {}
+        exitedOutsideWhilePointerDownRef.current = false;
+        lastOutsidePointerRef.current = null;
         if (isDrawingRef.current) {
-          try {
-            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-          } catch (err) {}
           const activeTool = propsRef.current.tool;
           const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
           if (isShape) {
@@ -2273,14 +2355,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (!canvas) return;
             const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
             finishShapeDrawing(raw.x, raw.y);
+          } else if (activeTool === 'pencil' || activeTool === 'eraser') {
+            finishCurrentStroke();
           }
         }
       }}
       onPointerCancel={(e) => {
+        try {
+          (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch (err) {}
+        exitedOutsideWhilePointerDownRef.current = false;
+        lastOutsidePointerRef.current = null;
         if (isDrawingRef.current) {
-          try {
-            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-          } catch (err) {}
           const activeTool = propsRef.current.tool;
           const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
           if (isShape) {
@@ -2288,6 +2374,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (!canvas) return;
             const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
             finishShapeDrawing(raw.x, raw.y);
+          } else if (activeTool === 'pencil' || activeTool === 'eraser') {
+            finishCurrentStroke();
           }
         }
       }}

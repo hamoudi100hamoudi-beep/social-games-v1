@@ -976,14 +976,12 @@ export default function GameRoom({
 
       if (!isChatOpenRef.current) {
         unreadCountRef.current += 1;
+        setUnreadCount(unreadCountRef.current);
       }
 
-      // 🛡️ If not in drawing mode OR if chat overlay is currently open, update React state immediately
-      if (!isDrawingModeRef.current || isChatOpenRef.current) {
+      // If not in drawing mode, or in Free Draw, or if chat overlay is currently open, update React state immediately
+      if (!isDrawingModeRef.current || isFreeDraw || isChatOpenRef.current) {
         setChatMessages(updated);
-        if (!isChatOpenRef.current) {
-          setUnreadCount(unreadCountRef.current);
-        }
       }
     };
 
@@ -1621,25 +1619,13 @@ export default function GameRoom({
             >
               {isDrawingMode && !isFreeDraw && renderWordOverlay(true)}
               
-              {/* Free Draw Top Bar: Return to room arrow button and Quick Chat button */}
+              {/* Free Draw Top Bar: Quick Chat button */}
               {isDrawingMode && isFreeDraw && (
                 <div 
-                  className="absolute left-0 right-0 flex items-center justify-between px-3 sm:px-4 z-[150] pointer-events-none"
+                  className="absolute right-0 flex items-center px-3 sm:px-4 z-[150] pointer-events-none"
                   style={{ top: 'clamp(8px, 2vw, 16px)' }}
                   dir="ltr"
                 >
-                  {/* Left: Return to Room / Spectator button (shifted to the right of zoom controls, pointing left) */}
-                  <div className="flex items-center pointer-events-auto ml-[88px] sm:ml-[96px]">
-                    <button
-                      type="button"
-                      onClick={handleStopFreeDraw}
-                      title="العودة للروم"
-                      className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/95 hover:bg-white text-slate-800 flex items-center justify-center shadow-md active:scale-95 transition-all border border-slate-300/80 cursor-pointer"
-                    >
-                      <ArrowLeft size={18} className="stroke-[2.5]" />
-                    </button>
-                  </div>
-
                   {/* Right: Chat button (shifted left with mr-12 sm:mr-16 so it never collides with exit X button) */}
                   <div className="flex items-center pointer-events-auto mr-12 sm:mr-16">
                     <button
@@ -1666,6 +1652,7 @@ export default function GameRoom({
                 readOnly={!isDrawingMode}
                 isFreeDraw={isFreeDraw}
                 amIDrawer={amIDrawer}
+                onExitFreeDraw={handleStopFreeDraw}
                 onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
                 onHistoryLengthChange={(hasStrokes) => {
                   setHasDrawHistory(hasStrokes);

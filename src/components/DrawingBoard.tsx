@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { 
   Pencil, Eraser, Undo2, Redo2, FileX, RefreshCcw, 
   Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2, ZoomIn,
-  Check, X, AlertTriangle
+  Check, X, AlertTriangle, ArrowLeft
 } from 'lucide-react';
 import { ToolType } from '../types/draw';
 import {
@@ -34,6 +34,7 @@ export default function DrawingBoard({
   isFreeDraw = false,
   onHistoryLengthChange,
   amIDrawer = false,
+  onExitFreeDraw,
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -48,6 +49,7 @@ export default function DrawingBoard({
   isFreeDraw?: boolean;
   onHistoryLengthChange?: (hasStrokes: boolean) => void;
   amIDrawer?: boolean;
+  onExitFreeDraw?: () => void;
 }) {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
 
@@ -117,13 +119,20 @@ export default function DrawingBoard({
     prevStatusRef.current = status;
   }, [readOnly, status, isFreeDraw, amIDrawer]);
 
-  // Persistent Zoom & Pan preference
+  // Persistent Zoom & Pan preference (automatically enabled in Free Draw mode)
   const [zoomEnabled, setZoomEnabled] = useState(() => {
+    if (isFreeDraw) return true;
     if (typeof window !== 'undefined') {
       return safeLocalStorage.getItem('gartic_zoom_enabled') === 'true';
     }
     return false;
   });
+
+  useEffect(() => {
+    if (isFreeDraw) {
+      setZoomEnabled(true);
+    }
+  }, [isFreeDraw]);
 
   const toggleZoom = () => {
     const nextVal = !zoomEnabled;
@@ -343,22 +352,36 @@ export default function DrawingBoard({
           </div>
         )}
 
-        {/* Floating Action Buttons (Zoom) - Upper-Left */}
+        {/* Floating Action Buttons (Zoom / Exit Free Draw) - Upper-Left */}
         {!readOnly && (
           <div className="absolute top-3 left-3 flex flex-col gap-1.5 z-30 pointer-events-auto" dir="ltr">
             <div className="flex gap-1.5">
-              {/* Toggle Zoom Mode */}
-              <button 
-                type="button"
-                onClick={toggleZoom} 
-                title={zoomEnabled ? "تعطيل وضع التكبير والتنقل" : "تفعيل وضع التكبير والتنقل (بإصبعين)"}
-                className={`w-[32px] h-[32px] rounded-lg flex items-center justify-center border transition-all select-none hover:scale-105 active:scale-95
-                  ${zoomEnabled 
-                    ? 'bg-amber-500 text-white border-amber-400' 
-                    : 'bg-white text-slate-700 border-slate-300/40 hover:bg-slate-100'}`}
-              >
-                <ZoomIn size={16} strokeWidth={2.5} />
-              </button>
+              {/* In Free Draw: Exit Arrow button in the exact place of the removed zoom button */}
+              {isFreeDraw ? (
+                onExitFreeDraw && (
+                  <button
+                    type="button"
+                    onClick={onExitFreeDraw}
+                    title="العودة للروم"
+                    className="w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 transition-all hover:bg-slate-100 hover:scale-105 active:scale-95 cursor-pointer shadow-sm select-none"
+                  >
+                    <ArrowLeft size={16} strokeWidth={2.5} />
+                  </button>
+                )
+              ) : (
+                /* In standard game rounds: Toggle Zoom Mode */
+                <button 
+                  type="button"
+                  onClick={toggleZoom} 
+                  title={zoomEnabled ? "تعطيل وضع التكبير والتنقل" : "تفعيل وضع التكبير والتنقل (بإصبعين)"}
+                  className={`w-[32px] h-[32px] rounded-lg flex items-center justify-center border transition-all select-none hover:scale-105 active:scale-95
+                    ${zoomEnabled 
+                      ? 'bg-amber-500 text-white border-amber-400' 
+                      : 'bg-white text-slate-700 border-slate-300/40 hover:bg-slate-100'}`}
+                >
+                  <ZoomIn size={16} strokeWidth={2.5} />
+                </button>
+              )}
 
               {/* Reset Zoom helper */}
               {zoomEnabled && (
