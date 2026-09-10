@@ -89,7 +89,7 @@ export default function CinematicModal({
   const getButtonStyles = (btn: CinematicModalButton) => {
     if (btn.className) return btn.className;
 
-    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-5 rounded-[18px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap";
+    const base = "cinematic-modal-btn flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-5 rounded-[18px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap";
     
     switch (btn.variant) {
       case "primary":
@@ -136,32 +136,32 @@ export default function CinematicModal({
                 animate="visible"
                 exit="exit"
                 style={{ willChange: "transform, opacity" }}
-                className={`bg-[#ECEBFC] pt-5 pb-7 sm:pb-8 px-5 sm:px-8 rounded-[28px] sm:rounded-[32px] w-full max-h-[92dvh] overflow-y-auto no-scrollbar shadow-xl text-center relative border border-white/40 flex flex-col h-auto`}
+                className={`cinematic-modal-card bg-[#ECEBFC] pt-5 pb-7 sm:pb-8 px-5 sm:px-8 rounded-[28px] sm:rounded-[32px] w-full max-h-[92dvh] overflow-y-auto no-scrollbar shadow-xl text-center relative border border-white/40 flex flex-col h-auto`}
               >
             {/* Minimalist Top Corner Close Button - No circle, no border, no shadow, completely static relative to card */}
             {onClose && (
               <button
                 type="button"
                 onClick={onClose}
-                className="absolute top-5 right-5 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
+                className="absolute top-4 sm:top-5 right-4 sm:right-5 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
                 aria-label="Close"
               >
-                <X className="w-6 h-6 stroke-[3]" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
               </button>
             )}
 
             {/* Little Spacer to balance aesthetic padding of the card */}
-            <motion.div variants={cinematicItemVariants} className="h-3 w-full" />
+            <motion.div variants={cinematicItemVariants} className="cinematic-modal-spacer h-2 sm:h-3 w-full" />
 
             {/* Structured Title Label */}
             <motion.div
               variants={cinematicItemVariants}
-              className="relative select-none mb-5 mx-auto py-2 px-3 flex justify-center w-full"
+              className="cinematic-modal-title-wrap relative select-none mb-4 sm:mb-5 mx-auto py-1 sm:py-2 px-3 flex justify-center w-full"
             >
               <GameTitle
                 text={titleText}
                 type={titleType}
-                className="text-[34px]"
+                className="cinematic-modal-title-text text-[30px] sm:text-[34px]"
               />
             </motion.div>
 
@@ -177,7 +177,7 @@ export default function CinematicModal({
             {buttons && buttons.length > 0 && (
               <motion.div
                 variants={cinematicItemVariants}
-                className="flex items-center gap-2.5 sm:gap-3 w-full mt-5 sm:mt-6"
+                className="cinematic-modal-buttons flex items-center gap-2.5 sm:gap-3 w-full mt-4 sm:mt-6"
               >
                 {buttons.map((btn) => (
                   <button

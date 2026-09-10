@@ -257,10 +257,10 @@ export default function DrawingBoard({
           },
         ]}
       >
-        <h3 id="clean-confirm-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        <h3 id="clean-confirm-desc" className="cinematic-modal-text text-[18px] sm:text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2">
           Do you want to clean the drawing?
         </h3>
-        <p id="clean-confirm-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+        <p id="clean-confirm-desc-ar" className="cinematic-modal-subtext text-[#8C8AA7] text-sm sm:text-base font-bold mb-4 sm:mb-6">
           هل تريد مسح اللوحة بالكامل؟
         </p>
       </CinematicModal>

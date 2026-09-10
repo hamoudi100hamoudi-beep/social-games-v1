@@ -87,10 +87,116 @@
   }
 }
 
-/* Responsive Modal Scaling for Short Viewports (Landscape or ultra-short screens) */
+/* Responsive Modal Scaling & Proportional Heights for Compact Screens */
 .responsive-modal-scale {
   transform-origin: center center;
   transition: transform 0.2s ease-out;
+}
+
+@media (max-height: 750px) {
+  .cinematic-modal-card {
+    padding-top: 0.875rem !important; /* 14px */
+    padding-bottom: 1.25rem !important; /* 20px */
+    border-radius: 1.5rem !important; /* 24px */
+  }
+
+  .cinematic-modal-spacer {
+    display: none !important;
+  }
+
+  .cinematic-modal-title-wrap {
+    margin-bottom: 0.5rem !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+  }
+
+  .cinematic-modal-title-text {
+    font-size: 26px !important;
+  }
+
+  .cinematic-modal-buttons {
+    margin-top: 0.875rem !important;
+    gap: 0.5rem !important;
+  }
+
+  .cinematic-modal-btn {
+    padding-top: 0.625rem !important; /* 10px */
+    padding-bottom: 0.625rem !important;
+    font-size: 0.875rem !important; /* 14px */
+    border-radius: 1rem !important; /* 16px */
+  }
+
+  .cinematic-modal-sprite {
+    width: 5rem !important; /* 80px */
+  }
+
+  .cinematic-modal-sprite-wrap {
+    margin-top: 0.25rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  .cinematic-modal-icon-wrap {
+    width: 4.25rem !important;
+    height: 4.25rem !important;
+    margin-top: 0.25rem !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .cinematic-modal-text {
+    font-size: 1.05rem !important;
+    margin-bottom: 0.375rem !important;
+  }
+
+  .cinematic-modal-subtext {
+    font-size: 0.875rem !important;
+    margin-bottom: 0.75rem !important;
+  }
+}
+
+@media (max-height: 640px) {
+  .cinematic-modal-card {
+    padding-top: 0.625rem !important; /* 10px */
+    padding-bottom: 0.875rem !important; /* 14px */
+    border-radius: 1.25rem !important;
+  }
+
+  .cinematic-modal-title-wrap {
+    margin-bottom: 0.25rem !important;
+  }
+
+  .cinematic-modal-title-text {
+    font-size: 23px !important;
+  }
+
+  .cinematic-modal-buttons {
+    margin-top: 0.625rem !important;
+  }
+
+  .cinematic-modal-btn {
+    padding-top: 0.5rem !important; /* 8px */
+    padding-bottom: 0.5rem !important;
+    font-size: 0.8125rem !important; /* 13px */
+  }
+
+  .cinematic-modal-sprite {
+    width: 4.25rem !important; /* 68px */
+  }
+
+  .cinematic-modal-icon-wrap {
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  .cinematic-modal-text {
+    font-size: 0.95rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  .cinematic-modal-subtext {
+    font-size: 0.8125rem !important;
+    margin-bottom: 0.5rem !important;
+  }
 }
 
 @media (max-height: 520px) {
