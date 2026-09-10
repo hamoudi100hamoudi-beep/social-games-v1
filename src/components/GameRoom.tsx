@@ -1570,12 +1570,12 @@ export default function GameRoom({
           ]}
         >
           {/* Animated Exit Character Sprite */}
-          <div className="w-full flex items-center justify-center mb-2 mt-0.5">
-            <ExitSprite className="w-20 sm:w-24 h-auto drop-shadow-sm" />
+          <div className="w-full flex items-center justify-center mb-3 sm:mb-4 mt-1">
+            <ExitSprite className="w-26 sm:w-30 h-auto drop-shadow-sm" />
           </div>
 
           {/* Question */}
-          <h3 id="exit-confirm-title" className="text-base sm:text-lg font-black text-[#2E2882] leading-snug tracking-tight mb-2 text-center">
+          <h3 id="exit-confirm-title" className="text-[18px] sm:text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 text-center">
             Do you want to leave the game?
           </h3>
         </CinematicModal>
@@ -2305,10 +2305,10 @@ export default function GameRoom({
           },
         ]}
       >
-        <h3 id="skip-confirm-title" className="text-base sm:text-lg font-black text-[#2E2882] leading-snug tracking-tight mb-1">
+        <h3 id="skip-confirm-title" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
           Do you want to skip your turn?
         </h3>
-        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-xs sm:text-sm font-bold mb-2">
+        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold mb-4 sm:mb-5">
           هل تريد تجاوز دورك في الرسم؟
         </p>
       </CinematicModal>
@@ -2329,15 +2329,15 @@ export default function GameRoom({
         ]}
       >
         {/* Animated Warning Sprite */}
-        <div className="flex justify-center mb-2 mt-0.5">
-          <AfkWarningSprite className="w-16 sm:w-20 aspect-[256/326]" />
+        <div className="flex justify-center mb-3 mt-1">
+          <AfkWarningSprite className="w-24 sm:w-28 aspect-[256/326]" />
         </div>
 
         {/* Question & Subtext in the same line (RTL reading order) */}
         <h3 
           id="afk-title" 
           dir="rtl"
-          className="text-xs sm:text-sm font-black text-[#2E2882] leading-snug mb-2 px-1 text-center"
+          className="text-sm sm:text-base font-black text-[#2E2882] leading-snug mb-3 px-1 text-center"
         >
           <span>هل ما زلت هنا؟ </span>
           <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
@@ -2346,11 +2346,11 @@ export default function GameRoom({
         {/* Compact Remainder Countdown Badge */}
         <div 
           dir="rtl"
-          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-3 py-1 inline-flex items-center gap-1.5 mb-2 text-[11px] sm:text-xs font-black text-[#EF4444] select-none"
+          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 text-xs sm:text-sm font-black text-[#EF4444] select-none"
         >
-          <span className="flex h-1.5 w-1.5 relative">
+          <span className="flex h-2 w-2 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#EF4444]"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]"></span>
           </span>
           <span>
             سيتم فصل الاتصال بعد: <span className="font-extrabold font-mono text-xs sm:text-sm">{afkCountdown}</span> ثانية
@@ -2383,7 +2383,7 @@ export default function GameRoom({
         ]}
       >
         {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-14 h-14 flex items-center justify-center mx-auto mb-2 mt-0.5 relative">
+        <div className="w-18 h-18 flex items-center justify-center mx-auto mb-3 mt-1 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2397,12 +2397,12 @@ export default function GameRoom({
               ease: "easeInOut"
             }}
           >
-            <AlertTriangle className="w-12 h-12 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-16 h-16 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
         {/* Content Text exactly as requested */}
-        <h3 id="report-confirm-title" className="text-sm sm:text-base font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        <h3 id="report-confirm-title" className="text-base sm:text-lg font-black text-[#2E2882] leading-snug tracking-tight mb-3">
           Are you sure you wanna report this drawing?
         </h3>
       </CinematicModal>
@@ -2505,26 +2505,26 @@ export default function GameRoom({
 
           return (
             <>
-              {/* Avatar Emoji Frame with Compact Dimensions */}
-              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-2 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)] shrink-0">
-                <span className="text-[42px] sm:text-[48px] leading-none mb-0.5">{playerToRender.avatar || "👤"}</span>
+              {/* Avatar Emoji Frame with Comfortable Dimensions */}
+              <div className="w-26 h-26 sm:w-28 sm:h-28 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)] shrink-0">
+                <span className="text-[60px] sm:text-[68px] leading-none mb-0.5">{playerToRender.avatar || "👤"}</span>
               </div>
 
               {/* Player Name Card */}
               <div>
-                <h3 id="profile-modal-name" className="text-base sm:text-lg font-black text-[#2E2882] leading-snug tracking-tight mb-2.5">
+                <h3 id="profile-modal-name" className="text-xl sm:text-2xl font-black text-[#2E2882] leading-snug tracking-tight mb-3.5">
                   {playerToRender.name}
                 </h3>
               </div>
 
               {isSelf ? (
                 <div 
-                  className="py-2 px-3 bg-white rounded-[14px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-xs sm:text-sm shadow-sm"
+                  className="py-3 px-4 bg-white rounded-[18px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm shadow-sm"
                 >
                   هذا هو حسابك الشخصي
                 </div>
               ) : (
-                <div className="flex flex-col gap-2 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="flex flex-col gap-2.5 sm:gap-3 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                   {/* Block / Unblock Action Button (Mute) */}
                   <div>
                     <button
@@ -2533,13 +2533,13 @@ export default function GameRoom({
                         handleToggleBlock();
                         setSelectedProfilePlayer(null);
                       }}
-                      className={`w-full py-2.5 sm:py-3 px-3.5 font-black text-xs sm:text-sm rounded-[15px] sm:rounded-[17px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2 select-none ${
+                      className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
                         isBlocked 
                           ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
                           : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
                       }`}
                     >
-                      <EyeOff className="w-4 h-4" />
+                      <EyeOff className="w-5 h-5" />
                       {isBlocked ? "UNBLOCK" : "BLOCK"}
                     </button>
                   </div>
@@ -2552,13 +2552,13 @@ export default function GameRoom({
                         handleToggleVoteKick();
                         setSelectedProfilePlayer(null);
                       }}
-                      className={`w-full py-2.5 sm:py-3 px-3.5 font-black text-xs sm:text-sm rounded-[15px] sm:rounded-[17px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2 select-none ${
+                      className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
                         alreadyVoted
                           ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
                           : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
                       }`}
                     >
-                      <UserIcon className="w-4 h-4" />
+                      <UserIcon className="w-5 h-5" />
                       {alreadyVoted ? "REMOVE VOTE" : "VOTEKICK"}
                     </button>
                   </div>

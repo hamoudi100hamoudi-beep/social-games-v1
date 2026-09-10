@@ -102,54 +102,54 @@ export default function CustomEmojiModal({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-[85%] max-w-[420px] h-auto max-h-[70%] max-h-[70dvh] overflow-y-auto no-scrollbar bg-white rounded-[22px] sm:rounded-[26px] pt-3 pb-4 px-4 sm:pt-4 sm:pb-5 sm:px-6 border border-white/40 shadow-2xl z-10 flex flex-col items-center text-center"
+            className="relative w-[85%] max-w-[420px] h-auto max-h-[75%] max-h-[75dvh] overflow-y-auto no-scrollbar bg-white rounded-[28px] sm:rounded-[32px] p-5 sm:p-6 border border-white/40 shadow-2xl z-10 flex flex-col items-center text-center"
             dir="rtl"
           >
             {/* Close Button */}
             <button
               onClick={onClose}
               type="button"
-              className="absolute top-2.5 left-2.5 w-7 h-7 sm:w-8 sm:h-8 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 active:scale-90 transition-transform cursor-pointer z-20"
+              className="absolute top-3 left-3 sm:top-4 sm:left-4 w-8 h-8 sm:w-9 sm:h-9 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 active:scale-90 transition-transform cursor-pointer z-20"
             >
-              <X size={16} strokeWidth={3} />
+              <X size={18} strokeWidth={3} />
             </button>
 
             {/* Title */}
-            <div className="mb-0.5 mt-0">
-              <GameTitle text="CUSTOM EMOJI" type="skip" className="text-[20px] sm:text-[24px]" />
+            <div className="mb-1 mt-0.5">
+              <GameTitle text="CUSTOM EMOJI" type="skip" className="text-[22px] sm:text-[26px]" />
             </div>
 
-            <p className="text-[#8C8AA7] font-bold text-[11px] sm:text-xs mb-2">
+            <p className="text-[#8C8AA7] font-bold text-xs sm:text-sm mb-3">
               أضف إيموجيك الخاص من كيبورد الهاتف 🎨
             </p>
 
             {/* Preview Box */}
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#38BDF8]/10 border-2 border-[#38BDF8]/30 flex items-center justify-center mb-2 relative shadow-inner shrink-0">
+            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-[#38BDF8]/10 border-2 border-[#38BDF8]/30 flex items-center justify-center mb-3 relative shadow-inner shrink-0">
               {detectedEmoji ? (
                 <motion.span
                   key={detectedEmoji}
                   initial={{ scale: 0.5, rotate: -10 }}
                   animate={{ scale: 1, rotate: 0 }}
-                  className="text-4xl sm:text-5xl select-none"
+                  className="text-5xl sm:text-6xl select-none"
                 >
                   {detectedEmoji}
                 </motion.span>
               ) : (
                 <div className="flex flex-col items-center text-[#38BDF8]/60">
-                  <Sparkles size={22} className="animate-pulse" />
-                  <span className="text-[9px] sm:text-[10px] font-black mt-0.5">اختر إيموجي</span>
+                  <Sparkles size={26} className="animate-pulse" />
+                  <span className="text-[10px] sm:text-[11px] font-black mt-1">اختر إيموجي</span>
                 </div>
               )}
 
               {detectedEmoji && (
-                <div className="absolute -bottom-1 -right-1 bg-green-500 text-white rounded-full p-0.5 shadow-md border-2 border-white">
-                  <Check size={11} strokeWidth={3} />
+                <div className="absolute -bottom-1.5 -right-1.5 bg-green-500 text-white rounded-full p-1 shadow-md border-2 border-white">
+                  <Check size={12} strokeWidth={3} />
                 </div>
               )}
             </div>
 
             {/* Form Input */}
-            <form onSubmit={handleConfirm} className="w-full space-y-2">
+            <form onSubmit={handleConfirm} className="w-full space-y-3">
               <div className="relative w-full">
                 <input
                   ref={inputRef}
@@ -168,12 +168,12 @@ export default function CustomEmojiModal({
                   data-1p-ignore="true"
                   data-lpignore="true"
                   data-form-type="other"
-                  className="w-full bg-slate-50 border-2 border-[#2E2882]/15 focus:border-[#38BDF8] rounded-xl px-3 py-2 sm:py-2.5 text-center text-slate-800 font-bold placeholder:text-slate-400 outline-none transition-all text-xs sm:text-sm shadow-inner ios-input-focus"
+                  className="w-full bg-slate-50 border-2 border-[#2E2882]/15 focus:border-[#38BDF8] rounded-2xl px-3 py-2.5 sm:py-3 text-center text-slate-800 font-bold placeholder:text-slate-400 outline-none transition-all text-xs sm:text-sm shadow-inner ios-input-focus"
                 />
               </div>
 
               {errorMsg && (
-                <p className="text-rose-500 font-bold text-[11px] animate-shake">
+                <p className="text-rose-500 font-bold text-xs animate-shake">
                   {errorMsg}
                 </p>
               )}
@@ -182,9 +182,9 @@ export default function CustomEmojiModal({
               <button
                 type="submit"
                 disabled={!detectedEmoji}
-                className="w-full h-10 sm:h-11 bg-[#38BDF8] hover:bg-[#0EA5E9] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-md cursor-pointer shrink-0"
+                className="w-full h-11 sm:h-12 bg-[#38BDF8] hover:bg-[#0EA5E9] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md cursor-pointer shrink-0"
               >
-                <Plus size={16} strokeWidth={3.5} />
+                <Plus size={18} strokeWidth={3.5} />
                 <span>إضافة للإيموجيات</span>
               </button>
             </form>
