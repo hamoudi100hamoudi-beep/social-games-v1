@@ -89,7 +89,7 @@ export default function CinematicModal({
   const getButtonStyles = (btn: CinematicModalButton) => {
     if (btn.className) return btn.className;
 
-    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-4 rounded-[18px] sm:rounded-[20px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shadow-md";
+    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-xs sm:text-sm font-black py-2.5 sm:py-3 px-2.5 sm:px-3 rounded-[15px] sm:rounded-[17px] tracking-wide flex items-center justify-center gap-1.5 whitespace-nowrap shadow-md";
     
     switch (btn.variant) {
       case "primary":
@@ -134,39 +134,39 @@ export default function CinematicModal({
             animate="visible"
             exit="exit"
             style={{ willChange: "transform, opacity" }}
-            className={`cinematic-modal-card bg-[#ECEBFC] pt-5 pb-7 px-5 sm:px-7 rounded-[28px] sm:rounded-[32px] w-[80%] max-w-[400px] h-auto max-h-[90dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col pointer-events-auto ${maxWidthClass || ""}`}
+            className={`cinematic-modal-card bg-[#ECEBFC] pt-3.5 pb-4 px-4 sm:pt-4 sm:pb-5 sm:px-6 rounded-[22px] sm:rounded-[26px] w-[85%] max-w-[420px] h-auto max-h-[70%] max-h-[70dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col pointer-events-auto ${maxWidthClass || ""}`}
           >
             {/* Minimalist Top Corner Close Button */}
             {onClose && (
               <button
                 type="button"
                 onClick={onClose}
-                className="absolute top-3.5 right-3.5 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
+                className="absolute top-2.5 right-2.5 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
                 aria-label="Close"
               >
-                <X className="w-5 h-5 stroke-[3]" />
+                <X className="w-4.5 h-4.5 stroke-[3]" />
               </button>
             )}
 
             {/* Little Spacer to balance aesthetic padding of the card */}
-            <motion.div variants={cinematicItemVariants} className="h-1.5 sm:h-2 w-full" />
+            <motion.div variants={cinematicItemVariants} className="h-1 w-full" />
 
             {/* Structured Title Label */}
             <motion.div
               variants={cinematicItemVariants}
-              className="relative select-none mb-3 sm:mb-4 mx-auto py-1 sm:py-1.5 px-2 flex justify-center w-full"
+              className="relative select-none mb-2 sm:mb-2.5 mx-auto py-0.5 px-2 flex justify-center w-full shrink-0"
             >
               <GameTitle
                 text={titleText}
                 type={titleType}
-                className="text-[26px] sm:text-[32px]"
+                className="text-[22px] sm:text-[26px]"
               />
             </motion.div>
 
-            {/* Main Interactive Slot Body (Guaranteed to be h-auto) */}
+            {/* Main Interactive Slot Body (Guaranteed to be h-auto with compact flex) */}
             <motion.div
               variants={cinematicItemVariants}
-              className="w-full text-center h-auto dynamic-modal-content"
+              className="w-full text-center h-auto dynamic-modal-content flex flex-col justify-center items-center min-h-0"
             >
               {children}
             </motion.div>
@@ -175,7 +175,7 @@ export default function CinematicModal({
             {buttons && buttons.length > 0 && (
               <motion.div
                 variants={cinematicItemVariants}
-                className="flex items-center gap-2.5 sm:gap-3 w-full mt-4 sm:mt-5"
+                className="flex items-center gap-2 sm:gap-2.5 w-full mt-3 sm:mt-3.5 shrink-0"
               >
                 {buttons.map((btn) => (
                   <button

@@ -689,30 +689,30 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
           return (
             <div className="flex flex-col items-center">
-              <div className="w-20 h-20 rounded-full bg-[#FB923C]/10 flex items-center justify-center mb-5 mt-2 relative">
-                <Settings size={40} className="text-[#FB923C] animate-spin-slow" strokeWidth={3} />
+              <div className="w-14 h-14 rounded-full bg-[#FB923C]/10 flex items-center justify-center mb-2 mt-0.5 relative shrink-0">
+                <Settings size={28} className="text-[#FB923C] animate-spin-slow" strokeWidth={3} />
               </div>
               
-              <h3 className="text-2xl sm:text-3xl font-black text-[#2E2882] mb-6 text-center">{roomDisplayName}</h3>
+              <h3 className="text-lg sm:text-xl font-black text-[#2E2882] mb-2.5 text-center leading-tight">{roomDisplayName}</h3>
 
               {joinError && (
-                <div className="mb-4 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl text-center">
+                <div className="mb-2 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1 rounded-xl text-center">
                   {joinError}
                 </div>
               )}
 
-              <div className="grid grid-cols-3 gap-2 sm:gap-4 w-full mb-6 py-1">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2 w-full mb-2 py-0.5">
                 <div className="text-center flex flex-col items-center justify-center">
-                  <div className="text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1.5">Players</div>
-                  <div className="text-[#2E2882] font-black text-xl sm:text-2xl">{currentCount}/{max}</div>
+                  <div className="text-[#8C8AA7] text-[10px] sm:text-[11px] font-black uppercase tracking-wider mb-1">Players</div>
+                  <div className="text-[#2E2882] font-black text-base sm:text-lg">{currentCount}/{max}</div>
                 </div>
                 <div className="text-center flex flex-col items-center justify-center">
-                  <div className="text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1.5">Theme</div>
-                  <div className="text-[#2E2882] font-black text-lg sm:text-xl leading-snug truncate max-w-full">{theme}</div>
+                  <div className="text-[#8C8AA7] text-[10px] sm:text-[11px] font-black uppercase tracking-wider mb-1">Theme</div>
+                  <div className="text-[#2E2882] font-black text-sm sm:text-base leading-snug truncate max-w-full">{theme}</div>
                 </div>
                 <div className="text-center flex flex-col items-center justify-center">
-                  <div className="text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1.5">To Win</div>
-                  <div className="text-[#FB923C] font-black text-lg sm:text-xl leading-snug">
+                  <div className="text-[#8C8AA7] text-[10px] sm:text-[11px] font-black uppercase tracking-wider mb-1">To Win</div>
+                  <div className="text-[#FB923C] font-black text-sm sm:text-base leading-snug">
                     {config.isFreeDraw ? "مفتوح" : `${toWin} pts`}
                   </div>
                 </div>
