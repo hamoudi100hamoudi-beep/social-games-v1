@@ -75,9 +75,9 @@ export const ExitSprite: React.FC<ExitSpriteProps> = ({ className = "" }) => {
   const posY = (row / (ROWS - 1)) * 100;
 
   return (
-    <div className={`relative flex items-center justify-center ${className}`}>
+    <div className={`relative flex items-center justify-center shrink-0 ${className}`}>
       <div
-        className="w-full aspect-[288/528] bg-no-repeat pointer-events-none select-none relative z-10"
+        className="h-full aspect-[288/528] max-w-full bg-no-repeat pointer-events-none select-none relative z-10"
         style={{
           backgroundImage: `url('/exit.webp')`,
           backgroundSize: `${COLS * 100}% ${ROWS * 100}%`,

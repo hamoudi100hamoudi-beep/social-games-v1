@@ -1565,17 +1565,17 @@ export default function GameRoom({
                 socket?.emit("leave_room", { roomId: room });
                 onLeave?.();
               },
-              className: "flex-1 select-none cursor-pointer bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/60 active:scale-95 transition-all text-base sm:text-lg font-black py-3.5 sm:py-4 px-4 sm:px-5 rounded-[20px] sm:rounded-[22px] shadow-md tracking-wide flex items-center justify-center gap-2 whitespace-nowrap",
+              className: "flex-1 select-none cursor-pointer bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/60 active:scale-95 transition-all text-[clamp(13px,1.8dvh,17px)] font-black py-[clamp(8px,1.4dvh,14px)] px-[clamp(10px,2vw,18px)] rounded-[clamp(16px,2.2dvh,22px)] shadow-md tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap",
             },
           ]}
         >
           {/* Animated Exit Character Sprite */}
-          <div className="w-full flex items-center justify-center mb-4 mt-2">
-            <ExitSprite className="w-28 sm:w-32 h-auto drop-shadow-sm" />
+          <div className="w-full flex items-center justify-center mb-[clamp(8px,1.6dvh,16px)] mt-1">
+            <ExitSprite className="h-[clamp(85px,15dvh,135px)] drop-shadow-sm" />
           </div>
 
           {/* Question */}
-          <h3 id="exit-confirm-title" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-4 text-center">
+          <h3 id="exit-confirm-title" className="text-[clamp(15px,2.2dvh,20px)] font-black text-[#2E2882] leading-snug tracking-tight mb-[clamp(8px,1.6dvh,16px)] text-center">
             Do you want to leave the game?
           </h3>
         </CinematicModal>
@@ -2305,10 +2305,10 @@ export default function GameRoom({
           },
         ]}
       >
-        <h3 id="skip-confirm-title" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        <h3 id="skip-confirm-title" className="text-[clamp(15px,2.2dvh,20px)] font-black text-[#2E2882] leading-snug tracking-tight mb-1">
           Do you want to skip your turn?
         </h3>
-        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-[clamp(12px,1.6dvh,15px)] font-bold mb-[clamp(8px,1.6dvh,18px)]">
           هل تريد تجاوز دورك في الرسم؟
         </p>
       </CinematicModal>
@@ -2329,15 +2329,15 @@ export default function GameRoom({
         ]}
       >
         {/* Animated Warning Sprite */}
-        <div className="flex justify-center mb-3">
-          <AfkWarningSprite className="w-28 sm:w-32 aspect-[256/326]" />
+        <div className="flex justify-center mb-[clamp(6px,1.4dvh,12px)]">
+          <AfkWarningSprite className="h-[clamp(75px,13dvh,115px)]" />
         </div>
 
         {/* Question & Subtext in the same line (RTL reading order) */}
         <h3 
           id="afk-title" 
           dir="rtl"
-          className="text-[15px] sm:text-[17px] font-black text-[#2E2882] leading-snug mb-3 px-1 text-center"
+          className="text-[clamp(13px,1.8dvh,16px)] font-black text-[#2E2882] leading-snug mb-[clamp(6px,1.4dvh,12px)] px-1 text-center"
         >
           <span>هل ما زلت هنا؟ </span>
           <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
@@ -2346,7 +2346,7 @@ export default function GameRoom({
         {/* Compact Remainder Countdown Badge */}
         <div 
           dir="rtl"
-          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 text-xs sm:text-sm font-black text-[#EF4444] select-none"
+          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-3 sm:px-4 py-1 sm:py-1.5 inline-flex items-center gap-2 mb-[clamp(6px,1.4dvh,12px)] text-[clamp(11px,1.5dvh,13px)] font-black text-[#EF4444] select-none"
         >
           <span className="flex h-2 w-2 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
@@ -2383,7 +2383,7 @@ export default function GameRoom({
         ]}
       >
         {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
+        <div className="w-[clamp(48px,8dvh,72px)] h-[clamp(48px,8dvh,72px)] flex items-center justify-center mx-auto mb-[clamp(8px,1.6dvh,18px)] mt-1 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2396,13 +2396,14 @@ export default function GameRoom({
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
+            className="w-full h-full flex items-center justify-center"
           >
-            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-full h-full text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
         {/* Content Text exactly as requested */}
-        <h3 id="report-confirm-title" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-5">
+        <h3 id="report-confirm-title" className="text-[clamp(15px,2.2dvh,20px)] font-black text-[#2E2882] leading-snug tracking-tight mb-[clamp(8px,1.6dvh,18px)]">
           Are you sure you wanna report this drawing?
         </h3>
       </CinematicModal>
@@ -2506,25 +2507,25 @@ export default function GameRoom({
           return (
             <>
               {/* Avatar Emoji Frame with Sequential Animation */}
-              <div className="w-36 h-36 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-5 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)]">
-                <span className="text-[85px] leading-none mb-1">{playerToRender.avatar || "👤"}</span>
+              <div className="w-[clamp(80px,12dvh,120px)] h-[clamp(80px,12dvh,120px)] rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-[clamp(8px,1.6dvh,16px)] shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)]">
+                <span className="text-[clamp(48px,7.5dvh,72px)] leading-none mb-1">{playerToRender.avatar || "👤"}</span>
               </div>
 
               {/* Player Name Card */}
               <div>
-                <h3 id="profile-modal-name" className="text-[25px] font-black text-[#2E2882] leading-snug tracking-tight mb-6">
+                <h3 id="profile-modal-name" className="text-[clamp(18px,2.4dvh,24px)] font-black text-[#2E2882] leading-snug tracking-tight mb-[clamp(10px,1.8dvh,18px)]">
                   {playerToRender.name}
                 </h3>
               </div>
 
               {isSelf ? (
                 <div 
-                  className="py-3.5 px-4 bg-white rounded-[20px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm shadow-sm"
+                  className="py-[clamp(8px,1.4dvh,14px)] px-4 bg-white rounded-[clamp(16px,2.2dvh,20px)] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-[clamp(12px,1.6dvh,14px)] shadow-sm"
                 >
                   هذا هو حسابك الشخصي
                 </div>
               ) : (
-                <div className="flex flex-col gap-3.5 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="flex flex-col gap-2.5 sm:gap-3.5 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
                   {/* Block / Unblock Action Button (Mute) */}
                   <div>
                     <button
@@ -2533,7 +2534,7 @@ export default function GameRoom({
                         handleToggleBlock();
                         setSelectedProfilePlayer(null);
                       }}
-                      className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
+                      className={`w-full py-[clamp(8px,1.4dvh,14px)] px-4 font-black text-[clamp(13px,1.8dvh,16px)] rounded-[clamp(16px,2.2dvh,22px)] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
                         isBlocked 
                           ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
                           : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
@@ -2552,7 +2553,7 @@ export default function GameRoom({
                         handleToggleVoteKick();
                         setSelectedProfilePlayer(null);
                       }}
-                      className={`w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none ${
+                      className={`w-full py-[clamp(8px,1.4dvh,14px)] px-4 font-black text-[clamp(13px,1.8dvh,16px)] rounded-[clamp(16px,2.2dvh,22px)] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
                         alreadyVoted
                           ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
                           : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
@@ -2581,12 +2582,12 @@ export default function GameRoom({
             text: "OK",
             onClick: () => setShowCooldownWarning(false),
             variant: "custom",
-            className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95 shadow-md",
+            className: "w-full py-[clamp(8px,1.4dvh,14px)] px-5 font-black text-[clamp(13px,1.8dvh,16px)] rounded-[clamp(16px,2.2dvh,22px)] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95 shadow-md",
           },
         ]}
       >
         {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+        <div className="w-[clamp(48px,8dvh,72px)] h-[clamp(48px,8dvh,72px)] flex items-center justify-center mx-auto mb-[clamp(8px,1.6dvh,18px)] mt-1 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2599,16 +2600,17 @@ export default function GameRoom({
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
+            className="w-full h-full flex items-center justify-center"
           >
-            <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-full h-full text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
         {/* Alert Message */}
-        <h3 id="cooldown-warning-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        <h3 id="cooldown-warning-title" className="text-[clamp(15px,2.2dvh,20px)] font-black text-[#2E2882] leading-snug tracking-tight mb-1">
           You voted recently. Please waiting to votekick again
         </h3>
-        <p id="cooldown-warning-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+        <p id="cooldown-warning-ar" className="text-[#8C8AA7] text-[clamp(12px,1.6dvh,15px)] font-bold mb-[clamp(8px,1.6dvh,18px)]">
           لقد قمت بالتصويت مؤخراً. يرجى الانتظار للمحاولة مرة أخرى.
         </p>
       </CinematicModal>
@@ -2633,7 +2635,7 @@ export default function GameRoom({
         ]}
       >
         {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+        <div className="w-[clamp(48px,8dvh,72px)] h-[clamp(48px,8dvh,72px)] flex items-center justify-center mx-auto mb-[clamp(8px,1.6dvh,18px)] mt-1 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2646,16 +2648,17 @@ export default function GameRoom({
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
+            className="w-full h-full flex items-center justify-center"
           >
-            <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-full h-full text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
         {/* Content Text in standard theme colors */}
-        <h3 id="kicked-out-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        <h3 id="kicked-out-desc" className="text-[clamp(15px,2.2dvh,20px)] font-black text-[#2E2882] leading-snug tracking-tight mb-1">
           You were kicked out by voting
         </h3>
-        <p id="kicked-out-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+        <p id="kicked-out-desc-ar" className="text-[#8C8AA7] text-[clamp(12px,1.6dvh,15px)] font-bold mb-[clamp(8px,1.6dvh,18px)]">
           تم طردك من هذه الغرفة بناءً على تصويت اللاعبين الآخرين.
         </p>
       </CinematicModal>
@@ -2688,7 +2691,7 @@ export default function GameRoom({
           },
         ]}
       >
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
+        <div className="w-[clamp(48px,8dvh,72px)] h-[clamp(48px,8dvh,72px)] flex items-center justify-center mx-auto mb-[clamp(8px,1.6dvh,18px)] mt-1 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2701,15 +2704,16 @@ export default function GameRoom({
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
+            className="w-full h-full flex items-center justify-center"
           >
-            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-full h-full text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
-        <h3 id="nickname-taken-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        <h3 id="nickname-taken-desc" className="text-[clamp(15px,2.2dvh,20px)] font-black text-[#2E2882] leading-snug tracking-tight mb-1">
           Name already in use
         </h3>
-        <p id="nickname-taken-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+        <p id="nickname-taken-desc-ar" className="text-[#8C8AA7] text-[clamp(12px,1.6dvh,15px)] font-bold mb-[clamp(8px,1.6dvh,18px)]">
           يوجد شخص آخر في الغرفة بنفس الاسم، غيره لتتمكن من الدخول
         </p>
       </CinematicModal>
@@ -2741,7 +2745,7 @@ export default function GameRoom({
           },
         ]}
       >
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
+        <div className="w-[clamp(48px,8dvh,72px)] h-[clamp(48px,8dvh,72px)] flex items-center justify-center mx-auto mb-[clamp(8px,1.6dvh,18px)] mt-1 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2754,15 +2758,16 @@ export default function GameRoom({
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
+            className="w-full h-full flex items-center justify-center"
           >
-            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-full h-full text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
-        <h3 id="room-full-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        <h3 id="room-full-desc" className="text-[clamp(15px,2.2dvh,20px)] font-black text-[#2E2882] leading-snug tracking-tight mb-1">
           This room is full
         </h3>
-        <p id="room-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+        <p id="room-full-desc-ar" className="text-[#8C8AA7] text-[clamp(12px,1.6dvh,15px)] font-bold mb-[clamp(8px,1.6dvh,18px)]">
           هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>

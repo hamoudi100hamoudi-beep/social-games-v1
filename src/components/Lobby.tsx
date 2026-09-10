@@ -787,7 +787,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
           },
         ]}
       >
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+        <div className="w-[clamp(48px,8dvh,72px)] h-[clamp(48px,8dvh,72px)] flex items-center justify-center mx-auto mb-[clamp(8px,1.6dvh,18px)] mt-1 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -800,15 +800,16 @@ export default function Lobby({ onPlay }: LobbyProps) {
               repeatDelay: 1.8,
               ease: "easeInOut"
             }}
+            className="w-full h-full flex items-center justify-center"
           >
-            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-full h-full text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
-        <h3 id="lobby-room-full-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        <h3 id="lobby-room-full-desc" className="text-[clamp(15px,2.2dvh,20px)] font-black text-[#2E2882] leading-snug tracking-tight mb-1">
           This room is full
         </h3>
-        <p id="lobby-room-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+        <p id="lobby-room-full-desc-ar" className="text-[#8C8AA7] text-[clamp(12px,1.6dvh,15px)] font-bold mb-[clamp(8px,1.6dvh,18px)]">
           هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>

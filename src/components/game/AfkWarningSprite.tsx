@@ -83,7 +83,7 @@ export const AfkWarningSprite: React.FC<AfkWarningSpriteProps> = ({
   const posY = (row / (ROWS - 1)) * 100;
 
   return (
-    <div className={`relative flex items-center justify-center ${className}`}>
+    <div className={`relative flex items-center justify-center shrink-0 ${className}`}>
       {/* Hidden image element to guarantee GPU texture decoding is retained */}
       <img
         src="/afk_warning.webp"
@@ -93,7 +93,7 @@ export const AfkWarningSprite: React.FC<AfkWarningSpriteProps> = ({
         decoding="sync"
       />
       <div
-        className="w-full aspect-[256/326] bg-no-repeat pointer-events-none select-none relative z-10"
+        className="h-full aspect-[256/326] max-w-full bg-no-repeat pointer-events-none select-none relative z-10"
         style={{
           backgroundImage: `url('/afk_warning.webp')`,
           backgroundSize: `${COLS * 100}% ${ROWS * 100}%`,

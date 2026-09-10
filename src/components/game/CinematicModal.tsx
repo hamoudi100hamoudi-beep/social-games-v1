@@ -89,7 +89,7 @@ export default function CinematicModal({
   const getButtonStyles = (btn: CinematicModalButton) => {
     if (btn.className) return btn.className;
 
-    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-base sm:text-lg font-black py-3.5 sm:py-4 px-4 sm:px-5 rounded-[20px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-2 whitespace-nowrap shadow-md";
+    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-[clamp(13px,1.8dvh,17px)] font-black py-[clamp(8px,1.4dvh,14px)] px-[clamp(10px,2vw,18px)] rounded-[clamp(16px,2.2dvh,22px)] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shadow-md";
     
     switch (btn.variant) {
       case "primary":
@@ -120,7 +120,7 @@ export default function CinematicModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className={`fixed inset-0 z-[9999] flex items-center justify-center p-4 ${overlayClassName || "bg-slate-900/80"}`}
+          className={`fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 ${overlayClassName || "bg-slate-900/80"}`}
           onClick={(e) => {
             if (e.target === e.currentTarget && onClose) {
               onClose();
@@ -136,32 +136,29 @@ export default function CinematicModal({
                 animate="visible"
                 exit="exit"
                 style={{ willChange: "transform, opacity" }}
-                className="cinematic-modal-card bg-[#ECEBFC] pt-6 pb-8 px-6 sm:px-8 rounded-[30px] sm:rounded-[34px] w-full max-h-[92dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col h-auto"
+                className="cinematic-modal-card bg-[#ECEBFC] pt-[clamp(16px,2.6dvh,24px)] pb-[clamp(18px,3.2dvh,28px)] px-[clamp(18px,4.5vw,28px)] rounded-[clamp(24px,3.2dvh,32px)] w-full max-h-[92dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col h-auto"
               >
             {/* Minimalist Top Corner Close Button - No circle, no border, no shadow, completely static relative to card */}
             {onClose && (
               <button
                 type="button"
                 onClick={onClose}
-                className="absolute top-4 sm:top-5 right-4 sm:right-5 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
+                className="absolute top-3 sm:top-4 right-3 sm:right-4 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
                 aria-label="Close"
               >
                 <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
               </button>
             )}
 
-            {/* Little Spacer to balance aesthetic padding of the card */}
-            <motion.div variants={cinematicItemVariants} className="h-2 sm:h-3 w-full" />
-
             {/* Structured Title Label */}
             <motion.div
               variants={cinematicItemVariants}
-              className="relative select-none mb-4 sm:mb-5 mx-auto py-1.5 sm:py-2 px-3 flex justify-center w-full"
+              className="relative select-none mb-[clamp(8px,1.6dvh,16px)] mx-auto py-1 px-2 flex justify-center w-full"
             >
               <GameTitle
                 text={titleText}
                 type={titleType}
-                className="text-[32px] sm:text-[36px]"
+                className="text-[clamp(24px,3.6dvh,34px)]"
               />
             </motion.div>
 
@@ -177,7 +174,7 @@ export default function CinematicModal({
             {buttons && buttons.length > 0 && (
               <motion.div
                 variants={cinematicItemVariants}
-                className="flex items-center gap-3 w-full mt-5 sm:mt-6"
+                className="flex items-center gap-2 sm:gap-3 w-full mt-[clamp(10px,2dvh,20px)]"
               >
                 {buttons.map((btn) => (
                   <button
