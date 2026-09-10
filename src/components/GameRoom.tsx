@@ -1565,17 +1565,17 @@ export default function GameRoom({
                 socket?.emit("leave_room", { roomId: room });
                 onLeave?.();
               },
-              className: "cinematic-modal-btn flex-1 select-none cursor-pointer bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/60 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-5 rounded-[18px] sm:rounded-[22px] shadow-md tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap",
+              className: "flex-1 select-none cursor-pointer bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/60 active:scale-95 transition-all text-base sm:text-lg font-black py-3.5 sm:py-4 px-4 sm:px-5 rounded-[20px] sm:rounded-[22px] shadow-md tracking-wide flex items-center justify-center gap-2 whitespace-nowrap",
             },
           ]}
         >
           {/* Animated Exit Character Sprite */}
-          <div className="cinematic-modal-sprite-wrap w-full flex items-center justify-center mb-3 sm:mb-4 mt-1 sm:mt-2">
-            <ExitSprite className="cinematic-modal-sprite w-24 sm:w-32 h-auto drop-shadow-sm" />
+          <div className="w-full flex items-center justify-center mb-4 mt-2">
+            <ExitSprite className="w-28 sm:w-32 h-auto drop-shadow-sm" />
           </div>
 
           {/* Question */}
-          <h3 id="exit-confirm-title" className="cinematic-modal-text text-[18px] sm:text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
+          <h3 id="exit-confirm-title" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-4 text-center">
             Do you want to leave the game?
           </h3>
         </CinematicModal>
@@ -2305,10 +2305,10 @@ export default function GameRoom({
           },
         ]}
       >
-        <h3 id="skip-confirm-title" className="cinematic-modal-text text-[18px] sm:text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2">
+        <h3 id="skip-confirm-title" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
           Do you want to skip your turn?
         </h3>
-        <p id="skip-confirm-title-ar" className="cinematic-modal-subtext text-[#8C8AA7] text-sm sm:text-base font-bold mb-4 sm:mb-6">
+        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
           هل تريد تجاوز دورك في الرسم؟
         </p>
       </CinematicModal>
@@ -2329,15 +2329,15 @@ export default function GameRoom({
         ]}
       >
         {/* Animated Warning Sprite */}
-        <div className="cinematic-modal-sprite-wrap flex justify-center mb-2">
-          <AfkWarningSprite className="cinematic-modal-sprite w-24 sm:w-32 aspect-[256/326]" />
+        <div className="flex justify-center mb-3">
+          <AfkWarningSprite className="w-28 sm:w-32 aspect-[256/326]" />
         </div>
 
         {/* Question & Subtext in the same line (RTL reading order) */}
         <h3 
           id="afk-title" 
           dir="rtl"
-          className="cinematic-modal-text text-[14px] sm:text-[16px] font-black text-[#2E2882] leading-snug mb-2 sm:mb-3 px-1 text-center"
+          className="text-[15px] sm:text-[17px] font-black text-[#2E2882] leading-snug mb-3 px-1 text-center"
         >
           <span>هل ما زلت هنا؟ </span>
           <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
@@ -2346,7 +2346,7 @@ export default function GameRoom({
         {/* Compact Remainder Countdown Badge */}
         <div 
           dir="rtl"
-          className="cinematic-modal-subtext bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-3 sm:px-4 py-1 sm:py-1.5 inline-flex items-center gap-1.5 sm:gap-2 mb-2 sm:mb-3 text-xs sm:text-sm font-black text-[#EF4444] select-none"
+          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 text-xs sm:text-sm font-black text-[#EF4444] select-none"
         >
           <span className="flex h-2 w-2 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
@@ -2383,7 +2383,7 @@ export default function GameRoom({
         ]}
       >
         {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="cinematic-modal-icon-wrap w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-6 mt-2 sm:mt-4 relative">
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2397,12 +2397,12 @@ export default function GameRoom({
               ease: "easeInOut"
             }}
           >
-            <AlertTriangle className="cinematic-modal-sprite w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
         {/* Content Text exactly as requested */}
-        <h3 id="report-confirm-title" className="cinematic-modal-text text-[18px] sm:text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-6">
+        <h3 id="report-confirm-title" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-5">
           Are you sure you wanna report this drawing?
         </h3>
       </CinematicModal>
@@ -2688,7 +2688,7 @@ export default function GameRoom({
           },
         ]}
       >
-        <div className="cinematic-modal-icon-wrap w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-6 mt-2 sm:mt-4 relative">
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2702,14 +2702,14 @@ export default function GameRoom({
               ease: "easeInOut"
             }}
           >
-            <AlertTriangle className="cinematic-modal-sprite w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
-        <h3 id="nickname-taken-desc" className="cinematic-modal-text text-[18px] sm:text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2">
+        <h3 id="nickname-taken-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
           Name already in use
         </h3>
-        <p id="nickname-taken-desc-ar" className="cinematic-modal-subtext text-[#8C8AA7] text-sm sm:text-base font-bold mb-4 sm:mb-6">
+        <p id="nickname-taken-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
           يوجد شخص آخر في الغرفة بنفس الاسم، غيره لتتمكن من الدخول
         </p>
       </CinematicModal>
@@ -2741,7 +2741,7 @@ export default function GameRoom({
           },
         ]}
       >
-        <div className="cinematic-modal-icon-wrap w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-6 mt-2 sm:mt-4 relative">
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2755,14 +2755,14 @@ export default function GameRoom({
               ease: "easeInOut"
             }}
           >
-            <AlertTriangle className="cinematic-modal-sprite w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
-        <h3 id="room-full-desc" className="cinematic-modal-text text-[18px] sm:text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2">
+        <h3 id="room-full-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
           This room is full
         </h3>
-        <p id="room-full-desc-ar" className="cinematic-modal-subtext text-[#8C8AA7] text-sm sm:text-base font-bold mb-4 sm:mb-6">
+        <p id="room-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
           هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>

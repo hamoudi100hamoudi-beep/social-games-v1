@@ -89,7 +89,7 @@ export default function CinematicModal({
   const getButtonStyles = (btn: CinematicModalButton) => {
     if (btn.className) return btn.className;
 
-    const base = "cinematic-modal-btn flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-5 rounded-[18px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap";
+    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-base sm:text-lg font-black py-3.5 sm:py-4 px-4 sm:px-5 rounded-[20px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-2 whitespace-nowrap shadow-md";
     
     switch (btn.variant) {
       case "primary":
@@ -136,7 +136,7 @@ export default function CinematicModal({
                 animate="visible"
                 exit="exit"
                 style={{ willChange: "transform, opacity" }}
-                className={`cinematic-modal-card bg-[#ECEBFC] pt-5 pb-7 sm:pb-8 px-5 sm:px-8 rounded-[28px] sm:rounded-[32px] w-full max-h-[92dvh] overflow-y-auto no-scrollbar shadow-xl text-center relative border border-white/40 flex flex-col h-auto`}
+                className="cinematic-modal-card bg-[#ECEBFC] pt-6 pb-8 px-6 sm:px-8 rounded-[30px] sm:rounded-[34px] w-full max-h-[92dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col h-auto"
               >
             {/* Minimalist Top Corner Close Button - No circle, no border, no shadow, completely static relative to card */}
             {onClose && (
@@ -151,17 +151,17 @@ export default function CinematicModal({
             )}
 
             {/* Little Spacer to balance aesthetic padding of the card */}
-            <motion.div variants={cinematicItemVariants} className="cinematic-modal-spacer h-2 sm:h-3 w-full" />
+            <motion.div variants={cinematicItemVariants} className="h-2 sm:h-3 w-full" />
 
             {/* Structured Title Label */}
             <motion.div
               variants={cinematicItemVariants}
-              className="cinematic-modal-title-wrap relative select-none mb-4 sm:mb-5 mx-auto py-1 sm:py-2 px-3 flex justify-center w-full"
+              className="relative select-none mb-4 sm:mb-5 mx-auto py-1.5 sm:py-2 px-3 flex justify-center w-full"
             >
               <GameTitle
                 text={titleText}
                 type={titleType}
-                className="cinematic-modal-title-text text-[30px] sm:text-[34px]"
+                className="text-[32px] sm:text-[36px]"
               />
             </motion.div>
 
@@ -177,7 +177,7 @@ export default function CinematicModal({
             {buttons && buttons.length > 0 && (
               <motion.div
                 variants={cinematicItemVariants}
-                className="cinematic-modal-buttons flex items-center gap-2.5 sm:gap-3 w-full mt-4 sm:mt-6"
+                className="flex items-center gap-3 w-full mt-5 sm:mt-6"
               >
                 {buttons.map((btn) => (
                   <button
