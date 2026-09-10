@@ -1570,12 +1570,12 @@ export default function GameRoom({
           ]}
         >
           {/* Animated Exit Character Sprite */}
-          <div className="w-full flex items-center justify-center mb-3 sm:mb-4 mt-1">
-            <ExitSprite className="w-26 sm:w-30 h-auto drop-shadow-sm" />
+          <div className="w-full flex items-center justify-center mb-3 sm:mb-5 mt-1">
+            <ExitSprite className="w-26 sm:w-36 h-auto drop-shadow-sm" />
           </div>
 
           {/* Question */}
-          <h3 id="exit-confirm-title" className="text-[18px] sm:text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 text-center">
+          <h3 id="exit-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
             Do you want to leave the game?
           </h3>
         </CinematicModal>
@@ -2329,15 +2329,15 @@ export default function GameRoom({
         ]}
       >
         {/* Animated Warning Sprite */}
-        <div className="flex justify-center mb-3 mt-1">
-          <AfkWarningSprite className="w-24 sm:w-28 aspect-[256/326]" />
+        <div className="flex justify-center mb-3 sm:mb-4 mt-1">
+          <AfkWarningSprite className="w-24 sm:w-34 aspect-[256/326]" />
         </div>
 
         {/* Question & Subtext in the same line (RTL reading order) */}
         <h3 
           id="afk-title" 
           dir="rtl"
-          className="text-sm sm:text-base font-black text-[#2E2882] leading-snug mb-3 px-1 text-center"
+          className="text-sm sm:text-base font-black text-[#2E2882] leading-snug mb-3 sm:mb-4 px-1 text-center"
         >
           <span>هل ما زلت هنا؟ </span>
           <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
@@ -2346,7 +2346,7 @@ export default function GameRoom({
         {/* Compact Remainder Countdown Badge */}
         <div 
           dir="rtl"
-          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 text-xs sm:text-sm font-black text-[#EF4444] select-none"
+          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 sm:mb-4 text-xs sm:text-sm font-black text-[#EF4444] select-none"
         >
           <span className="flex h-2 w-2 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
@@ -2383,7 +2383,7 @@ export default function GameRoom({
         ]}
       >
         {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-18 h-18 flex items-center justify-center mx-auto mb-3 mt-1 relative">
+        <div className="w-18 h-18 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative">
           <motion.div 
             animate={{
               rotate: [-4, 4, -4, 4, -4, 4, 0],
@@ -2397,12 +2397,12 @@ export default function GameRoom({
               ease: "easeInOut"
             }}
           >
-            <AlertTriangle className="w-16 h-16 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            <AlertTriangle className="w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
           </motion.div>
         </div>
 
         {/* Content Text exactly as requested */}
-        <h3 id="report-confirm-title" className="text-base sm:text-lg font-black text-[#2E2882] leading-snug tracking-tight mb-3">
+        <h3 id="report-confirm-title" className="text-base sm:text-xl font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4">
           Are you sure you wanna report this drawing?
         </h3>
       </CinematicModal>

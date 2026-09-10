@@ -102,48 +102,48 @@ export default function CustomEmojiModal({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-[85%] max-w-[420px] h-auto max-h-[75%] max-h-[75dvh] overflow-y-auto no-scrollbar bg-white rounded-[28px] sm:rounded-[32px] p-5 sm:p-6 border border-white/40 shadow-2xl z-10 flex flex-col items-center text-center"
+            className="relative w-[90%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[460px] h-auto max-h-[85dvh] overflow-y-auto no-scrollbar bg-white rounded-[28px] sm:rounded-[40px] p-6 sm:p-10 border border-white/40 shadow-2xl z-10 flex flex-col items-center justify-center text-center"
             dir="rtl"
           >
             {/* Close Button */}
             <button
               onClick={onClose}
               type="button"
-              className="absolute top-3 left-3 sm:top-4 sm:left-4 w-8 h-8 sm:w-9 sm:h-9 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 active:scale-90 transition-transform cursor-pointer z-20"
+              className="absolute top-3 left-3 sm:top-4 sm:left-4 w-8 h-8 sm:w-10 sm:h-10 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 active:scale-90 transition-transform cursor-pointer z-20"
             >
-              <X size={18} strokeWidth={3} />
+              <X size={18} className="sm:w-5 sm:h-5" strokeWidth={3} />
             </button>
 
             {/* Title */}
-            <div className="mb-1 mt-0.5">
-              <GameTitle text="CUSTOM EMOJI" type="skip" className="text-[22px] sm:text-[26px]" />
+            <div className="mb-1 mt-0.5 sm:mb-2">
+              <GameTitle text="CUSTOM EMOJI" type="skip" className="text-[22px] sm:text-[30px]" />
             </div>
 
-            <p className="text-[#8C8AA7] font-bold text-xs sm:text-sm mb-3">
+            <p className="text-[#8C8AA7] font-bold text-xs sm:text-base mb-3 sm:mb-4">
               أضف إيموجيك الخاص من كيبورد الهاتف 🎨
             </p>
 
             {/* Preview Box */}
-            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-2xl sm:rounded-3xl bg-[#38BDF8]/10 border-2 border-[#38BDF8]/30 flex items-center justify-center mb-3 relative shadow-inner shrink-0">
+            <div className="w-18 h-18 sm:w-24 sm:h-24 rounded-2xl sm:rounded-3xl bg-[#38BDF8]/10 border-2 border-[#38BDF8]/30 flex items-center justify-center mb-3 sm:mb-4 relative shadow-inner shrink-0">
               {detectedEmoji ? (
                 <motion.span
                   key={detectedEmoji}
                   initial={{ scale: 0.5, rotate: -10 }}
                   animate={{ scale: 1, rotate: 0 }}
-                  className="text-5xl sm:text-6xl select-none"
+                  className="text-5xl sm:text-7xl select-none"
                 >
                   {detectedEmoji}
                 </motion.span>
               ) : (
                 <div className="flex flex-col items-center text-[#38BDF8]/60">
-                  <Sparkles size={26} className="animate-pulse" />
-                  <span className="text-[10px] sm:text-[11px] font-black mt-1">اختر إيموجي</span>
+                  <Sparkles size={26} className="sm:w-8 sm:h-8 animate-pulse" />
+                  <span className="text-[10px] sm:text-xs font-black mt-1">اختر إيموجي</span>
                 </div>
               )}
 
               {detectedEmoji && (
-                <div className="absolute -bottom-1.5 -right-1.5 bg-green-500 text-white rounded-full p-1 shadow-md border-2 border-white">
-                  <Check size={12} strokeWidth={3} />
+                <div className="absolute -bottom-1.5 -right-1.5 bg-green-500 text-white rounded-full p-1 sm:p-1.5 shadow-md border-2 border-white">
+                  <Check size={12} className="sm:w-4 sm:h-4" strokeWidth={3} />
                 </div>
               )}
             </div>

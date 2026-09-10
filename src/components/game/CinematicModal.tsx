@@ -89,7 +89,7 @@ export default function CinematicModal({
   const getButtonStyles = (btn: CinematicModalButton) => {
     if (btn.className) return btn.className;
 
-    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-4 rounded-[18px] sm:rounded-[20px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2 whitespace-nowrap shadow-md";
+    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-5 rounded-[18px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2.5 whitespace-nowrap shadow-md";
     
     switch (btn.variant) {
       case "primary":
@@ -134,17 +134,17 @@ export default function CinematicModal({
             animate="visible"
             exit="exit"
             style={{ willChange: "transform, opacity" }}
-            className={`cinematic-modal-card bg-[#ECEBFC] pt-5 pb-6 px-5 sm:pt-6 sm:pb-7 sm:px-7 rounded-[28px] sm:rounded-[32px] w-[85%] max-w-[420px] h-auto max-h-[75%] max-h-[75dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col pointer-events-auto ${maxWidthClass || ""}`}
+            className={`cinematic-modal-card bg-[#ECEBFC] pt-6 pb-6 px-5 sm:pt-10 sm:pb-10 sm:px-8 rounded-[28px] sm:rounded-[40px] w-[90%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[460px] h-auto max-h-[85dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col justify-center pointer-events-auto ${maxWidthClass || ""}`}
           >
             {/* Minimalist Top Corner Close Button */}
             {onClose && (
               <button
                 type="button"
                 onClick={onClose}
-                className="absolute top-3.5 right-3.5 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
+                className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
                 aria-label="Close"
               >
-                <X className="w-5 h-5 stroke-[3]" />
+                <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
               </button>
             )}
 
@@ -154,12 +154,12 @@ export default function CinematicModal({
             {/* Structured Title Label */}
             <motion.div
               variants={cinematicItemVariants}
-              className="relative select-none mb-3 sm:mb-4 mx-auto py-1 sm:py-1.5 px-2 flex justify-center w-full shrink-0"
+              className="relative select-none mb-3 sm:mb-5 mx-auto py-1 sm:py-1.5 px-2 flex justify-center w-full shrink-0"
             >
               <GameTitle
                 text={titleText}
                 type={titleType}
-                className="text-[25px] sm:text-[30px]"
+                className="text-[25px] sm:text-[32px]"
               />
             </motion.div>
 
