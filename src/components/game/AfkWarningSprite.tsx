@@ -93,7 +93,7 @@ export const AfkWarningSprite: React.FC<AfkWarningSpriteProps> = ({
         decoding="sync"
       />
       <div
-        className="h-full aspect-[256/326] max-w-full bg-no-repeat pointer-events-none select-none relative z-10"
+        className="w-full aspect-[256/326] max-w-full bg-no-repeat pointer-events-none select-none relative z-10"
         style={{
           backgroundImage: `url('/afk_warning.webp')`,
           backgroundSize: `${COLS * 100}% ${ROWS * 100}%`,
