@@ -1034,7 +1034,10 @@ export default function ExperimentalGameRoom({
 
       if (!isChatOpenRef.current) {
         unreadCountRef.current += 1;
-        setUnreadCount(unreadCountRef.current);
+        // 🛡️ Task 3: Defer React state update while drawing to protect Drawing Critical Path
+        if (!isDrawingModeRef.current) {
+          setUnreadCount(unreadCountRef.current);
+        }
       }
 
       // If not in drawing mode, or in Free Draw, or if chat overlay is currently open, update React state immediately
@@ -1721,11 +1724,15 @@ export default function ExperimentalGameRoom({
                 drawerTimerSlotRef={handleDrawerSlotRef}
               />
 
-              {/* Hit Notifications Overlay (Active only when drawing in fullscreen mode) */}
-              {isDrawingMode && (
-                <div className="absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full">
-                  <AnimatePresence>
-                    {hitNotifications.map((hit) => {
+              {/* Hit Notifications Overlay (Pre-mounted to eliminate Mount Shock during drawing transitions) */}
+              <div
+                className={`absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full ${
+                  isDrawingMode ? '' : 'hidden pointer-events-none'
+                }`}
+                aria-hidden={!isDrawingMode}
+              >
+                <AnimatePresence>
+                  {isDrawingMode && hitNotifications.map((hit) => {
                       if (hit.isReport) {
                         return (
                           <motion.div
@@ -1791,8 +1798,7 @@ export default function ExperimentalGameRoom({
                       );
                     })}
                   </AnimatePresence>
-                </div>
-              )}
+              </div>
             </div>
 
             {/* Correct Guess Animation */}

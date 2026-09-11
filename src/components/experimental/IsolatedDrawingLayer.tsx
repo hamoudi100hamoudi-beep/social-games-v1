@@ -1,5 +1,5 @@
 import React, { memo, useEffect, useMemo, useRef } from 'react';
-import DrawingBoard from '../DrawingBoard';
+import { ExperimentalDrawingBoard } from './ExperimentalDrawingBoard';
 import { expMetrics } from './experimentalInstrumentation';
 
 export interface IsolatedDrawingLayerProps {
@@ -53,14 +53,17 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Measure layout / dimension readiness of the drawing container
+  // Measure layout / dimension readiness of the drawing container without forced synchronous reflow
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    let rafId: number | null = null;
 
-    if (el.clientWidth > 0 && el.clientHeight > 0) {
-      expMetrics.recordLayoutMeasurement(el.clientWidth, el.clientHeight, 'DrawingContainerInitial');
-    }
+    rafId = requestAnimationFrame(() => {
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        expMetrics.recordLayoutMeasurement(el.clientWidth, el.clientHeight, 'DrawingContainerInitial');
+      }
+    });
 
     const obs = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -72,7 +75,10 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
     });
 
     obs.observe(el);
-    return () => obs.disconnect();
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      obs.disconnect();
+    };
   }, []);
 
   // Passive pointer listeners (capture-mode, passive, non-intercepting) to profile hardware-to-JS latency
@@ -124,7 +130,7 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
 
   return (
     <div ref={containerRef} className="w-full h-full relative flex flex-col">
-      <DrawingBoard
+      <ExperimentalDrawingBoard
         key="isolated-shared-board"
         currentDrawerId={currentDrawerId}
         status={status}
