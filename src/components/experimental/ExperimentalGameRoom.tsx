@@ -264,7 +264,7 @@ export default function ExperimentalGameRoom({
   justJoined,
 }: GameRoomProps) {
   // 🧪 Dev Instrumentation: Track Game Layer Renders
-  expMetrics.recordGameRoomRender();
+  expMetrics.recordReactCommit('ExperimentalGameRoom', 'state_update');
 
   const { socket, isConnected, socketId } = useSocket();
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
@@ -649,7 +649,11 @@ export default function ExperimentalGameRoom({
   React.useEffect(() => {
     isDrawingModeRef.current = isDrawingMode;
     if (isDrawingMode) {
-      expMetrics.recordDrawingModeEnter();
+      expMetrics.startTransition(true);
+      expMetrics.recordOperation('Modal unmount (Word Selection / CHOOSING)', 'NON-CRITICAL', 'Removing choosing overlay');
+      expMetrics.recordOperation('SmoothTimer phase change to DRAWING', 'NON-CRITICAL', 'CSS timer bar transition initiated');
+      expMetrics.recordOperation('DrawingLayer readOnly set to false', 'CRITICAL FOR DRAWING', 'Enabling canvas interactions');
+      expMetrics.recordOperation('HitNotifications overlay mount', 'NON-CRITICAL', 'Floating notification container');
     }
   }, [isDrawingMode]);
 

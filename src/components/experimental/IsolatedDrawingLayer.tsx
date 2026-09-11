@@ -45,31 +45,59 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
   onHistoryLengthChangeAction,
   drawerTimerSlotRef,
 }) => {
-  // Record Drawing Layer render metric
-  expMetrics.recordDrawingLayerRender(
+  // Record Drawing Layer render / commit metric
+  expMetrics.recordReactCommit(
+    'IsolatedDrawingLayer',
     `status=${status}, drawer=${amIDrawer ? 'self' : 'other'}, readOnly=${readOnly}`
   );
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Passive pointerdown detection to instrument input-latency without intercepting drawing
+  // Measure layout / dimension readiness of the drawing container
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    const handlePointerDown = () => {
+    if (el.clientWidth > 0 && el.clientHeight > 0) {
+      expMetrics.recordLayoutMeasurement(el.clientWidth, el.clientHeight, 'DrawingContainerInitial');
+    }
+
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          expMetrics.recordLayoutMeasurement(width, height, 'DrawingContainerResize');
+        }
+      }
+    });
+
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Passive pointer listeners (capture-mode, passive, non-intercepting) to profile hardware-to-JS latency
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
       if (isDrawingMode && amIDrawer) {
-        expMetrics.recordFirstPointerDown();
-        // Give a microtask tick to capture the local canvas draw
-        requestAnimationFrame(() => {
-          expMetrics.recordFirstCanvasDraw();
-        });
+        expMetrics.recordPointerDown(e);
+      }
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (isDrawingMode && amIDrawer) {
+        expMetrics.recordPointerMove(e);
       }
     };
 
     el.addEventListener('pointerdown', handlePointerDown, { passive: true, capture: true });
+    el.addEventListener('pointermove', handlePointerMove, { passive: true, capture: true });
+
     return () => {
       el.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+      el.removeEventListener('pointermove', handlePointerMove, { capture: true });
     };
   }, [isDrawingMode, amIDrawer]);
 
