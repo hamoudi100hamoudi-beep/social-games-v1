@@ -116,8 +116,17 @@ const SmoothTimer = ({
   const lastTimeLeftRef = React.useRef(currentInitialTimeLeft);
   const lastColorClassRef = React.useRef<string>("");
   const isMountedRef = React.useRef(false);
+  const rafIdRef = React.useRef<number | null>(null);
 
   maxTimeRef.current = maxTime;
+
+  React.useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+    };
+  }, []);
 
   // Helper to compute and apply color class smoothly
   const applyColor = (pct: number, status: string) => {
@@ -151,6 +160,10 @@ const SmoothTimer = ({
     applyColor(currentPct, status);
 
     if (clampedTime <= 0) {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
       bar.style.transition = "width 0.25s linear";
       bar.style.width = "0%";
       lastTimeLeftRef.current = 0;
@@ -161,11 +174,26 @@ const SmoothTimer = ({
       lastTimeLeftRef.current > 0 &&
       Math.abs(lastTimeLeftRef.current - 1 - clampedTime) > 3;
 
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+
     if (isStatusChange || isBigDiscrepancy) {
       bar.style.transition = "none";
       bar.style.width = `${currentPct.toFixed(2)}%`;
-      // Force layout flush so browser commits the starting position before transition begins
-      void bar.offsetWidth;
+      lastTimeLeftRef.current = clampedTime;
+
+      // Non-blocking rAF schedule: eliminates forced synchronous layout reflow (void bar.offsetWidth)
+      // during the critical phase transition window (CHOOSING -> DRAWING).
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        if (!barRef.current) return;
+        const targetPct = Math.max(0, ((clampedTime - 1) / mTime) * 100);
+        barRef.current.style.transition = "width 1s linear";
+        barRef.current.style.width = `${targetPct.toFixed(2)}%`;
+      });
+      return;
     }
 
     // Target percentage for next 1-second interval
