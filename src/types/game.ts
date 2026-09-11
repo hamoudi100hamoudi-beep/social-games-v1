@@ -60,6 +60,7 @@ export interface RoomConfig {
   maxPlayers: number;
   winningScore: number;
   isFreeDraw?: boolean;
+  isExperimental?: boolean;
 }
 
 export const ROOM_PRESETS: RoomConfig[] = [
@@ -88,6 +89,15 @@ export const ROOM_PRESETS: RoomConfig[] = [
     winningScore: 0,
     isFreeDraw: true,
   },
+  {
+    id: 'Experimental Draw',
+    name: '🧪 Experimental Draw',
+    tag: '#Lab',
+    theme: 'General',
+    maxPlayers: 5,
+    winningScore: 30,
+    isExperimental: true,
+  },
 ];
 
 export function getRoomConfig(roomId: string): RoomConfig {
@@ -96,6 +106,15 @@ export function getRoomConfig(roomId: string): RoomConfig {
     (r) => r.id.toLowerCase() === normalized
   );
   if (found) return found;
+
+  if (
+    normalized === 'experimental draw' ||
+    normalized === 'experimental' ||
+    normalized.includes('experimental') ||
+    normalized.includes('🧪')
+  ) {
+    return ROOM_PRESETS[3];
+  }
 
   if (normalized === 'general' || normalized === 'general #test' || normalized === 'test' || normalized === '#test') {
     return ROOM_PRESETS[0];

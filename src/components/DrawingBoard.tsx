@@ -259,8 +259,8 @@ export default function DrawingBoard({
       >
         {/* Animated Clean / Reset Visual Anchor */}
         <div className="w-20 h-20 sm:w-26 sm:h-26 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative shrink-0">
-          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#EF4444]/10 border-2 border-[#EF4444]/25 flex items-center justify-center shadow-inner">
-            <RefreshCcw className="w-8 h-8 sm:w-10 sm:h-10 text-[#EF4444] drop-shadow-sm" strokeWidth={2.8} />
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#EF4444]/12 border-2 border-[#EF4444]/30 flex items-center justify-center shadow-inner">
+            <RefreshCcw className="w-8 h-8 sm:w-10 sm:h-10 text-[#EF4444] drop-shadow-sm animate-clean-spin" strokeWidth={2.8} />
           </div>
         </div>
 

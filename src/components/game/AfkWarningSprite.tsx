@@ -9,10 +9,13 @@ const COLS = 6;
 const ROWS = 2;
 
 // 12 fps baseline: 1000ms / 12 = ~83.33ms
-// Frame 1 (index 0) and Frame 12 (index 11) hold for 3 frames duration (3 * 83.33 ≈ 250ms)
+// Frame 1 (index 0) holds for 350ms so it appears firmly with the text on first render, and endpoints hold for 250ms
 const getFrameDelay = (frameIndex: number): number => {
-  if (frameIndex === 0 || frameIndex === TOTAL_FRAMES - 1) {
-    return 250; // 3 frames duration for endpoints
+  if (frameIndex === 0) {
+    return 350; // First frame held for 350ms so it's clearly visible with the text
+  }
+  if (frameIndex === TOTAL_FRAMES - 1) {
+    return 250; // Endpoint pause
   }
   return 83; // Standard 12 fps frame duration
 };
@@ -55,18 +58,8 @@ export const AfkWarningSprite: React.FC<AfkWarningSpriteProps> = ({
       }, delay);
     };
 
-    const img = new Image();
-    img.src = "/afk_warning.webp";
-    if (img.complete) {
-      scheduleNextFrame(0, 1);
-    } else {
-      img.onload = () => {
-        if (isMounted) scheduleNextFrame(0, 1);
-      };
-      img.onerror = () => {
-        if (isMounted) scheduleNextFrame(0, 1);
-      };
-    }
+    // Immediately schedule next frame from frame 0 without waiting for async image load checks
+    scheduleNextFrame(0, 1);
 
     return () => {
       isMounted = false;
@@ -79,31 +72,27 @@ export const AfkWarningSprite: React.FC<AfkWarningSpriteProps> = ({
   const col = frameIndex % COLS;
   const row = Math.floor(frameIndex / COLS);
 
-  const posX = (col / (COLS - 1)) * 100;
-  const posY = (row / (ROWS - 1)) * 100;
-
   return (
     <div className={`relative flex items-center justify-center ${className}`}>
-      {/* Hidden image element to guarantee GPU texture decoding is retained */}
-      <img
-        src="/afk_warning.webp"
-        alt=""
-        className="hidden"
-        aria-hidden="true"
-        decoding="sync"
-      />
-      <div
-        className="w-full aspect-[256/326] bg-no-repeat pointer-events-none select-none relative z-10"
-        style={{
-          backgroundImage: `url('/afk_warning.webp')`,
-          backgroundSize: `${COLS * 100}% ${ROWS * 100}%`,
-          backgroundPosition: `${posX.toFixed(4)}% ${posY.toFixed(4)}%`,
-        }}
-        role="img"
-        aria-label="AFK Inactivity Warning Animation"
-      />
+      {/* Synchronous eager image rendering for instant 0ms appearance with text */}
+      <div className="w-full aspect-[256/326] overflow-hidden pointer-events-none select-none relative z-10">
+        <img
+          src="/afk_warning.webp"
+          alt="AFK Inactivity Warning Animation"
+          decoding="sync"
+          loading="eager"
+          className="absolute max-w-none pointer-events-none select-none"
+          style={{
+            width: `${COLS * 100}%`,
+            height: `${ROWS * 100}%`,
+            transform: `translate(-${(col / COLS) * 100}%, -${(row / ROWS) * 100}%)`,
+            willChange: "transform",
+          }}
+        />
+      </div>
     </div>
   );
 };
 
 export default AfkWarningSprite;
+

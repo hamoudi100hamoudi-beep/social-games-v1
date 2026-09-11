@@ -10,12 +10,12 @@ const ROWS = 3;
 const BASE_DELAY = 100; // Base delay in ms for normal frames
 
 // Delay logic per frame index (0-based):
-// First frame (index 0): 300ms (held as 3 frames)
+// First frame (index 0): 400ms pause so the character is clearly visible with the text from frame 0
 // Last frame (index 13): Stops/freezes
 // Other frames: 100ms
 const getFrameDelay = (frameIndex: number): number => {
   if (frameIndex === 0) {
-    return BASE_DELAY * 3; // First frame displayed for 3 frames duration (300ms)
+    return BASE_DELAY * 4; // First frame held for 400ms
   }
   return BASE_DELAY;
 };
@@ -37,7 +37,7 @@ export const ExitSprite: React.FC<ExitSpriteProps> = ({ className = "" }) => {
     let isMounted = true;
 
     const scheduleNextFrame = (currentFrame: number) => {
-      // Stop and freeze at the last active frame (index 22)
+      // Stop and freeze at the last active frame (index 13)
       if (currentFrame >= TOTAL_FRAMES - 1) {
         return;
       }
@@ -51,14 +51,8 @@ export const ExitSprite: React.FC<ExitSpriteProps> = ({ className = "" }) => {
       }, delay);
     };
 
-    const img = new Image();
-    img.src = "/exit.webp";
-    if (img.complete) {
-      scheduleNextFrame(0);
-    } else {
-      img.onload = () => { if (isMounted) scheduleNextFrame(0); };
-      img.onerror = () => { if (isMounted) scheduleNextFrame(0); };
-    }
+    // Immediately schedule next frame from frame 0 without waiting for async image load checks
+    scheduleNextFrame(0);
 
     return () => {
       isMounted = false;
@@ -71,23 +65,27 @@ export const ExitSprite: React.FC<ExitSpriteProps> = ({ className = "" }) => {
   const col = frameIndex % COLS;
   const row = Math.floor(frameIndex / COLS);
 
-  const posX = (col / (COLS - 1)) * 100;
-  const posY = (row / (ROWS - 1)) * 100;
-
   return (
     <div className={`relative flex items-center justify-center ${className}`}>
-      <div
-        className="w-full aspect-[288/528] bg-no-repeat pointer-events-none select-none relative z-10"
-        style={{
-          backgroundImage: `url('/exit.webp')`,
-          backgroundSize: `${COLS * 100}% ${ROWS * 100}%`,
-          backgroundPosition: `${posX.toFixed(4)}% ${posY.toFixed(4)}%`,
-        }}
-        role="img"
-        aria-label="Exit room animation"
-      />
+      {/* Synchronous eager image rendering for instant 0ms appearance with text */}
+      <div className="w-full aspect-[288/528] overflow-hidden pointer-events-none select-none relative z-10">
+        <img
+          src="/exit.webp"
+          alt="Exit room animation"
+          decoding="sync"
+          loading="eager"
+          className="absolute max-w-none pointer-events-none select-none"
+          style={{
+            width: `${COLS * 100}%`,
+            height: `${ROWS * 100}%`,
+            transform: `translate(-${(col / COLS) * 100}%, -${(row / ROWS) * 100}%)`,
+            willChange: "transform",
+          }}
+        />
+      </div>
     </div>
   );
 };
 
 export default ExitSprite;
+

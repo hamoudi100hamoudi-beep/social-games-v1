@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import DrawingBoard from "./DrawingBoard";
+import { IsolatedDrawingLayer } from "./IsolatedDrawingLayer";
+import { ExperimentalDevHUD } from "./ExperimentalDevHUD";
+import { expMetrics } from "./experimentalInstrumentation";
 import {
   Send,
   MessageSquare,
@@ -24,18 +26,18 @@ import {
   ArrowLeft,
   FastForward,
 } from "lucide-react";
-import { useSocket } from "./SocketProvider";
+import { useSocket } from "../SocketProvider";
 import { motion, AnimatePresence } from "motion/react";
-import { PlayersSidebar } from "./game/PlayersSidebar";
-import { MiniBoardOverlay } from "./game/MiniBoardOverlay";
-import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
-import CinematicModal from "./game/CinematicModal";
-import ExitSprite from "./game/ExitSprite";
-import AfkWarningSprite from "./game/AfkWarningSprite";
-import { safeLocalStorage } from "../utils/storage";
-import { soundManager } from "../utils/soundManager";
-import { useRoomEventGate } from "../hooks/useRoomEventGate";
-import { getRoomConfig } from "../types/game";
+import { PlayersSidebar } from "../game/PlayersSidebar";
+import { MiniBoardOverlay } from "../game/MiniBoardOverlay";
+import { OverlayChatRoom, ChatMessage } from "../game/OverlayChatRoom";
+import CinematicModal from "../game/CinematicModal";
+import ExitSprite from "../game/ExitSprite";
+import AfkWarningSprite from "../game/AfkWarningSprite";
+import { safeLocalStorage } from "../../utils/storage";
+import { soundManager } from "../../utils/soundManager";
+import { useRoomEventGate } from "../../hooks/useRoomEventGate";
+import { getRoomConfig } from "../../types/game";
 
 interface GameRoomProps {
   nickname: string;
@@ -254,13 +256,16 @@ const cinematicItemVariants = {
   }
 };
 
-export default function GameRoom({
+export default function ExperimentalGameRoom({
   nickname,
   room,
   avatar,
   onLeave,
   justJoined,
 }: GameRoomProps) {
+  // 🧪 Dev Instrumentation: Track Game Layer Renders
+  expMetrics.recordGameRoomRender();
+
   const { socket, isConnected, socketId } = useSocket();
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
@@ -643,6 +648,9 @@ export default function GameRoom({
 
   React.useEffect(() => {
     isDrawingModeRef.current = isDrawingMode;
+    if (isDrawingMode) {
+      expMetrics.recordDrawingModeEnter();
+    }
   }, [isDrawingMode]);
 
   // 🛡️ When active drawing mode finishes, flush any buffered background data cleanly to React state
@@ -674,6 +682,51 @@ export default function GameRoom({
   const handleSpectatorSlotRef = React.useCallback((el: HTMLDivElement | null) => {
     setSpectatorTimerSlotEl((prev) => (prev !== el ? el : prev));
   }, []);
+
+  // 🛡️ Drawing Layer Callback & Prop Stabilization (Drawing Isolation Barrier)
+  const handleSkipTurnRequest = useCallback(() => {
+    setShowSkipConfirm(true);
+  }, []);
+
+  const handleRequestHintAction = useCallback(() => {
+    socket?.emit("request_hint");
+  }, [socket]);
+
+  const handleStopFreeDrawAction = useCallback(() => {
+    handleStopFreeDraw();
+  }, [socket, persistentPlayerId, socketId]);
+
+  const handleSyncStateChangeAction = useCallback((syncing: boolean) => {
+    setIsCanvasSyncing(syncing);
+  }, []);
+
+  const handleHistoryLengthChangeAction = useCallback((hasStrokes: boolean) => {
+    setHasDrawHistory(hasStrokes);
+  }, []);
+
+  const canSkipTurn = !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0);
+  const canRequestHint = !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0);
+
+  const hintsRemaining = useMemo(() => {
+    if (isFreeDraw || !isDrawingMode) return 0;
+    const word = gameState.currentWord || "";
+    const words = word.split(" ").filter((w: string) => w.length > 0);
+    let maxHints = 0;
+    if (words.length <= 1) {
+      const charCount = word.replace(/\s/g, "").length;
+      maxHints = charCount < 3 ? 1 : 2;
+      if (charCount >= 5) {
+        maxHints = 3;
+      }
+    } else {
+      maxHints = 1;
+      for (const w of words) {
+        if (w.length >= 5) maxHints += 2;
+        else if (w.length >= 3) maxHints += 1;
+      }
+    }
+    return Math.max(0, maxHints - (gameState.hintsUsed || 0));
+  }, [isFreeDraw, isDrawingMode, gameState.currentWord, gameState.hintsUsed]);
 
   const activeTimerContainer = !isFreeDraw
     ? (isDrawingMode && drawerTimerSlotEl ? drawerTimerSlotEl : spectatorTimerSlotEl)
@@ -1646,61 +1699,22 @@ export default function GameRoom({
                 </div>
               )}
 
-              <DrawingBoard
-                key={`shared-board-${room || ""}`}
-                currentDrawerId={gameState.currentDrawerId}
-                status={gameState.status}
+              <IsolatedDrawingLayer
                 readOnly={!isDrawingMode}
+                isDrawingMode={isDrawingMode}
                 isFreeDraw={isFreeDraw}
                 amIDrawer={amIDrawer}
-                onExitFreeDraw={handleStopFreeDraw}
-                onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
-                onHistoryLengthChange={(hasStrokes) => {
-                  setHasDrawHistory(hasStrokes);
-                }}
-                onSkipTurn={
-                  !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
-                    ? () => setShowSkipConfirm(true)
-                    : undefined
-                }
-                onRequestHint={
-                  !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
-                    ? () => socket?.emit("request_hint")
-                    : undefined
-                }
-                timerPercentage={isFreeDraw ? 100 : timerPercentage}
-                timerBarNode={
-                  !isFreeDraw ? (
-                    <div
-                      id="timer-slot-drawer"
-                      ref={handleDrawerSlotRef}
-                      className="w-full shrink-0"
-                    />
-                  ) : undefined
-                }
-                hintsRemaining={
-                  !isFreeDraw && isDrawingMode
-                    ? (() => {
-                        const word = gameState.currentWord || "";
-                        const words = word.split(" ").filter((w: string) => w.length > 0);
-                        let maxHints = 0;
-                        if (words.length <= 1) {
-                          const charCount = word.replace(/\s/g, "").length;
-                          maxHints = charCount < 3 ? 1 : 2;
-                          if (charCount >= 5) {
-                            maxHints = 3;
-                          }
-                        } else {
-                          maxHints = 1;
-                          for (const w of words) {
-                            if (w.length >= 5) maxHints += 2;
-                            else if (w.length >= 3) maxHints += 1;
-                          }
-                        }
-                        return Math.max(0, maxHints - (gameState.hintsUsed || 0));
-                      })()
-                    : 0
-                }
+                currentDrawerId={gameState.currentDrawerId}
+                status={gameState.status}
+                canSkipTurn={canSkipTurn}
+                canRequestHint={canRequestHint}
+                hintsRemaining={hintsRemaining}
+                onSkipTurnRequest={handleSkipTurnRequest}
+                onRequestHintAction={handleRequestHintAction}
+                onExitFreeDrawAction={handleStopFreeDrawAction}
+                onSyncStateChangeAction={handleSyncStateChangeAction}
+                onHistoryLengthChangeAction={handleHistoryLengthChangeAction}
+                drawerTimerSlotRef={handleDrawerSlotRef}
               />
 
               {/* Hit Notifications Overlay (Active only when drawing in fullscreen mode) */}
@@ -2780,6 +2794,9 @@ export default function GameRoom({
           هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>
+
+      {/* 🧪 Dev-Only Performance HUD for Experimental Room */}
+      <ExperimentalDevHUD />
     </>
   );
 }
