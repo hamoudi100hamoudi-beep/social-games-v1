@@ -102,7 +102,7 @@ export default function CustomEmojiModal({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="relative w-[90%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[460px] h-auto max-h-[85dvh] overflow-y-auto no-scrollbar bg-white rounded-[28px] sm:rounded-[40px] p-6 sm:p-10 border border-white/40 shadow-2xl z-10 flex flex-col items-center justify-center text-center"
+            className="relative w-[88%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[440px] h-auto max-h-[85dvh] overflow-y-auto no-scrollbar bg-white rounded-[28px] sm:rounded-[36px] p-5 sm:p-7 border border-white/40 shadow-2xl z-10 flex flex-col justify-between items-center text-center"
             dir="rtl"
           >
             {/* Close Button */}

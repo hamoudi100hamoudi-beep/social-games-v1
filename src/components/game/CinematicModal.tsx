@@ -134,7 +134,7 @@ export default function CinematicModal({
             animate="visible"
             exit="exit"
             style={{ willChange: "transform, opacity" }}
-            className={`cinematic-modal-card bg-[#ECEBFC] pt-6 pb-6 px-5 sm:pt-10 sm:pb-10 sm:px-8 rounded-[28px] sm:rounded-[40px] w-[90%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[460px] h-auto max-h-[85dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col justify-center pointer-events-auto ${maxWidthClass || ""}`}
+            className={`cinematic-modal-card bg-[#ECEBFC] pt-5 pb-5 px-5 sm:pt-7 sm:pb-7 sm:px-8 rounded-[28px] sm:rounded-[36px] w-[88%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[440px] h-auto max-h-[85dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col justify-between pointer-events-auto ${maxWidthClass || ""}`}
           >
             {/* Minimalist Top Corner Close Button */}
             {onClose && (
@@ -148,13 +148,10 @@ export default function CinematicModal({
               </button>
             )}
 
-            {/* Little Spacer to balance aesthetic padding of the card */}
-            <motion.div variants={cinematicItemVariants} className="h-1.5 sm:h-2 w-full" />
-
-            {/* Structured Title Label */}
+            {/* Structured Top Header Tier */}
             <motion.div
               variants={cinematicItemVariants}
-              className="relative select-none mb-3 sm:mb-5 mx-auto py-1 sm:py-1.5 px-2 flex justify-center w-full shrink-0"
+              className="relative select-none mb-1 sm:mb-2 mx-auto py-1 px-2 flex justify-center w-full shrink-0"
             >
               <GameTitle
                 text={titleText}
@@ -163,19 +160,19 @@ export default function CinematicModal({
               />
             </motion.div>
 
-            {/* Main Interactive Slot Body (Guaranteed to be h-auto with comfortable flow) */}
+            {/* Main Center Body Tier (Flex-1 ensures perfect vertical alignment across all modals) */}
             <motion.div
               variants={cinematicItemVariants}
-              className="w-full text-center h-auto dynamic-modal-content flex flex-col justify-center items-center min-h-0"
+              className="w-full text-center flex-1 flex flex-col justify-center items-center min-h-0 py-1 sm:py-2 my-auto"
             >
               {children}
             </motion.div>
 
-            {/* Bottom Button Layout Group */}
+            {/* Bottom Buttons Tier (Pinned consistently at the base of the card) */}
             {buttons && buttons.length > 0 && (
               <motion.div
                 variants={cinematicItemVariants}
-                className="flex items-center gap-2.5 sm:gap-3 w-full mt-4 sm:mt-5 shrink-0"
+                className="flex items-center gap-2.5 sm:gap-3 w-full mt-auto pt-3 sm:pt-4 shrink-0"
               >
                 {buttons.map((btn) => (
                   <button

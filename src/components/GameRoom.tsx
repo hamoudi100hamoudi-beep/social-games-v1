@@ -22,6 +22,7 @@ import {
   Zap,
   ArrowRight,
   ArrowLeft,
+  FastForward,
 } from "lucide-react";
 import { useSocket } from "./SocketProvider";
 import { motion, AnimatePresence } from "motion/react";
@@ -2305,10 +2306,17 @@ export default function GameRoom({
           },
         ]}
       >
-        <h3 id="skip-confirm-title" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        {/* Animated Skip Visual Anchor */}
+        <div className="w-20 h-20 sm:w-26 sm:h-26 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative shrink-0">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#1AAACC]/10 border-2 border-[#1AAACC]/25 flex items-center justify-center shadow-inner">
+            <FastForward className="w-8 h-8 sm:w-10 sm:h-10 text-[#1AAACC] drop-shadow-sm ml-0.5" strokeWidth={2.8} />
+          </div>
+        </div>
+
+        <h3 id="skip-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
           Do you want to skip your turn?
         </h3>
-        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold mb-4 sm:mb-5">
+        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
           هل تريد تجاوز دورك في الرسم؟
         </p>
       </CinematicModal>
@@ -2401,8 +2409,8 @@ export default function GameRoom({
           </motion.div>
         </div>
 
-        {/* Content Text exactly as requested */}
-        <h3 id="report-confirm-title" className="text-base sm:text-xl font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4">
+        {/* Content Text unified with golden standard */}
+        <h3 id="report-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
           Are you sure you wanna report this drawing?
         </h3>
       </CinematicModal>
@@ -2506,13 +2514,13 @@ export default function GameRoom({
           return (
             <>
               {/* Avatar Emoji Frame with Comfortable Dimensions */}
-              <div className="w-26 h-26 sm:w-28 sm:h-28 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)] shrink-0">
-                <span className="text-[60px] sm:text-[68px] leading-none mb-0.5">{playerToRender.avatar || "👤"}</span>
+              <div className="w-24 h-24 sm:w-30 sm:h-30 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)] shrink-0">
+                <span className="text-[56px] sm:text-[70px] leading-none mb-0.5">{playerToRender.avatar || "👤"}</span>
               </div>
 
               {/* Player Name Card */}
-              <div>
-                <h3 id="profile-modal-name" className="text-xl sm:text-2xl font-black text-[#2E2882] leading-snug tracking-tight mb-3.5">
+              <div className="w-full">
+                <h3 id="profile-modal-name" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center truncate px-2">
                   {playerToRender.name}
                 </h3>
               </div>

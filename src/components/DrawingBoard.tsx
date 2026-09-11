@@ -257,10 +257,17 @@ export default function DrawingBoard({
           },
         ]}
       >
-        <h3 id="clean-confirm-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+        {/* Animated Clean / Reset Visual Anchor */}
+        <div className="w-20 h-20 sm:w-26 sm:h-26 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative shrink-0">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#EF4444]/10 border-2 border-[#EF4444]/25 flex items-center justify-center shadow-inner">
+            <RefreshCcw className="w-8 h-8 sm:w-10 sm:h-10 text-[#EF4444] drop-shadow-sm" strokeWidth={2.8} />
+          </div>
+        </div>
+
+        <h3 id="clean-confirm-desc" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
           Do you want to clean the drawing?
         </h3>
-        <p id="clean-confirm-desc-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold mb-4 sm:mb-5">
+        <p id="clean-confirm-desc-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
           هل تريد مسح اللوحة بالكامل؟
         </p>
       </CinematicModal>
