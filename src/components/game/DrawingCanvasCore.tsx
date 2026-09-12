@@ -235,6 +235,7 @@ interface DrawingCanvasCoreProps {
   status?: string;
   isZoomEnabled?: boolean;
   onSyncStateChange?: (syncing: boolean) => void;
+  deferredReset?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -249,7 +250,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     currentDrawerId,
     status,
     isZoomEnabled = false,
-    onSyncStateChange
+    onSyncStateChange,
+    deferredReset = false
   },
   ref
 ) => {
@@ -873,7 +875,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     undo: () => executeUndo(true),
     redo: () => executeRedo(true),
     clear: () => executeClear(true),
-    resetState: () => executeResetState(),
+    resetState: () => {
+      flushPendingReset();
+      executeResetState();
+    },
     getCanvasSnapshot: () => {
       if (canvasRef.current) {
         return canvasRef.current.toDataURL('image/png');
@@ -1138,7 +1143,34 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     syncHistoryButtons();
   };
 
+  // 🛡️ Task 4: Deferred Reset Mechanism - prevents heavy canvas fill/clear blocking transition frames
+  const pendingResetRafRef = useRef<number | null>(null);
+  const isResetPendingRef = useRef(false);
+
+  const flushPendingReset = () => {
+    if (pendingResetRafRef.current !== null) {
+      cancelAnimationFrame(pendingResetRafRef.current);
+      pendingResetRafRef.current = null;
+    }
+    if (isResetPendingRef.current) {
+      isResetPendingRef.current = false;
+      executeResetState();
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (pendingResetRafRef.current !== null) {
+        cancelAnimationFrame(pendingResetRafRef.current);
+        pendingResetRafRef.current = null;
+      }
+    };
+  }, []);
+
   const executeClear = (emit: boolean = true) => {
+    if (isResetPendingRef.current) {
+      flushPendingReset();
+    }
     const ctx = ctxRef.current;
     const tempCtx = tempCtxRef.current;
     if (!ctx || !tempCtx) return;
@@ -1163,6 +1195,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const executeUndo = (emit: boolean = true) => {
+    if (isResetPendingRef.current) {
+      flushPendingReset();
+    }
     const list = localCommandsRef.current;
     const canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
     if (!canUndo) return;
@@ -1188,6 +1223,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const executeRedo = (emit: boolean = true) => {
+    if (isResetPendingRef.current) {
+      flushPendingReset();
+    }
     const canRedo = localRedoStackRef.current.length > 0;
     if (!canRedo) return;
 
@@ -1375,6 +1413,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!socket) return;
 
     const onDrawBinary = (raw: any) => {
+      if (isResetPendingRef.current) {
+        flushPendingReset();
+      }
       const decoded = decodeBinaryDrawMessage(raw);
       if (!decoded) return;
       const { event, data } = decoded;
@@ -1642,6 +1683,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
 
     const onDrawHistorySync = (commands: any[]) => {
+      if (isResetPendingRef.current) {
+        flushPendingReset();
+      }
       console.log("[DrawingCanvasCore] Received draw_history_sync event, payload length:", commands?.length);
       
       const attemptSync = () => {
@@ -1749,11 +1793,27 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (previousStateRef.current.currentDrawerId !== currentDrawerId || previousStateRef.current.status !== status) {
       if (hasSyncedOnce && !isSyncing) {
         console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
-        executeResetState();
+        if (deferredReset && status === 'DRAWING') {
+          // Defer heavy canvas clear/fill out of the critical transition frame
+          isResetPendingRef.current = true;
+          if (pendingResetRafRef.current !== null) {
+            cancelAnimationFrame(pendingResetRafRef.current);
+          }
+          pendingResetRafRef.current = requestAnimationFrame(() => {
+            pendingResetRafRef.current = null;
+            if (isResetPendingRef.current) {
+              isResetPendingRef.current = false;
+              executeResetState();
+            }
+          });
+        } else {
+          flushPendingReset();
+          executeResetState();
+        }
       }
     }
     previousStateRef.current = { currentDrawerId, status };
-  }, [currentDrawerId, status, hasSyncedOnce, isSyncing]);
+  }, [currentDrawerId, status, hasSyncedOnce, isSyncing, deferredReset]);
 
   // --- HTML Canvas Initialization ---
   useEffect(() => {
@@ -2098,6 +2158,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
     
+    if (isResetPendingRef.current) {
+      flushPendingReset();
+    }
+
     // STRICT GUARD: Prevent drawing before Canvas layout and ResizeObserver are fully ready.
     // If the canvas width/height are 0 during early mount, getLogicalCoords produces Infinity,
     // which causes catastrophic GPU lag when passed to ctx.stroke().

@@ -305,6 +305,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
             }
           }}
           onSyncStateChange={onSyncStateChange}
+          deferredReset={true}
         />
 
         {/* 🛡️ Task 3: Pre-mounted FlipaClip Brush Controls - Always in DOM to prevent Mount Shock */}

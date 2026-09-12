@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { IsolatedDrawingLayer } from "./IsolatedDrawingLayer";
 import { ExperimentalDevHUD } from "./ExperimentalDevHUD";
 import { expMetrics } from "./experimentalInstrumentation";
+import { ExperimentalWordOverlay } from "./ExperimentalWordOverlay";
 import {
   Send,
   MessageSquare,
@@ -1362,117 +1363,6 @@ export default function ExperimentalGameRoom({
     socket?.emit("select_word", { word });
   };
 
-  const renderWordOverlay = (isFullScreenMode: boolean = false) => {
-    if (gameState.status !== "DRAWING") return null;
-    if (amIDrawer && !isFullScreenMode) return null;
-    return (
-      <div 
-        className="absolute left-0 right-0 flex items-center justify-center z-[150] pointer-events-none"
-        style={{ top: 'clamp(6px, 1.6vw, 12px)' }}
-      >
-        {(() => {
-          const isDrawer = amIDrawer;
-          const hintsUsed = gameState.hintsUsed || 0;
-          const maskedArray = gameState.maskedWordArray || [];
-
-          if (isDrawer && gameState.currentWord) {
-            const isRTL = /[\u0600-\u06FF]/.test(gameState.currentWord);
-
-            return (
-              <div
-                className="flex items-center"
-                style={{ 
-                  flexDirection: isRTL ? "row-reverse" : "row",
-                  gap: 'clamp(4px, 1.6vw, 12px)'
-                }}
-              >
-                {gameState.currentWord
-                  .split("")
-                  .map((char: string, i: number) => {
-                    if (char === " ")
-                      return (
-                        <span 
-                          key={`space-${i}`} 
-                          style={{ width: 'clamp(10px, 3.2vw, 24px)' }} 
-                        />
-                      );
-                    const isRevealed = (
-                      gameState.revealedIndices || []
-                    ).includes(i);
-                    return (
-                      <div
-                        key={`char-${i}`}
-                        className="flex flex-col items-center justify-between"
-                        style={{ height: 'clamp(22px, 5.2vw, 42px)' }}
-                      >
-                        <span
-                          className={`leading-none font-black ${isRevealed ? "text-[#FBBF24]" : "text-[#0F172A]"}`}
-                          style={{ fontSize: 'clamp(14px, 3.2vw, 24px)' }}
-                        >
-                          {char}
-                        </span>
-                        <div
-                          className={`rounded-full mt-auto ${hintsUsed >= 1 ? (isRevealed ? "bg-[#FBBF24]" : "bg-[#0F172A]") : "opacity-0"}`}
-                          style={{
-                            width: 'clamp(7px, 1.9vw, 14px)',
-                            height: 'clamp(2.5px, 0.4vw, 3px)'
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-              </div>
-            );
-          } else {
-            if (!maskedArray || maskedArray.length === 0) return null;
-            const isRTL = gameState.isRTL || false;
-
-            return (
-              <div
-                className="flex items-center"
-                style={{ 
-                  flexDirection: isRTL ? "row-reverse" : "row",
-                  gap: 'clamp(4px, 1.6vw, 12px)'
-                }}
-              >
-                {maskedArray.map((item: any, i: number) => {
-                  if (item.isSpace)
-                    return (
-                      <span 
-                        key={`space-${i}`} 
-                        style={{ width: 'clamp(10px, 3.2vw, 24px)' }} 
-                      />
-                    );
-                  return (
-                    <div
-                      key={`char-${i}`}
-                      className="flex flex-col items-center justify-between"
-                      style={{ height: 'clamp(22px, 5.2vw, 42px)' }}
-                    >
-                      <span 
-                        className="leading-none font-black text-[#0F172A]"
-                        style={{ fontSize: 'clamp(14px, 3.2vw, 24px)' }}
-                      >
-                        {item.char || ""}
-                      </span>
-                      <div
-                        className={`rounded-full mt-auto ${item.char ? "bg-[#0F172A]" : "bg-slate-500"}`}
-                        style={{
-                          width: 'clamp(7px, 1.9vw, 14px)',
-                          height: 'clamp(2.5px, 0.4vw, 3px)'
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          }
-        })()}
-      </div>
-    );
-  };
-
   const roomCapacity = Math.max(currentPlayers.length, getRoomConfig(room).maxPlayers);
   const slots: PlayerSlot[] = Array.from({ length: roomCapacity }).map((_, index) => {
     if (index < currentPlayers.length) {
@@ -1695,8 +1585,21 @@ export default function ExperimentalGameRoom({
               </button>
             )}
 
-            {/* Hint/Word Overlay Overlay for spectator view (normal rooms only) */}
-            {!isDrawingMode && !isFreeDraw && renderWordOverlay()}
+            {/* Hint/Word Overlay for spectator view (normal rooms only) */}
+            {!isDrawingMode && !isFreeDraw && (
+              <ExperimentalWordOverlay
+                status={gameState.status}
+                isDrawingMode={isDrawingMode}
+                isFreeDraw={isFreeDraw}
+                amIDrawer={amIDrawer}
+                isFullScreenMode={false}
+                currentWord={gameState.currentWord}
+                revealedIndices={gameState.revealedIndices}
+                hintsUsed={gameState.hintsUsed}
+                maskedWordArray={gameState.maskedWordArray}
+                isRTL={gameState.isRTL}
+              />
+            )}
 
             {/* Unified Adaptive Drawing Canvas Container */}
             <div
@@ -1706,7 +1609,20 @@ export default function ExperimentalGameRoom({
                   : "w-full h-full relative flex flex-col"
               }
             >
-              {isDrawingMode && !isFreeDraw && renderWordOverlay(true)}
+              {isDrawingMode && !isFreeDraw && (
+                <ExperimentalWordOverlay
+                  status={gameState.status}
+                  isDrawingMode={isDrawingMode}
+                  isFreeDraw={isFreeDraw}
+                  amIDrawer={amIDrawer}
+                  isFullScreenMode={true}
+                  currentWord={gameState.currentWord}
+                  revealedIndices={gameState.revealedIndices}
+                  hintsUsed={gameState.hintsUsed}
+                  maskedWordArray={gameState.maskedWordArray}
+                  isRTL={gameState.isRTL}
+                />
+              )}
               
               {/* Free Draw Top Bar: Quick Chat button */}
               {isDrawingMode && isFreeDraw && (
@@ -2473,9 +2389,16 @@ export default function ExperimentalGameRoom({
         </h3>
       </CinematicModal>
 
-      {/* Global Overlays for CHOOSING state */}
-      {gameState.status === "CHOOSING" && amIDrawer && (
-        <div className="fixed inset-0 z-[500] bg-black/70  flex items-center justify-center p-4 touch-none">
+      {/* Global Overlays for CHOOSING state - Kept mounted while amIDrawer is true to prevent DOM unmount shock */}
+      {amIDrawer && (
+        <div
+          className={`fixed inset-0 z-[500] bg-black/70 flex items-center justify-center p-4 touch-none transition-opacity duration-150 ${
+            gameState.status === "CHOOSING"
+              ? "opacity-100 pointer-events-auto"
+              : "opacity-0 pointer-events-none invisible"
+          }`}
+          aria-hidden={gameState.status !== "CHOOSING"}
+        >
           <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
             <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 drop-shadow-md tracking-wide">
               IT'S YOUR TURN!
