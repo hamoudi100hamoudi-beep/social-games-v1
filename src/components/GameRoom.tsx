@@ -895,27 +895,15 @@ export default function GameRoom({
           return b.points - a.points;
         }
 
-        // If points are identical and > 0, use the exact same tie-breaker as the server
-        // (which is the join order, reflected by their index in state.players)
-        if (b.points > 0) {
-          const indexA_server = state.players.findIndex((p) => p.id === a.id);
-          const indexB_server = state.players.findIndex((p) => p.id === b.id);
+        // When points are equal, sort deterministically by server join order (index in state.players)
+        const indexA_server = state.players.findIndex((p) => p.id === a.id);
+        const indexB_server = state.players.findIndex((p) => p.id === b.id);
+        if (indexA_server !== -1 && indexB_server !== -1 && indexA_server !== indexB_server) {
           return indexA_server - indexB_server;
         }
 
-        // If points are identical (such as a round-end score reset or tie), preserve their previous ranking order
-        const indexA = prevPlayers.findIndex((p) => p.id === a.id);
-        const indexB = prevPlayers.findIndex((p) => p.id === b.id);
-
-        if (indexA !== -1 && indexB !== -1) {
-          return indexA - indexB;
-        }
-
-        // Fallback if one is new
-        if (indexA !== -1) return -1;
-        if (indexB !== -1) return 1;
-
-        return a.name.localeCompare(b.name);
+        // Ultimate deterministic fallback: player id
+        return a.id.localeCompare(b.id);
       });
 
       currentPlayersRef.current = mapped;

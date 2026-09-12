@@ -122,60 +122,59 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
   const prevRanksRef = React.useRef<{ [key: string]: number }>({});
-  const initializedRef = React.useRef(false);
-
-  // Initialize prevRanksRef on first render with real players to prevent avatar jump on join
-  if (!initializedRef.current && slots.some(s => !s.isEmpty)) {
-    slots.forEach((slot, index) => {
-      prevRanksRef.current[slot.id] = index;
-    });
-    initializedRef.current = true;
-  }
+  const hasMountedRef = React.useRef(false);
 
   const [newlyJoinedIds, setNewlyJoinedIds] = React.useState<Set<string>>(new Set());
   const prevPlayerIdsRef = React.useRef<Set<string> | null>(null);
 
-  // Track player joins dynamically and trigger pop animation cleanly
+  // Track player joins dynamically and trigger pop animation cleanly ONLY for real joins
   React.useEffect(() => {
     const currentActiveIds = new Set(slots.filter((s) => !s.isEmpty).map((s) => s.id));
 
+    // First mount: initialize known player set without triggering entrance animation
     if (prevPlayerIdsRef.current === null) {
       prevPlayerIdsRef.current = currentActiveIds;
-      if (currentActiveIds.size > 0) {
-        setNewlyJoinedIds(new Set(currentActiveIds));
-        const timer = setTimeout(() => {
-          setNewlyJoinedIds(new Set());
-        }, 500);
-        return () => clearTimeout(timer);
-      }
       return;
     }
 
+    // Identify fresh players that actually just joined
     const freshNewIds: string[] = [];
-    currentActiveIds.forEach((id) => {
-      if (!prevPlayerIdsRef.current!.has(id)) {
-        freshNewIds.push(id);
+    slots.forEach((s) => {
+      if (!s.isEmpty) {
+        if (s.isNew || (prevPlayerIdsRef.current && prevPlayerIdsRef.current.size > 0 && !prevPlayerIdsRef.current.has(s.id))) {
+          if (!prevPlayerIdsRef.current?.has(s.id) || s.isNew) {
+            freshNewIds.push(s.id);
+          }
+        }
       }
     });
 
-    prevPlayerIdsRef.current = currentActiveIds;
+    // Update set of known active players (preserve known IDs if array is transiently empty)
+    if (currentActiveIds.size > 0) {
+      const merged = new Set(prevPlayerIdsRef.current);
+      currentActiveIds.forEach((id) => merged.add(id));
+      prevPlayerIdsRef.current = merged;
+    }
 
     if (freshNewIds.length > 0) {
-      setNewlyJoinedIds((prev) => {
-        const next = new Set(prev);
-        freshNewIds.forEach((id) => next.add(id));
-        return next;
-      });
-
-      const timer = setTimeout(() => {
+      const uniqueNew = freshNewIds.filter((id) => !newlyJoinedIds.has(id));
+      if (uniqueNew.length > 0) {
         setNewlyJoinedIds((prev) => {
           const next = new Set(prev);
-          freshNewIds.forEach((id) => next.delete(id));
+          uniqueNew.forEach((id) => next.add(id));
           return next;
         });
-      }, 500);
 
-      return () => clearTimeout(timer);
+        const timer = setTimeout(() => {
+          setNewlyJoinedIds((prev) => {
+            const next = new Set(prev);
+            uniqueNew.forEach((id) => next.delete(id));
+            return next;
+          });
+        }, 500);
+
+        return () => clearTimeout(timer);
+      }
     }
   }, [slots]);
 
@@ -183,8 +182,9 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     return [...slots].sort((a, b) => a.id.localeCompare(b.id));
   }, [slots]);
 
-  // Record previous ranks after rendering
+  // Record previous ranks after rendering and mark component as mounted
   React.useEffect(() => {
+    hasMountedRef.current = true;
     slots.forEach((slot, index) => {
       prevRanksRef.current[slot.id] = index;
     });
@@ -291,13 +291,19 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
             }
           }
 
+          // Only animate rank movement if the component has already mounted AND the player had an established rank that changed
+          const isRealRankChange = hasMountedRef.current && prevRank !== undefined && prevRank !== rankIndex;
+          const cardTransition = isRealRankChange
+            ? 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease'
+            : 'background-color 0.2s ease, border-color 0.2s ease';
+
           return (
             <div 
               key={slot.id} 
               style={{
                 top: `calc(var(--row-height) * ${rankIndex})`,
                 height: 'var(--row-height)',
-                transition: 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease',
+                transition: cardTransition,
                 zIndex: zIndex,
               }}
               className={`absolute inset-x-0 flex items-center pl-1.5 pr-1 py-1.5 sm:pl-3 sm:pr-2.5 sm:py-3 overflow-visible ${bgClass} ${!slot.isEmpty ? 'cursor-pointer hover:bg-white/5 active:bg-white/10' : ''}`}
