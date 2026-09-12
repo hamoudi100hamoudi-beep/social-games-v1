@@ -465,19 +465,17 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
               className="!bg-white !text-primary-brand !border-transparent !rounded-lg"
             />
 
-            {/* 3. Yellow hint bulb with Red Badge */}
-            {hintsRemaining > 0 && onRequestHint && (
-              <div className="relative">
-                <ActionBtn 
-                  icon={<Lightbulb />} 
-                  onClick={onRequestHint} 
-                  className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-lg flex" 
-                />
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4.5 h-4.5 flex items-center justify-center rounded-full border border-primary-brand">
-                  {hintsRemaining}
-                </span>
-              </div>
-            )}
+            {/* 3. Yellow hint bulb with Red Badge - Pre-mounted to eliminate layout shifts and DOM churn */}
+            <div className={`relative shrink-0 ${hintsRemaining > 0 && onRequestHint ? 'block' : 'hidden'}`}>
+              <ActionBtn 
+                icon={<Lightbulb />} 
+                onClick={onRequestHint || (() => {})} 
+                className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-lg flex" 
+              />
+              <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4.5 h-4.5 flex items-center justify-center rounded-full border border-primary-brand">
+                {hintsRemaining}
+              </span>
+            </div>
 
             {/* 4. Orange Skip/Kick Button - Pre-mounted to eliminate layout shifts and DOM churn */}
             <div className={`shrink-0 ${onSkipTurn ? 'block' : 'hidden'}`}>

@@ -1631,7 +1631,7 @@ export default function ExperimentalGameRoom({
                   : "w-full h-full relative flex flex-col"
               }
             >
-              {isDrawingMode && !isFreeDraw && !FULL_DRAWING_ISOLATION_TEST && (
+              {isDrawingMode && !isFreeDraw && (
                 <ExperimentalWordOverlay
                   status={gameState.status}
                   isDrawingMode={isDrawingMode}
@@ -1680,8 +1680,8 @@ export default function ExperimentalGameRoom({
                 currentDrawerId={gameState.currentDrawerId}
                 status={gameState.status}
                 canSkipTurn={canSkipTurn}
-                canRequestHint={FULL_DRAWING_ISOLATION_TEST ? false : canRequestHint}
-                hintsRemaining={FULL_DRAWING_ISOLATION_TEST ? 0 : hintsRemaining}
+                canRequestHint={canRequestHint}
+                hintsRemaining={hintsRemaining}
                 onSkipTurnRequest={handleSkipTurnRequest}
                 onRequestHintAction={handleRequestHintAction}
                 onExitFreeDrawAction={handleStopFreeDrawAction}
