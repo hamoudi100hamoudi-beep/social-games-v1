@@ -629,18 +629,6 @@ export default function ExperimentalGameRoom({
     }
   }, [gameState?.status, amIDrawer]);
 
-  // 🧪 FULL DRAWING ISOLATION TEST: Auto-select word immediately when drawer enters CHOOSING
-  const autoSelectedTurnRef = React.useRef<string | null>(null);
-  useEffect(() => {
-    if (!FULL_DRAWING_ISOLATION_TEST) return;
-    if (gameState?.status === "CHOOSING" && amIDrawer && gameState?.wordOptions && gameState.wordOptions.length > 0) {
-      const turnKey = `${gameState.currentDrawerId || 'drawer'}-${gameState.wordOptions.join(',')}`;
-      if (autoSelectedTurnRef.current !== turnKey) {
-        autoSelectedTurnRef.current = turnKey;
-        socket?.emit("select_word", { word: gameState.wordOptions[0] });
-      }
-    }
-  }, [gameState?.status, amIDrawer, gameState?.wordOptions, gameState?.currentDrawerId, socket]);
 
   // 🔊 Sound Hooks
   const eventGate = useRoomEventGate();
@@ -2421,16 +2409,9 @@ export default function ExperimentalGameRoom({
         </CinematicModal>
       )}
 
-      {/* Global Overlays for CHOOSING state - Kept mounted while amIDrawer is true to prevent DOM unmount shock */}
-      {!FULL_DRAWING_ISOLATION_TEST && amIDrawer && (
-        <div
-          className={`fixed inset-0 z-[500] bg-black/70 flex items-center justify-center p-4 touch-none transition-opacity duration-150 ${
-            gameState.status === "CHOOSING"
-              ? "opacity-100 pointer-events-auto"
-              : "opacity-0 pointer-events-none invisible"
-          }`}
-          aria-hidden={gameState.status !== "CHOOSING"}
-        >
+      {/* Global Overlays for CHOOSING state */}
+      {gameState.status === "CHOOSING" && amIDrawer && (
+        <div className="fixed inset-0 z-[500] bg-black/70 flex items-center justify-center p-4 touch-none">
           <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
             <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 drop-shadow-md tracking-wide">
               IT'S YOUR TURN!
