@@ -479,14 +479,14 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
               </div>
             )}
 
-            {/* 4. Orange Skip/Kick Button */}
-            {onSkipTurn && (
+            {/* 4. Orange Skip/Kick Button - Pre-mounted to eliminate layout shifts and DOM churn */}
+            <div className={`shrink-0 ${onSkipTurn ? 'block' : 'hidden'}`}>
               <ActionBtn 
                 icon={<UserMinus />} 
-                onClick={onSkipTurn} 
-                className="!bg-[#FB923C] !text-white hover:!bg-[#EA580C] !border-transparent !rounded-lg shrink-0" 
+                onClick={onSkipTurn || (() => {})} 
+                className="!bg-[#FB923C] !text-white hover:!bg-[#EA580C] !border-transparent !rounded-lg" 
               />
-            )}
+            </div>
           </div>
 
           {/* Colors scroll palette */}
