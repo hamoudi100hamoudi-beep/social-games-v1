@@ -40,6 +40,11 @@ import { soundManager } from "../../utils/soundManager";
 import { useRoomEventGate } from "../../hooks/useRoomEventGate";
 import { getRoomConfig } from "../../types/game";
 
+// 🧪 DIAGNOSTIC TEST: FULL DRAWING ISOLATION TEST
+// Isolates drawing completely from all non-essential Game Room UI, modals, sound, and animations.
+// Set to false or delete to cleanly remove this test mode.
+export const FULL_DRAWING_ISOLATION_TEST = true;
+
 interface GameRoomProps {
   nickname: string;
   room: string;
@@ -624,6 +629,19 @@ export default function ExperimentalGameRoom({
     }
   }, [gameState?.status, amIDrawer]);
 
+  // 🧪 FULL DRAWING ISOLATION TEST: Auto-select word immediately when drawer enters CHOOSING
+  const autoSelectedTurnRef = React.useRef<string | null>(null);
+  useEffect(() => {
+    if (!FULL_DRAWING_ISOLATION_TEST) return;
+    if (gameState?.status === "CHOOSING" && amIDrawer && gameState?.wordOptions && gameState.wordOptions.length > 0) {
+      const turnKey = `${gameState.currentDrawerId || 'drawer'}-${gameState.wordOptions.join(',')}`;
+      if (autoSelectedTurnRef.current !== turnKey) {
+        autoSelectedTurnRef.current = turnKey;
+        socket?.emit("select_word", { word: gameState.wordOptions[0] });
+      }
+    }
+  }, [gameState?.status, amIDrawer, gameState?.wordOptions, gameState?.currentDrawerId, socket]);
+
   // 🔊 Sound Hooks
   const eventGate = useRoomEventGate();
   const canPlaySoundRef = React.useRef<boolean>(false);
@@ -648,7 +666,9 @@ export default function ExperimentalGameRoom({
     if (eventGate.isLive() && canPlaySoundRef.current && curr !== prev && curr) {
       if (curr === "CHOOSING") {
         if (amIDrawer) {
-          soundManager.play("wordSelectionShow");
+          if (!FULL_DRAWING_ISOLATION_TEST) {
+            soundManager.play("wordSelectionShow");
+          }
         } else {
           soundManager.play("roundStart");
         }
@@ -667,10 +687,12 @@ export default function ExperimentalGameRoom({
     const prevHints = prevHintsUsedRef.current;
     
     if (eventGate.isLive() && canPlaySoundRef.current && currHints > prevHints && currHints > 0) {
-      soundManager.play("hintShow");
+      if (!FULL_DRAWING_ISOLATION_TEST || !amIDrawer) {
+        soundManager.play("hintShow");
+      }
     }
     prevHintsUsedRef.current = currHints;
-  }, [gameState.hintsUsed, eventGate]);
+  }, [gameState.hintsUsed, eventGate, amIDrawer]);
 
   const isDrawingMode = isFreeDraw ? amIDrawer : (gameState.status === "DRAWING" && amIDrawer);
   const isDrawingModeRef = React.useRef<boolean>(isDrawingMode);
@@ -1609,7 +1631,7 @@ export default function ExperimentalGameRoom({
                   : "w-full h-full relative flex flex-col"
               }
             >
-              {isDrawingMode && !isFreeDraw && (
+              {isDrawingMode && !isFreeDraw && !FULL_DRAWING_ISOLATION_TEST && (
                 <ExperimentalWordOverlay
                   status={gameState.status}
                   isDrawingMode={isDrawingMode}
@@ -1657,9 +1679,9 @@ export default function ExperimentalGameRoom({
                 amIDrawer={amIDrawer}
                 currentDrawerId={gameState.currentDrawerId}
                 status={gameState.status}
-                canSkipTurn={canSkipTurn}
-                canRequestHint={canRequestHint}
-                hintsRemaining={hintsRemaining}
+                canSkipTurn={FULL_DRAWING_ISOLATION_TEST ? false : canSkipTurn}
+                canRequestHint={FULL_DRAWING_ISOLATION_TEST ? false : canRequestHint}
+                hintsRemaining={FULL_DRAWING_ISOLATION_TEST ? 0 : hintsRemaining}
                 onSkipTurnRequest={handleSkipTurnRequest}
                 onRequestHintAction={handleRequestHintAction}
                 onExitFreeDrawAction={handleStopFreeDrawAction}
@@ -1669,14 +1691,15 @@ export default function ExperimentalGameRoom({
               />
 
               {/* Hit Notifications Overlay (Pre-mounted to eliminate Mount Shock during drawing transitions) */}
-              <div
-                className={`absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full ${
-                  isDrawingMode ? '' : 'hidden pointer-events-none'
-                }`}
-                aria-hidden={!isDrawingMode}
-              >
-                <AnimatePresence>
-                  {isDrawingMode && hitNotifications.map((hit) => {
+              {!FULL_DRAWING_ISOLATION_TEST && (
+                <div
+                  className={`absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full ${
+                    isDrawingMode ? '' : 'hidden pointer-events-none'
+                  }`}
+                  aria-hidden={!isDrawingMode}
+                >
+                  <AnimatePresence>
+                    {isDrawingMode && hitNotifications.map((hit) => {
                       if (hit.isReport) {
                         return (
                           <motion.div
@@ -1742,11 +1765,12 @@ export default function ExperimentalGameRoom({
                       );
                     })}
                   </AnimatePresence>
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Correct Guess Animation */}
-            {showCorrectAnimation && (
+            {!FULL_DRAWING_ISOLATION_TEST && showCorrectAnimation && (
               <div className="absolute inset-0 pointer-events-none z-[60] flex items-center justify-center">
                 <motion.div
                   key="correct-guess-overlay"
@@ -1824,22 +1848,25 @@ export default function ExperimentalGameRoom({
             )}
         </div>
 
-        {/* Left: Players Sidebar */}
-        <PlayersSidebar
-          slots={slots}
-          gameState={gameState}
-          morphMode={morphMode}
-          socketId={socketId}
-          onPlayerClick={setSelectedProfilePlayer}
-          isFreeDraw={isFreeDraw}
-        />
+        {/* Left: Players Sidebar - Suppressed during FULL DRAWING ISOLATION TEST for active drawer */}
+        {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+          <PlayersSidebar
+            slots={slots}
+            gameState={gameState}
+            morphMode={morphMode}
+            socketId={socketId}
+            onPlayerClick={setSelectedProfilePlayer}
+            isFreeDraw={isFreeDraw}
+          />
+        )}
 
-        {/* Right: Actions & Guess Input */}
-        <div
-          className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-0 pl-1 sm:pb-3 sm:pr-3 sm:pt-0 sm:pl-1.5
-                      ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
-                     `}
-        >
+        {/* Right: Actions & Guess Input - Suppressed during FULL DRAWING ISOLATION TEST for active drawer */}
+        {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+          <div
+            className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-0 pl-1 sm:pb-3 sm:pr-3 sm:pt-0 sm:pl-1.5
+                        ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
+                       `}
+          >
           <div className="flex-1 flex flex-col bg-bg-dark-brand rounded-xl sm:rounded-2xl shadow-inner border border-white/5 overflow-hidden relative">
             {/* Actions Bar */}
             <div
@@ -2238,62 +2265,67 @@ export default function ExperimentalGameRoom({
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Chat Overlay */}
-      <OverlayChatRoom
-        isChatOpen={isChatOpen}
-        viewportOffsetTop={0}
-        closeChat={closeChat}
-        chatMessages={filteredChatMessages}
-        socketId={socketId}
-        chatInput={chatInput}
-        setChatInput={setChatInput}
-        handleChatSubmit={handleChatSubmit}
-        iosKeyboardHeightCache={iosKeyboardHeightCache}
-      />
+      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+        <OverlayChatRoom
+          isChatOpen={isChatOpen}
+          viewportOffsetTop={0}
+          closeChat={closeChat}
+          chatMessages={filteredChatMessages}
+          socketId={socketId}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          handleChatSubmit={handleChatSubmit}
+          iosKeyboardHeightCache={iosKeyboardHeightCache}
+        />
+      )}
 
       {/* Skip Confirm Modal */}
-      <CinematicModal
-        isOpen={showSkipConfirm}
-        onClose={() => setShowSkipConfirm(false)}
-        titleType="report"
-        titleText="SKIP"
-        buttons={[
-          {
-            id: "skip-confirm-no-btn",
-            text: <span className="text-white font-black">NO</span>,
-            onClick: () => setShowSkipConfirm(false),
-            variant: "primary",
-          },
-          {
-            id: "skip-confirm-yes-btn",
-            text: <span className="text-white font-black">YES</span>,
-            onClick: handleSkipTurn,
-            variant: "danger",
-          },
-        ]}
-      >
-        {/* Animated Skip Drawing Page & Creature Anchor */}
-        <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 shadow-[0_4px_16px_rgba(26,170,204,0.18)] relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
-          {/* Inner Canvas Border */}
-          <div className="absolute inset-1 rounded-[14px] border border-dashed border-[#1AAACC]/20 pointer-events-none" />
+      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+        <CinematicModal
+          isOpen={showSkipConfirm}
+          onClose={() => setShowSkipConfirm(false)}
+          titleType="report"
+          titleText="SKIP"
+          buttons={[
+            {
+              id: "skip-confirm-no-btn",
+              text: <span className="text-white font-black">NO</span>,
+              onClick: () => setShowSkipConfirm(false),
+              variant: "primary",
+            },
+            {
+              id: "skip-confirm-yes-btn",
+              text: <span className="text-white font-black">YES</span>,
+              onClick: handleSkipTurn,
+              variant: "danger",
+            },
+          ]}
+        >
+          {/* Animated Skip Drawing Page & Creature Anchor */}
+          <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 shadow-[0_4px_16px_rgba(26,170,204,0.18)] relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
+            {/* Inner Canvas Border */}
+            <div className="absolute inset-1 rounded-[14px] border border-dashed border-[#1AAACC]/20 pointer-events-none" />
 
-          {/* Playful Creature (FastForward triangles) leaping out of the drawing sheet */}
-          <div className="relative z-10 flex items-center justify-center animate-skip-escape">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center shadow-sm">
-              <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] drop-shadow-sm ml-0.5" strokeWidth={2.8} />
+            {/* Playful Creature (FastForward triangles) leaping out of the drawing sheet */}
+            <div className="relative z-10 flex items-center justify-center animate-skip-escape">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center shadow-sm">
+                <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] drop-shadow-sm ml-0.5" strokeWidth={2.8} />
+              </div>
             </div>
           </div>
-        </div>
 
-        <h3 id="skip-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
-          Do you want to skip your turn?
-        </h3>
-        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
-          هل تريد تجاوز دورك في الرسم؟
-        </p>
-      </CinematicModal>
+          <h3 id="skip-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
+            Do you want to skip your turn?
+          </h3>
+          <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
+            هل تريد تجاوز دورك في الرسم؟
+          </p>
+        </CinematicModal>
+      )}
 
       {/* AFK Popup Modal */}
       <CinematicModal
@@ -2341,56 +2373,58 @@ export default function ExperimentalGameRoom({
       </CinematicModal>
 
       {/* Report Confirmation Modal */}
-      <CinematicModal
-        isOpen={showReportConfirm}
-        onClose={() => setShowReportConfirm(false)}
-        titleType="report"
-        titleText="REPORT"
-        buttons={[
-          {
-            id: "report-confirm-no-btn",
-            text: "NO",
-            onClick: () => setShowReportConfirm(false),
-            variant: "primary",
-          },
-          {
-            id: "report-confirm-yes-btn",
-            text: "YES",
-            onClick: () => {
-              setShowReportConfirm(false);
-              socket?.emit("report_draw");
+      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+        <CinematicModal
+          isOpen={showReportConfirm}
+          onClose={() => setShowReportConfirm(false)}
+          titleType="report"
+          titleText="REPORT"
+          buttons={[
+            {
+              id: "report-confirm-no-btn",
+              text: "NO",
+              onClick: () => setShowReportConfirm(false),
+              variant: "primary",
             },
-            variant: "danger",
-          },
-        ]}
-      >
-        {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-18 h-18 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative">
-          <motion.div 
-            animate={{
-              rotate: [-4, 4, -4, 4, -4, 4, 0],
-              scale: [1, 1.05, 1, 1.05, 1]
-            }}
-            transition={{
-              delay: 1.5,
-              repeat: Infinity,
-              duration: 0.6,
-              repeatDelay: 1.8,
-              ease: "easeInOut"
-            }}
-          >
-            <AlertTriangle className="w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
-          </motion.div>
-        </div>
+            {
+              id: "report-confirm-yes-btn",
+              text: "YES",
+              onClick: () => {
+                setShowReportConfirm(false);
+                socket?.emit("report_draw");
+              },
+              variant: "danger",
+            },
+          ]}
+        >
+          {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
+          <div className="w-18 h-18 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative">
+            <motion.div 
+              animate={{
+                rotate: [-4, 4, -4, 4, -4, 4, 0],
+                scale: [1, 1.05, 1, 1.05, 1]
+              }}
+              transition={{
+                delay: 1.5,
+                repeat: Infinity,
+                duration: 0.6,
+                repeatDelay: 1.8,
+                ease: "easeInOut"
+              }}
+            >
+              <AlertTriangle className="w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            </motion.div>
+          </div>
 
-        {/* Content Text unified with golden standard */}
-        <h3 id="report-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
-          Are you sure you wanna report this drawing?
-        </h3>
-      </CinematicModal>
+          {/* Content Text unified with golden standard */}
+          <h3 id="report-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
+            Are you sure you wanna report this drawing?
+          </h3>
+        </CinematicModal>
+      )}
 
       {/* Global Overlays for CHOOSING state - Kept mounted while amIDrawer is true to prevent DOM unmount shock */}
-      {amIDrawer && (
+      {!FULL_DRAWING_ISOLATION_TEST && amIDrawer && (
         <div
           className={`fixed inset-0 z-[500] bg-black/70 flex items-center justify-center p-4 touch-none transition-opacity duration-150 ${
             gameState.status === "CHOOSING"
@@ -2476,131 +2510,135 @@ export default function ExperimentalGameRoom({
       </AnimatePresence>
 
       {/* Profile Modal */}
-      <CinematicModal
-        isOpen={!!selectedProfilePlayer}
-        onClose={() => setSelectedProfilePlayer(null)}
-        titleType="profile"
-        titleText="PROFILE"
-      >
-        {(() => {
-          const playerToRender = selectedProfilePlayer || lastActiveProfilePlayerRef.current;
-          if (!playerToRender) return null;
+      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+        <CinematicModal
+          isOpen={!!selectedProfilePlayer}
+          onClose={() => setSelectedProfilePlayer(null)}
+          titleType="profile"
+          titleText="PROFILE"
+        >
+          {(() => {
+            const playerToRender = selectedProfilePlayer || lastActiveProfilePlayerRef.current;
+            if (!playerToRender) return null;
 
-          const isSelf = playerToRender.persistentId === persistentPlayerId || playerToRender.id === socket?.id;
-          const targetId = playerToRender.persistentId || playerToRender.id;
-          const votesList = votekicks[targetId] || [];
-          const alreadyVoted = votesList.includes(persistentPlayerId);
-          const isBlocked = blockedUsers.includes(targetId);
+            const isSelf = playerToRender.persistentId === persistentPlayerId || playerToRender.id === socket?.id;
+            const targetId = playerToRender.persistentId || playerToRender.id;
+            const votesList = votekicks[targetId] || [];
+            const alreadyVoted = votesList.includes(persistentPlayerId);
+            const isBlocked = blockedUsers.includes(targetId);
 
-          return (
-            <>
-              {/* Avatar Emoji Frame with Comfortable Dimensions */}
-              <div className="w-24 h-24 sm:w-30 sm:h-30 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)] shrink-0">
-                <span className="text-[56px] sm:text-[70px] leading-none mb-0.5">{playerToRender.avatar || "👤"}</span>
-              </div>
-
-              {/* Player Name Card */}
-              <div className="w-full">
-                <h3 id="profile-modal-name" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center truncate px-2">
-                  {playerToRender.name}
-                </h3>
-              </div>
-
-              {isSelf ? (
-                <div 
-                  className="py-3 px-4 bg-white rounded-[18px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm shadow-sm"
-                >
-                  هذا هو حسابك الشخصي
+            return (
+              <>
+                {/* Avatar Emoji Frame with Comfortable Dimensions */}
+                <div className="w-24 h-24 sm:w-30 sm:h-30 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)] shrink-0">
+                  <span className="text-[56px] sm:text-[70px] leading-none mb-0.5">{playerToRender.avatar || "👤"}</span>
                 </div>
-              ) : (
-                <div className="flex flex-col gap-2.5 sm:gap-3 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  {/* Block / Unblock Action Button (Mute) */}
-                  <div>
-                    <button
-                      id="profile-modal-block-btn"
-                      onClick={() => {
-                        handleToggleBlock();
-                        setSelectedProfilePlayer(null);
-                      }}
-                      className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
-                        isBlocked 
-                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
-                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
-                      }`}
-                    >
-                      <EyeOff className="w-5 h-5" />
-                      {isBlocked ? "UNBLOCK" : "BLOCK"}
-                    </button>
-                  </div>
 
-                  {/* Votekick Action Button */}
-                  <div>
-                    <button
-                      id="profile-modal-kick-btn"
-                      onClick={() => {
-                        handleToggleVoteKick();
-                        setSelectedProfilePlayer(null);
-                      }}
-                      className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
-                        alreadyVoted
-                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
-                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
-                      }`}
-                    >
-                      <UserIcon className="w-5 h-5" />
-                      {alreadyVoted ? "REMOVE VOTE" : "VOTEKICK"}
-                    </button>
-                  </div>
+                {/* Player Name Card */}
+                <div className="w-full">
+                  <h3 id="profile-modal-name" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center truncate px-2">
+                    {playerToRender.name}
+                  </h3>
                 </div>
-              )}
-            </>
-          );
-        })()}
-      </CinematicModal>
+
+                {isSelf ? (
+                  <div 
+                    className="py-3 px-4 bg-white rounded-[18px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm shadow-sm"
+                  >
+                    هذا هو حسابك الشخصي
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2.5 sm:gap-3 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {/* Block / Unblock Action Button (Mute) */}
+                    <div>
+                      <button
+                        id="profile-modal-block-btn"
+                        onClick={() => {
+                          handleToggleBlock();
+                          setSelectedProfilePlayer(null);
+                        }}
+                        className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
+                          isBlocked 
+                            ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
+                            : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
+                        }`}
+                      >
+                        <EyeOff className="w-5 h-5" />
+                        {isBlocked ? "UNBLOCK" : "BLOCK"}
+                      </button>
+                    </div>
+
+                    {/* Votekick Action Button */}
+                    <div>
+                      <button
+                        id="profile-modal-kick-btn"
+                        onClick={() => {
+                          handleToggleVoteKick();
+                          setSelectedProfilePlayer(null);
+                        }}
+                        className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
+                          alreadyVoted 
+                            ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
+                            : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
+                        }`}
+                      >
+                        <UserIcon className="w-5 h-5" />
+                        {alreadyVoted ? "REMOVE VOTE" : "VOTEKICK"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </CinematicModal>
+      )}
 
       {/* Cooldown Warning Modal */}
-      <CinematicModal
-        isOpen={showCooldownWarning}
-        onClose={() => setShowCooldownWarning(false)}
-        titleType="report"
-        titleText="SLOW DOWN"
-        buttons={[
-          {
-            id: "cooldown-warning-ok-btn",
-            text: "OK",
-            onClick: () => setShowCooldownWarning(false),
-            variant: "custom",
-            className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95 shadow-md",
-          },
-        ]}
-      >
-        {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
-          <motion.div 
-            animate={{
-              rotate: [-4, 4, -4, 4, -4, 4, 0],
-              scale: [1, 1.05, 1, 1.05, 1]
-            }}
-            transition={{
-              delay: 1.5,
-              repeat: Infinity,
-              duration: 0.6,
-              repeatDelay: 1.8,
-              ease: "easeInOut"
-            }}
-          >
-            <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
-          </motion.div>
-        </div>
+      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+        <CinematicModal
+          isOpen={showCooldownWarning}
+          onClose={() => setShowCooldownWarning(false)}
+          titleType="report"
+          titleText="SLOW DOWN"
+          buttons={[
+            {
+              id: "cooldown-warning-ok-btn",
+              text: "OK",
+              onClick: () => setShowCooldownWarning(false),
+              variant: "custom",
+              className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95 shadow-md",
+            },
+          ]}
+        >
+          {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
+          <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+            <motion.div 
+              animate={{
+                rotate: [-4, 4, -4, 4, -4, 4, 0],
+                scale: [1, 1.05, 1, 1.05, 1]
+              }}
+              transition={{
+                delay: 1.5,
+                repeat: Infinity,
+                duration: 0.6,
+                repeatDelay: 1.8,
+                ease: "easeInOut"
+              }}
+            >
+              <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
+            </motion.div>
+          </div>
 
-        {/* Alert Message */}
-        <h3 id="cooldown-warning-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
-          You voted recently. Please waiting to votekick again
-        </h3>
-        <p id="cooldown-warning-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
-          لقد قمت بالتصويت مؤخراً. يرجى الانتظار للمحاولة مرة أخرى.
-        </p>
-      </CinematicModal>
+          {/* Alert Message */}
+          <h3 id="cooldown-warning-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+            You voted recently. Please waiting to votekick again
+          </h3>
+          <p id="cooldown-warning-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+            لقد قمت بالتصويت مؤخراً. يرجى الانتظار للمحاولة مرة أخرى.
+          </p>
+        </CinematicModal>
+      )}
 
       {/* Kicked Out / Hard Block Screen */}
       <CinematicModal

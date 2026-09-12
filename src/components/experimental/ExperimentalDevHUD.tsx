@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { expMetrics, ExperimentalMetrics } from './experimentalInstrumentation';
+import { FULL_DRAWING_ISOLATION_TEST } from './ExperimentalGameRoom';
 import {
   FlaskConical,
   ChevronDown,
@@ -61,10 +62,13 @@ export const ExperimentalDevHUD: React.FC = () => {
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        title="Open Experimental Profiling HUD (Task 2)"
+        title={`Open Experimental Profiling HUD (Task 2)${FULL_DRAWING_ISOLATION_TEST ? ' - FULL ISOLATION TEST ACTIVE' : ''}`}
         className="fixed bottom-2 left-2 z-[9999] p-2 rounded-full bg-slate-900/85 hover:bg-slate-800 text-amber-400 border border-amber-400/40 shadow-lg cursor-pointer transition-all active:scale-95 opacity-75 hover:opacity-100 flex items-center gap-1"
       >
         <FlaskConical size={14} />
+        {FULL_DRAWING_ISOLATION_TEST && (
+          <span className="w-2 h-2 rounded-full bg-emerald-400" title="Full Drawing Isolation Active" />
+        )}
         {metrics.longTasks.length > 0 && (
           <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
         )}
@@ -79,9 +83,14 @@ export const ExperimentalDevHUD: React.FC = () => {
     >
       {/* Header bar */}
       <div className="flex items-center justify-between px-3 py-2 bg-slate-950 border-b border-white/10">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
           <FlaskConical size={14} className="text-amber-400 animate-pulse" />
           <span className="font-bold text-amber-400 tracking-wider text-[12px]">TASK 2 PROFILER</span>
+          {FULL_DRAWING_ISOLATION_TEST && (
+            <span className="text-[9px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 px-1 py-0.5 rounded font-bold">
+              FULL ISOLATION
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
