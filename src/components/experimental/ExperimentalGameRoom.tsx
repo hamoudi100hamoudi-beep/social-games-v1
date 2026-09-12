@@ -1749,17 +1749,15 @@ export default function ExperimentalGameRoom({
             )}
         </div>
 
-        {/* Left: Players Sidebar - Suppressed during FULL DRAWING ISOLATION TEST for active drawer */}
-        {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
-          <PlayersSidebar
-            slots={slots}
-            gameState={gameState}
-            morphMode={morphMode}
-            socketId={socketId}
-            onPlayerClick={setSelectedProfilePlayer}
-            isFreeDraw={isFreeDraw}
-          />
-        )}
+        {/* Left: Players Sidebar */}
+        <PlayersSidebar
+          slots={slots}
+          gameState={gameState}
+          morphMode={morphMode}
+          socketId={socketId}
+          onPlayerClick={setSelectedProfilePlayer}
+          isFreeDraw={isFreeDraw}
+        />
 
         {/* Right: Actions & Guess Input - Suppressed during FULL DRAWING ISOLATION TEST for active drawer */}
         {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
@@ -2402,13 +2400,12 @@ export default function ExperimentalGameRoom({
       </AnimatePresence>
 
       {/* Profile Modal */}
-      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
-        <CinematicModal
-          isOpen={!!selectedProfilePlayer}
-          onClose={() => setSelectedProfilePlayer(null)}
-          titleType="profile"
-          titleText="PROFILE"
-        >
+      <CinematicModal
+        isOpen={!!selectedProfilePlayer}
+        onClose={() => setSelectedProfilePlayer(null)}
+        titleType="profile"
+        titleText="PROFILE"
+      >
           {(() => {
             const playerToRender = selectedProfilePlayer || lastActiveProfilePlayerRef.current;
             if (!playerToRender) return null;
@@ -2484,7 +2481,6 @@ export default function ExperimentalGameRoom({
             );
           })()}
         </CinematicModal>
-      )}
 
       {/* Cooldown Warning Modal */}
       {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
