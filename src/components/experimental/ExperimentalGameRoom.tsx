@@ -4,6 +4,7 @@ import { IsolatedDrawingLayer } from "./IsolatedDrawingLayer";
 import { ExperimentalDevHUD } from "./ExperimentalDevHUD";
 import { expMetrics } from "./experimentalInstrumentation";
 import { ExperimentalWordOverlay } from "./ExperimentalWordOverlay";
+import { ExperimentalHitOverlay, ExperimentalHitOverlayHandle } from "./ExperimentalHitOverlay";
 import {
   Send,
   MessageSquare,
@@ -360,9 +361,8 @@ export default function ExperimentalGameRoom({
   }, [gameState]);
 
   const [showCorrectAnimation, setShowCorrectAnimation] = useState(false);
-  const [hitNotifications, setHitNotifications] = useState<HitNotification[]>(
-    [],
-  );
+  // 🛡️ Zero-re-render Hit Notification imperative ref to isolated component
+  const hitOverlayRef = React.useRef<ExperimentalHitOverlayHandle>(null);
 
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
@@ -1121,27 +1121,12 @@ export default function ExperimentalGameRoom({
           if (eventGate.isLive() && canPlaySoundRef.current) soundManager.play('correctGuessOther');
         }
 
-        const hitId = Date.now().toString() + Math.random().toString();
-        setHitNotifications((prev) => {
-          const next = [...prev, { id: hitId, name: msg.sender }];
-          return next.slice(-20); // allow up to 20 notifications at once for larger rooms
-        });
-
-        setTimeout(() => {
-          setHitNotifications((prev) => prev.filter((n) => n.id !== hitId));
-        }, 4500);
+        // 🛡️ Zero-re-render Hit Notification dispatched imperatively to isolated overlay
+        hitOverlayRef.current?.addHit({ id: msg.id || Date.now().toString(), name: msg.sender });
       }
 
       if (msg.subType === "report") {
-        const reportId = Date.now().toString() + Math.random().toString();
-        setHitNotifications((prev) => {
-          const next = [...prev, { id: reportId, name: msg.sender, isReport: true }];
-          return next.slice(-20);
-        });
-
-        setTimeout(() => {
-          setHitNotifications((prev) => prev.filter((n) => n.id !== reportId));
-        }, 4500);
+        hitOverlayRef.current?.addHit({ id: msg.id || Date.now().toString(), name: msg.sender, isReport: true });
       }
     };
 
@@ -1678,83 +1663,11 @@ export default function ExperimentalGameRoom({
                 drawerTimerSlotRef={handleDrawerSlotRef}
               />
 
-              {/* Hit Notifications Overlay (Pre-mounted to eliminate Mount Shock during drawing transitions) */}
-              {!FULL_DRAWING_ISOLATION_TEST && (
-                <div
-                  className={`absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full ${
-                    isDrawingMode ? '' : 'hidden pointer-events-none'
-                  }`}
-                  aria-hidden={!isDrawingMode}
-                >
-                  <AnimatePresence>
-                    {isDrawingMode && hitNotifications.map((hit) => {
-                      if (hit.isReport) {
-                        return (
-                          <motion.div
-                            layout
-                            key={hit.id}
-                            initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{
-                              opacity: 0,
-                              scale: 0.6,
-                              y: -10,
-                              transition: { duration: 0.3 },
-                            }}
-                            transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
-                            style={{
-                              textShadow:
-                                "1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(255,100,100,0.4)",
-                            }}
-                            className="flex items-center justify-center gap-1.5 text-red-500 font-bold text-[15px] whitespace-nowrap bg-transparent"
-                            dir="ltr"
-                          >
-                            <AlertTriangle size={16} className="text-red-500 shrink-0" />
-                            <span
-                              className="truncate max-w-[150px] sm:max-w-[200px] text-center"
-                              dir="ltr"
-                            >
-                              {hit.name}
-                            </span>
-                            <span>reported!</span>
-                          </motion.div>
-                        );
-                      }
-
-                      return (
-                        <motion.div
-                          layout
-                          key={hit.id}
-                          initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{
-                            opacity: 0,
-                            scale: 0.6,
-                            y: -10,
-                            transition: { duration: 0.3 },
-                          }}
-                          transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
-                          style={{
-                            textShadow:
-                              "1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(0,229,64,0.4)",
-                          }}
-                          className="flex items-center justify-center gap-1.5 text-[#00E540] font-bold text-[15px] whitespace-nowrap bg-transparent"
-                          dir="ltr"
-                        >
-                          <Check size={16} strokeWidth={4} />
-                          <span
-                            className="truncate max-w-[150px] sm:max-w-[200px] text-center"
-                            dir="ltr"
-                          >
-                            {hit.name}
-                          </span>
-                          <span>hit!</span>
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </div>
-              )}
+              {/* Hit Notifications Overlay (Isolated, zero-re-render Sibling component with fixed slot pool) */}
+              <ExperimentalHitOverlay
+                ref={hitOverlayRef}
+                isDrawingMode={isDrawingMode}
+              />
             </div>
 
             {/* Correct Guess Animation */}
