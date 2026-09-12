@@ -190,7 +190,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     });
   }, [slots]);
 
-  // Detect score changes and trigger floating indicator
+  // Detect score changes and trigger floating indicator (disabled during DRAWING)
   React.useEffect(() => {
     slots.forEach((slot) => {
       if (slot.isEmpty) return;
@@ -198,7 +198,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
       const currentPts = slot.points;
       const prevPts = prevPointsRef.current[key];
 
-      if (prevPts !== undefined && prevPts !== null && currentPts !== null && currentPts > prevPts) {
+      if (gameState.status !== 'DRAWING' && prevPts !== undefined && prevPts !== null && currentPts !== null && currentPts > prevPts) {
         const diff = currentPts - prevPts;
         const popupId = `${key}-${Date.now()}-${Math.random()}`;
 
@@ -212,7 +212,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
       // Record current score
       prevPointsRef.current[key] = currentPts;
     });
-  }, [slots]);
+  }, [slots, gameState.status]);
 
   return (
     <div className={`flex flex-col bg-bg-panel-brand overflow-y-auto overscroll-contain touch-pan-y
@@ -291,8 +291,8 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
             }
           }
 
-          // Only animate rank movement if the component has already mounted AND the player had an established rank that changed
-          const isRealRankChange = hasMountedRef.current && prevRank !== undefined && prevRank !== rankIndex;
+          // Only animate rank movement if NOT in DRAWING mode, component has mounted, and the player had an established rank that changed
+          const isRealRankChange = gameState.status !== 'DRAWING' && hasMountedRef.current && prevRank !== undefined && prevRank !== rankIndex;
           const cardTransition = isRealRankChange
             ? 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease'
             : 'background-color 0.2s ease, border-color 0.2s ease';
@@ -360,33 +360,35 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                   )}
                </div>
 
-               {/* Bouncy floating score popups */}
-               <AnimatePresence>
-                 {slotPopups.map((popup) => (
-                   <motion.div
-                     key={popup.id}
-                     initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                     animate={{ opacity: 1, scale: 1.05, y: -10 }}
-                     exit={{ opacity: 0, scale: 0.8, y: -22 }}
-                     transition={{
-                       duration: 1.2,
-                       ease: [0.175, 0.885, 0.32, 1.255]
-                     }}
-                     style={{
-                       textShadow: `
-                         1px 1px 0px #000, 
-                         -1px -1px 0px #000, 
-                         1px -1px 0px #000, 
-                         -1px 1px 0px #000,
-                         0px 2px 4px rgba(0, 229, 64, 0.5)
-                       `
-                     }}
-                     className="absolute right-4 text-[#00E540] font-black italic text-xs sm:text-sm select-none pointer-events-none z-20"
-                   >
-                     <span>+{popup.amount}</span>
-                   </motion.div>
-                 ))}
-               </AnimatePresence>
+               {/* Bouncy floating score popups - completely disabled during DRAWING */}
+               {gameState.status !== 'DRAWING' && slotPopups.length > 0 && (
+                 <AnimatePresence>
+                   {slotPopups.map((popup) => (
+                     <motion.div
+                       key={popup.id}
+                       initial={{ opacity: 0, scale: 0.6, y: 10 }}
+                       animate={{ opacity: 1, scale: 1.05, y: -10 }}
+                       exit={{ opacity: 0, scale: 0.8, y: -22 }}
+                       transition={{
+                         duration: 1.2,
+                         ease: [0.175, 0.885, 0.32, 1.255]
+                       }}
+                       style={{
+                         textShadow: `
+                           1px 1px 0px #000, 
+                           -1px -1px 0px #000, 
+                           1px -1px 0px #000, 
+                           -1px 1px 0px #000,
+                           0px 2px 4px rgba(0, 229, 64, 0.5)
+                         `
+                       }}
+                       className="absolute right-4 text-[#00E540] font-black italic text-xs sm:text-sm select-none pointer-events-none z-20"
+                     >
+                       <span>+{popup.amount}</span>
+                     </motion.div>
+                   ))}
+                 </AnimatePresence>
+               )}
             </div>
           );
         })}
