@@ -620,6 +620,11 @@ export default function ExperimentalGameRoom({
   }, [gameState.currentDrawerId, currentPlayers]);
 
   // Clean-up and auto-dismiss of overlays when phase/turn changes
+  const amIDrawerRef = React.useRef<boolean>(amIDrawer);
+  useEffect(() => {
+    amIDrawerRef.current = amIDrawer;
+  }, [amIDrawer]);
+
   useEffect(() => {
     if (gameState?.status !== "DRAWING") {
       setShowReportConfirm(false);
@@ -1059,16 +1064,21 @@ export default function ExperimentalGameRoom({
 
       chatMessagesRef.current = updated;
 
+      // 🛡️ Determine if user is Drawer in active DRAWING mode
+      const isDrawerDrawing = isDrawingModeRef.current || (amIDrawerRef.current && gameState.status === "DRAWING");
+
       if (!isChatOpenRef.current) {
         unreadCountRef.current += 1;
-        // 🛡️ Task 3: Defer React state update while drawing to protect Drawing Critical Path
-        if (!isDrawingModeRef.current) {
+        // For Viewers or when not drawing: update unreadCount state immediately
+        // For Drawer during DRAWING: keep unreadCount in ref (no rerender) until chat opens or turn ends
+        if (!isDrawerDrawing) {
           setUnreadCount(unreadCountRef.current);
         }
       }
 
-      // If not in drawing mode, or in Free Draw, or if chat overlay is currently open, update React state immediately
-      if (!isDrawingModeRef.current || isFreeDraw || isChatOpenRef.current) {
+      // Viewer or Chat Open: update React state immediately for instant live chat
+      // Drawer + DRAWING + Chat Closed: lightweight background buffering in chatMessagesRef (0 rerenders)
+      if (!isDrawerDrawing || isChatOpenRef.current) {
         setChatMessages(updated);
       }
     };
