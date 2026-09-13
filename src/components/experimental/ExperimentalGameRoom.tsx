@@ -42,8 +42,9 @@ import { useRoomEventGate } from "../../hooks/useRoomEventGate";
 import { getRoomConfig } from "../../types/game";
 
 // 🧪 DIAGNOSTIC TEST: FULL DRAWING ISOLATION TEST
-// All Game Room features (Timer, Hints, Words, Choices, Hits, Players, Chat, Guess List) are reintegrated and isolated.
-export const FULL_DRAWING_ISOLATION_TEST = false;
+// Isolates drawing completely from all non-essential Game Room UI, modals, sound, and animations.
+// Set to false or delete to cleanly remove this test mode.
+export const FULL_DRAWING_ISOLATION_TEST = true;
 
 interface GameRoomProps {
   nickname: string;
@@ -1095,11 +1096,8 @@ export default function ExperimentalGameRoom({
 
         guessesRef.current = updated;
 
-        // 🛡️ Determine if user is Drawer in active DRAWING mode
-        const isDrawerDrawing = isDrawingModeRef.current || (amIDrawerRef.current && gameState.status === "DRAWING");
-
-        // 🛡️ Only trigger React state update for the guess list if NOT in active drawing mode (Drawer buffers in ref with 0 rerenders; Viewer gets live updates)
-        if (!isDrawerDrawing) {
+        // 🛡️ Only trigger React state update for the hidden guess list if NOT in active drawing mode
+        if (!isDrawingModeRef.current) {
           setGuesses(updated);
         }
       }
