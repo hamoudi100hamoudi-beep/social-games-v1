@@ -1669,7 +1669,7 @@ export default function ExperimentalGameRoom({
             </div>
 
             {/* Correct Guess Animation */}
-            {!FULL_DRAWING_ISOLATION_TEST && showCorrectAnimation && (
+            {showCorrectAnimation && (
               <div className="absolute inset-0 pointer-events-none z-[60] flex items-center justify-center">
                 <motion.div
                   key="correct-guess-overlay"
