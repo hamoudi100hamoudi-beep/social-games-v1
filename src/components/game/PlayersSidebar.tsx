@@ -318,7 +318,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
             prevRank !== undefined &&
             prevRank !== rankIndex;
           const cardTransition = isRealRankChange
-            ? 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease'
+            ? 'top 0.45s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease, border-color 0.2s ease'
             : 'background-color 0.2s ease, border-color 0.2s ease';
 
           return (
