@@ -678,12 +678,10 @@ export default function ExperimentalGameRoom({
     const prevHints = prevHintsUsedRef.current;
     
     if (eventGate.isLive() && canPlaySoundRef.current && currHints > prevHints && currHints > 0) {
-      if (!amIDrawer) {
-        soundManager.play("hintShow");
-      }
+      soundManager.play("hintShow");
     }
     prevHintsUsedRef.current = currHints;
-  }, [gameState.hintsUsed, eventGate, amIDrawer]);
+  }, [gameState.hintsUsed, eventGate]);
 
   const isDrawingMode = isFreeDraw ? amIDrawer : (gameState.status === "DRAWING" && amIDrawer);
   const isDrawingModeRef = React.useRef<boolean>(isDrawingMode);
