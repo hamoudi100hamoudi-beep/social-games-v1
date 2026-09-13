@@ -185,8 +185,8 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     return [...slots].sort((a, b) => a.id.localeCompare(b.id));
   }, [slots]);
 
-  // Record previous ranks after rendering and mark component as mounted
-  React.useEffect(() => {
+  // Record previous ranks after layout to track movements
+  React.useLayoutEffect(() => {
     hasMountedRef.current = true;
     isPointsResetRef.current = false;
     slots.forEach((slot, index) => {
@@ -305,19 +305,9 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
             }
           }
 
-          // Only animate rank movement if:
-          // 1. Not active drawer during DRAWING (preserves 60fps drawing smoothness)
-          // 2. Component has mounted (avoids initial load animations)
-          // 3. Not during a score reset (prevents re-sort jitter when points are zeroed)
-          // 4. The player had an established rank that actually changed
+          // Smooth easing: starts smoothly, accelerates, decelerates smoothly into position
           const isDrawerActive = amIDrawer && gameState.status === 'DRAWING';
-          const isRealRankChange =
-            !isDrawerActive &&
-            !isPointsResetRef.current &&
-            hasMountedRef.current &&
-            prevRank !== undefined &&
-            prevRank !== rankIndex;
-          const cardTransition = isRealRankChange
+          const cardTransition = !isDrawerActive && !isPointsResetRef.current
             ? 'top 0.45s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease, border-color 0.2s ease'
             : 'background-color 0.2s ease, border-color 0.2s ease';
 
