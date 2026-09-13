@@ -15,6 +15,9 @@ import {
   Check,
 } from 'lucide-react';
 
+// 🧪 Diagnostic Visual HUD Flag: Set to false to cleanly hide overlay from the UI without removing metrics collection
+export const SHOW_DEV_HUD = false;
+
 export const ExperimentalDevHUD: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [metrics, setMetrics] = useState<ExperimentalMetrics>(expMetrics.getMetrics());
@@ -23,12 +26,16 @@ export const ExperimentalDevHUD: React.FC = () => {
 
   // 🛡️ Only subscribe to metrics updates when the HUD is actually open, preventing re-renders during drawing
   useEffect(() => {
-    if (!isOpen) return;
+    if (!SHOW_DEV_HUD || !isOpen) return;
     setMetrics(expMetrics.getMetrics());
     return expMetrics.subscribe((next) => {
       setMetrics(next);
     });
   }, [isOpen]);
+
+  if (!SHOW_DEV_HUD) {
+    return null;
+  }
 
   const handleCopyReport = () => {
     const reportData = {

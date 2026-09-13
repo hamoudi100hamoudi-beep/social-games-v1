@@ -659,9 +659,7 @@ export default function ExperimentalGameRoom({
     if (eventGate.isLive() && canPlaySoundRef.current && curr !== prev && curr) {
       if (curr === "CHOOSING") {
         if (amIDrawer) {
-          if (!FULL_DRAWING_ISOLATION_TEST) {
-            soundManager.play("wordSelectionShow");
-          }
+          soundManager.play("wordSelectionShow");
         } else {
           soundManager.play("roundStart");
         }
@@ -680,7 +678,7 @@ export default function ExperimentalGameRoom({
     const prevHints = prevHintsUsedRef.current;
     
     if (eventGate.isLive() && canPlaySoundRef.current && currHints > prevHints && currHints > 0) {
-      if (!FULL_DRAWING_ISOLATION_TEST || !amIDrawer) {
+      if (!amIDrawer) {
         soundManager.play("hintShow");
       }
     }
