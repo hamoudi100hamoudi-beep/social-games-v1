@@ -1852,6 +1852,7 @@ export default function GameRoom({
           socketId={socketId}
           onPlayerClick={setSelectedProfilePlayer}
           isFreeDraw={isFreeDraw}
+          amIDrawer={amIDrawer}
         />
 
         {/* Right: Actions & Guess Input */}

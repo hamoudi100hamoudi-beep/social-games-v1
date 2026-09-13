@@ -1745,6 +1745,7 @@ export default function ExperimentalGameRoom({
           socketId={socketId}
           onPlayerClick={setSelectedProfilePlayer}
           isFreeDraw={isFreeDraw}
+          amIDrawer={amIDrawer}
         />
 
         {/* Right: Actions & Guess Input - Suppressed during FULL DRAWING ISOLATION TEST for active drawer */}

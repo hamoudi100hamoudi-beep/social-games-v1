@@ -103,6 +103,7 @@ interface PlayersSidebarProps {
   socketId: string | null;
   onPlayerClick?: (player: PlayerSlot) => void;
   isFreeDraw?: boolean;
+  amIDrawer?: boolean;
 }
 
 interface FloatingPoints {
@@ -118,6 +119,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   socketId,
   onPlayerClick,
   isFreeDraw = false,
+  amIDrawer = false,
 }) => {
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
@@ -190,7 +192,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     });
   }, [slots]);
 
-  // Detect score changes and trigger floating indicator (disabled during DRAWING)
+  // Detect score changes and trigger floating indicator (disabled for active drawer during DRAWING)
   React.useEffect(() => {
     slots.forEach((slot) => {
       if (slot.isEmpty) return;
@@ -198,7 +200,8 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
       const currentPts = slot.points;
       const prevPts = prevPointsRef.current[key];
 
-      if (gameState.status !== 'DRAWING' && prevPts !== undefined && prevPts !== null && currentPts !== null && currentPts > prevPts) {
+      const isDrawerActive = amIDrawer && gameState.status === 'DRAWING';
+      if (!isDrawerActive && prevPts !== undefined && prevPts !== null && currentPts !== null && currentPts > prevPts) {
         const diff = currentPts - prevPts;
         const popupId = `${key}-${Date.now()}-${Math.random()}`;
 
@@ -212,7 +215,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
       // Record current score
       prevPointsRef.current[key] = currentPts;
     });
-  }, [slots, gameState.status]);
+  }, [slots, gameState.status, amIDrawer]);
 
   return (
     <div className={`flex flex-col bg-bg-panel-brand overflow-y-auto overscroll-contain touch-pan-y
@@ -291,8 +294,9 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
             }
           }
 
-          // Only animate rank movement if NOT in DRAWING mode, component has mounted, and the player had an established rank that changed
-          const isRealRankChange = gameState.status !== 'DRAWING' && hasMountedRef.current && prevRank !== undefined && prevRank !== rankIndex;
+          // Only animate rank movement if not active drawer during DRAWING, component has mounted, and the player had an established rank that changed
+          const isDrawerActive = amIDrawer && gameState.status === 'DRAWING';
+          const isRealRankChange = !isDrawerActive && hasMountedRef.current && prevRank !== undefined && prevRank !== rankIndex;
           const cardTransition = isRealRankChange
             ? 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease'
             : 'background-color 0.2s ease, border-color 0.2s ease';
@@ -360,8 +364,8 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                   )}
                </div>
 
-               {/* Bouncy floating score popups - completely disabled during DRAWING */}
-               {gameState.status !== 'DRAWING' && slotPopups.length > 0 && (
+               {/* Bouncy floating score popups - disabled for drawer during DRAWING */}
+               {!isDrawerActive && slotPopups.length > 0 && (
                  <AnimatePresence>
                    {slotPopups.map((popup) => (
                      <motion.div
