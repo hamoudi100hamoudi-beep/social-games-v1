@@ -124,6 +124,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
   const prevRanksRef = React.useRef<{ [key: string]: number }>({});
+  const isPointsResetRef = React.useRef(false);
   const hasMountedRef = React.useRef(false);
 
   const [newlyJoinedIds, setNewlyJoinedIds] = React.useState<Set<string>>(new Set());
@@ -187,10 +188,20 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   // Record previous ranks after rendering and mark component as mounted
   React.useEffect(() => {
     hasMountedRef.current = true;
+    isPointsResetRef.current = false;
     slots.forEach((slot, index) => {
       prevRanksRef.current[slot.id] = index;
     });
   }, [slots]);
+
+  // Detect score reset and score changes
+  // When scores are reset (e.g. at start of new game/round after podium), all scores drop to 0.
+  // We must suppress rank animation so cards don't jitter or re-sort animatedly.
+  const hadPositiveScores = Object.values(prevPointsRef.current).some((pts) => pts !== null && pts !== undefined && pts > 0);
+  const allCurrentZero = slots.some((s) => !s.isEmpty) && slots.filter((s) => !s.isEmpty).every((s) => (s.points || 0) === 0);
+  if (hadPositiveScores && allCurrentZero) {
+    isPointsResetRef.current = true;
+  }
 
   // Detect score changes and trigger floating indicator (disabled for active drawer during DRAWING)
   React.useEffect(() => {
@@ -294,9 +305,18 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
             }
           }
 
-          // Only animate rank movement if not active drawer during DRAWING, component has mounted, and the player had an established rank that changed
+          // Only animate rank movement if:
+          // 1. Not active drawer during DRAWING (preserves 60fps drawing smoothness)
+          // 2. Component has mounted (avoids initial load animations)
+          // 3. Not during a score reset (prevents re-sort jitter when points are zeroed)
+          // 4. The player had an established rank that actually changed
           const isDrawerActive = amIDrawer && gameState.status === 'DRAWING';
-          const isRealRankChange = !isDrawerActive && hasMountedRef.current && prevRank !== undefined && prevRank !== rankIndex;
+          const isRealRankChange =
+            !isDrawerActive &&
+            !isPointsResetRef.current &&
+            hasMountedRef.current &&
+            prevRank !== undefined &&
+            prevRank !== rankIndex;
           const cardTransition = isRealRankChange
             ? 'top 0.75s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease, border-color 0.2s ease'
             : 'background-color 0.2s ease, border-color 0.2s ease';
