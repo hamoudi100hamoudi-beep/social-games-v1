@@ -1174,9 +1174,45 @@ const words = word.split(" ").filter(w => w.length > 0);
 
     const canUndo = room.gameState.drawHistory.length > 0 && room.gameState.redoStack.length === 0;
     if (canUndo) {
-      const removed = room.gameState.drawHistory.pop();
-      if (removed) {
-        room.gameState.redoStack = [removed]; // Enforce 1-step undo/redo limit
+      const history = room.gameState.drawHistory;
+      const lastIndex = history.length - 1;
+      const lastCmd = history[lastIndex];
+
+      const isEndCmd = (cmd: any): boolean => {
+        if (!cmd) return false;
+        if (cmd.event === 'draw_end' || cmd.event === 'draw_cancel') return true;
+        if (cmd.event === 'draw_binary' && cmd.data) {
+          let b: number | null = null;
+          if (Buffer.isBuffer(cmd.data) && cmd.data.length > 0) b = cmd.data[0];
+          else if (Array.isArray(cmd.data) && cmd.data.length > 0) b = cmd.data[0];
+          return b === 3 || b === 6;
+        }
+        return false;
+      };
+
+      const isStrokeCmd = (cmd: any): boolean => {
+        if (!cmd) return false;
+        if (cmd.event === 'draw_stroke') return true;
+        if (cmd.event === 'draw_binary' && cmd.data) {
+          let b: number | null = null;
+          if (Buffer.isBuffer(cmd.data) && cmd.data.length > 0) b = cmd.data[0];
+          else if (Array.isArray(cmd.data) && cmd.data.length > 0) b = cmd.data[0];
+          return b === 9;
+        }
+        return false;
+      };
+
+      // 🛡️ Atomic Stroke Undo: If the last completed action is draw_stroke followed by draw_end (Type 9 + Type 3),
+      // remove both together as a single logical unit so that draw_stroke does not remain orphaned in drawHistory.
+      if (lastIndex >= 1 && isEndCmd(lastCmd) && isStrokeCmd(history[lastIndex - 1])) {
+        const endCmd = history.pop()!;
+        const strokeCmd = history.pop()!;
+        room.gameState.redoStack = [[strokeCmd, endCmd]];
+      } else {
+        const removed = history.pop();
+        if (removed) {
+          room.gameState.redoStack = [removed]; // Enforce 1-step undo/redo limit
+        }
       }
     }
 

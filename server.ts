@@ -6,7 +6,7 @@ import path from 'path';
 import { roomManager, normalizeArabic } from './server/rooms.js';
 import { getRoomConfig } from './src/types/game.js';
 
-const getJsonSafeHistory = (history: any[]) => {
+const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
 
   const safeList: any[] = [];
@@ -14,6 +14,11 @@ const getJsonSafeHistory = (history: any[]) => {
 
   for (const cmd of history) {
     if (!cmd) continue;
+
+    if (Array.isArray(cmd)) {
+      safeList.push(getJsonSafeHistory(cmd));
+      continue;
+    }
 
     // تحويل البيانات الثنائية (Buffers) إلى مصفوفات JSON آمنة 
     let safeData = cmd.data;
