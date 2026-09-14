@@ -286,6 +286,7 @@ export default function DrawingBoard({
           currentDrawerId={currentDrawerId}
           status={status}
           isZoomEnabled={zoomEnabled}
+          isFreeDraw={isFreeDraw}
           onHistoryStateChange={(idx, len) => {
             setHistoryState({ index: idx, length: len });
             onHistoryLengthChange?.(idx > 0);
@@ -540,11 +541,28 @@ const SwapIcon = ({ size = 22, strokeWidth = 2.5, className }: any) => {
 };
 
 function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string }) {
+  const lastPointerTimeRef = useRef(0);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    lastPointerTimeRef.current = Date.now();
+    onClick();
+  };
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (Date.now() - lastPointerTimeRef.current < 400) {
+      e.preventDefault();
+      return;
+    }
+    onClick();
+  };
+
   return (
     <button 
       type="button"
-      onClick={onClick}
-      className={`w-[45px] h-[45px] flex items-center justify-center rounded-lg transition-all focus:outline-none select-none
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
+      className={`w-[45px] h-[45px] flex items-center justify-center rounded-lg transition-all focus:outline-none select-none touch-manipulation
         ${active 
           ? 'bg-white text-primary-brand scale-105' 
           : 'bg-accent-brand text-bg-dark-brand hover:bg-white hover:scale-105 active:scale-95'
@@ -556,12 +574,30 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
 }
 
 function SubToolBtn({ icon, active, onClick, className = '', disabled = false }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string, disabled?: boolean }) {
+  const lastPointerTimeRef = useRef(0);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (disabled || e.button !== 0) return;
+    lastPointerTimeRef.current = Date.now();
+    onClick();
+  };
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (disabled) return;
+    if (Date.now() - lastPointerTimeRef.current < 400) {
+      e.preventDefault();
+      return;
+    }
+    onClick();
+  };
+
   return (
     <button 
       type="button"
-      onClick={onClick}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
       disabled={disabled}
-      className={`w-11 h-11 flex items-center justify-center rounded-lg border transition-all
+      className={`w-11 h-11 flex items-center justify-center rounded-lg border transition-all touch-manipulation
         ${disabled ? 'opacity-30 pointer-events-none' : ''}
         ${active 
           ? 'bg-blue-600 border-blue-400 text-white scale-105' 
@@ -574,11 +610,42 @@ function SubToolBtn({ icon, active, onClick, className = '', disabled = false }:
 }
 
 function ColorBtn({ color, active, onClick }: { key?: React.Key, color: string, active: boolean, onClick: () => void }) {
+  const startCoordRef = useRef<{ x: number; y: number } | null>(null);
+  const lastPointerTimeRef = useRef(0);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    startCoordRef.current = { x: e.clientX, y: e.clientY };
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!startCoordRef.current || e.button !== 0) return;
+    const dx = Math.abs(e.clientX - startCoordRef.current.x);
+    const dy = Math.abs(e.clientY - startCoordRef.current.y);
+    startCoordRef.current = null;
+
+    // Fast-tap with finger micro-slip tolerance (< 12px)
+    if (dx < 12 && dy < 12) {
+      lastPointerTimeRef.current = Date.now();
+      onClick();
+    }
+  };
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (Date.now() - lastPointerTimeRef.current < 400) {
+      e.preventDefault();
+      return;
+    }
+    onClick();
+  };
+
   return (
     <button 
       type="button"
-      onClick={onClick}
-      className={`w-[21px] h-[21px] flex-shrink-0 rounded-[4px] border transition-all duration-150 relative focus:outline-none select-none border-black/15`}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onClick={handleClick}
+      className={`w-[21px] h-[21px] flex-shrink-0 rounded-[4px] border transition-all duration-150 relative focus:outline-none select-none border-black/15 touch-manipulation`}
       style={{ backgroundColor: color }}
     >
       {active && (

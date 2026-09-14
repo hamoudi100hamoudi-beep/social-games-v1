@@ -236,6 +236,7 @@ interface DrawingCanvasCoreProps {
   isZoomEnabled?: boolean;
   onSyncStateChange?: (syncing: boolean) => void;
   deferredReset?: boolean;
+  isFreeDraw?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -251,7 +252,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     status,
     isZoomEnabled = false,
     onSyncStateChange,
-    deferredReset = false
+    deferredReset = false,
+    isFreeDraw = false
   },
   ref
 ) => {
@@ -304,6 +306,85 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const localCommandsRef = useRef<any[]>([]);
   const localRedoStackRef = useRef<any[][]>([]);
   const prevCommandsCountRef = useRef<number>(-1);
+
+  // 🛡️ Free Draw 1-Step Undo/Redo Canvas Caches (Prevents O(N) full replays in long sessions)
+  const freeDrawUndoCacheCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const freeDrawRedoCacheCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const freeDrawPendingUndoCacheCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const hasFreeDrawUndoCacheRef = useRef<boolean>(false);
+  const hasFreeDrawRedoCacheRef = useRef<boolean>(false);
+  const hasFreeDrawPendingUndoCacheRef = useRef<boolean>(false);
+
+  // Free Draw Cache Lifecycle Helpers
+  const ensureCacheCanvas = (cacheRef: React.MutableRefObject<HTMLCanvasElement | null>, targetCanvas: HTMLCanvasElement) => {
+    if (!cacheRef.current) {
+      cacheRef.current = document.createElement('canvas');
+    }
+    if (cacheRef.current.width !== targetCanvas.width || cacheRef.current.height !== targetCanvas.height) {
+      cacheRef.current.width = targetCanvas.width;
+      cacheRef.current.height = targetCanvas.height;
+    }
+    return cacheRef.current;
+  };
+
+  const copyCanvasContent = (source: HTMLCanvasElement, target: HTMLCanvasElement) => {
+    if (target.width !== source.width || target.height !== source.height) {
+      target.width = source.width;
+      target.height = source.height;
+    }
+    const tCtx = target.getContext('2d');
+    if (tCtx) {
+      tCtx.globalCompositeOperation = 'copy';
+      tCtx.drawImage(source, 0, 0);
+      tCtx.globalCompositeOperation = 'source-over';
+    }
+  };
+
+  const restoreCanvasFromCache = (cache: HTMLCanvasElement, target: HTMLCanvasElement): boolean => {
+    if (cache.width !== target.width || cache.height !== target.height) {
+      return false;
+    }
+    const targetCtx = target.getContext('2d');
+    if (!targetCtx) return false;
+    targetCtx.save();
+    targetCtx.setTransform(1, 0, 0, 1, 0, 0);
+    targetCtx.globalCompositeOperation = 'copy';
+    targetCtx.drawImage(cache, 0, 0);
+    targetCtx.restore();
+    return true;
+  };
+
+  const stageFreeDrawPendingCache = () => {
+    if (!propsRef.current.isFreeDraw || propsRef.current.readOnly) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const pendingCanvas = ensureCacheCanvas(freeDrawPendingUndoCacheCanvasRef, canvas);
+    copyCanvasContent(canvas, pendingCanvas);
+    hasFreeDrawPendingUndoCacheRef.current = true;
+  };
+
+  const commitFreeDrawPendingCache = () => {
+    if (!propsRef.current.isFreeDraw) return;
+    if (hasFreeDrawPendingUndoCacheRef.current && freeDrawPendingUndoCacheCanvasRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
+      copyCanvasContent(freeDrawPendingUndoCacheCanvasRef.current, undoCanvas);
+      hasFreeDrawUndoCacheRef.current = true;
+      hasFreeDrawPendingUndoCacheRef.current = false;
+      hasFreeDrawRedoCacheRef.current = false;
+    }
+  };
+
+  const captureDirectFreeDrawUndoCache = () => {
+    if (!propsRef.current.isFreeDraw || propsRef.current.readOnly) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
+    copyCanvasContent(canvas, undoCanvas);
+    hasFreeDrawUndoCacheRef.current = true;
+    hasFreeDrawPendingUndoCacheRef.current = false;
+    hasFreeDrawRedoCacheRef.current = false;
+  };
 
   // Buffering history syncing before ref ready
   const bufferedSyncRef = useRef<any[] | null>(null);
@@ -361,11 +442,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly });
-  propsRef.current = { tool, color, thickness, opacity, readOnly };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly };
-  }, [tool, color, thickness, opacity, readOnly]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -1135,6 +1216,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     localRedoStackRef.current = [];
     prevCommandsCountRef.current = -1;
 
+    // Reinitialize Free Draw Caches
+    hasFreeDrawUndoCacheRef.current = false;
+    hasFreeDrawRedoCacheRef.current = false;
+    hasFreeDrawPendingUndoCacheRef.current = false;
+
     if (ctx && tempCtx) {
       saveSnapshot(); 
     }
@@ -1175,6 +1261,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCtx = tempCtxRef.current;
     if (!ctx || !tempCtx) return;
 
+    captureDirectFreeDrawUndoCache();
+
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
     tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
@@ -1213,7 +1301,27 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (removed) {
       localRedoStackRef.current = [removed];
     }
-    applySyncedHistory(list);
+
+    // 🛡️ Free Draw Fast-Path: Single Previous-State Canvas Cache
+    let restoredViaCache = false;
+    if (propsRef.current.isFreeDraw && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const redoCanvas = ensureCacheCanvas(freeDrawRedoCacheCanvasRef, canvas);
+      copyCanvasContent(canvas, redoCanvas);
+      hasFreeDrawRedoCacheRef.current = true;
+
+      restoredViaCache = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
+      if (restoredViaCache) {
+        if (tempCtxRef.current) {
+          tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        }
+        hasFreeDrawUndoCacheRef.current = false;
+      }
+    }
+
+    if (!restoredViaCache) {
+      applySyncedHistory(list);
+    }
 
     syncHistoryButtons();
 
@@ -1236,6 +1344,26 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else {
         localCommandsRef.current.push(commandsToRestore);
       }
+    }
+
+    // 🛡️ Free Draw Fast-Path: Single Redo-State Canvas Cache
+    let restoredViaCache = false;
+    if (propsRef.current.isFreeDraw && hasFreeDrawRedoCacheRef.current && freeDrawRedoCacheCanvasRef.current && canvasRef.current) {
+      const canvas = canvasRef.current;
+      const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
+      copyCanvasContent(canvas, undoCanvas);
+      hasFreeDrawUndoCacheRef.current = true;
+
+      restoredViaCache = restoreCanvasFromCache(freeDrawRedoCacheCanvasRef.current, canvas);
+      if (restoredViaCache) {
+        if (tempCtxRef.current) {
+          tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        }
+        hasFreeDrawRedoCacheRef.current = false;
+      }
+    }
+
+    if (!restoredViaCache) {
       applySyncedHistory(localCommandsRef.current);
     }
 
@@ -1538,6 +1666,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
         tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+
+        hasFreeDrawUndoCacheRef.current = false;
+        hasFreeDrawRedoCacheRef.current = false;
+        hasFreeDrawPendingUndoCacheRef.current = false;
 
         localCommandsRef.current = [...commands];
         prevCommandsCountRef.current = -1;
@@ -1873,6 +2005,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeTool = propsRef.current.tool;
     if (activeTool !== 'pencil' && activeTool !== 'eraser') return;
 
+    stageFreeDrawPendingCache();
+
     const activeColor = propsRef.current.color;
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
@@ -1898,6 +2032,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
       isDrawingRef.current = false;
+      hasFreeDrawPendingUndoCacheRef.current = false;
       const tempCtx = tempCtxRef.current;
       if (tempCtx) {
         tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
@@ -2015,6 +2150,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
       if (currentPathRef.current.length > 0) {
+        commitFreeDrawPendingCache();
         drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
 
         // Send complete stroke object for precise restoration and history tracking
@@ -2029,6 +2165,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           opacity: activeOpacity,
           points: normalizedPoints
         });
+      } else {
+        hasFreeDrawPendingUndoCacheRef.current = false;
       }
 
       emitDrawCommand('draw_end', {
@@ -2058,6 +2196,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeColor = propsRef.current.color;
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
+
+    stageFreeDrawPendingCache();
 
     emitDrawCommand('draw_start', {
       tool: activeTool,
@@ -2106,6 +2246,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeColor = propsRef.current.color;
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
+
+    commitFreeDrawPendingCache();
 
     // Draw shape to the primary canvas context (hardware-clipped naturally at canvas bounds)
     drawShape(ctx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity);
@@ -2190,6 +2332,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (activeTool === 'bucket') {
       const runBucket = () => {
+        captureDirectFreeDrawUndoCache();
         floodFill(ctx, x, y, activeColor, activeOpacity);
         emitDrawCommand('draw_action', {
           tool: 'bucket',
