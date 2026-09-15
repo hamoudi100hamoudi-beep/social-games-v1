@@ -119,8 +119,13 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const imageData = offscreenCtx.getImageData(0, 0, cw, ch);
   const data = imageData.data;
 
-  const sx = Math.floor(startX * DPR);
-  const sy = Math.floor(startY * DPR);
+  // Derive pixel seed coordinates directly from canvas physical backing store scale (cw / LOGICAL_WIDTH)
+  // For Free Draw (cw = 592), scale is 1.0 (exact 1:1 pixel match across all devices)
+  // For Normal/Competitive, scale equals DPR
+  const scaleX = cw / LOGICAL_WIDTH;
+  const scaleY = ch / LOGICAL_HEIGHT;
+  const sx = Math.floor(startX * scaleX);
+  const sy = Math.floor(startY * scaleY);
 
   if (sx < 0 || sx >= cw || sy < 0 || sy >= ch) return;
 
@@ -1968,23 +1973,29 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCanvas = tempCanvasRef.current;
     if (!canvas || !tempCanvas) return;
 
-    canvas.width = LOGICAL_WIDTH * DPR;
-    canvas.height = LOGICAL_HEIGHT * DPR;
-    tempCanvas.width = LOGICAL_WIDTH * DPR;
-    tempCanvas.height = LOGICAL_HEIGHT * DPR;
+    // In Free Draw mode: Canonical Backing Store Resolution (Option B)
+    // Both Main and Temp canvases are strictly locked to 592x344 (effectiveDPR = 1.0)
+    // for 100% deterministic pixel-perfect synchronization across all devices.
+    // In Normal/Competitive rooms: Adaptive DPR continues to be used.
+    const effectiveDPR = isFreeDraw ? 1.0 : DPR;
+
+    canvas.width = Math.round(LOGICAL_WIDTH * effectiveDPR);
+    canvas.height = Math.round(LOGICAL_HEIGHT * effectiveDPR);
+    tempCanvas.width = Math.round(LOGICAL_WIDTH * effectiveDPR);
+    tempCanvas.height = Math.round(LOGICAL_HEIGHT * effectiveDPR);
 
     const ctx = canvas.getContext('2d', isFreeDraw ? undefined : { alpha: false });
     const tempCtx = tempCanvas.getContext('2d');
 
     if (ctx && tempCtx) {
-      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      ctx.setTransform(effectiveDPR, 0, 0, effectiveDPR, 0, 0);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctxRef.current = ctx;
 
-      tempCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      tempCtx.setTransform(effectiveDPR, 0, 0, effectiveDPR, 0, 0);
       tempCtx.lineCap = 'round';
       tempCtx.lineJoin = 'round';
       tempCtx.imageSmoothingEnabled = true;
@@ -2384,8 +2395,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const oCtx = offscreen.getContext('2d', { willReadFrequently: true });
       if (oCtx) {
         oCtx.drawImage(canvas, 0, 0);
-        const rx = Math.floor(x * DPR);
-        const ry = Math.floor(y * DPR);
+        const scaleX = canvas.width / LOGICAL_WIDTH;
+        const scaleY = canvas.height / LOGICAL_HEIGHT;
+        const rx = Math.floor(x * scaleX);
+        const ry = Math.floor(y * scaleY);
         const pixel = oCtx.getImageData(rx, ry, 1, 1).data;
         const alpha = pixel[3];
         const r = alpha === 255 ? pixel[0] : Math.round((pixel[0] * alpha + 255 * (255 - alpha)) / 255);
