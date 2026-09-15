@@ -40,6 +40,23 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
+  // Size Drag ref tracker for instantaneous 120Hz sync and zero-deadzone boundary clamping
+  const sizeDragRef = useRef<{
+    isDragging: boolean;
+    startY: number;
+    startVal: number;
+    min: number;
+    max: number;
+    sensitivity: number;
+  }>({
+    isDragging: false,
+    startY: 0,
+    startVal: 1,
+    min: 1,
+    max: 50,
+    sensitivity: 2.2,
+  });
+
   // Opacity Touch / Click state tracker (distinguish quick tap from hold / drag)
   const opacityTouchRef = useRef<{
     startTime: number;
@@ -69,6 +86,15 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
     try {
       e.currentTarget.setPointerCapture(e.pointerId);
     } catch (_) {}
+
+    sizeDragRef.current = {
+      isDragging: true,
+      startY: e.clientY,
+      startVal: currentWidth,
+      min: minWidth,
+      max: maxWidth,
+      sensitivity: 2.2,
+    };
 
     setDragState({
       type: 'size',
@@ -111,15 +137,31 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
 
   // Pointer Move for Size Circle
   const handleSizePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!dragState || dragState.type !== 'size') return;
+    if (!sizeDragRef.current.isDragging) return;
     e.preventDefault();
     e.stopPropagation();
 
-    const deltaY = dragState.startY - e.clientY;
-    setDragState(prev => prev ? { ...prev, clientX: e.clientX, clientY: e.clientY } : null);
+    const { startVal, min, max, sensitivity } = sizeDragRef.current;
+    let currentStartY = sizeDragRef.current.startY;
 
-    const delta = Math.round(deltaY / dragState.sensitivity);
-    const newWidth = Math.max(dragState.min, Math.min(dragState.max, dragState.startVal + delta));
+    const maxDeltaY = (max - startVal) * sensitivity;
+    const minDeltaY = (min - startVal) * sensitivity;
+
+    // Dynamically adjust startY when dragging beyond the boundary
+    // so reversing direction immediately changes the value with zero dead zone
+    if (currentStartY - e.clientY > maxDeltaY) {
+      currentStartY = e.clientY + maxDeltaY;
+      sizeDragRef.current.startY = currentStartY;
+    } else if (currentStartY - e.clientY < minDeltaY) {
+      currentStartY = e.clientY + minDeltaY;
+      sizeDragRef.current.startY = currentStartY;
+    }
+
+    setDragState(prev => prev ? { ...prev, startY: currentStartY, clientX: e.clientX, clientY: e.clientY } : null);
+
+    const deltaY = currentStartY - e.clientY;
+    const delta = Math.round(deltaY / sensitivity);
+    const newWidth = Math.max(min, Math.min(max, startVal + delta));
     onWidthChange(newWidth);
   };
 
@@ -139,26 +181,49 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
       } catch (_) {}
     }
 
-    setDragState(prev => prev ? { ...prev, clientX: e.clientX, clientY: e.clientY } : null);
-
     if (opacityTouchRef.current.hasMoved) {
       e.preventDefault();
       e.stopPropagation();
-      const deltaY = opacityTouchRef.current.startY - e.clientY;
-      const delta = deltaY / 140;
-      const newOpacity = Math.max(0.1, Math.min(1.0, Number((opacityTouchRef.current.startOpacity + delta).toFixed(2))));
+
+      const sensitivity = 140;
+      const minOpacity = 0.1;
+      const maxOpacity = 1.0;
+      const { startOpacity } = opacityTouchRef.current;
+      let currentStartY = opacityTouchRef.current.startY;
+
+      const maxDeltaY = (maxOpacity - startOpacity) * sensitivity;
+      const minDeltaY = (minOpacity - startOpacity) * sensitivity;
+
+      // Dynamically adjust startY when dragging beyond the boundary
+      // so reversing direction immediately changes the value with zero dead zone
+      if (currentStartY - e.clientY > maxDeltaY) {
+        currentStartY = e.clientY + maxDeltaY;
+        opacityTouchRef.current.startY = currentStartY;
+      } else if (currentStartY - e.clientY < minDeltaY) {
+        currentStartY = e.clientY + minDeltaY;
+        opacityTouchRef.current.startY = currentStartY;
+      }
+
+      setDragState(prev => prev ? { ...prev, startY: currentStartY, clientX: e.clientX, clientY: e.clientY } : null);
+
+      const deltaY = currentStartY - e.clientY;
+      const delta = deltaY / sensitivity;
+      const newOpacity = Math.max(minOpacity, Math.min(maxOpacity, Number((startOpacity + delta).toFixed(2))));
       onOpacityChange(newOpacity);
+    } else {
+      setDragState(prev => prev ? { ...prev, clientX: e.clientX, clientY: e.clientY } : null);
     }
   };
 
   // Pointer Up / Cancel for Size Circle
   const handleSizePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (dragState && dragState.type === 'size') {
+    if (sizeDragRef.current.isDragging) {
       e.preventDefault();
       e.stopPropagation();
       try {
         e.currentTarget.releasePointerCapture(e.pointerId);
       } catch (_) {}
+      sizeDragRef.current.isDragging = false;
       setDragState(null);
     }
   };

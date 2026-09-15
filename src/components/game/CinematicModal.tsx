@@ -67,6 +67,17 @@ export default function CinematicModal({
   maxWidthClass,
   overlayClassName,
 }: CinematicModalProps) {
+  // 🛡️ Prevent instant closure caused by click bubbling or pointer release from the gesture that opened the modal
+  const openTimeRef = React.useRef(0);
+  const backdropPointerDownRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      openTimeRef.current = Date.now();
+      backdropPointerDownRef.current = false;
+    }
+  }, [isOpen]);
+
   // Translate the titleType to standard cartoon classes defined in CSS
   const getTitleClass = () => {
     switch (titleType) {
@@ -121,8 +132,19 @@ export default function CinematicModal({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
           className={`fixed inset-0 z-[9999] flex items-center justify-center ${overlayClassName || "bg-slate-900/80"}`}
+          onPointerDown={(e) => {
+            if (e.target === e.currentTarget) {
+              backdropPointerDownRef.current = true;
+            }
+          }}
           onClick={(e) => {
-            if (e.target === e.currentTarget && onClose) {
+            if (
+              e.target === e.currentTarget &&
+              backdropPointerDownRef.current &&
+              Date.now() - openTimeRef.current > 300 &&
+              onClose
+            ) {
+              backdropPointerDownRef.current = false;
               onClose();
             }
           }}

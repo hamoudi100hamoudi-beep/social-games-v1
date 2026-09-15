@@ -139,7 +139,7 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const fg = parseInt(fillHex.slice(3, 5), 16) || 0;
   const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
 
-  if (ta > 10 && fillOpacity >= 0.95 && Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5) {
+  if (ta >= 240 && fillOpacity >= 0.95 && Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5) {
     return;
   }
 
@@ -176,14 +176,25 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
     while (xCurr < cw && !visited[pixelIdx] && matchColor(data, idx, tr, tg, tb, ta)) {
       visited[pixelIdx] = 1;
 
-      const destR = data[idx];
-      const destG = data[idx + 1];
-      const destB = data[idx + 2];
+      const destA = data[idx + 3] / 255;
 
-      data[idx] = Math.round(fr * fillOpacity + destR * (1 - fillOpacity));
-      data[idx + 1] = Math.round(fg * fillOpacity + destG * (1 - fillOpacity));
-      data[idx + 2] = Math.round(fb * fillOpacity + destB * (1 - fillOpacity));
-      data[idx + 3] = 255;
+      if (destA <= 0.04) {
+        data[idx] = fr;
+        data[idx + 1] = fg;
+        data[idx + 2] = fb;
+        data[idx + 3] = Math.round(fillOpacity * 255);
+      } else {
+        const destR = data[idx];
+        const destG = data[idx + 1];
+        const destB = data[idx + 2];
+        const outA = fillOpacity + destA * (1 - fillOpacity);
+        const factorSrc = fillOpacity / outA;
+        const factorDest = (destA * (1 - fillOpacity)) / outA;
+        data[idx] = Math.round(fr * factorSrc + destR * factorDest);
+        data[idx + 1] = Math.round(fg * factorSrc + destG * factorDest);
+        data[idx + 2] = Math.round(fb * factorSrc + destB * factorDest);
+        data[idx + 3] = Math.round(outA * 255);
+      }
 
       if (yCurr > 0) {
         const idxAbove = ((yCurr - 1) * cw + xCurr) * 4;
@@ -2620,6 +2631,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           className="absolute inset-0 w-full h-full bg-white pointer-events-none"
           style={{ zIndex: 5 }}
         />
+
+        {/* 🧪 Experimental Faint Watermark Layer (Free Draw Only) */}
+        {isFreeDraw && (
+          <div
+            id="drawing-board-faint-watermark"
+            className="absolute top-4 inset-x-0 flex justify-center pointer-events-none select-none text-[13px] sm:text-[15px] font-black tracking-widest text-slate-400/20 uppercase"
+            style={{ zIndex: 6 }}
+          >
+            FREE DRAW
+          </div>
+        )}
+
         <canvas
           id="drawing-board-layer-primary"
           ref={canvasRef}
