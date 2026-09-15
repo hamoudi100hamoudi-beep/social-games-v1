@@ -77,6 +77,12 @@ const DPR = typeof window !== 'undefined' ? getAdaptiveDPR() : 2;
 
 // --- Built-in Flood Fill (Aided for performance and safety) ---
 const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b: number, a: number) => {
+  if (a <= 10) {
+    return data[i + 3] <= 10;
+  }
+  if (data[i + 3] <= 10) {
+    return false;
+  }
   const tolerance = 40;
   return Math.abs(data[i] - r) <= tolerance &&
          Math.abs(data[i + 1] - g) <= tolerance &&
@@ -133,7 +139,7 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const fg = parseInt(fillHex.slice(3, 5), 16) || 0;
   const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
 
-  if (fillOpacity >= 0.95 && Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5) {
+  if (ta > 10 && fillOpacity >= 0.95 && Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5) {
     return;
   }
 
@@ -968,10 +974,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       executeResetState();
     },
     getCanvasSnapshot: () => {
-      if (canvasRef.current) {
-        return canvasRef.current.toDataURL('image/png');
+      const canvas = canvasRef.current;
+      if (!canvas) return null;
+      if (!propsRef.current.isFreeDraw) {
+        return canvas.toDataURL('image/png');
       }
-      return null;
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = canvas.width;
+      exportCanvas.height = canvas.height;
+      const exportCtx = exportCanvas.getContext('2d');
+      if (exportCtx) {
+        exportCtx.fillStyle = '#ffffff';
+        exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+        exportCtx.drawImage(canvas, 0, 0);
+        return exportCanvas.toDataURL('image/png');
+      }
+      return canvas.toDataURL('image/png');
     },
     resetZoom: () => {
       const container = containerRef.current;
@@ -1048,8 +1066,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeCtx.globalAlpha = drawOpacity;
 
     if (drawTool === 'eraser') {
-      activeCtx.strokeStyle = '#ffffff';
-      activeCtx.fillStyle = '#ffffff';
+      if (propsRef.current.isFreeDraw && activeCtx !== tempCtxRef.current) {
+        activeCtx.globalCompositeOperation = 'destination-out';
+        activeCtx.strokeStyle = 'rgba(0,0,0,1)';
+        activeCtx.fillStyle = 'rgba(0,0,0,1)';
+      } else {
+        activeCtx.strokeStyle = '#ffffff';
+        activeCtx.fillStyle = '#ffffff';
+      }
     } else {
       activeCtx.strokeStyle = drawColor;
       activeCtx.fillStyle = drawColor;
@@ -1149,8 +1173,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeCtx.globalAlpha = drawOpacity;
 
     if (drawTool === 'eraser') {
-      activeCtx.strokeStyle = '#ffffff';
-      activeCtx.fillStyle = '#ffffff';
+      if (propsRef.current.isFreeDraw && activeCtx !== tempCtxRef.current) {
+        activeCtx.globalCompositeOperation = 'destination-out';
+        activeCtx.strokeStyle = 'rgba(0,0,0,1)';
+        activeCtx.fillStyle = 'rgba(0,0,0,1)';
+      } else {
+        activeCtx.strokeStyle = '#ffffff';
+        activeCtx.fillStyle = '#ffffff';
+      }
     } else {
       activeCtx.strokeStyle = drawColor;
       activeCtx.fillStyle = drawColor;
@@ -1187,15 +1217,43 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // --- Handlers & Commands Replays ---
 
+  // 🛡️ Deterministic Canvas Backing-Store Clear:
+  // Clears the entire physical framebuffer (0, 0, canvas.width, canvas.height) at identity transform
+  // to ensure 100% solid white main canvas and 100% empty transparent temp canvas with zero residual alpha or edge artifacts.
+  const resetCanvasBackingStores = (
+    targetCtx?: CanvasRenderingContext2D | null,
+    targetTempCtx?: CanvasRenderingContext2D | null
+  ) => {
+    const activeCtx = targetCtx || ctxRef.current;
+    const activeTempCtx = targetTempCtx || tempCtxRef.current;
+
+    if (activeCtx && activeCtx.canvas) {
+      activeCtx.save();
+      activeCtx.setTransform(1, 0, 0, 1, 0, 0);
+      if (propsRef.current.isFreeDraw) {
+        activeCtx.clearRect(0, 0, activeCtx.canvas.width, activeCtx.canvas.height);
+      } else {
+        activeCtx.fillStyle = '#ffffff';
+        activeCtx.fillRect(0, 0, activeCtx.canvas.width, activeCtx.canvas.height);
+      }
+      activeCtx.restore();
+    }
+
+    if (activeTempCtx && activeTempCtx.canvas) {
+      activeTempCtx.save();
+      activeTempCtx.setTransform(1, 0, 0, 1, 0, 0);
+      activeTempCtx.clearRect(0, 0, activeTempCtx.canvas.width, activeTempCtx.canvas.height);
+      activeTempCtx.restore();
+      activeTempCtx.beginPath();
+    }
+  };
+
   const executeResetState = () => {
     console.log("[DrawingCanvasCore] Hard-resetting drawing state...");
     const ctx = ctxRef.current;
     const tempCtx = tempCtxRef.current;
     if (ctx && tempCtx) {
-      // Clear visual layers
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      resetCanvasBackingStores(ctx, tempCtx);
     }
 
     // Reset local/remote paths & sessions
@@ -1274,9 +1332,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       invalidateFreeDrawCaches();
     }
 
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    resetCanvasBackingStores(ctx, tempCtx);
 
     if (emit) {
       emitDrawCommand('draw_clear', {});
@@ -1479,8 +1535,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else if (event === 'draw_clear') {
         Object.keys(replayPaths).forEach((k) => delete replayPaths[k]);
         Object.keys(replaySessions).forEach((k) => delete replaySessions[k]);
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+        resetCanvasBackingStores(ctx, tempCtxRef.current);
         saveSnapshot();
       } else if (event === 'draw_action') {
         if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
@@ -1507,9 +1562,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       console.log("[DrawingCanvasCore] Instantly rebuilding room drawing history...", commands.length);
 
       // Initial clear
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      resetCanvasBackingStores(ctx, tempCtx);
 
       // Reset history stacks
       localCommandsRef.current = [...commands];
@@ -1696,9 +1749,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         console.log("[DrawingCanvasCore] Starting Deferred Queue & Forced Multi-Snapshots chunking...", commands.length);
 
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-        tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        resetCanvasBackingStores(ctx, tempCtx);
 
         hasFreeDrawUndoCacheRef.current = false;
         hasFreeDrawRedoCacheRef.current = false;
@@ -1911,22 +1962,26 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     tempCanvas.width = LOGICAL_WIDTH * DPR;
     tempCanvas.height = LOGICAL_HEIGHT * DPR;
 
-    const ctx = canvas.getContext('2d', { alpha: false });
+    const ctx = canvas.getContext('2d', isFreeDraw ? undefined : { alpha: false });
     const tempCtx = tempCanvas.getContext('2d');
 
     if (ctx && tempCtx) {
-      ctx.scale(DPR, DPR);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctxRef.current = ctx;
 
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-
-      tempCtx.scale(DPR, DPR);
+      tempCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
       tempCtx.lineCap = 'round';
       tempCtx.lineJoin = 'round';
+      tempCtx.imageSmoothingEnabled = true;
+      tempCtx.imageSmoothingQuality = 'high';
       tempCtxRef.current = tempCtx;
+
+      // Solidify initial physical backing store state (transparent for Free Draw, white for Normal)
+      resetCanvasBackingStores(ctx, tempCtx);
 
       // WARM-UP Canvas rendering engine to prevent first-stroke stutter on weak devices
       // This forces Skia / GPU to compile shaders immediately rather than when user draws.
@@ -1936,7 +1991,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.quadraticCurveTo(0.2, 0.2, 0.3, 0.3);
       tempCtx.strokeStyle = 'rgba(0,0,0,0.01)';
       tempCtx.stroke();
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      resetCanvasBackingStores(ctx, tempCtx);
 
       saveSnapshot();
 
@@ -2321,7 +2376,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const rx = Math.floor(x * DPR);
         const ry = Math.floor(y * DPR);
         const pixel = oCtx.getImageData(rx, ry, 1, 1).data;
-        const hex = "#" + ("000000" + ((pixel[0] << 16) | (pixel[1] << 8) | pixel[2]).toString(16)).slice(-6);
+        const alpha = pixel[3];
+        const r = alpha === 255 ? pixel[0] : Math.round((pixel[0] * alpha + 255 * (255 - alpha)) / 255);
+        const g = alpha === 255 ? pixel[1] : Math.round((pixel[1] * alpha + 255 * (255 - alpha)) / 255);
+        const b = alpha === 255 ? pixel[2] : Math.round((pixel[2] * alpha + 255 * (255 - alpha)) / 255);
+        const hex = "#" + ("000000" + ((r << 16) | (g << 8) | b).toString(16)).slice(-6);
         onPipetteColorPicked?.(hex);
       }
       return;
@@ -2555,10 +2614,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           willChange: 'transform'
         }}
       >
+        {/* Dedicated background layer: In Free Draw, canvas pixels are transparent and this layer provides visual white background */}
+        <div
+          id="drawing-board-underlying-white-bg"
+          className="absolute inset-0 w-full h-full bg-white pointer-events-none"
+          style={{ zIndex: 5 }}
+        />
         <canvas
           id="drawing-board-layer-primary"
           ref={canvasRef}
-          className={`absolute inset-0 w-full h-full block bg-white touch-none ${readOnly ? 'object-contain pointer-events-none' : 'pointer-events-auto cursor-crosshair'}`}
+          className={`absolute inset-0 w-full h-full block ${isFreeDraw ? 'bg-transparent' : 'bg-white'} touch-none ${readOnly ? 'object-contain pointer-events-none' : 'pointer-events-auto cursor-crosshair'}`}
           style={{
             zIndex: 10,
             imageRendering: 'auto'
