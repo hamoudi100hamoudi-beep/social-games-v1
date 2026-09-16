@@ -549,6 +549,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     let touchStartY = 0;
     let isPinching = false;
 
+    // Performance optimization for mobile pinch/zoom:
+    // Cache container bounding rect during active gesture to prevent forced layout thrashing on every touchmove
+    let cachedContainerRect: DOMRect | null = null;
+    let gestureRafId: number | null = null;
+
+    const flushPendingTransform = () => {
+      if (gestureRafId !== null) {
+        cancelAnimationFrame(gestureRafId);
+        gestureRafId = null;
+        applyTransform();
+      }
+    };
+
     const handleTouchStart = (e: TouchEvent) => {
       activeTouchCountRef.current = e.touches.length;
 
@@ -615,6 +628,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const clientMidY = (t1.clientY + t2.clientY) / 2;
 
         const rect = container.getBoundingClientRect();
+        cachedContainerRect = rect;
         touchStartCenterX = clientMidX - rect.left;
         touchStartCenterY = clientMidY - rect.top;
 
@@ -737,7 +751,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const t2 = e.touches[1];
 
         const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-        const rect = container.getBoundingClientRect();
+        if (!cachedContainerRect) {
+          cachedContainerRect = container.getBoundingClientRect();
+        }
+        const rect = cachedContainerRect;
 
         // If touchStart was missed, interrupted, or zero-distance, re-anchor cleanly
         if ((!isPinching || touchStartDist <= 0) && dist > 0) {
@@ -792,7 +809,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
           transformRef.current = { scale: nextScale, x: nextX, y: nextY };
           hasManuallyZoomedOrPanned.current = true;
-          applyTransform();
+
+          // Coalesce DOM transform updates onto screen refresh rate (rAF) to eliminate main-thread layout bottleneck
+          if (gestureRafId === null) {
+            gestureRafId = requestAnimationFrame(() => {
+              gestureRafId = null;
+              applyTransform();
+            });
+          }
         }
       }
     };
@@ -828,6 +852,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (isPinching) {
         isPinching = false;
         touchStartDist = 0;
+        cachedContainerRect = null;
+        flushPendingTransform();
         // Keep zoom-is-pinching true for 100ms path stabilization after pinch ends
         setTimeout(() => {
           isZoomPinchingRef.current = false;
@@ -841,6 +867,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     container.addEventListener('touchcancel', handleTouchEnd);
 
     return () => {
+      if (gestureRafId !== null) {
+        cancelAnimationFrame(gestureRafId);
+        gestureRafId = null;
+      }
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
