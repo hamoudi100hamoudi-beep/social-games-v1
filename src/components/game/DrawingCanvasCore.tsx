@@ -706,17 +706,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               lastOutsideTouchRef.current = { clientX: t.clientX, clientY: t.clientY };
             }
           } else if (touchDrawingActiveFromOutsideRef.current) {
-            if (isInside) {
-              const curCoords = getLogicalCoords(t.clientX, t.clientY, canvas, true);
-              strokeHandlerRef.current?.move(curCoords.x, curCoords.y);
+            if (propsRef.current.isFreeDraw) {
+              const rawCoords = getLogicalCoords(t.clientX, t.clientY, canvas, false);
+              strokeHandlerRef.current?.move(rawCoords.x, rawCoords.y);
               if (e.cancelable) e.preventDefault();
             } else {
-              const clamped = getLogicalCoords(t.clientX, t.clientY, canvas, true);
-              strokeHandlerRef.current?.move(clamped.x, clamped.y);
-              strokeHandlerRef.current?.end();
-              touchDrawingActiveFromOutsideRef.current = false;
-              lastOutsideTouchRef.current = { clientX: t.clientX, clientY: t.clientY };
-              if (e.cancelable) e.preventDefault();
+              if (isInside) {
+                const curCoords = getLogicalCoords(t.clientX, t.clientY, canvas, true);
+                strokeHandlerRef.current?.move(curCoords.x, curCoords.y);
+                if (e.cancelable) e.preventDefault();
+              } else {
+                const clamped = getLogicalCoords(t.clientX, t.clientY, canvas, true);
+                strokeHandlerRef.current?.move(clamped.x, clamped.y);
+                strokeHandlerRef.current?.end();
+                touchDrawingActiveFromOutsideRef.current = false;
+                lastOutsideTouchRef.current = { clientX: t.clientX, clientY: t.clientY };
+                if (e.cancelable) e.preventDefault();
+              }
             }
           }
         }
@@ -2102,7 +2108,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         return;
       }
 
-      if (dist > 8) {
+      if (!propsRef.current.isFreeDraw && dist > 8) {
         const stepSize = 6;
         const stepsCount = Math.floor(dist / stepSize);
         if (stepsCount > 1) {
@@ -2180,21 +2186,31 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
 
       if (currentPathRef.current.length > 0) {
-        commitFreeDrawPendingCache();
-        drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
+        // Only commit undo cache and record stroke in history if at least one point is inside/touches canvas viewport
+        const hasVisibleContent = !propsRef.current.isFreeDraw || currentPathRef.current.some(
+          pt => pt.x >= 0 && pt.x <= LOGICAL_WIDTH && pt.y >= 0 && pt.y <= LOGICAL_HEIGHT
+        );
 
-        // Send complete stroke object for precise restoration and history tracking
-        const normalizedPoints = currentPathRef.current.map(pt => ({
-          x: pt.x / LOGICAL_WIDTH,
-          y: pt.y / LOGICAL_HEIGHT
-        }));
-        emitDrawCommand('draw_stroke', {
-          tool: activeTool,
-          color: activeColor,
-          width: activeWidth,
-          opacity: activeOpacity,
-          points: normalizedPoints
-        });
+        if (hasVisibleContent) {
+          commitFreeDrawPendingCache();
+          drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
+
+          // Send complete stroke object for precise restoration and history tracking
+          const normalizedPoints = currentPathRef.current.map(pt => ({
+            x: pt.x / LOGICAL_WIDTH,
+            y: pt.y / LOGICAL_HEIGHT
+          }));
+          emitDrawCommand('draw_stroke', {
+            tool: activeTool,
+            color: activeColor,
+            width: activeWidth,
+            opacity: activeOpacity,
+            points: normalizedPoints
+          });
+        } else {
+          // Entire gesture stayed outside canvas without entering: discard pending undo cache cleanly
+          hasFreeDrawPendingUndoCacheRef.current = false;
+        }
       } else {
         hasFreeDrawPendingUndoCacheRef.current = false;
       }
@@ -2453,18 +2469,37 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
       if (isDrawingRef.current) {
-        if (isInside) {
-          processStrokeMove(rawCoords.x, rawCoords.y);
+        if (propsRef.current.isFreeDraw) {
+          // Free Draw: Continuous un-clamped stroke trajectory across canvas edges
+          // Pointer capture maintains full gesture tracking outside canvas.
+          // Native canvas context naturally clips any geometry outside (0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT).
+          // Extract native browser coalesced events if available to preserve sub-frame curve fidelity without synthetic Lerp
+          const nativeEvt = e.nativeEvent as any;
+          const rawEvents: PointerEvent[] = (nativeEvt && typeof nativeEvt.getCoalescedEvents === 'function')
+            ? nativeEvt.getCoalescedEvents()
+            : [];
+          if (rawEvents.length > 0) {
+            for (let i = 0; i < rawEvents.length; i++) {
+              const pt = getLogicalCoords(rawEvents[i].clientX, rawEvents[i].clientY, canvas, false);
+              processStrokeMove(pt.x, pt.y);
+            }
+          } else {
+            processStrokeMove(rawCoords.x, rawCoords.y);
+          }
         } else {
-          // Moved outside canvas: reach the edge boundary point and end stroke cleanly
-          const clamped = getLogicalCoords(e.clientX, e.clientY, canvas, true);
-          processStrokeMove(clamped.x, clamped.y);
-          finishCurrentStroke();
-          exitedOutsideWhilePointerDownRef.current = true;
-          lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+          if (isInside) {
+            processStrokeMove(rawCoords.x, rawCoords.y);
+          } else {
+            // Normal / Competitive: Keep existing legacy boundary edge clamp behavior
+            const clamped = getLogicalCoords(e.clientX, e.clientY, canvas, true);
+            processStrokeMove(clamped.x, clamped.y);
+            finishCurrentStroke();
+            exitedOutsideWhilePointerDownRef.current = true;
+            lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+          }
         }
-      } else if (exitedOutsideWhilePointerDownRef.current) {
-        // Was outside while holding down, now re-entered canvas: start new stroke cleanly
+      } else if (exitedOutsideWhilePointerDownRef.current && !propsRef.current.isFreeDraw) {
+        // Normal / Competitive: Was outside while holding down, now re-entered canvas: start new stroke cleanly
         if (isInside) {
           exitedOutsideWhilePointerDownRef.current = false;
           let entryX = rawCoords.x;
@@ -2537,11 +2572,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
           startShapeDrawing(raw.x, raw.y);
         } else if ((activeTool === 'pencil' || activeTool === 'eraser') && e.target === containerRef.current) {
-          exitedOutsideWhilePointerDownRef.current = true;
-          lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+          const canvas = canvasRef.current;
+          if (!canvas) return;
           try {
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           } catch (err) {}
+
+          if (propsRef.current.isFreeDraw) {
+            // Free Draw: Continuous un-clamped raw trajectory begins directly from the pointer position.
+            // Native canvas context naturally clips any geometry outside (0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT).
+            const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+            startPencilOrEraserStroke(rawCoords.x, rawCoords.y);
+          } else {
+            exitedOutsideWhilePointerDownRef.current = true;
+            lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+          }
         }
       }}
       onPointerMove={(e) => {
@@ -2556,16 +2601,31 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
           const isInside = rawCoords.x >= 0 && rawCoords.x <= LOGICAL_WIDTH && rawCoords.y >= 0 && rawCoords.y <= LOGICAL_HEIGHT;
           if (isDrawingRef.current) {
-            if (isInside) {
-              processStrokeMove(rawCoords.x, rawCoords.y);
+            if (propsRef.current.isFreeDraw) {
+              const nativeEvt = e.nativeEvent as any;
+              const rawEvents: PointerEvent[] = (nativeEvt && typeof nativeEvt.getCoalescedEvents === 'function')
+                ? nativeEvt.getCoalescedEvents()
+                : [];
+              if (rawEvents.length > 0) {
+                for (let i = 0; i < rawEvents.length; i++) {
+                  const pt = getLogicalCoords(rawEvents[i].clientX, rawEvents[i].clientY, canvas, false);
+                  processStrokeMove(pt.x, pt.y);
+                }
+              } else {
+                processStrokeMove(rawCoords.x, rawCoords.y);
+              }
             } else {
-              const clamped = getLogicalCoords(e.clientX, e.clientY, canvas, true);
-              processStrokeMove(clamped.x, clamped.y);
-              finishCurrentStroke();
-              exitedOutsideWhilePointerDownRef.current = true;
-              lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+              if (isInside) {
+                processStrokeMove(rawCoords.x, rawCoords.y);
+              } else {
+                const clamped = getLogicalCoords(e.clientX, e.clientY, canvas, true);
+                processStrokeMove(clamped.x, clamped.y);
+                finishCurrentStroke();
+                exitedOutsideWhilePointerDownRef.current = true;
+                lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
+              }
             }
-          } else if (exitedOutsideWhilePointerDownRef.current) {
+          } else if (exitedOutsideWhilePointerDownRef.current && !propsRef.current.isFreeDraw) {
             if (isInside) {
               exitedOutsideWhilePointerDownRef.current = false;
               let entryX = rawCoords.x;
@@ -2671,6 +2731,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           onPointerEnter={(e) => {
             if (propsRef.current.readOnly) return;
             if (isDrawingRef.current) return;
+            if (propsRef.current.isFreeDraw) return;
             if (e.pointerType === 'mouse' && e.buttons === 1) {
               const tool = propsRef.current.tool;
               if (tool === 'pencil' || tool === 'eraser') {
