@@ -2620,6 +2620,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }}
       onPointerMove={(e) => {
+        if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
+          return;
+        }
+
         const canvas = canvasRef.current;
         if (!canvas) return;
         const activeTool = propsRef.current.tool;
