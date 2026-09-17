@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import DrawingBoard from "./DrawingBoard";
+import { IsolatedDrawingLayer } from "./experimental/IsolatedDrawingLayer";
 import {
   Send,
   MessageSquare,
@@ -693,6 +693,51 @@ export default function GameRoom({
     if (!canReport) return;
     setShowReportConfirm(true);
   };
+
+  // 🛡️ Stabilized Drawing Layer Action Callbacks (Ensures areDrawingPropsEqual stays rock-solid)
+  const handleSkipTurnRequest = useCallback(() => {
+    setShowSkipConfirm(true);
+  }, []);
+
+  const handleRequestHintAction = useCallback(() => {
+    socket?.emit("request_hint");
+  }, [socket]);
+
+  const handleStopFreeDrawAction = useCallback(() => {
+    handleStopFreeDraw();
+  }, [socket, persistentPlayerId, socketId]);
+
+  const handleSyncStateChangeAction = useCallback((syncing: boolean) => {
+    setIsCanvasSyncing(syncing);
+  }, []);
+
+  const handleHistoryLengthChangeAction = useCallback((hasStrokes: boolean) => {
+    setHasDrawHistory(hasStrokes);
+  }, []);
+
+  const canSkipTurn = !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0);
+  const canRequestHint = !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0);
+
+  const hintsRemaining = useMemo(() => {
+    if (isFreeDraw || !isDrawingMode) return 0;
+    const word = gameState.currentWord || "";
+    const words = word.split(" ").filter((w: string) => w.length > 0);
+    let maxHints = 0;
+    if (words.length <= 1) {
+      const charCount = word.replace(/\s/g, "").length;
+      maxHints = charCount < 3 ? 1 : 2;
+      if (charCount >= 5) {
+        maxHints = 3;
+      }
+    } else {
+      maxHints = 1;
+      for (const w of words) {
+        if (w.length >= 5) maxHints += 2;
+        else if (w.length >= 3) maxHints += 1;
+      }
+    }
+    return Math.max(0, maxHints - (gameState.hintsUsed || 0));
+  }, [isFreeDraw, isDrawingMode, gameState.currentWord, gameState.hintsUsed]);
 
   // --- Block 1: Handle Room Join & Rejoin based on (Re)connection status ---
   useEffect(() => {
@@ -1634,61 +1679,22 @@ export default function GameRoom({
                 </div>
               )}
 
-              <DrawingBoard
-                key={`shared-board-${room || ""}`}
-                currentDrawerId={gameState.currentDrawerId}
-                status={gameState.status}
+              <IsolatedDrawingLayer
                 readOnly={!isDrawingMode}
+                isDrawingMode={isDrawingMode}
                 isFreeDraw={isFreeDraw}
                 amIDrawer={amIDrawer}
-                onExitFreeDraw={handleStopFreeDraw}
-                onSyncStateChange={(syncing) => setIsCanvasSyncing(syncing)}
-                onHistoryLengthChange={(hasStrokes) => {
-                  setHasDrawHistory(hasStrokes);
-                }}
-                onSkipTurn={
-                  !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
-                    ? () => setShowSkipConfirm(true)
-                    : undefined
-                }
-                onRequestHint={
-                  !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0)
-                    ? () => socket?.emit("request_hint")
-                    : undefined
-                }
-                timerPercentage={isFreeDraw ? 100 : timerPercentage}
-                timerBarNode={
-                  !isFreeDraw ? (
-                    <div
-                      id="timer-slot-drawer"
-                      ref={handleDrawerSlotRef}
-                      className="w-full shrink-0"
-                    />
-                  ) : undefined
-                }
-                hintsRemaining={
-                  !isFreeDraw && isDrawingMode
-                    ? (() => {
-                        const word = gameState.currentWord || "";
-                        const words = word.split(" ").filter((w: string) => w.length > 0);
-                        let maxHints = 0;
-                        if (words.length <= 1) {
-                          const charCount = word.replace(/\s/g, "").length;
-                          maxHints = charCount < 3 ? 1 : 2;
-                          if (charCount >= 5) {
-                            maxHints = 3;
-                          }
-                        } else {
-                          maxHints = 1;
-                          for (const w of words) {
-                            if (w.length >= 5) maxHints += 2;
-                            else if (w.length >= 3) maxHints += 1;
-                          }
-                        }
-                        return Math.max(0, maxHints - (gameState.hintsUsed || 0));
-                      })()
-                    : 0
-                }
+                currentDrawerId={gameState.currentDrawerId}
+                status={gameState.status}
+                canSkipTurn={canSkipTurn}
+                canRequestHint={canRequestHint}
+                hintsRemaining={hintsRemaining}
+                onSkipTurnRequest={handleSkipTurnRequest}
+                onRequestHintAction={handleRequestHintAction}
+                onExitFreeDrawAction={handleStopFreeDrawAction}
+                onSyncStateChangeAction={handleSyncStateChangeAction}
+                onHistoryLengthChangeAction={handleHistoryLengthChangeAction}
+                drawerTimerSlotRef={handleDrawerSlotRef}
               />
 
               {/* Hit Notifications Overlay (Active only when drawing in fullscreen mode) */}
