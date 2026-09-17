@@ -422,7 +422,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // Layout scale tracking for responsive full viewport fitting
   const containerRef = useRef<HTMLDivElement>(null);
   const transformWrapperRef = useRef<HTMLDivElement>(null);
-  const underlyingWhiteBgRef = useRef<HTMLDivElement>(null);
   const transformRef = useRef({ scale: 1, x: 0, y: 0 });
   const baseScaleRef = useRef(1);
   const hasInitializedTransform = useRef(false);
@@ -618,10 +617,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         e.preventDefault();
         isPinching = true;
         isZoomPinchingRef.current = true;
-        // 🧪 Diagnostic Experiment: Temporarily hide underlying-white-bg during pinch in Free Draw
-        if (propsRef.current.isFreeDraw && underlyingWhiteBgRef.current) {
-          underlyingWhiteBgRef.current.style.visibility = 'hidden';
-        }
 
         const t1 = e.touches[0];
         const t2 = e.touches[1];
@@ -765,10 +760,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if ((!isPinching || touchStartDist <= 0) && dist > 0) {
           isPinching = true;
           isZoomPinchingRef.current = true;
-          // 🧪 Diagnostic Experiment: Temporarily hide underlying-white-bg during pinch in Free Draw
-          if (propsRef.current.isFreeDraw && underlyingWhiteBgRef.current) {
-            underlyingWhiteBgRef.current.style.visibility = 'hidden';
-          }
           touchStartDist = dist;
           touchStartScale = (transformRef.current.scale && isFinite(transformRef.current.scale) && transformRef.current.scale > 0) ? transformRef.current.scale : 1;
           touchStartCenterX = (t1.clientX + t2.clientX) / 2 - rect.left;
@@ -866,10 +857,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         // Keep zoom-is-pinching true for 100ms path stabilization after pinch ends
         setTimeout(() => {
           isZoomPinchingRef.current = false;
-          // 🧪 Diagnostic Experiment: Restore underlying-white-bg visibility after pinch in Free Draw
-          if (propsRef.current.isFreeDraw && underlyingWhiteBgRef.current) {
-            underlyingWhiteBgRef.current.style.visibility = 'visible';
-          }
         }, 100);
       }
     };
@@ -883,9 +870,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (gestureRafId !== null) {
         cancelAnimationFrame(gestureRafId);
         gestureRafId = null;
-      }
-      if (propsRef.current.isFreeDraw && underlyingWhiteBgRef.current) {
-        underlyingWhiteBgRef.current.style.visibility = 'visible';
       }
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
@@ -2748,14 +2732,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           willChange: 'transform'
         }}
       >
-        {/* Dedicated background layer: In Free Draw, canvas pixels are transparent and this layer provides visual white background */}
-        <div
-          id="drawing-board-underlying-white-bg"
-          ref={underlyingWhiteBgRef}
-          className="absolute inset-0 w-full h-full bg-white pointer-events-none"
-          style={{ zIndex: 5 }}
-        />
-
         {/* 🧪 Experimental Faint Watermark Layer (Free Draw Only) */}
         {isFreeDraw && (
           <div
