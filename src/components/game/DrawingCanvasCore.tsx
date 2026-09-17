@@ -2732,16 +2732,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           willChange: 'transform'
         }}
       >
-        {/* 🧪 Experimental Faint Watermark Layer (Free Draw Only) */}
-        {isFreeDraw && (
-          <div
-            id="drawing-board-faint-watermark"
-            className="absolute top-4 inset-x-0 flex justify-center pointer-events-none select-none text-[13px] sm:text-[15px] font-black tracking-widest text-slate-400/20 uppercase"
-            style={{ zIndex: 6 }}
-          >
-            FREE DRAW
-          </div>
-        )}
 
         <canvas
           id="drawing-board-layer-primary"
