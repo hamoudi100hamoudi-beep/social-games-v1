@@ -156,7 +156,7 @@ export default function CinematicModal({
             animate="visible"
             exit="exit"
             style={{ willChange: "transform, opacity" }}
-            className={`cinematic-modal-card bg-[#ECEBFC] pt-5 pb-5 px-5 sm:pt-7 sm:pb-7 sm:px-8 rounded-[28px] sm:rounded-[36px] w-[88%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[440px] h-auto max-h-[85dvh] overflow-y-auto no-scrollbar shadow-2xl text-center relative border border-white/50 flex flex-col justify-between pointer-events-auto ${maxWidthClass || ""}`}
+            className={`cinematic-modal-card bg-[#ECEBFC] pt-5 pb-5 px-5 sm:pt-7 sm:pb-7 sm:px-8 rounded-[28px] sm:rounded-[36px] w-[88%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[440px] h-auto max-h-[85dvh] overflow-y-auto no-scrollbar text-center relative border-2 border-white/60 flex flex-col justify-between pointer-events-auto ${maxWidthClass || ""}`}
           >
             {/* Minimalist Top Corner Close Button */}
             {onClose && (

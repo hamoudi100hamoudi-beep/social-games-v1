@@ -371,7 +371,7 @@ export default function DrawingBoard({
                     type="button"
                     onClick={onExitFreeDraw}
                     title="العودة للروم"
-                    className="w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 transition-all hover:bg-slate-100 hover:scale-105 active:scale-95 cursor-pointer shadow-sm select-none"
+                    className="w-[32px] h-[32px] bg-white text-slate-700 rounded-lg flex items-center justify-center border border-slate-300/40 transition-all hover:bg-slate-100 hover:scale-105 active:scale-95 cursor-pointer select-none"
                   >
                     <ArrowLeft size={16} strokeWidth={2.5} />
                   </button>

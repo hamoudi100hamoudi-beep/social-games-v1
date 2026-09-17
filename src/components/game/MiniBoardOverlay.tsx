@@ -524,7 +524,7 @@ export function MiniBoardOverlay({
 
               {/* Scrollable list for 4th Rank and below */}
               {restOfPlayers.length > 0 && (
-                <div className="w-full max-w-[340px] sm:max-w-md mx-auto mt-1 sm:mt-2 mb-1 px-2 bg-white/60 backdrop-blur-sm rounded-xl p-1.5 border border-slate-200/80 shadow-inner z-10 shrink-0">
+                <div className="w-full max-w-[340px] sm:max-w-md mx-auto mt-1 sm:mt-2 mb-1 px-2 bg-white/95 rounded-xl p-1.5 border border-slate-200 z-10 shrink-0">
                   <p className="text-center text-[#0B2E5C] font-extrabold text-[10px] sm:text-xs uppercase tracking-wider mb-0.5">
                     بقية قائمة المتصدرين
                   </p>

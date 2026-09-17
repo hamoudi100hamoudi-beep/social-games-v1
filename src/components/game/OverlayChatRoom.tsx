@@ -337,7 +337,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                onMouseDown={(e) => e.stopPropagation()}
                onPointerDown={(e) => e.stopPropagation()}
                onContextMenu={(e) => e.stopPropagation()}
-               className="p-3 bg-game-primary-blue/95 backdrop-blur-md border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full select-auto"
+               className="p-3 bg-game-primary-blue border-t border-white/10 shrink-0 safe-area-bottom z-10 w-full select-auto"
                style={{ 
                  WebkitTouchCallout: 'default', 
                  WebkitUserSelect: 'auto', 

@@ -2801,7 +2801,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               transition={{ duration: 0.35, ease: 'easeInOut' }}
               className={`fixed inset-0 flex flex-col items-center justify-center z-[999999] select-none touch-none ${
                 hasSyncedOnce
-                  ? (readOnly ? "bg-transparent" : "bg-[#0c061d]/80 backdrop-blur-sm cursor-not-allowed")
+                  ? (readOnly ? "bg-transparent" : "bg-[#0c061d]/90 cursor-not-allowed")
                   : "bg-[#0c061d] cursor-not-allowed"
               }`}
               style={{ pointerEvents: hasSyncedOnce && readOnly ? 'none' : 'auto' }}

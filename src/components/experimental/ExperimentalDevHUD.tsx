@@ -86,7 +86,7 @@ export const ExperimentalDevHUD: React.FC = () => {
   return (
     <div
       dir="ltr"
-      className="fixed bottom-2 left-2 z-[9999] font-mono text-[11px] bg-slate-900/95 backdrop-blur-md border border-amber-400/40 text-slate-200 rounded-xl shadow-2xl overflow-hidden select-none pointer-events-auto transition-all w-[320px] sm:w-[380px] max-h-[85vh] flex flex-col"
+      className="fixed bottom-2 left-2 z-[9999] font-mono text-[11px] bg-slate-900 border border-amber-400/40 text-slate-200 rounded-xl overflow-hidden select-none pointer-events-auto transition-all w-[320px] sm:w-[380px] max-h-[85vh] flex flex-col"
     >
       {/* Header bar */}
       <div className="flex items-center justify-between px-3 py-2 bg-slate-950 border-b border-white/10">

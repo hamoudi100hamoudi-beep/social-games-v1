@@ -468,7 +468,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className={`w-[90%] max-w-[340px] bg-[#ECEBFC] rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col justify-center items-center text-[#2E2882] min-h-0 my-auto shrink-0 ${
+            className={`w-[90%] max-w-[340px] bg-[#ECEBFC] rounded-[32px] relative border-2 border-white/60 flex flex-col justify-center items-center text-[#2E2882] min-h-0 my-auto shrink-0 ${
               isKeyboardOpen 
                 ? "py-4 px-6" 
                 : "py-4 [@media(min-height:600px)]:py-5 px-5 [@media(min-height:600px)]:px-6 sm:px-8"
@@ -595,7 +595,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
             initial={{ opacity: 0, scale: 0.95, y: 30 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full bg-[#ECEBFC] p-4 sm:p-6 rounded-[32px] shadow-2xl relative border border-white/40 flex flex-col flex-1 mt-10 mb-4 sm:mt-12 sm:mb-6 text-[#2E2882] overflow-hidden min-h-[250px] shrink-0"
+            className="w-full bg-[#ECEBFC] p-4 sm:p-6 rounded-[32px] relative border-2 border-white/60 flex flex-col flex-1 mt-10 mb-4 sm:mt-12 sm:mb-6 text-[#2E2882] overflow-hidden min-h-[250px] shrink-0"
           >
             {/* List - Positioned cleanly at the top of the white container */}
             <div className="flex-1 overflow-y-auto pr-1 space-y-3 no-scrollbar">
@@ -644,7 +644,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 4, scale: 0.94 }}
                   transition={{ duration: 0.18 }}
-                  className="absolute -top-9 left-1/2 -translate-x-1/2 z-50 bg-[#1E1B4B]/95 text-white text-xs font-bold px-3.5 py-1.5 rounded-full shadow-lg border border-white/20 flex items-center gap-1.5 pointer-events-none whitespace-nowrap backdrop-blur-sm"
+                  className="absolute -top-9 left-1/2 -translate-x-1/2 z-50 bg-[#1E1B4B] text-white text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/20 flex items-center gap-1.5 pointer-events-none whitespace-nowrap"
                   dir="rtl"
                 >
                   <span>{newRoomNotice}</span>
@@ -817,7 +817,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
       {showAvatarGrid && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 cursor-pointer" onClick={() => setShowAvatarGrid(false)} />
-          <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 border border-white/40 shadow-2xl animate-in zoom-in-95 duration-200" dir="rtl">
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 border-2 border-slate-200 animate-in zoom-in-95 duration-200" dir="rtl">
             <div className="flex justify-between items-center mb-4">
               <span className="text-sm font-black text-[#38BDF8]">اختر أفاتار</span>
               <button onClick={() => setShowAvatarGrid(false)} className="text-[#8C8AA7] hover:text-[#2E2882] bg-slate-100 p-1.5 rounded-full transition-colors active:scale-90">

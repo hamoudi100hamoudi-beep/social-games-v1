@@ -268,7 +268,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
             onPointerUp={handleSizePointerUp}
             onPointerCancel={handleSizePointerUp}
             title="اضغط واسحب للأعلى أو الأسفل لتغيير حجم الخط"
-            className={`w-[38px] h-[38px] sm:w-[42px] sm:h-[42px] rounded-full bg-[#0B3B75]/95 backdrop-blur-sm border-2 flex items-center justify-center cursor-ns-resize shadow-lg active:scale-95 touch-none ${
+            className={`w-[38px] h-[38px] sm:w-[42px] sm:h-[42px] rounded-full bg-[#0B3B75]/95 border-2 flex items-center justify-center cursor-ns-resize active:scale-95 touch-none ${
               dragState?.type === 'size'
                 ? 'border-primary-brand ring-2 ring-primary-brand/50'
                 : 'border-white/30 hover:border-white/60'
@@ -276,7 +276,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
           >
             {/* Inner fixed white dot */}
             <div
-              className="rounded-full bg-white pointer-events-none shadow-sm"
+              className="rounded-full bg-white pointer-events-none"
               style={{
                 width: `${buttonDotSize}px`,
                 height: `${buttonDotSize}px`,
@@ -300,9 +300,9 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
             hasDraggedOpacityRef.current = false;
           }}
           title={isFreeDraw ? "اضغط لفتح عجلة الألوان، أو اسحب للأعلى والأسفل لتغيير الكثافة" : "اضغط واسحب للأعلى أو الأسفل لتغيير كثافة وشفافية اللون"}
-          className={`w-[38px] h-[38px] sm:w-[42px] sm:h-[42px] rounded-[8px] sm:rounded-[10px] bg-[#0B3B75]/95 backdrop-blur-sm border-2 p-[4px] flex items-center justify-center cursor-pointer shadow-lg active:scale-95 touch-none transition-all ${
+          className={`w-[38px] h-[38px] sm:w-[42px] sm:h-[42px] rounded-[8px] sm:rounded-[10px] bg-[#0B3B75]/95 border-2 p-[4px] flex items-center justify-center cursor-pointer active:scale-95 touch-none transition-all ${
             isColorPickerOpen
-              ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/50 shadow-amber-500/20 scale-105'
+              ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/50 scale-105'
               : dragState?.type === 'opacity'
               ? 'border-primary-brand ring-2 ring-primary-brand/50'
               : 'border-white/30 hover:border-white/60'
@@ -310,7 +310,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
         >
           {/* Inner Clean Color Swatch */}
           <div
-            className="w-full h-full rounded-[5px] sm:rounded-[6px] border border-black/20 shadow-inner"
+            className="w-full h-full rounded-[5px] sm:rounded-[6px] border border-black/20"
             style={{
               backgroundColor: activeOpacityColor,
               opacity: currentOpacity,
@@ -342,15 +342,15 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
           }}
         >
           {/* Single Clean Numerical Counter Pill */}
-          <div className="mb-2 bg-black/90 text-white font-black text-xs px-2.5 py-1 rounded-md shadow-2xl border border-white/20 whitespace-nowrap">
+          <div className="mb-2 bg-black/90 text-white font-black text-xs px-2.5 py-1 rounded-md border border-white/20 whitespace-nowrap">
             {dragState.type === 'size' ? `${currentWidth}px` : `${Math.round(currentOpacity * 100)}%`}
           </div>
 
           {/* Floating Shape Preview */}
           {dragState.type === 'size' ? (
-            <div className="w-[56px] h-[56px] rounded-full bg-[#0B3B75]/95 backdrop-blur-md border-2 border-white/40 shadow-2xl flex items-center justify-center overflow-hidden">
+            <div className="w-[56px] h-[56px] rounded-full bg-[#0B3B75] border-2 border-white/40 flex items-center justify-center overflow-hidden">
               <div
-                className="rounded-full bg-white shadow-md"
+                className="rounded-full bg-white"
                 style={{
                   width: `${floatingCircleSize}px`,
                   height: `${floatingCircleSize}px`,
@@ -358,9 +358,9 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
               />
             </div>
           ) : (
-            <div className="w-[56px] h-[56px] rounded-[14px] bg-[#0B3B75]/95 backdrop-blur-md border-2 border-white/40 shadow-2xl p-[6px] flex items-center justify-center">
+            <div className="w-[56px] h-[56px] rounded-[14px] bg-[#0B3B75] border-2 border-white/40 p-[6px] flex items-center justify-center">
               <div
-                className="w-full h-full rounded-[8px] border border-black/20 shadow-inner"
+                className="w-full h-full rounded-[8px] border border-black/20"
                 style={{
                   backgroundColor: activeOpacityColor,
                   opacity: currentOpacity,

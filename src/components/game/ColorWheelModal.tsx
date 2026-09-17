@@ -43,13 +43,17 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   // Track currently selected saved color (for targeted deletion)
   const [selectedSavedColor, setSelectedSavedColor] = useState<string | null>(null);
 
-  // Calculate maximum diameter to fill modal with virtually zero wasted side margin
+  // Calculate optimal diameter to fit neatly on small mobile screens without overflowing or feeling cramped
   const getOptimalWheelDiameter = () => {
     if (typeof window !== 'undefined') {
       const screenW = window.innerWidth;
-      return Math.min(346, Math.max(260, Math.floor(screenW * 0.94) - 8));
+      const screenH = window.innerHeight;
+      // On small phones (height < 650 or width < 380), use a compact 230-260px diameter
+      const maxByHeight = Math.max(210, Math.floor(screenH * 0.42));
+      const maxByWidth = Math.max(220, Math.floor(screenW * 0.82));
+      return Math.min(290, Math.min(maxByWidth, maxByHeight));
     }
-    return 340;
+    return 270;
   };
 
   const [wheelDiameter, setWheelDiameter] = useState(getOptimalWheelDiameter);
@@ -92,7 +96,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
     };
   }, []);
 
-  // Capture initial color and recalculate size when modal opens
+  // Capture initial color and recalculate size when modal opens, and on window resize
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
       setInitialColor(color);
@@ -110,6 +114,13 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
       }
     }
     prevIsOpenRef.current = isOpen;
+
+    if (!isOpen) return;
+    const handleResize = () => {
+      setWheelDiameter(getOptimalWheelDiameter());
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [isOpen, color]);
 
   // Sync hex input and selected color when color prop updates
@@ -286,21 +297,21 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
             className="fixed inset-0 z-0 bg-transparent"
           />
 
-          {/* Modal Container */}
+          {/* Modal Container: Compact, fits all mobile screens nicely */}
           <motion.div
             ref={modalCardRef}
-            initial={{ opacity: 0, scale: 0.94, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: 6 }}
-            transition={{ type: 'spring', damping: 27, stiffness: 380 }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.12, ease: 'easeOut' }}
             onClick={(e) => e.stopPropagation()}
-            className="relative z-10 w-[356px] sm:w-[370px] max-w-[98vw] bg-[#0E2A54] border-2 border-white/20 rounded-[20px] shadow-[0_12px_40px_rgba(0,0,0,0.45)] overflow-hidden flex flex-col text-white"
+            className="relative z-10 w-[310px] sm:w-[340px] max-w-[94vw] max-h-[92dvh] overflow-y-auto no-scrollbar bg-[#0E2A54] border-2 border-white/20 rounded-[20px] overflow-hidden flex flex-col text-white"
             dir="rtl"
           >
             {/* Top Bar: HEX Input on the right, Compare box in middle, Close on left */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10 bg-[#0B2245]/90">
-              {/* Top-Right: HEX Code Input (clean input without colored circle since compare box already shows color) */}
-              <div className="flex items-center gap-1 bg-[#071833] border border-white/20 rounded-xl px-2.5 py-1 shadow-inner shrink-0">
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10 bg-[#0B2245]/90 shrink-0">
+              {/* Top-Right: HEX Code Input */}
+              <div className="flex items-center gap-1 bg-[#071833] border border-white/20 rounded-xl px-2 py-0.5 shrink-0">
                 <span className="text-xs font-mono font-black text-white/50 select-none">#</span>
                 <input
                   type="text"
@@ -316,7 +327,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                     }
                   }}
                   maxLength={6}
-                  className="w-16 bg-transparent text-xs font-mono font-black text-white focus:outline-none uppercase tracking-wider text-center"
+                  className="w-14 bg-transparent text-xs font-mono font-black text-white focus:outline-none uppercase tracking-wider text-center"
                   dir="ltr"
                   placeholder="FFFFFF"
                 />
@@ -325,7 +336,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               {/* Middle: FlipaClip Split Comparison Box (revert vs live) */}
               <div
                 title="مقارنة اللون: انقر على النصف الأول لاسترجاع اللون السابق"
-                className="relative flex items-center h-7 rounded-lg overflow-hidden border border-white/40 shadow-inner cursor-pointer"
+                className="relative flex items-center h-6 rounded-lg overflow-hidden border border-white/40 cursor-pointer"
               >
                 {/* Revert to Initial Color */}
                 <button
@@ -339,7 +350,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                   title="استرجاع اللون السابق"
                 >
                   <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                    <Undo2 className="w-3 h-3 text-white drop-shadow" />
+                    <Undo2 className="w-3 h-3 text-white" />
                   </div>
                 </button>
 
@@ -358,15 +369,15 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center transition-colors text-white/80 hover:text-white shrink-0"
+                className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center transition-colors text-white/80 hover:text-white shrink-0"
                 title="إغلاق"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            {/* Body: Color Wheel taking MAXIMUM available width */}
-            <div className="px-0.5 py-1.5 flex flex-col items-center gap-2">
+            {/* Body: Color Wheel taking available width */}
+            <div className="px-0.5 py-1 flex flex-col items-center gap-1.5">
               {/* The Color Wheel */}
               <div
                 className="relative flex items-center justify-center select-none touch-none my-0.5"
@@ -377,16 +388,16 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               >
                 <div
                   ref={wheelContainerRef}
-                  className="flex items-center justify-center select-none touch-none [&_.reinvented-color-wheel--sv-space]:rounded-[8px] [&_.reinvented-color-wheel--sv-space]:shadow-[0_0_0_1.5px_rgba(255,255,255,0.25)] [&_.reinvented-color-wheel--hue-handle]:shadow-[0_2px_8px_rgba(0,0,0,0.6)] [&_.reinvented-color-wheel--sv-handle]:shadow-[0_2px_8px_rgba(0,0,0,0.6)]"
+                  className="flex items-center justify-center select-none touch-none [&_.reinvented-color-wheel--sv-space]:rounded-[8px] [&_.reinvented-color-wheel--sv-space]:border [&_.reinvented-color-wheel--sv-space]:border-white/30"
                 />
               </div>
 
-              {/* Opacity Slider: Thin Bar + Large Thumb Circle + Accurate LTR Direction */}
+              {/* Opacity Slider: Thin Bar + Thumb Circle + Accurate LTR Direction */}
               {onOpacityChange && (
-                <div className="w-full flex flex-col gap-1 px-3" dir="ltr">
+                <div className="w-full flex flex-col gap-0.5 px-3" dir="ltr">
                   <div className="flex justify-between items-center text-xs font-semibold text-white/80 px-0.5">
-                    <span className="font-mono text-[#D4AF37] font-black text-sm">{opacityPercent}%</span>
-                    <span dir="rtl" className="text-white/70 text-[11px]">الكثافة</span>
+                    <span className="font-mono text-[#D4AF37] font-black text-xs">{opacityPercent}%</span>
+                    <span dir="rtl" className="text-white/70 text-[10px]">الكثافة</span>
                   </div>
 
                   {/* Interactive Slider Track (LTR: Left 10% -> Right 100%) */}
@@ -396,10 +407,10 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                     onPointerMove={handleSliderPointerMove}
                     onPointerUp={handleSliderPointerUp}
                     onPointerCancel={handleSliderPointerUp}
-                    className="relative w-full h-6 flex items-center cursor-pointer select-none touch-none px-1"
+                    className="relative w-full h-5 flex items-center cursor-pointer select-none touch-none px-1"
                   >
-                    {/* Thin sleek bar track (height 8px) */}
-                    <div className="relative w-full h-2 rounded-full overflow-hidden border border-white/25 shadow-inner">
+                    {/* Thin sleek bar track (height 6px) */}
+                    <div className="relative w-full h-1.5 rounded-full overflow-hidden border border-white/25">
                       {/* Checkerboard Pattern */}
                       <div
                         className="absolute inset-0"
@@ -417,16 +428,16 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                       />
                     </div>
 
-                    {/* Prominent Large Thumb Circle (22px diameter, larger than 8px bar) */}
+                    {/* Prominent Thumb Circle */}
                     <div
-                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[22px] h-[22px] rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.6)] border-2 border-[#0E2A54] ring-2 ring-white/70 pointer-events-none transition-transform active:scale-110 flex items-center justify-center"
+                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[18px] h-[18px] rounded-full bg-white border-2 border-[#0E2A54] ring-1 ring-white/70 pointer-events-none transition-transform active:scale-110 flex items-center justify-center"
                       style={{
-                        left: `calc(11px + (100% - 22px) * ${opacityRatio})`,
+                        left: `calc(9px + (100% - 18px) * ${opacityRatio})`,
                       }}
                     >
                       {/* Inner dot with live color and opacity */}
                       <div
-                        className="w-2.5 h-2.5 rounded-full shadow-inner"
+                        className="w-2 h-2 rounded-full"
                         style={{ backgroundColor: color, opacity: opacity }}
                       />
                     </div>
@@ -435,17 +446,17 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               )}
 
               {/* Bottom Section: Save Color & Delete Icon Buttons + Saved Colors Swatches */}
-              <div className="w-full px-2.5 pb-1 flex flex-col gap-1.5" dir="rtl">
-                <div className="flex items-center gap-2">
-                  {/* Save Color Button (Returned to bottom as requested) */}
+              <div className="w-full px-2.5 pb-1 flex flex-col gap-1" dir="rtl">
+                <div className="flex items-center gap-1.5">
+                  {/* Save Color Button */}
                   <button
                     type="button"
                     onClick={handleSaveColor}
-                    className="flex items-center gap-1.5 text-xs font-black bg-[#1A447E] hover:bg-[#255DB0] active:scale-95 text-white px-3 py-1.5 rounded-xl border border-white/20 transition-all shadow-sm shrink-0"
+                    className="flex items-center gap-1 text-[11px] font-black bg-[#1A447E] hover:bg-[#255DB0] active:scale-95 text-white px-2.5 py-1.5 rounded-xl border border-white/20 transition-all shrink-0"
                     title="حفظ اللون الحالي"
                   >
-                    <Plus className="w-4 h-4 text-[#D4AF37]" strokeWidth={3} />
-                    <span>حفظ اللون</span>
+                    <Plus className="w-3.5 h-3.5 text-[#D4AF37]" strokeWidth={3} />
+                    <span>حفظ</span>
                   </button>
 
                   {/* Delete Selected Color Icon Button (ONLY appears when saved colors exist) */}
@@ -453,15 +464,15 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                     <button
                       type="button"
                       onClick={handleDeleteSelectedColor}
-                      className="flex items-center justify-center w-8 h-8 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-300 hover:text-red-100 border border-red-500/30 transition-all active:scale-95 shadow-sm shrink-0"
+                      className="flex items-center justify-center w-7 h-7 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-300 hover:text-red-100 border border-red-500/30 transition-all active:scale-95 shrink-0"
                       title={`حذف اللون المحدد (${currentTargetForDeletion || ''})`}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
 
                   {/* Saved Color Swatches List */}
-                  <div className="flex-1 flex items-center gap-1.5 overflow-x-auto px-2 py-1 scrollbar-none min-h-[38px] bg-[#071833]/40 border border-white/10 rounded-xl">
+                  <div className="flex-1 flex items-center gap-1 overflow-x-auto px-1.5 py-1 scrollbar-none min-h-[34px] bg-[#071833]/40 border border-white/10 rounded-xl">
                     {savedPalette.map((savedColor, idx) => {
                       const isSelected = selectedSavedColor === savedColor || (!selectedSavedColor && idx === 0);
                       return (
@@ -473,10 +484,10 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                               setWheelColorSafely(savedColor);
                               onColorChange(savedColor);
                             }}
-                            className={`w-7 h-7 rounded-lg border transition-all active:scale-95 ${
+                            className={`w-6 h-6 rounded-md border transition-all active:scale-95 ${
                               isSelected
-                                ? 'border-[#D4AF37] ring-2 ring-[#D4AF37] shadow-[0_0_8px_rgba(212,175,55,0.5)]'
-                                : 'border-white/30 hover:border-white/80 shadow-sm'
+                                ? 'border-[#D4AF37] ring-1.5 ring-[#D4AF37]'
+                                : 'border-white/30 hover:border-white/80'
                             }`}
                             style={{ backgroundColor: savedColor }}
                             title={savedColor}
