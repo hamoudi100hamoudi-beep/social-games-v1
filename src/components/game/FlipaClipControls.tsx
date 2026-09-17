@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ToolType } from '../../types/draw';
 import ColorWheelModal from './ColorWheelModal';
@@ -20,10 +20,7 @@ interface DragState {
   startY: number;
   clientX: number;
   clientY: number;
-  startVal: number;
-  min: number;
-  max: number;
-  sensitivity: number;
+  currentVal: number;
 }
 
 export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
@@ -40,215 +37,110 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
-  // rAF throttling refs for ultra-smooth drag handling
+  // Stable callback refs
+  const onWidthChangeRef = useRef(onWidthChange);
+  onWidthChangeRef.current = onWidthChange;
+  const onOpacityChangeRef = useRef(onOpacityChange);
+  onOpacityChangeRef.current = onOpacityChange;
+  const onColorChangeRef = useRef(onColorChange);
+  onColorChangeRef.current = onColorChange;
+
+  // rAF throttling refs for ultra-smooth 60/120fps live drag handling
   const rafWidthIdRef = useRef<number | null>(null);
   const pendingWidthRef = useRef<number | null>(null);
   const rafOpacityIdRef = useRef<number | null>(null);
   const pendingOpacityRef = useRef<number | null>(null);
 
-  // Size Drag ref tracker for instantaneous 120Hz sync and zero-deadzone boundary clamping
-  const sizeDragRef = useRef<{
-    isDragging: boolean;
-    startY: number;
-    startVal: number;
-    min: number;
-    max: number;
-    sensitivity: number;
-  }>({
-    isDragging: false,
-    startY: 0,
-    startVal: 1,
-    min: 1,
-    max: 50,
-    sensitivity: 2.2,
-  });
+  // Active window cleanup tracker to prevent dangling listeners
+  const activeCleanupRef = useRef<(() => void) | null>(null);
 
-  // Opacity Touch / Click state tracker (distinguish quick tap from hold / drag)
-  const opacityTouchRef = useRef<{
-    startTime: number;
-    startX: number;
-    startY: number;
-    hasMoved: boolean;
-    isTracking: boolean;
-    startOpacity: number;
-  }>({
-    startTime: 0,
-    startX: 0,
-    startY: 0,
-    hasMoved: false,
-    isTracking: false,
-    startOpacity: 1,
-  });
-  const hasDraggedOpacityRef = useRef(false);
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (activeCleanupRef.current) {
+        activeCleanupRef.current();
+        activeCleanupRef.current = null;
+      }
+      if (rafWidthIdRef.current) {
+        cancelAnimationFrame(rafWidthIdRef.current);
+        rafWidthIdRef.current = null;
+      }
+      if (rafOpacityIdRef.current) {
+        cancelAnimationFrame(rafOpacityIdRef.current);
+        rafOpacityIdRef.current = null;
+      }
+    };
+  }, []);
 
   // Max width according to tool
   const maxWidth = tool === 'eraser' ? 120 : 50;
   const minWidth = 1;
 
-  // Pointer Down for Size Circle
+  // 1. Live Drag for Brush Size Circle
   const handleSizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch (_) {}
 
-    sizeDragRef.current = {
-      isDragging: true,
-      startY: e.clientY,
-      startVal: currentWidth,
-      min: minWidth,
-      max: maxWidth,
-      sensitivity: 2.2,
-    };
+    if (activeCleanupRef.current) {
+      activeCleanupRef.current();
+    }
+
+    const startVal = currentWidth;
+    let startY = e.clientY;
+    const sensitivity = 2.2;
 
     setDragState({
       type: 'size',
-      startY: e.clientY,
+      startY,
       clientX: e.clientX,
       clientY: e.clientY,
-      startVal: currentWidth,
-      min: minWidth,
-      max: maxWidth,
-      sensitivity: 2.2,
+      currentVal: startVal,
     });
-  };
 
-  // Pointer Down for Opacity Square
-  const handleOpacityPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.stopPropagation();
-    hasDraggedOpacityRef.current = false;
+    const onWindowMove = (moveEv: PointerEvent) => {
+      moveEv.preventDefault();
 
-    opacityTouchRef.current = {
-      startTime: Date.now(),
-      startX: e.clientX,
-      startY: e.clientY,
-      hasMoved: false,
-      isTracking: true,
-      startOpacity: currentOpacity,
-    };
+      const maxDeltaY = (maxWidth - startVal) * sensitivity;
+      const minDeltaY = (minWidth - startVal) * sensitivity;
 
-    // Show floating opacity badge immediately on press (like brush size circle)
-    setDragState({
-      type: 'opacity',
-      startY: e.clientY,
-      clientX: e.clientX,
-      clientY: e.clientY,
-      startVal: currentOpacity,
-      min: 0.1,
-      max: 1.0,
-      sensitivity: 140,
-    });
-  };
-
-  // Pointer Move for Size Circle
-  const handleSizePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!sizeDragRef.current.isDragging) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    const { startVal, min, max, sensitivity } = sizeDragRef.current;
-    let currentStartY = sizeDragRef.current.startY;
-
-    const maxDeltaY = (max - startVal) * sensitivity;
-    const minDeltaY = (min - startVal) * sensitivity;
-
-    // Dynamically adjust startY when dragging beyond the boundary
-    // so reversing direction immediately changes the value with zero dead zone
-    if (currentStartY - e.clientY > maxDeltaY) {
-      currentStartY = e.clientY + maxDeltaY;
-      sizeDragRef.current.startY = currentStartY;
-    } else if (currentStartY - e.clientY < minDeltaY) {
-      currentStartY = e.clientY + minDeltaY;
-      sizeDragRef.current.startY = currentStartY;
-    }
-
-    setDragState(prev => prev ? { ...prev, startY: currentStartY, clientX: e.clientX, clientY: e.clientY } : null);
-
-    const deltaY = currentStartY - e.clientY;
-    const delta = Math.round(deltaY / sensitivity);
-    const newWidth = Math.max(min, Math.min(max, startVal + delta));
-
-    pendingWidthRef.current = newWidth;
-    if (!rafWidthIdRef.current) {
-      rafWidthIdRef.current = requestAnimationFrame(() => {
-        rafWidthIdRef.current = null;
-        if (pendingWidthRef.current !== null) {
-          onWidthChange(pendingWidthRef.current);
-        }
-      });
-    }
-  };
-
-  // Pointer Move for Opacity Square
-  const handleOpacityPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!opacityTouchRef.current.isTracking) return;
-
-    const distX = Math.abs(e.clientX - opacityTouchRef.current.startX);
-    const distY = Math.abs(e.clientY - opacityTouchRef.current.startY);
-
-    // Only transition into active drag mode if vertical swipe exceeds 10px and is primarily vertical
-    if (!opacityTouchRef.current.hasMoved && distY >= 10 && distY > distX * 0.8) {
-      opacityTouchRef.current.hasMoved = true;
-      hasDraggedOpacityRef.current = true;
-      try {
-        e.currentTarget.setPointerCapture(e.pointerId);
-      } catch (_) {}
-    }
-
-    if (opacityTouchRef.current.hasMoved) {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const sensitivity = 140;
-      const minOpacity = 0.1;
-      const maxOpacity = 1.0;
-      const { startOpacity } = opacityTouchRef.current;
-      let currentStartY = opacityTouchRef.current.startY;
-
-      const maxDeltaY = (maxOpacity - startOpacity) * sensitivity;
-      const minDeltaY = (minOpacity - startOpacity) * sensitivity;
-
-      // Dynamically adjust startY when dragging beyond the boundary
-      // so reversing direction immediately changes the value with zero dead zone
-      if (currentStartY - e.clientY > maxDeltaY) {
-        currentStartY = e.clientY + maxDeltaY;
-        opacityTouchRef.current.startY = currentStartY;
-      } else if (currentStartY - e.clientY < minDeltaY) {
-        currentStartY = e.clientY + minDeltaY;
-        opacityTouchRef.current.startY = currentStartY;
+      // Dynamic zero-deadzone boundary clamping on reversal
+      if (startY - moveEv.clientY > maxDeltaY) {
+        startY = moveEv.clientY + maxDeltaY;
+      } else if (startY - moveEv.clientY < minDeltaY) {
+        startY = moveEv.clientY + minDeltaY;
       }
 
-      setDragState(prev => prev ? { ...prev, startY: currentStartY, clientX: e.clientX, clientY: e.clientY } : null);
+      const deltaY = startY - moveEv.clientY;
+      const delta = Math.round(deltaY / sensitivity);
+      const newWidth = Math.max(minWidth, Math.min(maxWidth, startVal + delta));
 
-      const deltaY = currentStartY - e.clientY;
-      const delta = deltaY / sensitivity;
-      const newOpacity = Math.max(minOpacity, Math.min(maxOpacity, Number((startOpacity + delta).toFixed(2))));
+      setDragState({
+        type: 'size',
+        startY,
+        clientX: moveEv.clientX,
+        clientY: moveEv.clientY,
+        currentVal: newWidth,
+      });
 
-      pendingOpacityRef.current = newOpacity;
-      if (!rafOpacityIdRef.current) {
-        rafOpacityIdRef.current = requestAnimationFrame(() => {
-          rafOpacityIdRef.current = null;
-          if (pendingOpacityRef.current !== null) {
-            onOpacityChange(pendingOpacityRef.current);
+      pendingWidthRef.current = newWidth;
+      if (!rafWidthIdRef.current) {
+        rafWidthIdRef.current = requestAnimationFrame(() => {
+          rafWidthIdRef.current = null;
+          if (pendingWidthRef.current !== null) {
+            onWidthChangeRef.current(pendingWidthRef.current);
           }
         });
       }
-    } else {
-      setDragState(prev => prev ? { ...prev, clientX: e.clientX, clientY: e.clientY } : null);
-    }
-  };
+    };
 
-  // Pointer Up / Cancel for Size Circle
-  const handleSizePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (sizeDragRef.current.isDragging) {
-      e.preventDefault();
-      e.stopPropagation();
-      try {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      } catch (_) {}
-      sizeDragRef.current.isDragging = false;
+    const onWindowUp = () => {
+      window.removeEventListener('pointermove', onWindowMove);
+      window.removeEventListener('pointerup', onWindowUp);
+      window.removeEventListener('pointercancel', onWindowUp);
+      activeCleanupRef.current = null;
+
       setDragState(null);
+
       if (rafWidthIdRef.current) {
         cancelAnimationFrame(rafWidthIdRef.current);
         rafWidthIdRef.current = null;
@@ -256,43 +148,131 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
       if (pendingWidthRef.current !== null) {
         const finalWidth = pendingWidthRef.current;
         pendingWidthRef.current = null;
-        onWidthChange(finalWidth);
+        onWidthChangeRef.current(finalWidth);
       }
-    }
+    };
+
+    activeCleanupRef.current = () => {
+      window.removeEventListener('pointermove', onWindowMove);
+      window.removeEventListener('pointerup', onWindowUp);
+      window.removeEventListener('pointercancel', onWindowUp);
+    };
+
+    window.addEventListener('pointermove', onWindowMove, { passive: false });
+    window.addEventListener('pointerup', onWindowUp);
+    window.addEventListener('pointercancel', onWindowUp);
   };
 
-  // Pointer Up / Cancel for Opacity Square
-  const handleOpacityPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!opacityTouchRef.current.isTracking) return;
+  // 2. Live Drag & Tap Handler for Opacity Square
+  const handleOpacityPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
     e.stopPropagation();
 
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch (_) {}
+    if (activeCleanupRef.current) {
+      activeCleanupRef.current();
+    }
 
-    opacityTouchRef.current.isTracking = false;
-    if (dragState?.type === 'opacity') {
+    const startTime = Date.now();
+    const startX = e.clientX;
+    let startY = e.clientY;
+    const startOpacity = currentOpacity;
+    const minOpacity = 0.1;
+    const maxOpacity = 1.0;
+    const sensitivity = 140;
+    let isDragging = false;
+
+    const onWindowMove = (moveEv: PointerEvent) => {
+      const distX = Math.abs(moveEv.clientX - startX);
+      const distY = Math.abs(moveEv.clientY - startY);
+
+      if (!isDragging && distY >= 6 && distY > distX * 0.7) {
+        isDragging = true;
+      }
+
+      if (isDragging) {
+        moveEv.preventDefault();
+
+        const maxDeltaY = (maxOpacity - startOpacity) * sensitivity;
+        const minDeltaY = (minOpacity - startOpacity) * sensitivity;
+
+        // Dynamic zero-deadzone boundary clamping on reversal
+        if (startY - moveEv.clientY > maxDeltaY) {
+          startY = moveEv.clientY + maxDeltaY;
+        } else if (startY - moveEv.clientY < minDeltaY) {
+          startY = moveEv.clientY + minDeltaY;
+        }
+
+        const deltaY = startY - moveEv.clientY;
+        const delta = deltaY / sensitivity;
+        const newOpacity = Math.max(minOpacity, Math.min(maxOpacity, Number((startOpacity + delta).toFixed(2))));
+
+        setDragState({
+          type: 'opacity',
+          startY,
+          clientX: moveEv.clientX,
+          clientY: moveEv.clientY,
+          currentVal: newOpacity,
+        });
+
+        pendingOpacityRef.current = newOpacity;
+        if (!rafOpacityIdRef.current) {
+          rafOpacityIdRef.current = requestAnimationFrame(() => {
+            rafOpacityIdRef.current = null;
+            if (pendingOpacityRef.current !== null) {
+              onOpacityChangeRef.current(pendingOpacityRef.current);
+            }
+          });
+        }
+      }
+    };
+
+    const onWindowUp = () => {
+      window.removeEventListener('pointermove', onWindowMove);
+      window.removeEventListener('pointerup', onWindowUp);
+      window.removeEventListener('pointercancel', onWindowUp);
+      activeCleanupRef.current = null;
+
+      if (!isDragging && Date.now() - startTime < 350) {
+        // Quick tap: toggle color picker modal
+        if (isFreeDraw) {
+          setIsColorPickerOpen(prev => !prev);
+        }
+      }
+
       setDragState(null);
-    }
-    if (rafOpacityIdRef.current) {
-      cancelAnimationFrame(rafOpacityIdRef.current);
-      rafOpacityIdRef.current = null;
-    }
-    if (pendingOpacityRef.current !== null) {
-      const finalOp = pendingOpacityRef.current;
-      pendingOpacityRef.current = null;
-      onOpacityChange(finalOp);
-    }
+
+      if (rafOpacityIdRef.current) {
+        cancelAnimationFrame(rafOpacityIdRef.current);
+        rafOpacityIdRef.current = null;
+      }
+      if (pendingOpacityRef.current !== null) {
+        const finalOp = pendingOpacityRef.current;
+        pendingOpacityRef.current = null;
+        onOpacityChangeRef.current(finalOp);
+      }
+    };
+
+    activeCleanupRef.current = () => {
+      window.removeEventListener('pointermove', onWindowMove);
+      window.removeEventListener('pointerup', onWindowUp);
+      window.removeEventListener('pointercancel', onWindowUp);
+    };
+
+    window.addEventListener('pointermove', onWindowMove, { passive: false });
+    window.addEventListener('pointerup', onWindowUp);
+    window.addEventListener('pointercancel', onWindowUp);
   };
 
-  // Proportional dot calculation (bounded strictly to prevent disappearing or overflowing)
+  // Proportional dot calculation (bounds: 4px min, 22px max)
   const widthRatio = Math.max(0, Math.min(1, (currentWidth - minWidth) / (maxWidth - minWidth)));
-
-  // Inner dot for the static button (bounds: 4px min, 22px max)
   const buttonDotSize = 4 + widthRatio * 18;
 
-  // Inner circle for the floating preview (bounds: 4px min, 44px max within 56px container)
-  const floatingCircleSize = 4 + widthRatio * 40;
+  // Proportional preview circle for drag portal (bounds: 4px min, 44px max)
+  const displayVal = dragState ? dragState.currentVal : (dragState === null ? currentWidth : currentOpacity);
+  const dragRatio = dragState?.type === 'size'
+    ? Math.max(0, Math.min(1, (displayVal - minWidth) / (maxWidth - minWidth)))
+    : 0;
+  const floatingCircleSize = 4 + dragRatio * 40;
 
   // Opacity display color
   const activeOpacityColor = tool === 'eraser' ? '#FFFFFF' : color;
@@ -302,17 +282,14 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
     <div className="relative select-none touch-none" dir="ltr">
       {/* 1. FlipaClip Main Buttons on the Right */}
       <div className="flex items-center gap-2 pointer-events-auto">
-        {/* Brush Size Circle Button (Fixed pure white dot) */}
+        {/* Brush Size Circle Button */}
         {!isBucket && (
           <div
             onPointerDown={handleSizePointerDown}
-            onPointerMove={handleSizePointerMove}
-            onPointerUp={handleSizePointerUp}
-            onPointerCancel={handleSizePointerUp}
             title="اضغط واسحب للأعلى أو الأسفل لتغيير حجم الخط"
             className={`w-[38px] h-[38px] sm:w-[42px] sm:h-[42px] rounded-full bg-[#0B3B75]/95 border-2 flex items-center justify-center cursor-ns-resize active:scale-95 touch-none ${
               dragState?.type === 'size'
-                ? 'border-primary-brand ring-2 ring-primary-brand/50'
+                ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/50 scale-105'
                 : 'border-white/30 hover:border-white/60'
             }`}
           >
@@ -330,29 +307,18 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
         {/* Opacity Square Button (Styled identically to palette color squares) */}
         <div
           onPointerDown={handleOpacityPointerDown}
-          onPointerMove={handleOpacityPointerMove}
-          onPointerUp={handleOpacityPointerUp}
-          onPointerCancel={handleOpacityPointerUp}
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!isFreeDraw) return;
-            if (!hasDraggedOpacityRef.current) {
-              setIsColorPickerOpen(prev => !prev);
-            }
-            hasDraggedOpacityRef.current = false;
-          }}
           title={isFreeDraw ? "اضغط لفتح عجلة الألوان، أو اسحب للأعلى والأسفل لتغيير الكثافة" : "اضغط واسحب للأعلى أو الأسفل لتغيير كثافة وشفافية اللون"}
           className={`w-[38px] h-[38px] sm:w-[42px] sm:h-[42px] rounded-[8px] sm:rounded-[10px] bg-[#0B3B75]/95 border-2 p-[4px] flex items-center justify-center cursor-pointer active:scale-95 touch-none transition-all ${
             isColorPickerOpen
               ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/50 scale-105'
               : dragState?.type === 'opacity'
-              ? 'border-primary-brand ring-2 ring-primary-brand/50'
+              ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/50 scale-105'
               : 'border-white/30 hover:border-white/60'
           }`}
         >
           {/* Inner Clean Color Swatch */}
           <div
-            className="w-full h-full rounded-[5px] sm:rounded-[6px] border border-black/20"
+            className="w-full h-full rounded-[5px] sm:rounded-[6px] border border-black/20 pointer-events-none"
             style={{
               backgroundColor: activeOpacityColor,
               opacity: currentOpacity,
@@ -373,7 +339,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
         />
       )}
 
-      {/* 3. Floating Portal Preview: Rendered directly to body with z-[9999] so it NEVER hides under bottom toolbar */}
+      {/* 3. Floating Portal Preview: Rendered directly to body with z-[9999] */}
       {dragState !== null && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed pointer-events-none z-[9999] select-none flex flex-col items-center"
@@ -385,7 +351,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
         >
           {/* Single Clean Numerical Counter Pill */}
           <div className="mb-2 bg-black/90 text-white font-black text-xs px-2.5 py-1 rounded-md border border-white/20 whitespace-nowrap">
-            {dragState.type === 'size' ? `${currentWidth}px` : `${Math.round(currentOpacity * 100)}%`}
+            {dragState.type === 'size' ? `${Math.round(displayVal)}px` : `${Math.round(displayVal * 100)}%`}
           </div>
 
           {/* Floating Shape Preview */}
@@ -405,7 +371,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
                 className="w-full h-full rounded-[8px] border border-black/20"
                 style={{
                   backgroundColor: activeOpacityColor,
-                  opacity: currentOpacity,
+                  opacity: displayVal,
                 }}
               />
             </div>

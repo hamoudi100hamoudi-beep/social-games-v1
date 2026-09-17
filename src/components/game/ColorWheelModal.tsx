@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Plus, Trash2, Undo2 } from 'lucide-react';
@@ -28,6 +28,12 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   const [initialColor, setInitialColor] = useState(color);
   const prevIsOpenRef = useRef(isOpen);
 
+  // Stable refs for callbacks to prevent re-instantiating the color wheel during live drag
+  const onColorChangeRef = useRef(onColorChange);
+  onColorChangeRef.current = onColorChange;
+  const onOpacityChangeRef = useRef(onOpacityChange);
+  onOpacityChangeRef.current = onOpacityChange;
+
   // Saved palette in localStorage - empty by default, ONLY user saved colors!
   const [savedPalette, setSavedPalette] = useState<string[]>(() => {
     try {
@@ -44,17 +50,16 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   const [selectedSavedColor, setSelectedSavedColor] = useState<string | null>(null);
 
   // Calculate optimal diameter to fit neatly on small mobile screens without overflowing or feeling cramped
-  const getOptimalWheelDiameter = () => {
+  const getOptimalWheelDiameter = useCallback(() => {
     if (typeof window !== 'undefined') {
       const screenW = window.innerWidth;
       const screenH = window.innerHeight;
-      // On small phones (height < 650 or width < 380), use a compact 230-260px diameter
       const maxByHeight = Math.max(210, Math.floor(screenH * 0.42));
       const maxByWidth = Math.max(220, Math.floor(screenW * 0.82));
       return Math.min(290, Math.min(maxByWidth, maxByHeight));
     }
     return 270;
-  };
+  }, []);
 
   const [wheelDiameter, setWheelDiameter] = useState(getOptimalWheelDiameter);
 
@@ -63,7 +68,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   const wheelInstanceRef = useRef<ReinventedColorWheel | null>(null);
   const isInternalUpdateRef = useRef(false);
 
-  // Direct DOM feedback refs for zero-latency 60/120fps dragging without React reconciliation overhead
+  // Direct DOM feedback refs for zero-latency 60/120fps live dragging without React reconciliation overhead
   const hexInputRef = useRef<HTMLInputElement>(null);
   const liveColorBoxRef = useRef<HTMLDivElement>(null);
   const sliderGradientRef = useRef<HTMLDivElement>(null);
@@ -71,7 +76,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   const sliderDotRef = useRef<HTMLDivElement>(null);
   const opacityTextRef = useRef<HTMLSpanElement>(null);
 
-  // rAF and pending state refs
+  // rAF and pending state refs for silky-smooth continuous live updates
   const rafColorIdRef = useRef<number | null>(null);
   const pendingColorRef = useRef<string | null>(null);
   const rafOpacityIdRef = useRef<number | null>(null);
@@ -91,7 +96,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   // Modal card ref
   const modalCardRef = useRef<HTMLDivElement>(null);
 
-  // Listen to global pointer releases to safely reset wheel interaction flag and flush pending updates
+  // Global pointer release listener to safely reset interaction flag and flush pending updates
   useEffect(() => {
     const handlePointerRelease = () => {
       isUserInteractingWithWheelRef.current = false;
@@ -103,7 +108,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
         const finalColor = pendingColorRef.current;
         pendingColorRef.current = null;
         setHexInput(finalColor);
-        onColorChange(finalColor);
+        onColorChangeRef.current?.(finalColor);
       }
     };
 
@@ -126,7 +131,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
         rafOpacityIdRef.current = null;
       }
     };
-  }, [onColorChange]);
+  }, []);
 
   // Capture initial color and recalculate size when modal opens, and on window resize
   useEffect(() => {
@@ -153,7 +158,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [isOpen, color]);
+  }, [isOpen, color, getOptimalWheelDiameter, savedPalette]);
 
   // Sync hex input and selected color when color prop updates
   useEffect(() => {
@@ -165,14 +170,13 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   }, [color, savedPalette]);
 
   // Safe setter that protects Hue when Saturation is 0 (preventing unexpected reset to red)
-  const setWheelColorSafely = (newHex: string) => {
+  const setWheelColorSafely = useCallback((newHex: string) => {
     if (!wheelInstanceRef.current) return;
     try {
       const rgb = ReinventedColorWheel.hex2rgb(newHex);
       const hsv = ReinventedColorWheel.rgb2hsv(rgb);
       const currentHsv = wheelInstanceRef.current.hsv;
       // If saturation is 0 (far left of square: white/gray/black), preserve existing hue!
-      // Otherwise rgb2hsv converts grayscale to Hue 0 (pure red)
       if (hsv[1] === 0 && currentHsv) {
         hsv[0] = currentHsv[0];
       }
@@ -181,9 +185,9 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
       isInternalUpdateRef.current = false;
       lastWheelHexRef.current = newHex.toUpperCase();
     } catch (_) {}
-  };
+  }, []);
 
-  // Initialize ReinventedColorWheel when modal is open
+  // Initialize ReinventedColorWheel ONLY on open/resize — NEVER destroyed on parent re-renders!
   useEffect(() => {
     if (!isOpen || !wheelContainerRef.current) return;
 
@@ -202,7 +206,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
         const hex = c.hex.toUpperCase();
         lastWheelHexRef.current = hex;
 
-        // 1. Instant Direct DOM Sync (0ms delay, no React re-render overhead)
+        // 1. Direct Instant DOM Updates (0ms latency)
         if (hexInputRef.current && document.activeElement !== hexInputRef.current) {
           hexInputRef.current.value = hex.replace(/^#/, '');
         }
@@ -216,13 +220,13 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
           sliderDotRef.current.style.backgroundColor = hex;
         }
 
-        // 2. Throttle parent update via requestAnimationFrame for silky smooth 60/120fps
+        // 2. Continuous live drag updates to parent throttled at 60/120fps via rAF
         pendingColorRef.current = hex;
         if (!rafColorIdRef.current) {
           rafColorIdRef.current = requestAnimationFrame(() => {
             rafColorIdRef.current = null;
             if (pendingColorRef.current) {
-              onColorChange(pendingColorRef.current);
+              onColorChangeRef.current?.(pendingColorRef.current);
             }
           });
         }
@@ -240,22 +244,33 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
         }
       } catch (_) {}
     };
-  }, [isOpen, wheelDiameter, onColorChange]);
+  }, [isOpen, wheelDiameter]); // ONLY dependent on open state and diameter
 
-  // Sync color changes from external clicks (e.g. clicking swatch, typing HEX, or revert button)
+  // Sync color changes from external sources (e.g. clicking swatch, typing HEX, or revert button)
   useEffect(() => {
     if (!wheelInstanceRef.current || !color) return;
     const upper = color.toUpperCase();
 
     // CRITICAL: If the user is actively dragging in the wheel, OR if this color was
     // generated by the wheel itself, DO NOT overwrite the wheel!
-    // Overwriting while dragging was the exact cause of the vibration and jumping to red!
     if (isUserInteractingWithWheelRef.current || upper === lastWheelHexRef.current) {
       return;
     }
 
     setWheelColorSafely(upper);
-  }, [color]);
+    if (hexInputRef.current && document.activeElement !== hexInputRef.current) {
+      hexInputRef.current.value = upper.replace(/^#/, '');
+    }
+    if (liveColorBoxRef.current) {
+      liveColorBoxRef.current.style.backgroundColor = upper;
+    }
+    if (sliderGradientRef.current) {
+      sliderGradientRef.current.style.background = `linear-gradient(to right, transparent, ${upper})`;
+    }
+    if (sliderDotRef.current) {
+      sliderDotRef.current.style.backgroundColor = upper;
+    }
+  }, [color, setWheelColorSafely]);
 
   // Handle saving current color to palette
   const handleSaveColor = () => {
@@ -291,13 +306,13 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
     if (/^#[0-9A-F]{6}$/i.test(clean)) {
       const upper = clean.toUpperCase();
       setWheelColorSafely(upper);
-      onColorChange(upper);
+      onColorChangeRef.current?.(upper);
     }
   };
 
-  // Smooth tactile Opacity Slider calculation with zero-delay direct DOM updates and rAF batching
-  const updateOpacityFromClientX = (clientX: number) => {
-    if (!sliderTrackRef.current || !onOpacityChange) return;
+  // Smooth tactile Opacity Slider calculation with zero-delay direct DOM updates and continuous rAF updates
+  const updateOpacityFromClientX = useCallback((clientX: number) => {
+    if (!sliderTrackRef.current) return;
     const rect = sliderTrackRef.current.getBoundingClientRect();
     if (rect.width <= 0) return;
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
@@ -314,52 +329,49 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
       opacityTextRef.current.innerText = `${Math.round(newOpacity * 100)}%`;
     }
 
-    // Schedule parent update
+    // Schedule continuous live parent update
     pendingOpacityRef.current = newOpacity;
     if (!rafOpacityIdRef.current) {
       rafOpacityIdRef.current = requestAnimationFrame(() => {
         rafOpacityIdRef.current = null;
         if (pendingOpacityRef.current !== null) {
-          onOpacityChange(pendingOpacityRef.current);
+          onOpacityChangeRef.current?.(pendingOpacityRef.current);
         }
       });
     }
-  };
+  }, []);
 
   const handleSliderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
     isDraggingSliderRef.current = true;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch (_) {}
     updateOpacityFromClientX(e.clientX);
-  };
 
-  const handleSliderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingSliderRef.current) return;
-    e.preventDefault();
-    e.stopPropagation();
-    updateOpacityFromClientX(e.clientX);
-  };
+    const onMove = (moveEv: PointerEvent) => {
+      if (!isDraggingSliderRef.current) return;
+      moveEv.preventDefault();
+      updateOpacityFromClientX(moveEv.clientX);
+    };
 
-  const handleSliderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDraggingSliderRef.current) return;
-    e.preventDefault();
-    e.stopPropagation();
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch (_) {}
-    isDraggingSliderRef.current = false;
-    if (rafOpacityIdRef.current) {
-      cancelAnimationFrame(rafOpacityIdRef.current);
-      rafOpacityIdRef.current = null;
-    }
-    if (pendingOpacityRef.current !== null) {
-      const finalOp = pendingOpacityRef.current;
-      pendingOpacityRef.current = null;
-      onOpacityChange?.(finalOp);
-    }
+    const onUp = (upEv: PointerEvent) => {
+      isDraggingSliderRef.current = false;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (rafOpacityIdRef.current) {
+        cancelAnimationFrame(rafOpacityIdRef.current);
+        rafOpacityIdRef.current = null;
+      }
+      if (pendingOpacityRef.current !== null) {
+        const finalOp = pendingOpacityRef.current;
+        pendingOpacityRef.current = null;
+        onOpacityChangeRef.current?.(finalOp);
+      }
+    };
+
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   if (typeof document === 'undefined') return null;
@@ -429,7 +441,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                   type="button"
                   onClick={() => {
                     setWheelColorSafely(initialColor.toUpperCase());
-                    onColorChange(initialColor);
+                    onColorChangeRef.current?.(initialColor);
                   }}
                   className="w-6 h-full relative group transition-transform active:scale-95"
                   style={{ backgroundColor: initialColor }}
@@ -475,7 +487,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               >
                 <div
                   ref={wheelContainerRef}
-                  className="flex items-center justify-center select-none touch-none [&_.reinvented-color-wheel--sv-space]:rounded-[8px] [&_.reinvented-color-wheel--sv-space]:border-0 [&_.reinvented-color-wheel--sv-space]:outline-none"
+                  className="flex items-center justify-center select-none touch-none [&_.reinvented-color-wheel]:touch-none [&_.reinvented-color-wheel--sv-space]:rounded-[8px] [&_.reinvented-color-wheel--sv-space]:border-0 [&_.reinvented-color-wheel--sv-space]:outline-none"
                 />
               </div>
 
@@ -491,9 +503,6 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                   <div
                     ref={sliderTrackRef}
                     onPointerDown={handleSliderPointerDown}
-                    onPointerMove={handleSliderPointerMove}
-                    onPointerUp={handleSliderPointerUp}
-                    onPointerCancel={handleSliderPointerUp}
                     className="relative w-full h-5 flex items-center cursor-pointer select-none touch-none px-1"
                   >
                     {/* Thin sleek bar track (height 6px) */}
@@ -538,54 +547,64 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               {/* Bottom Section: Save Color & Delete Icon Buttons + Saved Colors Swatches */}
               <div className="w-full px-2.5 pb-1 flex flex-col gap-1" dir="rtl">
                 <div className="flex items-center gap-1.5">
-                  {/* Save Color Button */}
+                  {/* Plus Button: Add current color */}
                   <button
                     type="button"
                     onClick={handleSaveColor}
-                    className="flex items-center gap-1 text-[11px] font-black bg-[#1A447E] hover:bg-[#255DB0] active:scale-95 text-white px-2.5 py-1.5 rounded-xl border border-white/20 transition-all shrink-0"
-                    title="حفظ اللون الحالي"
+                    disabled={savedPalette.length >= 24}
+                    title="حفظ اللون الحالي في اللوحة"
+                    className="h-6 px-2 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1 text-[11px] font-bold text-white transition-all border border-white/20 shrink-0"
                   >
-                    <Plus className="w-3.5 h-3.5 text-[#D4AF37]" strokeWidth={3} />
+                    <Plus className="w-3 h-3 text-[#D4AF37]" />
                     <span>حفظ</span>
                   </button>
 
-                  {/* Delete Selected Color Icon Button (ONLY appears when saved colors exist) */}
-                  {savedPalette.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={handleDeleteSelectedColor}
-                      className="flex items-center justify-center w-7 h-7 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-300 hover:text-red-100 border border-red-500/30 transition-all active:scale-95 shrink-0"
-                      title={`حذف اللون المحدد (${currentTargetForDeletion || ''})`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  {/* Delete Button: Trash icon */}
+                  <button
+                    type="button"
+                    onClick={handleDeleteSelectedColor}
+                    disabled={savedPalette.length === 0}
+                    title={currentTargetForDeletion ? `حذف اللون المحدد (${currentTargetForDeletion})` : "حذف اللون المحدد"}
+                    className="w-6 h-6 rounded-lg bg-red-500/20 hover:bg-red-500/30 active:scale-95 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-red-300 hover:text-red-200 transition-all border border-red-500/30 shrink-0"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
 
-                  {/* Saved Color Swatches List */}
-                  <div className="flex-1 flex items-center gap-1 overflow-x-auto px-1.5 py-1 scrollbar-none min-h-[34px] bg-[#071833]/40 border border-white/10 rounded-xl">
-                    {savedPalette.map((savedColor, idx) => {
-                      const isSelected = selectedSavedColor === savedColor || (!selectedSavedColor && idx === 0);
+                  {/* Swatches Label */}
+                  <span className="text-[10px] text-white/50 font-bold mr-auto">
+                    {savedPalette.length > 0 ? `${savedPalette.length}/24 لون` : 'الألوان المحفوظة'}
+                  </span>
+                </div>
+
+                {/* Swatches Grid: User Saved Colors */}
+                <div className="w-full min-h-[34px] max-h-[70px] overflow-y-auto no-scrollbar bg-[#081B38]/90 border border-white/15 rounded-xl p-1.5 flex flex-wrap gap-1.5 items-center">
+                  {savedPalette.length === 0 ? (
+                    <div className="w-full py-1 text-center text-[11px] text-white/40 font-medium">
+                      اضغط على &ldquo;حفظ&rdquo; لإضافة ألوانك المفضلة هنا
+                    </div>
+                  ) : (
+                    savedPalette.map((savedHex, idx) => {
+                      const isSelected = selectedSavedColor === savedHex;
                       return (
-                        <div key={`${savedColor}-${idx}`} className="relative shrink-0 p-0.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedSavedColor(savedColor);
-                              setWheelColorSafely(savedColor);
-                              onColorChange(savedColor);
-                            }}
-                            className={`w-6 h-6 rounded-md border transition-all active:scale-95 ${
-                              isSelected
-                                ? 'border-[#D4AF37] ring-1.5 ring-[#D4AF37]'
-                                : 'border-white/30 hover:border-white/80'
-                            }`}
-                            style={{ backgroundColor: savedColor }}
-                            title={savedColor}
-                          />
-                        </div>
+                        <button
+                          key={`${savedHex}-${idx}`}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSavedColor(savedHex);
+                            setWheelColorSafely(savedHex);
+                            onColorChangeRef.current?.(savedHex);
+                          }}
+                          className={`w-6 h-6 rounded-[6px] relative transition-all active:scale-90 shrink-0 ${
+                            isSelected
+                              ? 'ring-2 ring-[#D4AF37] ring-offset-1 ring-offset-[#081B38] scale-105 z-10'
+                              : 'border border-white/30 hover:border-white/70 hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: savedHex }}
+                          title={savedHex}
+                        />
                       );
-                    })}
-                  </div>
+                    })
+                  )}
                 </div>
               </div>
             </div>
