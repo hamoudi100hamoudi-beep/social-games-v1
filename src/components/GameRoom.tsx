@@ -1560,7 +1560,7 @@ export default function GameRoom({
         >
           {/* Animated Exit Character Sprite */}
           <div className="w-full flex items-center justify-center mb-3 sm:mb-5 mt-1">
-            <ExitSprite className="w-26 sm:w-36 h-auto drop-shadow-sm" />
+            <ExitSprite className="w-26 sm:w-36 h-auto" />
           </div>
 
           {/* Question */}
@@ -1621,11 +1621,11 @@ export default function GameRoom({
                       type="button"
                       onClick={openChat}
                       title="الدردشة"
-                      className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all shadow-md relative cursor-pointer"
+                      className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all border border-black/10 relative cursor-pointer"
                     >
                       <MessageSquare size={18} />
                       {unreadCount > 0 && (
-                        <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full shadow-md border-2 border-slate-200">
+                        <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full border-2 border-slate-200">
                           {unreadCount > 9 ? "+9" : unreadCount}
                         </div>
                       )}
@@ -1874,7 +1874,7 @@ export default function GameRoom({
                       disabled={!canReport}
                       onClick={handleReport}
                       title={hasAlreadyReported ? "You reported this draw" : "Report drawing"}
-                      className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white transition-all shadow-md active:scale-95 cursor-pointer
+                      className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white transition-all border border-white/10 active:scale-95 cursor-pointer
                         ${hasAlreadyReported 
                           ? "bg-red-600 border border-red-500 opacity-90 cursor-not-allowed" 
                           : canReport 
@@ -1887,29 +1887,29 @@ export default function GameRoom({
                   )}
                   <button 
                     onClick={toggleMute}
-                    className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all shadow-md relative overflow-hidden ${
+                    className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all border border-white/10 relative overflow-hidden ${
                       isMuted ? "bg-slate-400 hover:bg-slate-500" : "bg-yellow-400 hover:bg-yellow-500"
                     }`}
                   >
                     {isMuted ? (
-                      <VolumeX size={16} className="text-white drop-shadow-md z-10" />
+                      <VolumeX size={16} className="text-white z-10" />
                     ) : (
-                      <Volume2 size={16} className="text-white drop-shadow-md z-10" />
+                      <Volume2 size={16} className="text-white z-10" />
                     )}
                     {isMuted && (
                       <div className="absolute inset-0 m-auto w-[2px] h-[70%] bg-white/70 -rotate-45 z-0 animate-in fade-in zoom-in duration-200"></div>
                     )}
                   </button>
-                  <button className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-white transition-all shadow-md">
+                  <button className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-white transition-all border border-white/10">
                     <Info size={16} />
                   </button>
                   <button
                     onClick={openChat}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all shadow-md relative"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all border border-white/10 relative"
                   >
                     <MessageSquare size={16} />
                     {unreadCount > 0 && (
-                      <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] sm:text-[11px] font-bold px-1 py-0.5 rounded-full shadow-md border-2 border-slate-200">
+                      <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] sm:text-[11px] font-bold px-1 py-0.5 rounded-full border-2 border-slate-200">
                         {unreadCount > 9 ? "+9" : unreadCount}
                       </div>
                     )}
@@ -2296,14 +2296,14 @@ export default function GameRoom({
         ]}
       >
         {/* Animated Skip Drawing Page & Creature Anchor */}
-        <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 shadow-[0_4px_16px_rgba(26,170,204,0.18)] relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
+        <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
           {/* Inner Canvas Border */}
           <div className="absolute inset-1 rounded-[14px] border border-dashed border-[#1AAACC]/20 pointer-events-none" />
 
           {/* Playful Creature (FastForward triangles) leaping out of the drawing sheet */}
           <div className="relative z-10 flex items-center justify-center animate-skip-escape">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center shadow-sm">
-              <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] drop-shadow-sm ml-0.5" strokeWidth={2.8} />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center">
+              <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] ml-0.5" strokeWidth={2.8} />
             </div>
           </div>
         </div>
@@ -2414,7 +2414,7 @@ export default function GameRoom({
       {gameState.status === "CHOOSING" && amIDrawer && (
         <div className="fixed inset-0 z-[500] bg-black/70  flex items-center justify-center p-4 touch-none">
           <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
-            <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 drop-shadow-md tracking-wide">
+            <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 tracking-wide">
               IT'S YOUR TURN!
             </h2>
             <p className="text-white/80 text-lg sm:text-xl mb-12">
@@ -2425,14 +2425,14 @@ export default function GameRoom({
               <div className="space-y-6">
                 <div className="flex flex-col items-center">
                   <span
-                    className="text-white text-3xl font-bold mb-4 drop-shadow-lg"
+                    className="text-white text-3xl font-bold mb-4"
                     dir="auto"
                   >
                     {gameState.wordOptions[0]}
                   </span>
                   <button
                     onClick={() => handleWordSelect(gameState.wordOptions[0])}
-                    className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl"
+                    className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 border-2 border-white/20 active:scale-95 transition-all text-xl"
                   >
                     <Pencil fill="currentColor" size={24} />
                     DRAW
@@ -2449,14 +2449,14 @@ export default function GameRoom({
 
                 <div className="flex flex-col items-center">
                   <span
-                    className="text-white text-3xl font-bold mb-4 drop-shadow-lg"
+                    className="text-white text-3xl font-bold mb-4"
                     dir="auto"
                   >
                     {gameState.wordOptions[1]}
                   </span>
                   <button
                     onClick={() => handleWordSelect(gameState.wordOptions[1])}
-                    className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl"
+                    className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 border-2 border-white/20 active:scale-95 transition-all text-xl"
                   >
                     <Pencil fill="currentColor" size={24} />
                     DRAW
@@ -2509,7 +2509,7 @@ export default function GameRoom({
           return (
             <>
               {/* Avatar Emoji Frame with Comfortable Dimensions */}
-              <div className="w-24 h-24 sm:w-30 sm:h-30 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)] shrink-0">
+              <div className="w-24 h-24 sm:w-30 sm:h-30 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 sm:mb-4 relative select-none shrink-0">
                 <span className="text-[56px] sm:text-[70px] leading-none mb-0.5">{playerToRender.avatar || "👤"}</span>
               </div>
 
@@ -2522,7 +2522,7 @@ export default function GameRoom({
 
               {isSelf ? (
                 <div 
-                  className="py-3 px-4 bg-white rounded-[18px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm shadow-sm"
+                  className="py-3 px-4 bg-white rounded-[18px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm"
                 >
                   هذا هو حسابك الشخصي
                 </div>
@@ -2538,8 +2538,8 @@ export default function GameRoom({
                       }}
                       className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
                         isBlocked 
-                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
-                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
+                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95"
+                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95"
                       }`}
                     >
                       <EyeOff className="w-5 h-5" />
@@ -2557,8 +2557,8 @@ export default function GameRoom({
                       }}
                       className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
                         alreadyVoted
-                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
-                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
+                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95"
+                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95"
                       }`}
                     >
                       <UserIcon className="w-5 h-5" />
@@ -2584,7 +2584,7 @@ export default function GameRoom({
             text: "OK",
             onClick: () => setShowCooldownWarning(false),
             variant: "custom",
-            className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95 shadow-md",
+            className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95",
           },
         ]}
       >

@@ -46,11 +46,11 @@ const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
             <img 
               src="/trophy.webp" 
               alt="Trophy" 
-              className="w-full h-full object-contain drop-shadow-[1px_2px_1px_rgba(0,0,0,0.5)]"
+              className="w-full h-full object-contain"
               referrerPolicy="no-referrer"
             />
           ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-7 h-7 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]" fill="none">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-7 h-7" fill="none">
               {/* Base bottom stand */}
               <path d="M6 21H18" stroke="black" strokeWidth="1.5" strokeLinecap="round"/>
               <path d="M9 21L10 17H14L15 21" fill="#FDE047" stroke="black" strokeWidth="1.5" strokeLinejoin="round"/>

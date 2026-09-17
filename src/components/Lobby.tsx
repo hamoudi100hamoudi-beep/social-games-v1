@@ -675,7 +675,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
             text: <span className="text-white font-black">PLAY</span>,
             onClick: handlePlay,
             variant: "danger",
-            icon: <Play className="w-5 h-5 shadow-sm" fill="currentColor" strokeWidth={3} />,
+            icon: <Play className="w-5 h-5" fill="currentColor" strokeWidth={3} />,
           },
         ]}
       >

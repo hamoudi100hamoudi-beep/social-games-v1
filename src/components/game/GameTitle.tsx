@@ -22,17 +22,17 @@ export default function GameTitle({ text, type, className = "text-[34px]" }: Gam
         return { color: "#818CF8", stroke: "#2E2882" };
       case "choose":
       case "miniboard":
-        return { color: "#FFFFFF", stroke: "#2E2882", dropShadow: "drop-shadow(0px 6px 0px rgba(46, 40, 130, 0.15))" };
+        return { color: "#FFFFFF", stroke: "#2E2882" };
       default:
         return { color: "#38BDF8", stroke: "#0F3957" };
     }
   };
 
-  const { color, stroke, dropShadow } = getColors();
+  const { color, stroke } = getColors();
 
   return (
     <div 
-      className={`relative inline-block select-none font-black tracking-widest uppercase text-center leading-none ${className} ${dropShadow || ""}`}
+      className={`relative inline-block select-none font-black tracking-widest uppercase text-center leading-none ${className}`}
       style={{ fontFamily: "'Fredoka', 'Inter', sans-serif" }}
     >
       {/* 

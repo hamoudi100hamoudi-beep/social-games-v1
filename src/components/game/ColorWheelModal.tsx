@@ -63,6 +63,20 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   const wheelInstanceRef = useRef<ReinventedColorWheel | null>(null);
   const isInternalUpdateRef = useRef(false);
 
+  // Direct DOM feedback refs for zero-latency 60/120fps dragging without React reconciliation overhead
+  const hexInputRef = useRef<HTMLInputElement>(null);
+  const liveColorBoxRef = useRef<HTMLDivElement>(null);
+  const sliderGradientRef = useRef<HTMLDivElement>(null);
+  const sliderThumbRef = useRef<HTMLDivElement>(null);
+  const sliderDotRef = useRef<HTMLDivElement>(null);
+  const opacityTextRef = useRef<HTMLSpanElement>(null);
+
+  // rAF and pending state refs
+  const rafColorIdRef = useRef<number | null>(null);
+  const pendingColorRef = useRef<string | null>(null);
+  const rafOpacityIdRef = useRef<number | null>(null);
+  const pendingOpacityRef = useRef<number | null>(null);
+
   // Critical refs to eliminate wheel vibration and accidental red reset during rapid SV dragging
   const isUserInteractingWithWheelRef = useRef(false);
   const lastWheelHexRef = useRef<string | null>(null);
@@ -77,10 +91,20 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   // Modal card ref
   const modalCardRef = useRef<HTMLDivElement>(null);
 
-  // Listen to global pointer releases to safely reset wheel interaction flag
+  // Listen to global pointer releases to safely reset wheel interaction flag and flush pending updates
   useEffect(() => {
     const handlePointerRelease = () => {
       isUserInteractingWithWheelRef.current = false;
+      if (rafColorIdRef.current) {
+        cancelAnimationFrame(rafColorIdRef.current);
+        rafColorIdRef.current = null;
+      }
+      if (pendingColorRef.current) {
+        const finalColor = pendingColorRef.current;
+        pendingColorRef.current = null;
+        setHexInput(finalColor);
+        onColorChange(finalColor);
+      }
     };
 
     window.addEventListener('pointerup', handlePointerRelease);
@@ -93,8 +117,16 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
       window.removeEventListener('pointercancel', handlePointerRelease);
       window.removeEventListener('mouseup', handlePointerRelease);
       window.removeEventListener('touchend', handlePointerRelease);
+      if (rafColorIdRef.current) {
+        cancelAnimationFrame(rafColorIdRef.current);
+        rafColorIdRef.current = null;
+      }
+      if (rafOpacityIdRef.current) {
+        cancelAnimationFrame(rafOpacityIdRef.current);
+        rafOpacityIdRef.current = null;
+      }
     };
-  }, []);
+  }, [onColorChange]);
 
   // Capture initial color and recalculate size when modal opens, and on window resize
   useEffect(() => {
@@ -169,8 +201,31 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
         if (isInternalUpdateRef.current) return;
         const hex = c.hex.toUpperCase();
         lastWheelHexRef.current = hex;
-        setHexInput(hex);
-        onColorChange(hex);
+
+        // 1. Instant Direct DOM Sync (0ms delay, no React re-render overhead)
+        if (hexInputRef.current && document.activeElement !== hexInputRef.current) {
+          hexInputRef.current.value = hex.replace(/^#/, '');
+        }
+        if (liveColorBoxRef.current) {
+          liveColorBoxRef.current.style.backgroundColor = hex;
+        }
+        if (sliderGradientRef.current) {
+          sliderGradientRef.current.style.background = `linear-gradient(to right, transparent, ${hex})`;
+        }
+        if (sliderDotRef.current) {
+          sliderDotRef.current.style.backgroundColor = hex;
+        }
+
+        // 2. Throttle parent update via requestAnimationFrame for silky smooth 60/120fps
+        pendingColorRef.current = hex;
+        if (!rafColorIdRef.current) {
+          rafColorIdRef.current = requestAnimationFrame(() => {
+            rafColorIdRef.current = null;
+            if (pendingColorRef.current) {
+              onColorChange(pendingColorRef.current);
+            }
+          });
+        }
       },
     });
 
@@ -185,7 +240,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
         }
       } catch (_) {}
     };
-  }, [isOpen, wheelDiameter]);
+  }, [isOpen, wheelDiameter, onColorChange]);
 
   // Sync color changes from external clicks (e.g. clicking swatch, typing HEX, or revert button)
   useEffect(() => {
@@ -240,14 +295,35 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
     }
   };
 
-  // Smooth tactile Opacity Slider calculation
+  // Smooth tactile Opacity Slider calculation with zero-delay direct DOM updates and rAF batching
   const updateOpacityFromClientX = (clientX: number) => {
     if (!sliderTrackRef.current || !onOpacityChange) return;
     const rect = sliderTrackRef.current.getBoundingClientRect();
     if (rect.width <= 0) return;
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const newOpacity = Number((0.10 + ratio * 0.90).toFixed(2));
-    onOpacityChange(newOpacity);
+
+    // Direct DOM updates for thumb, dot and label
+    if (sliderThumbRef.current) {
+      sliderThumbRef.current.style.left = `calc(9px + (100% - 18px) * ${ratio})`;
+    }
+    if (sliderDotRef.current) {
+      sliderDotRef.current.style.opacity = String(newOpacity);
+    }
+    if (opacityTextRef.current) {
+      opacityTextRef.current.innerText = `${Math.round(newOpacity * 100)}%`;
+    }
+
+    // Schedule parent update
+    pendingOpacityRef.current = newOpacity;
+    if (!rafOpacityIdRef.current) {
+      rafOpacityIdRef.current = requestAnimationFrame(() => {
+        rafOpacityIdRef.current = null;
+        if (pendingOpacityRef.current !== null) {
+          onOpacityChange(pendingOpacityRef.current);
+        }
+      });
+    }
   };
 
   const handleSliderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -275,6 +351,15 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch (_) {}
     isDraggingSliderRef.current = false;
+    if (rafOpacityIdRef.current) {
+      cancelAnimationFrame(rafOpacityIdRef.current);
+      rafOpacityIdRef.current = null;
+    }
+    if (pendingOpacityRef.current !== null) {
+      const finalOp = pendingOpacityRef.current;
+      pendingOpacityRef.current = null;
+      onOpacityChange?.(finalOp);
+    }
   };
 
   if (typeof document === 'undefined') return null;
@@ -314,8 +399,9 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               <div className="flex items-center gap-1 bg-[#071833] border border-white/20 rounded-xl px-2 py-0.5 shrink-0">
                 <span className="text-xs font-mono font-black text-white/50 select-none">#</span>
                 <input
+                  ref={hexInputRef}
                   type="text"
-                  value={hexInput.replace(/^#/, '')}
+                  defaultValue={hexInput.replace(/^#/, '')}
                   onChange={(e) => {
                     const clean = e.target.value.replace(/[^0-9A-Fa-f]/g, '').slice(0, 6);
                     setHexInput('#' + clean.toUpperCase());
@@ -357,8 +443,9 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                 {/* Divider */}
                 <div className="w-[1px] h-full bg-white/40 z-10 pointer-events-none" />
 
-                {/* Current Color */}
+                {/* Current Color Live Box */}
                 <div
+                  ref={liveColorBoxRef}
                   className="w-6 h-full"
                   style={{ backgroundColor: color }}
                   title="اللون المختار حالياً"
@@ -388,7 +475,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               >
                 <div
                   ref={wheelContainerRef}
-                  className="flex items-center justify-center select-none touch-none [&_.reinvented-color-wheel--sv-space]:rounded-[8px] [&_.reinvented-color-wheel--sv-space]:border [&_.reinvented-color-wheel--sv-space]:border-white/30"
+                  className="flex items-center justify-center select-none touch-none [&_.reinvented-color-wheel--sv-space]:rounded-[8px] [&_.reinvented-color-wheel--sv-space]:border-0 [&_.reinvented-color-wheel--sv-space]:outline-none"
                 />
               </div>
 
@@ -396,7 +483,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               {onOpacityChange && (
                 <div className="w-full flex flex-col gap-0.5 px-3" dir="ltr">
                   <div className="flex justify-between items-center text-xs font-semibold text-white/80 px-0.5">
-                    <span className="font-mono text-[#D4AF37] font-black text-xs">{opacityPercent}%</span>
+                    <span ref={opacityTextRef} className="font-mono text-[#D4AF37] font-black text-xs">{opacityPercent}%</span>
                     <span dir="rtl" className="text-white/70 text-[10px]">الكثافة</span>
                   </div>
 
@@ -421,6 +508,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                       />
                       {/* Gradient Fill: Left transparent -> Right solid color */}
                       <div
+                        ref={sliderGradientRef}
                         className="absolute inset-0"
                         style={{
                           background: `linear-gradient(to right, transparent, ${color})`,
@@ -430,6 +518,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
 
                     {/* Prominent Thumb Circle */}
                     <div
+                      ref={sliderThumbRef}
                       className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[18px] h-[18px] rounded-full bg-white border-2 border-[#0E2A54] ring-1 ring-white/70 pointer-events-none transition-transform active:scale-110 flex items-center justify-center"
                       style={{
                         left: `calc(9px + (100% - 18px) * ${opacityRatio})`,
@@ -437,6 +526,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                     >
                       {/* Inner dot with live color and opacity */}
                       <div
+                        ref={sliderDotRef}
                         className="w-2 h-2 rounded-full"
                         style={{ backgroundColor: color, opacity: opacity }}
                       />

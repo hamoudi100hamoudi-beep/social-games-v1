@@ -2199,14 +2199,14 @@ export default function ExperimentalGameRoom({
         ]}
       >
         {/* Animated Skip Drawing Page & Creature Anchor */}
-        <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 shadow-[0_4px_16px_rgba(26,170,204,0.18)] relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
+        <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
           {/* Inner Canvas Border */}
           <div className="absolute inset-1 rounded-[14px] border border-dashed border-[#1AAACC]/20 pointer-events-none" />
 
           {/* Playful Creature (FastForward triangles) leaping out of the drawing sheet */}
           <div className="relative z-10 flex items-center justify-center animate-skip-escape">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center shadow-sm">
-              <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] drop-shadow-sm ml-0.5" strokeWidth={2.8} />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center">
+              <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] ml-0.5" strokeWidth={2.8} />
             </div>
           </div>
         </div>
@@ -2414,7 +2414,7 @@ export default function ExperimentalGameRoom({
             return (
               <>
                 {/* Avatar Emoji Frame with Comfortable Dimensions */}
-                <div className="w-24 h-24 sm:w-30 sm:h-30 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 sm:mb-4 shadow-inner relative select-none shadow-[inset_0_2px_4px_rgba(255,255,255,0.7),_0_6px_15px_rgba(46,40,130,0.12)] shrink-0">
+                <div className="w-24 h-24 sm:w-30 sm:h-30 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 sm:mb-4 relative select-none shrink-0">
                   <span className="text-[56px] sm:text-[70px] leading-none mb-0.5">{playerToRender.avatar || "👤"}</span>
                 </div>
 
@@ -2427,7 +2427,7 @@ export default function ExperimentalGameRoom({
 
                 {isSelf ? (
                   <div 
-                    className="py-3 px-4 bg-white rounded-[18px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm shadow-sm"
+                    className="py-3 px-4 bg-white rounded-[18px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm"
                   >
                     هذا هو حسابك الشخصي
                   </div>
@@ -2443,8 +2443,8 @@ export default function ExperimentalGameRoom({
                         }}
                         className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
                           isBlocked 
-                            ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
-                            : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
+                            ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95"
+                            : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95"
                         }`}
                       >
                         <EyeOff className="w-5 h-5" />
@@ -2462,8 +2462,8 @@ export default function ExperimentalGameRoom({
                         }}
                         className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
                           alreadyVoted 
-                            ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95 shadow-md"
-                            : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95 shadow-md"
+                            ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95"
+                            : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95"
                         }`}
                       >
                         <UserIcon className="w-5 h-5" />
@@ -2490,7 +2490,7 @@ export default function ExperimentalGameRoom({
               text: "OK",
               onClick: () => setShowCooldownWarning(false),
               variant: "custom",
-              className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95 shadow-md",
+              className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95",
             },
           ]}
         >

@@ -93,7 +93,7 @@ export function MiniBoardOverlay({
 
             {/* Middle Frameless Animated Sprite */}
             <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
-              <WaitingSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm" />
+              <WaitingSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" />
             </div>
 
             {/* Bottom Text / Start Button */}
@@ -200,7 +200,7 @@ export function MiniBoardOverlay({
                     <GameTitle text="INACTIVE" type="miniboard" className="text-[17px] sm:text-[22px]" />
                   </div>
                   <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
-                    <TurnLostSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm" />
+                    <TurnLostSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" />
                   </div>
                   <div className="pb-0.5 sm:pb-1">
                     <h3 className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5" dir="auto">
@@ -222,7 +222,7 @@ export function MiniBoardOverlay({
                   </div>
 
                   <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
-                    <CanceledTurnSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px] drop-shadow-sm" />
+                    <CanceledTurnSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" />
                   </div>
 
                   <div className="pb-0.5 sm:pb-1">
@@ -301,7 +301,7 @@ export function MiniBoardOverlay({
                       <span className="text-[#728299] text-[11px] sm:text-xs font-bold block mb-0.5">
                         The answer was:
                       </span>
-                      <span className="text-[#0B2E5C] text-sm sm:text-xl font-black tracking-wide inline-block drop-shadow-sm" dir="auto">
+                      <span className="text-[#0B2E5C] text-sm sm:text-xl font-black tracking-wide inline-block" dir="auto">
                         {word}
                       </span>
                     </div>
@@ -389,7 +389,7 @@ export function MiniBoardOverlay({
                   initial={{ y: -150, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
                   transition={{ ease: [0.1, 0.9, 0.2, 1], duration: 0.85 }}
-                  className="mt-1 sm:mt-3 mb-1 sm:mb-3 w-full flex justify-center drop-shadow-md shrink-0"
+                  className="mt-1 sm:mt-3 mb-1 sm:mb-3 w-full flex justify-center shrink-0"
                 >
                   <GameTitle text="GAME OVER" type="miniboard" className="text-[18px] sm:text-[26px]" />
                 </motion.div>
@@ -400,12 +400,12 @@ export function MiniBoardOverlay({
                     {second ? (
                       <>
                         <div className={`relative mb-1 w-fit mx-auto ${getAnimClass("animate-podium-pop")}`} style={{ animationDelay: '2.4s' }}>
-                          <div className="w-14 h-14 sm:w-22 sm:h-22 rounded-full bg-[#E2E8F0] flex items-center justify-center text-3xl sm:text-5xl border-[3px] sm:border-[4px] border-[#0A2540] shadow-md overflow-hidden relative">
+                          <div className="w-14 h-14 sm:w-22 sm:h-22 rounded-full bg-[#E2E8F0] flex items-center justify-center text-3xl sm:text-5xl border-[3px] sm:border-[4px] border-[#0A2540] overflow-hidden relative">
                             <span className="select-none">{second.avatar}</span>
                           </div>
                           <div className="absolute left-1/2 -translate-x-1/2 -bottom-2.5 sm:-bottom-3.5 z-20 pointer-events-none flex items-center justify-center">
                             <div 
-                              className={`relative w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] ${getAnimClass("animate-badge-pop")}`}
+                              className={`relative w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center ${getAnimClass("animate-badge-pop")}`}
                               style={{ animationDelay: '2.9s' }}
                             >
                               <img 
@@ -441,18 +441,18 @@ export function MiniBoardOverlay({
                         <div className={`relative mb-1.5 w-fit mx-auto ${getAnimClass("animate-podium-pop")}`} style={{ animationDelay: '1.0s' }}>
                           {/* Crown - inside relative avatar wrapper for perfect centering */}
                           <div 
-                            className={`absolute -top-[22px] sm:-top-[30px] inset-x-0 mx-auto w-fit z-40 ${getAnimClass("animate-crown-fall")} drop-shadow-md flex justify-center`} 
+                            className={`absolute -top-[22px] sm:-top-[30px] inset-x-0 mx-auto w-fit z-40 ${getAnimClass("animate-crown-fall")} flex justify-center`} 
                             style={{ animationDelay: crownDelay }}
                           >
                             <span className="text-[20px] sm:text-[28px] select-none">👑</span>
                           </div>
 
-                          <div className="w-18 h-18 sm:w-26 sm:h-26 rounded-full bg-[#FFD13B] flex items-center justify-center text-4xl sm:text-6xl border-[3px] sm:border-[5px] border-[#0A2540] shadow-lg overflow-hidden relative group-hover:scale-105 transition-transform duration-300">
+                          <div className="w-18 h-18 sm:w-26 sm:h-26 rounded-full bg-[#FFD13B] flex items-center justify-center text-4xl sm:text-6xl border-[3px] sm:border-[5px] border-[#0A2540] overflow-hidden relative group-hover:scale-105 transition-transform duration-300">
                             <span className="select-none">{first.avatar}</span>
                           </div>
                           <div className="absolute left-1/2 -translate-x-1/2 -bottom-3 sm:-bottom-4 z-20 pointer-events-none flex items-center justify-center">
                             <div 
-                              className={`relative w-9 h-9 sm:w-13 sm:h-13 flex items-center justify-center drop-shadow-[0_3px_5px_rgba(0,0,0,0.5)] ${getAnimClass("animate-badge-pop")}`}
+                              className={`relative w-9 h-9 sm:w-13 sm:h-13 flex items-center justify-center ${getAnimClass("animate-badge-pop")}`}
                               style={{ animationDelay: '1.5s' }}
                             >
                               <img 
@@ -468,7 +468,7 @@ export function MiniBoardOverlay({
                           </div>
                         </div>
                         <div className={`text-center mt-3 sm:mt-4 mb-0.5 px-0.5 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '1.2s' }}>
-                          <span className="text-[#0A2540] font-black text-[13px] sm:text-[18px] truncate block w-full drop-shadow-sm">
+                          <span className="text-[#0A2540] font-black text-[13px] sm:text-[18px] truncate block w-full">
                             {first.name}
                           </span>
                           <span className="text-yellow-600 font-black text-[10px] sm:text-[12px] block leading-none">
@@ -486,12 +486,12 @@ export function MiniBoardOverlay({
                     {third ? (
                       <>
                         <div className={`relative mb-1 w-fit mx-auto ${getAnimClass("animate-podium-pop")}`} style={{ animationDelay: '3.6s' }}>
-                          <div className="w-14 h-14 sm:w-22 sm:h-22 rounded-full bg-[#FFB074] flex items-center justify-center text-3xl sm:text-5xl border-[3px] sm:border-[4px] border-[#0A2540] shadow-md overflow-hidden relative">
+                          <div className="w-14 h-14 sm:w-22 sm:h-22 rounded-full bg-[#FFB074] flex items-center justify-center text-3xl sm:text-5xl border-[3px] sm:border-[4px] border-[#0A2540] overflow-hidden relative">
                             <span className="select-none">{third.avatar}</span>
                           </div>
                           <div className="absolute left-1/2 -translate-x-1/2 -bottom-2.5 sm:-bottom-3.5 z-20 pointer-events-none flex items-center justify-center">
                             <div 
-                              className={`relative w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] ${getAnimClass("animate-badge-pop")}`}
+                              className={`relative w-7 h-7 sm:w-10 sm:h-10 flex items-center justify-center ${getAnimClass("animate-badge-pop")}`}
                               style={{ animationDelay: '4.1s' }}
                             >
                               <img 

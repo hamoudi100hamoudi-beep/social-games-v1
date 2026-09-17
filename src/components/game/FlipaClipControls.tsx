@@ -40,6 +40,12 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
 
+  // rAF throttling refs for ultra-smooth drag handling
+  const rafWidthIdRef = useRef<number | null>(null);
+  const pendingWidthRef = useRef<number | null>(null);
+  const rafOpacityIdRef = useRef<number | null>(null);
+  const pendingOpacityRef = useRef<number | null>(null);
+
   // Size Drag ref tracker for instantaneous 120Hz sync and zero-deadzone boundary clamping
   const sizeDragRef = useRef<{
     isDragging: boolean;
@@ -162,7 +168,16 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
     const deltaY = currentStartY - e.clientY;
     const delta = Math.round(deltaY / sensitivity);
     const newWidth = Math.max(min, Math.min(max, startVal + delta));
-    onWidthChange(newWidth);
+
+    pendingWidthRef.current = newWidth;
+    if (!rafWidthIdRef.current) {
+      rafWidthIdRef.current = requestAnimationFrame(() => {
+        rafWidthIdRef.current = null;
+        if (pendingWidthRef.current !== null) {
+          onWidthChange(pendingWidthRef.current);
+        }
+      });
+    }
   };
 
   // Pointer Move for Opacity Square
@@ -209,7 +224,16 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
       const deltaY = currentStartY - e.clientY;
       const delta = deltaY / sensitivity;
       const newOpacity = Math.max(minOpacity, Math.min(maxOpacity, Number((startOpacity + delta).toFixed(2))));
-      onOpacityChange(newOpacity);
+
+      pendingOpacityRef.current = newOpacity;
+      if (!rafOpacityIdRef.current) {
+        rafOpacityIdRef.current = requestAnimationFrame(() => {
+          rafOpacityIdRef.current = null;
+          if (pendingOpacityRef.current !== null) {
+            onOpacityChange(pendingOpacityRef.current);
+          }
+        });
+      }
     } else {
       setDragState(prev => prev ? { ...prev, clientX: e.clientX, clientY: e.clientY } : null);
     }
@@ -225,6 +249,15 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
       } catch (_) {}
       sizeDragRef.current.isDragging = false;
       setDragState(null);
+      if (rafWidthIdRef.current) {
+        cancelAnimationFrame(rafWidthIdRef.current);
+        rafWidthIdRef.current = null;
+      }
+      if (pendingWidthRef.current !== null) {
+        const finalWidth = pendingWidthRef.current;
+        pendingWidthRef.current = null;
+        onWidthChange(finalWidth);
+      }
     }
   };
 
@@ -240,6 +273,15 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
     opacityTouchRef.current.isTracking = false;
     if (dragState?.type === 'opacity') {
       setDragState(null);
+    }
+    if (rafOpacityIdRef.current) {
+      cancelAnimationFrame(rafOpacityIdRef.current);
+      rafOpacityIdRef.current = null;
+    }
+    if (pendingOpacityRef.current !== null) {
+      const finalOp = pendingOpacityRef.current;
+      pendingOpacityRef.current = null;
+      onOpacityChange(finalOp);
     }
   };
 

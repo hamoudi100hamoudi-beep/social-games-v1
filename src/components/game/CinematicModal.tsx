@@ -100,23 +100,23 @@ export default function CinematicModal({
   const getButtonStyles = (btn: CinematicModalButton) => {
     if (btn.className) return btn.className;
 
-    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-5 rounded-[18px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2.5 whitespace-nowrap shadow-md";
+    const base = "flex-1 select-none cursor-pointer border-2 active:scale-95 transition-all text-sm sm:text-base font-black py-3 sm:py-3.5 px-3 sm:px-5 rounded-[18px] sm:rounded-[22px] tracking-wide flex items-center justify-center gap-1.5 sm:gap-2.5 whitespace-nowrap";
     
     switch (btn.variant) {
       case "primary":
         // Light blue key-player (Yes skip / general action)
-        return `${base} bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-white/40 shadow-md`;
+        return `${base} bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-white/40`;
       case "secondary":
         // Lavender grey/soft gloss (The standard beautiful "NO" styling with glossy borders)
-        return `${base} bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-white/80 shadow-sm`;
+        return `${base} bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-white/80`;
       case "danger":
         // Vibrant warning orange/red for reporting or permanent exits and votes
-        return `${base} bg-[#FB923C] text-white hover:bg-[#EA580C] border-white/40 shadow-md`;
+        return `${base} bg-[#FB923C] text-white hover:bg-[#EA580C] border-white/40`;
       case "neutral":
         // Playful general active button (Indigo/Purple for OK return trigger etc.)
-        return `${base} bg-[#818CF8] text-white hover:bg-[#6366F1] border-white/40 shadow-md`;
+        return `${base} bg-[#818CF8] text-white hover:bg-[#6366F1] border-white/40`;
       default:
-        return `${base} bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-white/80 shadow-sm`;
+        return `${base} bg-[#ECEBFC] text-[#8C8AA7] hover:bg-[#D9D6F7] border-white/80`;
     }
   };
 
