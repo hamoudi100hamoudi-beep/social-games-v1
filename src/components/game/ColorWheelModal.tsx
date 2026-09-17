@@ -14,7 +14,13 @@ interface ColorWheelModalProps {
   onClose: () => void;
 }
 
+interface CachedTrackBounds {
+  left: number;
+  width: number;
+}
+
 const LOCAL_STORAGE_PALETTE_KEY = 'flipaclip_user_saved_colors';
+const EMIT_THROTTLE_MS = 30; // ~33Hz safe throttle for heavy React/Canvas parent updates on low-end devices
 
 export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   isOpen,
@@ -76,11 +82,17 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   const sliderDotRef = useRef<HTMLDivElement>(null);
   const opacityTextRef = useRef<HTMLSpanElement>(null);
 
-  // rAF and pending state refs for silky-smooth continuous live updates
-  const rafColorIdRef = useRef<number | null>(null);
+  // Cached layout bounds to completely eliminate getBoundingClientRect layout thrashing during pointermove
+  const cachedSliderBoundsRef = useRef<CachedTrackBounds | null>(null);
+
+  // Low-end device throttle tracking refs (~30ms emit window)
+  const lastColorEmitTimeRef = useRef<number>(0);
   const pendingColorRef = useRef<string | null>(null);
-  const rafOpacityIdRef = useRef<number | null>(null);
+  const rafColorIdRef = useRef<number | null>(null);
+
+  const lastOpacityEmitTimeRef = useRef<number>(0);
   const pendingOpacityRef = useRef<number | null>(null);
+  const rafOpacityIdRef = useRef<number | null>(null);
 
   // Critical refs to eliminate wheel vibration and accidental red reset during rapid SV dragging
   const isUserInteractingWithWheelRef = useRef(false);
@@ -206,7 +218,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
         const hex = c.hex.toUpperCase();
         lastWheelHexRef.current = hex;
 
-        // 1. Direct Instant DOM Updates (0ms latency)
+        // 1. Direct Instant DOM Updates (0ms latency, zero reflow)
         if (hexInputRef.current && document.activeElement !== hexInputRef.current) {
           hexInputRef.current.value = hex.replace(/^#/, '');
         }
@@ -220,12 +232,23 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
           sliderDotRef.current.style.backgroundColor = hex;
         }
 
-        // 2. Continuous live drag updates to parent throttled at 60/120fps via rAF
+        // 2. Throttled parent notification (~30ms / 33Hz) to prevent CPU starvation on low-end devices
         pendingColorRef.current = hex;
-        if (!rafColorIdRef.current) {
+        const now = performance.now();
+        const elapsed = now - lastColorEmitTimeRef.current;
+
+        if (elapsed >= EMIT_THROTTLE_MS) {
+          lastColorEmitTimeRef.current = now;
+          if (rafColorIdRef.current) {
+            cancelAnimationFrame(rafColorIdRef.current);
+            rafColorIdRef.current = null;
+          }
+          onColorChangeRef.current?.(hex);
+        } else if (!rafColorIdRef.current) {
           rafColorIdRef.current = requestAnimationFrame(() => {
             rafColorIdRef.current = null;
             if (pendingColorRef.current) {
+              lastColorEmitTimeRef.current = performance.now();
               onColorChangeRef.current?.(pendingColorRef.current);
             }
           });
@@ -310,17 +333,15 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
     }
   };
 
-  // Smooth tactile Opacity Slider calculation with zero-delay direct DOM updates and continuous rAF updates
-  const updateOpacityFromClientX = useCallback((clientX: number) => {
-    if (!sliderTrackRef.current) return;
-    const rect = sliderTrackRef.current.getBoundingClientRect();
-    if (rect.width <= 0) return;
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  // Smooth tactile Opacity Slider calculation with cached bounds (0 layout thrashing) and GPU translate3d acceleration
+  const updateOpacityFromClientX = useCallback((clientX: number, bounds: CachedTrackBounds) => {
+    if (bounds.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - bounds.left) / bounds.width));
     const newOpacity = Number((0.10 + ratio * 0.90).toFixed(2));
 
-    // Direct DOM updates for thumb, dot and label
+    // 1. GPU Hardware Accelerated translate3d update on the compositor thread
     if (sliderThumbRef.current) {
-      sliderThumbRef.current.style.left = `calc(9px + (100% - 18px) * ${ratio})`;
+      sliderThumbRef.current.style.transform = `translate3d(calc(9px + (${bounds.width}px - 18px) * ${ratio}), -50%, 0)`;
     }
     if (sliderDotRef.current) {
       sliderDotRef.current.style.opacity = String(newOpacity);
@@ -329,12 +350,23 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
       opacityTextRef.current.innerText = `${Math.round(newOpacity * 100)}%`;
     }
 
-    // Schedule continuous live parent update
+    // 2. Throttled parent notification (~30ms) to preserve CPU performance on low-end phones
     pendingOpacityRef.current = newOpacity;
-    if (!rafOpacityIdRef.current) {
+    const now = performance.now();
+    const elapsed = now - lastOpacityEmitTimeRef.current;
+
+    if (elapsed >= EMIT_THROTTLE_MS) {
+      lastOpacityEmitTimeRef.current = now;
+      if (rafOpacityIdRef.current) {
+        cancelAnimationFrame(rafOpacityIdRef.current);
+        rafOpacityIdRef.current = null;
+      }
+      onOpacityChangeRef.current?.(newOpacity);
+    } else if (!rafOpacityIdRef.current) {
       rafOpacityIdRef.current = requestAnimationFrame(() => {
         rafOpacityIdRef.current = null;
         if (pendingOpacityRef.current !== null) {
+          lastOpacityEmitTimeRef.current = performance.now();
           onOpacityChangeRef.current?.(pendingOpacityRef.current);
         }
       });
@@ -344,20 +376,29 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   const handleSliderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+
+    if (!sliderTrackRef.current) return;
+    // Measure bounding client rect ONCE at pointerdown to completely prevent layout thrashing inside pointermove
+    const rect = sliderTrackRef.current.getBoundingClientRect();
+    const bounds: CachedTrackBounds = { left: rect.left, width: rect.width };
+    cachedSliderBoundsRef.current = bounds;
+
     isDraggingSliderRef.current = true;
-    updateOpacityFromClientX(e.clientX);
+    updateOpacityFromClientX(e.clientX, bounds);
 
     const onMove = (moveEv: PointerEvent) => {
-      if (!isDraggingSliderRef.current) return;
+      if (!isDraggingSliderRef.current || !cachedSliderBoundsRef.current) return;
       moveEv.preventDefault();
-      updateOpacityFromClientX(moveEv.clientX);
+      updateOpacityFromClientX(moveEv.clientX, cachedSliderBoundsRef.current);
     };
 
-    const onUp = (upEv: PointerEvent) => {
+    const onUp = () => {
       isDraggingSliderRef.current = false;
+      cachedSliderBoundsRef.current = null;
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
+
       if (rafOpacityIdRef.current) {
         cancelAnimationFrame(rafOpacityIdRef.current);
         rafOpacityIdRef.current = null;
@@ -525,12 +566,13 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                       />
                     </div>
 
-                    {/* Prominent Thumb Circle */}
+                    {/* Prominent Thumb Circle - Hardware GPU Accelerated via translate3d */}
                     <div
                       ref={sliderThumbRef}
-                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[18px] h-[18px] rounded-full bg-white border-2 border-[#0E2A54] ring-1 ring-white/70 pointer-events-none transition-transform active:scale-110 flex items-center justify-center"
+                      className="absolute top-1/2 left-0 -translate-x-1/2 w-[18px] h-[18px] rounded-full bg-white border-2 border-[#0E2A54] ring-1 ring-white/70 pointer-events-none transition-transform active:scale-110 flex items-center justify-center"
                       style={{
-                        left: `calc(9px + (100% - 18px) * ${opacityRatio})`,
+                        transform: `translate3d(calc(9px + (100% - 18px) * ${opacityRatio}), -50%, 0)`,
+                        willChange: 'transform',
                       }}
                     >
                       {/* Inner dot with live color and opacity */}

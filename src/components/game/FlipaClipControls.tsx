@@ -23,6 +23,8 @@ interface DragState {
   currentVal: number;
 }
 
+const EMIT_THROTTLE_MS = 30; // ~33Hz safe throttle for canvas / drawing board state re-renders
+
 export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
   tool,
   color,
@@ -45,11 +47,14 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
   const onColorChangeRef = useRef(onColorChange);
   onColorChangeRef.current = onColorChange;
 
-  // rAF throttling refs for ultra-smooth 60/120fps live drag handling
-  const rafWidthIdRef = useRef<number | null>(null);
+  // Throttled data update refs (~30ms) for low-end device optimization
+  const lastWidthEmitTimeRef = useRef<number>(0);
   const pendingWidthRef = useRef<number | null>(null);
-  const rafOpacityIdRef = useRef<number | null>(null);
+  const rafWidthIdRef = useRef<number | null>(null);
+
+  const lastOpacityEmitTimeRef = useRef<number>(0);
   const pendingOpacityRef = useRef<number | null>(null);
+  const rafOpacityIdRef = useRef<number | null>(null);
 
   // Active window cleanup tracker to prevent dangling listeners
   const activeCleanupRef = useRef<(() => void) | null>(null);
@@ -114,6 +119,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
       const delta = Math.round(deltaY / sensitivity);
       const newWidth = Math.max(minWidth, Math.min(maxWidth, startVal + delta));
 
+      // Visual indicator follows finger immediately (GPU transform)
       setDragState({
         type: 'size',
         startY,
@@ -122,11 +128,23 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
         currentVal: newWidth,
       });
 
+      // Data update throttled (~30ms) to avoid locking CPU during rapid swipes
       pendingWidthRef.current = newWidth;
-      if (!rafWidthIdRef.current) {
+      const now = performance.now();
+      const elapsed = now - lastWidthEmitTimeRef.current;
+
+      if (elapsed >= EMIT_THROTTLE_MS) {
+        lastWidthEmitTimeRef.current = now;
+        if (rafWidthIdRef.current) {
+          cancelAnimationFrame(rafWidthIdRef.current);
+          rafWidthIdRef.current = null;
+        }
+        onWidthChangeRef.current(newWidth);
+      } else if (!rafWidthIdRef.current) {
         rafWidthIdRef.current = requestAnimationFrame(() => {
           rafWidthIdRef.current = null;
           if (pendingWidthRef.current !== null) {
+            lastWidthEmitTimeRef.current = performance.now();
             onWidthChangeRef.current(pendingWidthRef.current);
           }
         });
@@ -206,6 +224,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
         const delta = deltaY / sensitivity;
         const newOpacity = Math.max(minOpacity, Math.min(maxOpacity, Number((startOpacity + delta).toFixed(2))));
 
+        // Visual indicator follows finger immediately
         setDragState({
           type: 'opacity',
           startY,
@@ -214,11 +233,23 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
           currentVal: newOpacity,
         });
 
+        // Data update throttled (~30ms) for smooth performance
         pendingOpacityRef.current = newOpacity;
-        if (!rafOpacityIdRef.current) {
+        const now = performance.now();
+        const elapsed = now - lastOpacityEmitTimeRef.current;
+
+        if (elapsed >= EMIT_THROTTLE_MS) {
+          lastOpacityEmitTimeRef.current = now;
+          if (rafOpacityIdRef.current) {
+            cancelAnimationFrame(rafOpacityIdRef.current);
+            rafOpacityIdRef.current = null;
+          }
+          onOpacityChangeRef.current(newOpacity);
+        } else if (!rafOpacityIdRef.current) {
           rafOpacityIdRef.current = requestAnimationFrame(() => {
             rafOpacityIdRef.current = null;
             if (pendingOpacityRef.current !== null) {
+              lastOpacityEmitTimeRef.current = performance.now();
               onOpacityChangeRef.current(pendingOpacityRef.current);
             }
           });
@@ -339,24 +370,23 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
         />
       )}
 
-      {/* 3. Floating Portal Preview: Rendered directly to body with z-[9999] */}
+      {/* 3. Floating Portal Preview: Rendered directly to body with GPU Hardware Acceleration (translate3d) */}
       {dragState !== null && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed pointer-events-none z-[9999] select-none flex flex-col items-center"
+          className="fixed top-0 left-0 pointer-events-none z-[9999] select-none flex flex-col items-center"
           style={{
-            left: `${dragState.clientX - 68}px`,
-            top: `${dragState.clientY - 42}px`,
-            transform: 'translate(-50%, -50%)',
+            transform: `translate3d(${dragState.clientX - 68}px, ${dragState.clientY - 42}px, 0) translate(-50%, -50%)`,
+            willChange: 'transform',
           }}
         >
           {/* Single Clean Numerical Counter Pill */}
-          <div className="mb-2 bg-black/90 text-white font-black text-xs px-2.5 py-1 rounded-md border border-white/20 whitespace-nowrap">
+          <div className="mb-2 bg-black/90 text-white font-black text-xs px-2.5 py-1 rounded-md border border-white/20 whitespace-nowrap shadow-lg">
             {dragState.type === 'size' ? `${Math.round(displayVal)}px` : `${Math.round(displayVal * 100)}%`}
           </div>
 
           {/* Floating Shape Preview */}
           {dragState.type === 'size' ? (
-            <div className="w-[56px] h-[56px] rounded-full bg-[#0B3B75] border-2 border-white/40 flex items-center justify-center overflow-hidden">
+            <div className="w-[56px] h-[56px] rounded-full bg-[#0B3B75] border-2 border-white/40 flex items-center justify-center overflow-hidden shadow-xl">
               <div
                 className="rounded-full bg-white"
                 style={{
@@ -366,7 +396,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
               />
             </div>
           ) : (
-            <div className="w-[56px] h-[56px] rounded-[14px] bg-[#0B3B75] border-2 border-white/40 p-[6px] flex items-center justify-center">
+            <div className="w-[56px] h-[56px] rounded-[14px] bg-[#0B3B75] border-2 border-white/40 p-[6px] flex items-center justify-center shadow-xl">
               <div
                 className="w-full h-full rounded-[8px] border border-black/20"
                 style={{
