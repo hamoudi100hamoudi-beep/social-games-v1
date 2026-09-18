@@ -28,6 +28,18 @@ const LOGICAL_WIDTH = CANVAS_WIDTH;
 const LOGICAL_HEIGHT = CANVAS_HEIGHT;
 
 // --- Performance and DPR Tiering ---
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG:
+ * Tests if Free Draw pinch/zoom-out lag is specifically caused by GPU alpha compositing
+ * of transparent canvases over the transformed viewport.
+ * When enabled (true):
+ * - On 2-finger pinch start, a temporary opaque white canvas snapshots the current drawing.
+ * - The diagnostic canvas is shown while transparent canvases are hidden via display='none'.
+ * - On pinch end, the diagnostic canvas is hidden and original canvases are restored instantly.
+ * Default: false.
+ */
+export const FREE_DRAW_OPAQUE_PINCH_TEST = false;
+
 const getPerformanceTier = () => {
   if (typeof window === 'undefined') return 1;
   try {
@@ -431,6 +443,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const isZoomPinchingRef = useRef(false);
   const redrawRequestedRef = useRef(false);
 
+  // 🧪 Diagnostic Canvas Ref for FREE_DRAW_OPAQUE_PINCH_TEST
+  const diagnosticCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDiagnosticActiveRef = useRef(false);
+
   // Safe Edge Stroke Entry refs (تتبع الرسم عند البدء من خارج حدود اللوحة وسحب الإصبع لداخلها)
   const lastOutsideTouchRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const touchStartedOutsideRef = useRef(false);
@@ -617,6 +633,37 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         e.preventDefault();
         isPinching = true;
         isZoomPinchingRef.current = true;
+
+        // 🧪 FREE_DRAW_OPAQUE_PINCH_TEST: Snapshot to opaque white canvas & hide transparent canvases
+        if (FREE_DRAW_OPAQUE_PINCH_TEST && propsRef.current.isFreeDraw) {
+          const mainCanvas = canvasRef.current;
+          const tempCanvas = tempCanvasRef.current;
+          const diagCanvas = diagnosticCanvasRef.current;
+          if (mainCanvas && diagCanvas) {
+            if (diagCanvas.width !== mainCanvas.width || diagCanvas.height !== mainCanvas.height) {
+              diagCanvas.width = mainCanvas.width;
+              diagCanvas.height = mainCanvas.height;
+            }
+            const diagCtx = diagCanvas.getContext('2d', { alpha: false });
+            if (diagCtx) {
+              diagCtx.save();
+              diagCtx.setTransform(1, 0, 0, 1, 0, 0);
+              diagCtx.fillStyle = '#ffffff';
+              diagCtx.fillRect(0, 0, diagCanvas.width, diagCanvas.height);
+              diagCtx.drawImage(mainCanvas, 0, 0);
+              if (tempCanvas) {
+                diagCtx.drawImage(tempCanvas, 0, 0);
+              }
+              diagCtx.restore();
+            }
+            diagCanvas.style.display = 'block';
+            mainCanvas.style.display = 'none';
+            if (tempCanvas) {
+              tempCanvas.style.display = 'none';
+            }
+            isDiagnosticActiveRef.current = true;
+          }
+        }
 
         const t1 = e.touches[0];
         const t2 = e.touches[1];
@@ -854,6 +901,24 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         touchStartDist = 0;
         cachedContainerRect = null;
         flushPendingTransform();
+
+        // 🧪 FREE_DRAW_OPAQUE_PINCH_TEST: Hide diagnostic canvas & restore original transparent canvases
+        if (isDiagnosticActiveRef.current) {
+          const mainCanvas = canvasRef.current;
+          const tempCanvas = tempCanvasRef.current;
+          const diagCanvas = diagnosticCanvasRef.current;
+          if (diagCanvas) {
+            diagCanvas.style.display = 'none';
+          }
+          if (mainCanvas) {
+            mainCanvas.style.display = 'block';
+          }
+          if (tempCanvas) {
+            tempCanvas.style.display = 'block';
+          }
+          isDiagnosticActiveRef.current = false;
+        }
+
         // Keep zoom-is-pinching true for 100ms path stabilization after pinch ends
         setTimeout(() => {
           isZoomPinchingRef.current = false;
@@ -870,6 +935,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (gestureRafId !== null) {
         cancelAnimationFrame(gestureRafId);
         gestureRafId = null;
+      }
+      if (isDiagnosticActiveRef.current) {
+        const mainCanvas = canvasRef.current;
+        const tempCanvas = tempCanvasRef.current;
+        const diagCanvas = diagnosticCanvasRef.current;
+        if (diagCanvas) diagCanvas.style.display = 'none';
+        if (mainCanvas) mainCanvas.style.display = 'block';
+        if (tempCanvas) tempCanvas.style.display = 'block';
+        isDiagnosticActiveRef.current = false;
       }
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
@@ -2770,6 +2844,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           className={`absolute inset-0 w-full h-full block pointer-events-none touch-none bg-transparent ${readOnly ? 'object-contain' : ''}`}
           style={{
             zIndex: 20
+          }}
+        />
+        {/* 🧪 Diagnostic Canvas for FREE_DRAW_OPAQUE_PINCH_TEST */}
+        <canvas
+          id="drawing-board-layer-diagnostic-opaque"
+          ref={diagnosticCanvasRef}
+          className="absolute inset-0 w-full h-full pointer-events-none touch-none bg-white"
+          style={{
+            zIndex: 15,
+            display: 'none'
           }}
         />
       </div>
