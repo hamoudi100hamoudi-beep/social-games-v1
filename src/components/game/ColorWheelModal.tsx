@@ -295,6 +295,21 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
     }
   }, [color, setWheelColorSafely]);
 
+  // Sync opacity from external sources (e.g. dragging the toolbar opacity square on drawing page)
+  useEffect(() => {
+    if (isDraggingSliderRef.current) return;
+    const ratio = Math.max(0, Math.min(1, (opacity - 0.10) / 0.90));
+    if (sliderThumbRef.current) {
+      sliderThumbRef.current.style.left = `${(ratio * 100).toFixed(2)}%`;
+    }
+    if (sliderDotRef.current) {
+      sliderDotRef.current.style.opacity = String(opacity);
+    }
+    if (opacityTextRef.current) {
+      opacityTextRef.current.innerText = `${Math.round(opacity * 100)}%`;
+    }
+  }, [opacity]);
+
   // Handle saving current color to palette
   const handleSaveColor = () => {
     const hex = color.toUpperCase();
@@ -341,7 +356,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
 
     // 1. GPU Hardware Accelerated translate3d update on the compositor thread
     if (sliderThumbRef.current) {
-      sliderThumbRef.current.style.transform = `translate3d(calc(9px + (${bounds.width}px - 18px) * ${ratio}), -50%, 0)`;
+      sliderThumbRef.current.style.left = `${(ratio * 100).toFixed(2)}%`;
     }
     if (sliderDotRef.current) {
       sliderDotRef.current.style.opacity = String(newOpacity);
@@ -378,6 +393,10 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
     e.stopPropagation();
 
     if (!sliderTrackRef.current) return;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch (_) {}
+
     // Measure bounding client rect ONCE at pointerdown to completely prevent layout thrashing inside pointermove
     const rect = sliderTrackRef.current.getBoundingClientRect();
     const bounds: CachedTrackBounds = { left: rect.left, width: rect.width };
@@ -385,34 +404,32 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
 
     isDraggingSliderRef.current = true;
     updateOpacityFromClientX(e.clientX, bounds);
+  };
 
-    const onMove = (moveEv: PointerEvent) => {
-      if (!isDraggingSliderRef.current || !cachedSliderBoundsRef.current) return;
-      moveEv.preventDefault();
-      updateOpacityFromClientX(moveEv.clientX, cachedSliderBoundsRef.current);
-    };
+  const handleSliderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingSliderRef.current || !cachedSliderBoundsRef.current) return;
+    e.preventDefault();
+    updateOpacityFromClientX(e.clientX, cachedSliderBoundsRef.current);
+  };
 
-    const onUp = () => {
-      isDraggingSliderRef.current = false;
-      cachedSliderBoundsRef.current = null;
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
+  const handleSliderPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingSliderRef.current) return;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (_) {}
 
-      if (rafOpacityIdRef.current) {
-        cancelAnimationFrame(rafOpacityIdRef.current);
-        rafOpacityIdRef.current = null;
-      }
-      if (pendingOpacityRef.current !== null) {
-        const finalOp = pendingOpacityRef.current;
-        pendingOpacityRef.current = null;
-        onOpacityChangeRef.current?.(finalOp);
-      }
-    };
+    isDraggingSliderRef.current = false;
+    cachedSliderBoundsRef.current = null;
 
-    window.addEventListener('pointermove', onMove, { passive: false });
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    if (rafOpacityIdRef.current) {
+      cancelAnimationFrame(rafOpacityIdRef.current);
+      rafOpacityIdRef.current = null;
+    }
+    if (pendingOpacityRef.current !== null) {
+      const finalOp = pendingOpacityRef.current;
+      pendingOpacityRef.current = null;
+      onOpacityChangeRef.current?.(finalOp);
+    }
   };
 
   if (typeof document === 'undefined') return null;
@@ -544,7 +561,10 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                   <div
                     ref={sliderTrackRef}
                     onPointerDown={handleSliderPointerDown}
-                    className="relative w-full h-6 flex items-center cursor-pointer select-none touch-none px-1"
+                    onPointerMove={handleSliderPointerMove}
+                    onPointerUp={handleSliderPointerUp}
+                    onPointerCancel={handleSliderPointerUp}
+                    className="relative w-full h-7 flex items-center cursor-pointer select-none touch-none px-2"
                   >
                     {/* Thin sleek bar track (height 6px) */}
                     <div className="relative w-full h-1.5 rounded-full overflow-hidden border border-white/25 pointer-events-none">
@@ -566,19 +586,19 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                       />
                     </div>
 
-                    {/* Prominent Thumb Circle - Hardware GPU Accelerated via translate3d */}
+                    {/* Prominent Thumb Circle - Hardware GPU Accelerated via left % & transform */}
                     <div
                       ref={sliderThumbRef}
-                      className="absolute top-1/2 left-0 -translate-x-1/2 w-5 h-5 rounded-full bg-white border-2 border-[#0E2A54] ring-1 ring-white/70 pointer-events-none transition-transform active:scale-110 flex items-center justify-center z-10"
+                      className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white border-2 border-[#0E2A54] ring-1 ring-white/70 pointer-events-none transition-transform active:scale-110 flex items-center justify-center z-10"
                       style={{
-                        transform: `translate3d(calc(9px + (100% - 18px) * ${opacityRatio}), -50%, 0)`,
-                        willChange: 'transform',
+                        left: `${(opacityRatio * 100).toFixed(2)}%`,
+                        willChange: 'left',
                       }}
                     >
                       {/* Inner dot with live color and opacity */}
                       <div
                         ref={sliderDotRef}
-                        className="w-2 h-2 rounded-full"
+                        className="w-2 h-2 rounded-full pointer-events-none"
                         style={{ backgroundColor: color, opacity: opacity }}
                       />
                     </div>
