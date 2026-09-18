@@ -40,6 +40,18 @@ const LOGICAL_HEIGHT = CANVAS_HEIGHT;
  */
 export const FREE_DRAW_OPAQUE_PINCH_TEST = false;
 
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG:
+ * Tests if Free Draw low-zoom lag is specifically caused by the presence / compositing
+ * of the transformWrapper surface itself.
+ * When enabled (true):
+ * - transformWrapperRef is hidden from rendering/compositing (visibility: hidden)
+ *   so its visual surface and children do not participate in rendering or GPU compositing,
+ *   while preserving the surrounding layout, toolbar, and controls completely unchanged.
+ * Default: false.
+ */
+export const FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST = false;
+
 const getPerformanceTier = () => {
   if (typeof window === 'undefined') return 1;
   try {
@@ -2798,12 +2810,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           width: '100%',
           height: '100%',
           transformOrigin: '0 0',
-          willChange: 'transform'
+          willChange: 'transform',
+          ...(FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST ? { visibility: 'hidden' as const } : {})
         } : {
           width: LOGICAL_WIDTH,
           height: LOGICAL_HEIGHT,
           transformOrigin: '0 0',
-          willChange: 'transform'
+          willChange: 'transform',
+          ...(FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST ? { visibility: 'hidden' as const } : {})
         }}
       >
 
