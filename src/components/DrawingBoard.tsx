@@ -3,7 +3,7 @@
  * This component handles the UI layers, menus, toolbar controls and palette bindings,
  * delegating the high-performance drawing actions to the isolated DrawingCanvasCore.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { 
   Pencil, Eraser, Undo2, Redo2, FileX, RefreshCcw, 
   Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2, ZoomIn,
@@ -213,6 +213,17 @@ export default function DrawingBoard({
     setActiveMenu(null);
   };
 
+  const handleHistoryStateChange = useCallback((idx: number, len: number) => {
+    setHistoryState({ index: idx, length: len });
+    onHistoryLengthChange?.(idx > 0);
+  }, [onHistoryLengthChange]);
+
+  const handlePipetteColorPicked = useCallback((hex: string) => {
+    setColor(hex);
+    if (tool === 'pipette') {
+      changeTool(previousTool.current);
+    }
+  }, [tool]);
   const currentWidth = tool === 'eraser' ? eraserWidth : penWidth;
   const currentOpacity = tool === 'eraser' ? eraserOpacity : (tool === 'bucket' ? bucketOpacity : penOpacity);
 
@@ -287,16 +298,8 @@ export default function DrawingBoard({
           status={status}
           isZoomEnabled={zoomEnabled}
           isFreeDraw={isFreeDraw}
-          onHistoryStateChange={(idx, len) => {
-            setHistoryState({ index: idx, length: len });
-            onHistoryLengthChange?.(idx > 0);
-          }}
-          onPipetteColorPicked={(hex) => {
-            setColor(hex);
-            if (tool === 'pipette') {
-              changeTool(previousTool.current);
-            }
-          }}
+          onHistoryStateChange={handleHistoryStateChange}
+          onPipetteColorPicked={handlePipetteColorPicked}
           onSyncStateChange={onSyncStateChange}
         />
 

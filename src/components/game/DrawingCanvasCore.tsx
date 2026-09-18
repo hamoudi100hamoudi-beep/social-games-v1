@@ -2890,4 +2890,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
 DrawingCanvasCore.displayName = 'DrawingCanvasCore';
 
-export default DrawingCanvasCore;
+const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, nextProps) => {
+  // We decouple rapid brush/color updates from triggering heavy React reconciliations
+  // of the massive DrawingCanvasCore JSX tree, because DrawingCanvasCore reads dynamic
+  // live drawing parameters (color, thickness, opacity) synchronously from its internal propsRef.
+  return (
+    prevProps.readOnly === nextProps.readOnly &&
+    prevProps.tool === nextProps.tool &&
+    prevProps.currentDrawerId === nextProps.currentDrawerId &&
+    prevProps.status === nextProps.status &&
+    prevProps.isZoomEnabled === nextProps.isZoomEnabled &&
+    prevProps.isFreeDraw === nextProps.isFreeDraw &&
+    prevProps.deferredReset === nextProps.deferredReset &&
+    prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
+    prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&
+    prevProps.onSyncStateChange === nextProps.onSyncStateChange
+  );
+});
+
+export default MemoizedDrawingCanvasCore;
