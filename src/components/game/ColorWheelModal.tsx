@@ -544,10 +544,10 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                   <div
                     ref={sliderTrackRef}
                     onPointerDown={handleSliderPointerDown}
-                    className="relative w-full h-5 flex items-center cursor-pointer select-none touch-none px-1"
+                    className="relative w-full h-6 flex items-center cursor-pointer select-none touch-none px-1"
                   >
                     {/* Thin sleek bar track (height 6px) */}
-                    <div className="relative w-full h-1.5 rounded-full overflow-hidden border border-white/25">
+                    <div className="relative w-full h-1.5 rounded-full overflow-hidden border border-white/25 pointer-events-none">
                       {/* Checkerboard Pattern */}
                       <div
                         className="absolute inset-0"
@@ -569,7 +569,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                     {/* Prominent Thumb Circle - Hardware GPU Accelerated via translate3d */}
                     <div
                       ref={sliderThumbRef}
-                      className="absolute top-1/2 left-0 -translate-x-1/2 w-[18px] h-[18px] rounded-full bg-white border-2 border-[#0E2A54] ring-1 ring-white/70 pointer-events-none transition-transform active:scale-110 flex items-center justify-center"
+                      className="absolute top-1/2 left-0 -translate-x-1/2 w-5 h-5 rounded-full bg-white border-2 border-[#0E2A54] ring-1 ring-white/70 pointer-events-none transition-transform active:scale-110 flex items-center justify-center z-10"
                       style={{
                         transform: `translate3d(calc(9px + (100% - 18px) * ${opacityRatio}), -50%, 0)`,
                         willChange: 'transform',
