@@ -287,6 +287,7 @@ interface DrawingCanvasCoreProps {
   enableBitmapUndoCache?: boolean;
   enableFixedDPR?: boolean;
   enableCanvasAlpha?: boolean;
+  enableDestinationOutEraser?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -307,7 +308,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     enableInputOptimizations = false,
     enableBitmapUndoCache = false,
     enableFixedDPR = false,
-    enableCanvasAlpha = false
+    enableCanvasAlpha = false,
+    enableDestinationOutEraser = false
   },
   ref
 ) => {
@@ -511,11 +513,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -1216,7 +1218,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeCtx.globalAlpha = drawOpacity;
 
     if (drawTool === 'eraser') {
-      if (propsRef.current.isFreeDraw && activeCtx !== tempCtxRef.current) {
+      if ((propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser) && activeCtx !== tempCtxRef.current) {
         activeCtx.globalCompositeOperation = 'destination-out';
         activeCtx.strokeStyle = 'rgba(0,0,0,1)';
         activeCtx.fillStyle = 'rgba(0,0,0,1)';
@@ -1323,7 +1325,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeCtx.globalAlpha = drawOpacity;
 
     if (drawTool === 'eraser') {
-      if (propsRef.current.isFreeDraw && activeCtx !== tempCtxRef.current) {
+      if ((propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser) && activeCtx !== tempCtxRef.current) {
         activeCtx.globalCompositeOperation = 'destination-out';
         activeCtx.strokeStyle = 'rgba(0,0,0,1)';
         activeCtx.fillStyle = 'rgba(0,0,0,1)';
@@ -2942,6 +2944,7 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.enableBitmapUndoCache === nextProps.enableBitmapUndoCache &&
     prevProps.enableFixedDPR === nextProps.enableFixedDPR &&
     prevProps.enableCanvasAlpha === nextProps.enableCanvasAlpha &&
+    prevProps.enableDestinationOutEraser === nextProps.enableDestinationOutEraser &&
     prevProps.deferredReset === nextProps.deferredReset &&
     prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
     prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&

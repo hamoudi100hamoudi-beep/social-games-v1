@@ -82,6 +82,18 @@ export const EXPERIMENTAL_DPR_1_TEST = true;
  */
 export const EXPERIMENTAL_CANVAS_ALPHA_TEST = true;
 
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 5 - Destination-Out Eraser):
+ * Tests if using native destination-out compositing for the Eraser tool
+ * (clearing canvas pixels to transparent instead of drawing solid white #ffffff)
+ * in Experimental Draw triggers low-zoom lag or performance degradation.
+ *
+ * When true: Experimental Draw uses globalCompositeOperation = 'destination-out' for eraser.
+ * When false: Experimental Draw paints solid #ffffff for eraser.
+ * Default: true for final diagnostic test.
+ */
+export const EXPERIMENTAL_DESTINATION_OUT_ERASER_TEST = true;
+
 const LOGICAL_HEIGHT = 430;
 
 export interface ExperimentalDrawingBoardProps {
@@ -365,6 +377,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           enableBitmapUndoCache={Boolean(isExperimental && EXPERIMENTAL_BITMAP_UNDO_TEST)}
           enableFixedDPR={Boolean(isExperimental && EXPERIMENTAL_DPR_1_TEST)}
           enableCanvasAlpha={Boolean(isExperimental && EXPERIMENTAL_CANVAS_ALPHA_TEST)}
+          enableDestinationOutEraser={Boolean(isExperimental && EXPERIMENTAL_DESTINATION_OUT_ERASER_TEST)}
           onHistoryStateChange={(idx, len) => {
             setHistoryState({ index: idx, length: len });
             onHistoryLengthChange?.(idx > 0);
