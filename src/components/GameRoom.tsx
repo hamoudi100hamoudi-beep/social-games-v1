@@ -221,6 +221,39 @@ const SmoothTimer = ({
   );
 };
 
+// 🛡️ Isolated Micro-Badge Component (Re-renders ONLY itself when unread count changes, 0 re-renders for GameRoom/Canvas)
+export interface UnreadBadgeHandle {
+  setCount: (count: number) => void;
+}
+
+export const UnreadBadge = React.memo(
+  React.forwardRef<UnreadBadgeHandle, { initialCount?: number; className?: string }>(
+    ({ initialCount = 0, className = "px-1.5 py-0.5" }, ref) => {
+      const [count, setCount] = React.useState(initialCount);
+
+      React.useImperativeHandle(
+        ref,
+        () => ({
+          setCount: (newCount: number) => {
+            setCount(newCount);
+          },
+        }),
+        [],
+      );
+
+      if (count <= 0) return null;
+
+      return (
+        <div
+          className={`absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] sm:text-[11px] font-bold rounded-full border-2 border-slate-200 pointer-events-none select-none z-10 ${className}`}
+        >
+          {count > 9 ? "+9" : count}
+        </div>
+      );
+    },
+  ),
+);
+
 // 🎬 2️⃣ Cinematic Flow & Stagger Animation Variants
 const cinematicCardVariants = {
   hidden: { opacity: 0, scale: 0.94, y: 40 },
@@ -357,16 +390,6 @@ export default function GameRoom({
     setActiveDrawers((prev) => prev.filter((id) => id !== myId && id !== socketId && id !== persistentPlayerId));
   };
 
-  const openChat = () => {
-    if (chatMessagesRef.current.length > 0 && chatMessagesRef.current !== chatMessages) {
-      setChatMessages(chatMessagesRef.current);
-    }
-    setIsChatOpen(true);
-    isChatOpenRef.current = true;
-    setUnreadCount(0);
-    unreadCountRef.current = 0;
-  };
-
   const closeChat = () => {
     setIsChatOpen(false);
     isChatOpenRef.current = false;
@@ -388,6 +411,24 @@ export default function GameRoom({
   const currentPlayersRef = React.useRef<PlayerSlot[]>([]);
   const unreadCountRef = React.useRef<number>(0);
   const isChatOpenRef = React.useRef<boolean>(false);
+  const unreadBadgeTopRef = React.useRef<UnreadBadgeHandle>(null);
+  const unreadBadgeSideRef = React.useRef<UnreadBadgeHandle>(null);
+
+  const updateUnreadBadges = React.useCallback((count: number) => {
+    unreadBadgeTopRef.current?.setCount(count);
+    unreadBadgeSideRef.current?.setCount(count);
+  }, []);
+
+  const openChat = () => {
+    if (chatMessagesRef.current.length > 0 && chatMessagesRef.current !== chatMessages) {
+      setChatMessages(chatMessagesRef.current);
+    }
+    setIsChatOpen(true);
+    isChatOpenRef.current = true;
+    unreadCountRef.current = 0;
+    updateUnreadBadges(0);
+    setUnreadCount(0);
+  };
 
   React.useEffect(() => {
     chatMessagesRef.current = chatMessages;
@@ -664,6 +705,7 @@ export default function GameRoom({
       if (unreadCountRef.current > 0 && unreadCountRef.current !== unreadCount) {
         setUnreadCount(unreadCountRef.current);
       }
+      updateUnreadBadges(unreadCountRef.current);
       if (guessesRef.current.length > 0 && guessesRef.current !== guesses) {
         setGuesses(guessesRef.current);
       }
@@ -671,7 +713,7 @@ export default function GameRoom({
         setCurrentPlayers(currentPlayersRef.current);
       }
     }
-  }, [isDrawingMode]);
+  }, [isDrawingMode, updateUnreadBadges]);
 
   // ⏱️ Single Unified SmoothTimer Slot targets & active container
   const [drawerTimerSlotEl, setDrawerTimerSlotEl] = useState<HTMLDivElement | null>(null);
@@ -1020,6 +1062,8 @@ export default function GameRoom({
 
       if (!isChatOpenRef.current) {
         unreadCountRef.current += 1;
+        // Update isolated badge imperatively without triggering GameRoom re-render
+        updateUnreadBadges(unreadCountRef.current);
         // For Drawer in Free Draw when isolated: keep unreadCount in ref (no rerender) until chat opens or turn ends
         if (!isFreeDrawIsolatedRef.current) {
           setUnreadCount(unreadCountRef.current);
@@ -1682,11 +1726,7 @@ export default function GameRoom({
                       className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all border border-black/10 relative cursor-pointer"
                     >
                       <MessageSquare size={18} />
-                      {unreadCount > 0 && (
-                        <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full border-2 border-slate-200">
-                          {unreadCount > 9 ? "+9" : unreadCount}
-                        </div>
-                      )}
+                      <UnreadBadge ref={unreadBadgeTopRef} initialCount={unreadCountRef.current} className="px-1.5 py-0.5" />
                     </button>
                   </div>
                 </div>
@@ -1932,11 +1972,7 @@ export default function GameRoom({
                     className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all border border-white/10 relative"
                   >
                     <MessageSquare size={16} />
-                    {unreadCount > 0 && (
-                      <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] sm:text-[11px] font-bold px-1 py-0.5 rounded-full border-2 border-slate-200">
-                        {unreadCount > 9 ? "+9" : unreadCount}
-                      </div>
-                    )}
+                    <UnreadBadge ref={unreadBadgeSideRef} initialCount={unreadCountRef.current} className="px-1 py-0.5" />
                   </button>
                 </div>
               </div>
