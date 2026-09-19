@@ -69,6 +69,19 @@ export const EXPERIMENTAL_BITMAP_UNDO_TEST = true;
  */
 export const EXPERIMENTAL_DPR_1_TEST = true;
 
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 4 - Option B: Canvas Alpha + Transparent Background):
+ * Tests if switching the Primary Drawing Canvas 2D context to alpha: true and CSS background to bg-transparent
+ * (matching Free Draw's compositing model while container provides the solid white background)
+ * induces low-zoom interaction lag.
+ * Note: Eraser logic is completely untouched and continues writing solid white (#ffffff).
+ *
+ * When true: Experimental Draw sets primary canvas to alpha: true and CSS to bg-transparent.
+ * When false: Experimental Draw sets primary canvas to alpha: false with CSS bg-white.
+ * Default: true for Option B diagnostic test.
+ */
+export const EXPERIMENTAL_CANVAS_ALPHA_TEST = true;
+
 const LOGICAL_HEIGHT = 430;
 
 export interface ExperimentalDrawingBoardProps {
@@ -351,6 +364,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           enableInputOptimizations={Boolean(isExperimental && EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST)}
           enableBitmapUndoCache={Boolean(isExperimental && EXPERIMENTAL_BITMAP_UNDO_TEST)}
           enableFixedDPR={Boolean(isExperimental && EXPERIMENTAL_DPR_1_TEST)}
+          enableCanvasAlpha={Boolean(isExperimental && EXPERIMENTAL_CANVAS_ALPHA_TEST)}
           onHistoryStateChange={(idx, len) => {
             setHistoryState({ index: idx, length: len });
             onHistoryLengthChange?.(idx > 0);

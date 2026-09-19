@@ -286,6 +286,7 @@ interface DrawingCanvasCoreProps {
   enableInputOptimizations?: boolean;
   enableBitmapUndoCache?: boolean;
   enableFixedDPR?: boolean;
+  enableCanvasAlpha?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -305,7 +306,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     isFreeDraw = false,
     enableInputOptimizations = false,
     enableBitmapUndoCache = false,
-    enableFixedDPR = false
+    enableFixedDPR = false,
+    enableCanvasAlpha = false
   },
   ref
 ) => {
@@ -509,11 +511,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -1378,7 +1380,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (activeCtx && activeCtx.canvas) {
       activeCtx.save();
       activeCtx.setTransform(1, 0, 0, 1, 0, 0);
-      if (propsRef.current.isFreeDraw) {
+      if (propsRef.current.isFreeDraw || propsRef.current.enableCanvasAlpha) {
         activeCtx.clearRect(0, 0, activeCtx.canvas.width, activeCtx.canvas.height);
       } else {
         activeCtx.fillStyle = '#ffffff';
@@ -2118,10 +2120,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     tempCanvas.width = Math.round(LOGICAL_WIDTH * effectiveDPR);
     tempCanvas.height = Math.round(LOGICAL_HEIGHT * effectiveDPR);
 
-    const ctx = canvas.getContext('2d', isFreeDraw ? undefined : { alpha: false });
+    const ctx = canvas.getContext('2d', (isFreeDraw || enableCanvasAlpha) ? undefined : { alpha: false });
     const tempCtx = tempCanvas.getContext('2d');
 
     if (ctx && tempCtx) {
+      if (typeof console !== 'undefined' && enableCanvasAlpha) {
+        const attrs = ctx.getContextAttributes ? ctx.getContextAttributes() : null;
+        console.log("[DrawingCanvasCore] Diagnostic Alpha Test: context alpha =", attrs?.alpha);
+      }
       ctx.setTransform(effectiveDPR, 0, 0, effectiveDPR, 0, 0);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -2841,7 +2847,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         <canvas
           id="drawing-board-layer-primary"
           ref={canvasRef}
-          className={`absolute inset-0 w-full h-full block ${isFreeDraw ? 'bg-transparent' : 'bg-white'} touch-none ${readOnly ? 'object-contain pointer-events-none' : 'pointer-events-auto cursor-crosshair'}`}
+          className={`absolute inset-0 w-full h-full block ${(isFreeDraw || enableCanvasAlpha) ? 'bg-transparent' : 'bg-white'} touch-none ${readOnly ? 'object-contain pointer-events-none' : 'pointer-events-auto cursor-crosshair'}`}
           style={{
             zIndex: 10,
             imageRendering: 'auto'
@@ -2935,6 +2941,7 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.enableInputOptimizations === nextProps.enableInputOptimizations &&
     prevProps.enableBitmapUndoCache === nextProps.enableBitmapUndoCache &&
     prevProps.enableFixedDPR === nextProps.enableFixedDPR &&
+    prevProps.enableCanvasAlpha === nextProps.enableCanvasAlpha &&
     prevProps.deferredReset === nextProps.deferredReset &&
     prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
     prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&
