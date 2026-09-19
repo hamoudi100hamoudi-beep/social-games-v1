@@ -199,6 +199,15 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
     const sensitivity = 140;
     let isDragging = false;
 
+    // Show visual indicator immediately on pointerdown (current value) without changing the value
+    setDragState({
+      type: 'opacity',
+      startY,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      currentVal: startOpacity,
+    });
+
     const onWindowMove = (moveEv: PointerEvent) => {
       const distX = Math.abs(moveEv.clientX - startX);
       const distY = Math.abs(moveEv.clientY - startY);

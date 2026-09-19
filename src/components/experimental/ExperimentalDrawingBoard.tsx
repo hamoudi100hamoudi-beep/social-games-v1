@@ -17,9 +17,20 @@ import {
 } from '../../utils/drawBinaryHelper';
 import DrawingCanvasCore, { DrawingCanvasCoreRef } from '../game/DrawingCanvasCore';
 import FlipaClipControls from '../game/FlipaClipControls';
+import ColorWheelModal from '../game/ColorWheelModal';
 import CinematicModal from '../game/CinematicModal';
 import { safeLocalStorage } from '../../utils/storage';
 import { expMetrics } from './experimentalInstrumentation';
+
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG:
+ * Tests if the presence / mounting / execution of ColorWheelModal in Experimental Draw
+ * impacts rendering or tool performance, replicating Free Draw behavior under experiment.
+ * When true: ColorWheelModal is enabled and can be opened in Experimental Draw when isFreeDraw is true.
+ * When false: ColorWheelModal is completely disabled in Experimental Draw.
+ * Default: true for diagnostic test.
+ */
+export const EXPERIMENTAL_COLOR_WHEEL_TEST = true;
 
 const LOGICAL_HEIGHT = 430;
 
@@ -322,7 +333,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
             currentWidth={currentWidth}
             currentOpacity={currentOpacity}
             baseScale={baseScale}
-            isFreeDraw={isFreeDraw}
+            isFreeDraw={isFreeDraw && EXPERIMENTAL_COLOR_WHEEL_TEST}
             onColorChange={(newColor) => {
               setColor(newColor);
               if (tool === 'eraser') {

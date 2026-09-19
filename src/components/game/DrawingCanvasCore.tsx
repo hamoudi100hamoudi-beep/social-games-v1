@@ -52,18 +52,6 @@ export const FREE_DRAW_OPAQUE_PINCH_TEST = false;
  */
 export const FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST = false;
 
-/**
- * 🧪 DIAGNOSTIC TEST FLAG:
- * Tests if continuous 'will-change: transform' at low zoom degrades mobile GPU compositing / UI responsiveness.
- * When enabled (true):
- * - 'will-change: transform' is active ONLY during active multi-touch pinch gestures.
- * - Once the gesture ends and the transform settles, will-change is removed (set to 'auto').
- * - When a new gesture starts, will-change is re-enabled.
- * - On unmount, any pending rAF or listeners are cleaned up safely.
- * Default: false.
- */
-export const FREE_DRAW_DYNAMIC_WILL_CHANGE_TEST = false;
-
 const getPerformanceTier = () => {
   if (typeof window === 'undefined') return 1;
   try {
@@ -593,7 +581,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     // Cache container bounding rect during active gesture to prevent forced layout thrashing on every touchmove
     let cachedContainerRect: DOMRect | null = null;
     let gestureRafId: number | null = null;
-    let willChangeResetRafId: number | null = null;
 
     const flushPendingTransform = () => {
       if (gestureRafId !== null) {
@@ -658,15 +645,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         e.preventDefault();
         isPinching = true;
         isZoomPinchingRef.current = true;
-
-        // 🧪 FREE_DRAW_DYNAMIC_WILL_CHANGE_TEST: Enable will-change only during active gesture
-        if (FREE_DRAW_DYNAMIC_WILL_CHANGE_TEST && transformWrapperRef.current) {
-          if (willChangeResetRafId !== null) {
-            cancelAnimationFrame(willChangeResetRafId);
-            willChangeResetRafId = null;
-          }
-          transformWrapperRef.current.style.willChange = 'transform';
-        }
 
         // 🧪 FREE_DRAW_OPAQUE_PINCH_TEST: Snapshot to opaque white canvas & hide transparent canvases
         if (FREE_DRAW_OPAQUE_PINCH_TEST && propsRef.current.isFreeDraw) {
@@ -936,19 +914,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         cachedContainerRect = null;
         flushPendingTransform();
 
-        // 🧪 FREE_DRAW_DYNAMIC_WILL_CHANGE_TEST: Remove will-change after transform settles (via single rAF)
-        if (FREE_DRAW_DYNAMIC_WILL_CHANGE_TEST) {
-          if (willChangeResetRafId !== null) {
-            cancelAnimationFrame(willChangeResetRafId);
-          }
-          willChangeResetRafId = requestAnimationFrame(() => {
-            willChangeResetRafId = null;
-            if (transformWrapperRef.current) {
-              transformWrapperRef.current.style.willChange = 'auto';
-            }
-          });
-        }
-
         // 🧪 FREE_DRAW_OPAQUE_PINCH_TEST: Hide diagnostic canvas & restore original transparent canvases
         if (isDiagnosticActiveRef.current) {
           const mainCanvas = canvasRef.current;
@@ -982,10 +947,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (gestureRafId !== null) {
         cancelAnimationFrame(gestureRafId);
         gestureRafId = null;
-      }
-      if (willChangeResetRafId !== null) {
-        cancelAnimationFrame(willChangeResetRafId);
-        willChangeResetRafId = null;
       }
       if (isDiagnosticActiveRef.current) {
         const mainCanvas = canvasRef.current;
@@ -2849,13 +2810,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           width: '100%',
           height: '100%',
           transformOrigin: '0 0',
-          willChange: FREE_DRAW_DYNAMIC_WILL_CHANGE_TEST ? 'auto' : 'transform',
+          willChange: 'transform',
           ...(FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST ? { visibility: 'hidden' as const } : {})
         } : {
           width: LOGICAL_WIDTH,
           height: LOGICAL_HEIGHT,
           transformOrigin: '0 0',
-          willChange: FREE_DRAW_DYNAMIC_WILL_CHANGE_TEST ? 'auto' : 'transform',
+          willChange: 'transform',
           ...(FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST ? { visibility: 'hidden' as const } : {})
         }}
       >

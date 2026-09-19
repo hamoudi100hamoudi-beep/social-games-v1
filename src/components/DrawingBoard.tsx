@@ -61,7 +61,7 @@ export default function DrawingBoard({
   const [activeMenu, setActiveMenu] = useState<'tools' | 'controls' | null>(null);
   const [tool, setTool] = useState<ToolType>('pencil');
   const [color, setColor] = useState('#000000');
-  const [penWidth, setPenWidth] = useState(3);
+  const [penWidth, setPenWidth] = useState(isFreeDraw ? 2 : 3);
   const [penOpacity, setPenOpacity] = useState(1);
   const [eraserWidth, setEraserWidth] = useState(40);
   const [eraserOpacity, setEraserOpacity] = useState(1);
