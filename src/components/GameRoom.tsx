@@ -653,6 +653,7 @@ export default function GameRoom({
   }, []);
 
   useEffect(() => {
+    if (isFreeDraw) return;
     // Game Status sounds
     const curr = gameState.status;
     const prev = prevGameStateStatusRef.current;
@@ -671,9 +672,10 @@ export default function GameRoom({
       }
     }
     prevGameStateStatusRef.current = curr || "";
-  }, [gameState.status, amIDrawer, eventGate]);
+  }, [gameState.status, amIDrawer, eventGate, isFreeDraw]);
 
   useEffect(() => {
+    if (isFreeDraw) return;
     // Hint sounds
     const currHints = gameState.hintsUsed || 0;
     const prevHints = prevHintsUsedRef.current;
@@ -682,7 +684,7 @@ export default function GameRoom({
       soundManager.play("hintShow");
     }
     prevHintsUsedRef.current = currHints;
-  }, [gameState.hintsUsed, eventGate]);
+  }, [gameState.hintsUsed, eventGate, isFreeDraw]);
 
   const isDrawingMode = isFreeDraw ? amIDrawer : (gameState.status === "DRAWING" && amIDrawer);
   const isDrawingModeRef = React.useRef<boolean>(isDrawingMode);
@@ -739,21 +741,23 @@ export default function GameRoom({
     );
   }, [gameState.reports, persistentPlayerId, socket?.id]);
 
-  const canReport = gameState.status === "DRAWING" && !amIDrawer && !hasAlreadyReported;
+  const canReport = !isFreeDraw && gameState.status === "DRAWING" && !amIDrawer && !hasAlreadyReported;
 
   const handleReport = () => {
-    if (!canReport) return;
+    if (!canReport || isFreeDraw) return;
     setShowReportConfirm(true);
   };
 
   // 🛡️ Stabilized Drawing Layer Action Callbacks (Ensures areDrawingPropsEqual stays rock-solid)
   const handleSkipTurnRequest = useCallback(() => {
+    if (isFreeDraw) return;
     setShowSkipConfirm(true);
-  }, []);
+  }, [isFreeDraw]);
 
   const handleRequestHintAction = useCallback(() => {
+    if (isFreeDraw) return;
     socket?.emit("request_hint");
-  }, [socket]);
+  }, [socket, isFreeDraw]);
 
   const handleStopFreeDrawAction = useCallback(() => {
     handleStopFreeDraw();
@@ -1077,6 +1081,7 @@ export default function GameRoom({
     };
 
     const onReceiveGuess = (msg: any) => {
+      if (isFreeDraw) return;
       // 1. Synchronously buffer every guess into guessesRef (0% data loss)
       if (!guessesRef.current.some((m) => m.id === msg.id)) {
         const updated = [
@@ -1327,6 +1332,7 @@ export default function GameRoom({
   const handleGuessSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (
+      isFreeDraw ||
       !guessInput.trim() ||
       hasGuessedCorrectly ||
       amIDrawer
@@ -1353,6 +1359,7 @@ export default function GameRoom({
   };
 
   const handleSkipTurn = () => {
+    if (isFreeDraw) return;
     if (document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -1361,6 +1368,7 @@ export default function GameRoom({
   };
 
   const handleWordSelect = (word: string) => {
+    if (isFreeDraw) return;
     socket?.emit("select_word", { word });
   };
 
@@ -1751,7 +1759,7 @@ export default function GameRoom({
               />
 
               {/* Hit Notifications Overlay (Active only when drawing in fullscreen mode) */}
-              {isDrawingMode && !isFreeDrawIsolated && (
+              {isDrawingMode && !isFreeDraw && !isFreeDrawIsolated && (
                 <div className="absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full">
                   <AnimatePresence>
                     {hitNotifications.map((hit) => {
@@ -1978,323 +1986,322 @@ export default function GameRoom({
               </div>
             </div>
 
-            {/* Quick Feedback Area (interactive feed) */}
-            <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-3 flex flex-col-reverse font-sans min-h-0 bg-transparent">
-              <div className="flex flex-col-reverse gap-2">
-                {[...guesses].reverse().map((msg) => {
-                  const isSystem = msg.type === "system";
-                  if (isSystem) {
-                    const subType = (msg as any).subType || "";
-                    const text = msg.text;
+            {/* Quick Feedback Area (interactive feed) - Only for Competitive/Normal */}
+            {!isFreeDraw && (
+              <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-3 flex flex-col-reverse font-sans min-h-0 bg-transparent">
+                <div className="flex flex-col-reverse gap-2">
+                  {[...guesses].reverse().map((msg) => {
+                    const isSystem = msg.type === "system";
+                    if (isSystem) {
+                      const subType = (msg as any).subType || "";
+                      const text = msg.text;
 
-                    // Close guess warning
-                    if (subType === "close") {
-                      const displayWord = (msg as any).word || "";
-                      return (
-                        <div
-                          key={msg.id}
-                          className="flex items-center gap-2 text-amber-500 font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                        >
-                          <Zap size={15} className="text-amber-500 fill-amber-500 shrink-0" />
-                          <span dir="auto" className="flex items-center gap-1">
-                            <span className="text-amber-500 font-extrabold">{displayWord}</span>
-                            <span className="text-amber-500/90 font-normal">is close!</span>
-                          </span>
-                        </div>
+                      // Close guess warning
+                      if (subType === "close") {
+                        const displayWord = (msg as any).word || "";
+                        return (
+                          <div
+                            key={msg.id}
+                            className="flex items-center gap-2 text-amber-500 font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          >
+                            <Zap size={15} className="text-amber-500 fill-amber-500 shrink-0" />
+                            <span dir="auto" className="flex items-center gap-1">
+                              <span className="text-amber-500 font-extrabold">{displayWord}</span>
+                              <span className="text-amber-500/90 font-normal">is close!</span>
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      // Drawing report warning log
+                      if (subType === "report") {
+                        return (
+                          <div
+                            key={msg.id}
+                            className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          >
+                            <AlertTriangle
+                              size={14}
+                              className="text-[#EF4444] shrink-0 font-extrabold"
+                            />
+                            <span dir="auto" className="flex items-center gap-1">
+                              <span className="text-[#EF4444] font-extrabold">{msg.sender}</span>
+                              <span className="text-[#EF4444] font-normal">reported!</span>
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      // Drawing canceled turn log
+                      if (subType === "canceled") {
+                        return (
+                          <div
+                            key={msg.id}
+                            className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          >
+                            <AlertTriangle
+                              size={14}
+                              className="text-[#EF4444] shrink-0 font-extrabold"
+                            />
+                            <span dir="auto" className="text-[#EF4444] font-normal">Canceled turn</span>
+                          </div>
+                        );
+                      }
+
+                      // Hit / guessed correctly
+                      if (subType === "hit") {
+                        const isSelfGuesser = msg.senderId === socketId;
+                        const displayWord = (msg as any).word || "";
+                        return (
+                          <div
+                            key={msg.id}
+                            className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          >
+                            <Check
+                              size={14}
+                              className="stroke-[3.5] text-[#00E540] shrink-0"
+                            />
+                            {isSelfGuesser ? (
+                              <span dir="auto" className="font-normal text-[#00E540]">
+                                You've found the answer: <span className="font-extrabold text-[#00E540]">{displayWord}</span>
+                              </span>
+                            ) : (
+                              <span dir="auto" className="font-normal text-[#00E540]">
+                                <span className="font-extrabold text-[#00E540]">{msg.sender || text.replace(" guessed the word!", "")}</span> hit!
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // Round End break / Interval
+                      if (subType === "interval") {
+                        return (
+                          <div
+                            key={msg.id}
+                            className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          >
+                            <Clock
+                              size={14}
+                              className="text-[#1AD2FF] shrink-0"
+                            />
+                            <span className="font-normal text-[#1AD2FF]">Interval...</span>
+                          </div>
+                        );
+                      }
+
+                      // Turn change
+                      if (subType === "turn") {
+                        const match = text.match(/^(Turn of\s+)(.+)$/i);
+                        return (
+                          <div
+                            key={msg.id}
+                            className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          >
+                            <Pencil
+                              size={12}
+                              className="text-[#1AD2FF] shrink-0"
+                            />
+                            {match ? (
+                              <span dir="auto" className="text-[#1AD2FF]">
+                                Turn of <span className="font-extrabold text-[#1AD2FF]">{match[2]}</span>
+                              </span>
+                            ) : (
+                              <span dir="auto" className="text-[#1AD2FF]">{text}</span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // Game over
+                      if (subType === "game_over") {
+                        return (
+                          <div
+                            key={msg.id}
+                            className="flex items-start gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-1 animate-in fade-in slide-in-from-left-2 duration-200"
+                          >
+                            <Info
+                              size={14}
+                              className="text-[#1AD2FF] shrink-0 mt-0.5"
+                            />
+                            <span dir="auto" className="font-normal">{text}</span>
+                          </div>
+                        );
+                      }
+
+                      // Everybody hit
+                      if (subType === "all_guessed") {
+                        return (
+                          <div
+                            key={msg.id}
+                            className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          >
+                            <Check
+                              size={14}
+                              className="stroke-[3.5] text-[#00E540] shrink-0"
+                            />
+                            <span className="font-normal">Everybody hit the answer!</span>
+                          </div>
+                        );
+                      }
+
+                      // Lost turn / Inactive
+                      if (
+                        subType === "lost_turn" ||
+                        text.toLowerCase().includes("lost the turn") ||
+                        text.toLowerCase().includes("lost your turn")
+                      ) {
+                        const isDrawerSelf = amIDrawer;
+                        const displayText = isDrawerSelf
+                          ? "You've lost your turn"
+                          : text;
+                        return (
+                          <div
+                            key={msg.id}
+                            className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          >
+                            <AlertTriangle
+                              size={14}
+                              className="text-[#EF4444] shrink-0"
+                            />
+                            <span dir="auto" className="font-normal">{displayText}</span>
+                          </div>
+                        );
+                      }
+
+                      // Other reveals
+                      const isNobodyHit = text.toLowerCase().includes("nobody hit");
+                      let iconNode = (
+                        <Info size={14} className="shrink-0 text-[#1AD2FF]" />
                       );
-                    }
+                      let textColor = "#1AD2FF";
 
-                    // Drawing report warning log
-                    if (subType === "report") {
-                      return (
-                        <div
-                          key={msg.id}
-                          className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                        >
-                          <AlertTriangle
-                            size={14}
-                            className="text-[#EF4444] shrink-0 font-extrabold"
-                          />
-                          <span dir="auto" className="flex items-center gap-1">
-                            <span className="text-[#EF4444] font-extrabold">{msg.sender}</span>
-                            <span className="text-[#EF4444] font-normal">reported!</span>
-                          </span>
-                        </div>
-                      );
-                    }
-
-                    // Drawing canceled turn log
-                    if (subType === "canceled") {
-                      return (
-                        <div
-                          key={msg.id}
-                          className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                        >
-                          <AlertTriangle
-                            size={14}
-                            className="text-[#EF4444] shrink-0 font-extrabold"
-                          />
-                          <span dir="auto" className="text-[#EF4444] font-normal">Canceled turn</span>
-                        </div>
-                      );
-                    }
-
-                    // Hit / guessed correctly
-                    if (subType === "hit") {
-                      const isSelfGuesser = msg.senderId === socketId;
-                      const displayWord = (msg as any).word || "";
-                      return (
-                        <div
-                          key={msg.id}
-                          className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                        >
+                      if (
+                        !isNobodyHit && (
+                          text.toLowerCase().includes("hit") ||
+                          text.toLowerCase().includes("guessed") ||
+                          text.toLowerCase().includes("guessed the word")
+                        )
+                      ) {
+                        iconNode = (
                           <Check
                             size={14}
                             className="stroke-[3.5] text-[#00E540] shrink-0"
                           />
-                          {isSelfGuesser ? (
-                            <span dir="auto" className="font-normal text-[#00E540]">
-                              You've found the answer: <span className="font-extrabold text-[#00E540]">{displayWord}</span>
-                            </span>
-                          ) : (
-                            <span dir="auto" className="font-normal text-[#00E540]">
-                              <span className="font-extrabold text-[#00E540]">{msg.sender || text.replace(" guessed the word!", "")}</span> hit!
-                            </span>
-                          )}
-                        </div>
-                      );
-                    }
+                        );
+                        textColor = "#00E540";
+                      } else if (text.toLowerCase().includes("turn") || isNobodyHit) {
+                        iconNode = (
+                          <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
+                        );
+                        textColor = "#1AD2FF";
+                      } else if (text.toLowerCase().includes("interval")) {
+                        iconNode = (
+                          <Clock size={14} className="shrink-0 text-[#1AD2FF]" />
+                        );
+                        textColor = "#1AD2FF";
+                      } else if (
+                        text.toLowerCase().includes("timeout") ||
+                        text.toLowerCase().includes("time's up") ||
+                        text.toLowerCase().includes("answer was")
+                      ) {
+                        iconNode = (
+                          <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
+                        );
+                        textColor = "#1AD2FF";
+                      }
 
-                    // Round End break / Interval
-                    if (subType === "interval") {
                       return (
                         <div
                           key={msg.id}
-                          className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
+                          className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5"
+                          style={{ color: textColor }}
                         >
-                          <Clock
-                            size={14}
-                            className="text-[#1AD2FF] shrink-0"
-                          />
-                          <span className="font-normal text-[#1AD2FF]">Interval...</span>
+                          {iconNode}
+                          <span dir="auto">{text}</span>
                         </div>
                       );
-                    }
-
-                    // Turn change
-                    if (subType === "turn") {
-                      const match = text.match(/^(Turn of\s+)(.+)$/i);
-                      return (
-                        <div
-                          key={msg.id}
-                          className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                        >
-                          <Pencil
-                            size={12}
-                            className="text-[#1AD2FF] shrink-0"
-                          />
-                          {match ? (
-                            <span dir="auto" className="text-[#1AD2FF]">
-                              Turn of <span className="font-extrabold text-[#1AD2FF]">{match[2]}</span>
-                            </span>
-                          ) : (
-                            <span dir="auto" className="text-[#1AD2FF]">{text}</span>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    // Game over
-                    if (subType === "game_over") {
-                      return (
-                        <div
-                          key={msg.id}
-                          className="flex items-start gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-1 animate-in fade-in slide-in-from-left-2 duration-200"
-                        >
-                          <Info
-                            size={14}
-                            className="text-[#1AD2FF] shrink-0 mt-0.5"
-                          />
-                          <span dir="auto" className="font-normal">{text}</span>
-                        </div>
-                      );
-                    }
-
-                    // Everybody hit
-                    if (subType === "all_guessed") {
-                      return (
-                        <div
-                          key={msg.id}
-                          className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                        >
-                          <Check
-                            size={14}
-                            className="stroke-[3.5] text-[#00E540] shrink-0"
-                          />
-                          <span className="font-normal">Everybody hit the answer!</span>
-                        </div>
-                      );
-                    }
-
-                    // Lost turn / Inactive
-                    if (
-                      subType === "lost_turn" ||
-                      text.toLowerCase().includes("lost the turn") ||
-                      text.toLowerCase().includes("lost your turn")
-                    ) {
-                      const isDrawerSelf = amIDrawer;
-                      const displayText = isDrawerSelf
-                        ? "You've lost your turn"
-                        : text;
-                      return (
-                        <div
-                          key={msg.id}
-                          className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                        >
-                          <AlertTriangle
-                            size={14}
-                            className="text-[#EF4444] shrink-0"
-                          />
-                          <span dir="auto" className="font-normal">{displayText}</span>
-                        </div>
-                      );
-                    }
-
-                    // Other reveals
-                    const isNobodyHit = text.toLowerCase().includes("nobody hit");
-                    let iconNode = (
-                      <Info size={14} className="shrink-0 text-[#1AD2FF]" />
-                    );
-                    let textColor = "#1AD2FF";
-
-                    if (
-                      !isNobodyHit && (
-                        text.toLowerCase().includes("hit") ||
-                        text.toLowerCase().includes("guessed") ||
-                        text.toLowerCase().includes("guessed the word")
-                      )
-                    ) {
-                      iconNode = (
-                        <Check
-                          size={14}
-                          className="stroke-[3.5] text-[#00E540] shrink-0"
-                        />
-                      );
-                      textColor = "#00E540";
-                    } else if (text.toLowerCase().includes("turn") || isNobodyHit) {
-                      iconNode = (
-                        <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
-                      );
-                      textColor = "#1AD2FF";
-                    } else if (text.toLowerCase().includes("interval")) {
-                      iconNode = (
-                        <Clock size={14} className="shrink-0 text-[#1AD2FF]" />
-                      );
-                      textColor = "#1AD2FF";
-                    } else if (
-                      text.toLowerCase().includes("timeout") ||
-                      text.toLowerCase().includes("time's up") ||
-                      text.toLowerCase().includes("answer was")
-                    ) {
-                      iconNode = (
-                        <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
-                      );
-                      textColor = "#1AD2FF";
                     }
 
                     return (
-                      <div
-                        key={msg.id}
-                        className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5"
-                        style={{ color: textColor }}
-                      >
-                        {iconNode}
-                        <span dir="auto">{text}</span>
+                      <div key={msg.id} className="text-sm sm:text-base">
+                        <div className="flex items-start gap-1">
+                          <span className="font-extrabold text-[#F3F4F6] shrink-0">
+                            {msg.sender}:
+                          </span>
+                          <span
+                            className={`${msg.isSelf ? "text-white" : "text-slate-300"} font-normal break-words`}
+                            dir="auto"
+                            style={{ unicodeBidi: "plaintext" }}
+                          >
+                            {msg.text}
+                          </span>
+                        </div>
                       </div>
                     );
-                  }
-
-                  return (
-                    <div key={msg.id} className="text-sm sm:text-base">
-                      <div className="flex items-start gap-1">
-                        <span className="font-extrabold text-[#F3F4F6] shrink-0">
-                          {msg.sender}:
-                        </span>
-                        <span
-                          className={`${msg.isSelf ? "text-white" : "text-slate-300"} font-normal break-words`}
-                          dir="auto"
-                          style={{ unicodeBidi: "plaintext" }}
-                        >
-                          {msg.text}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-                {!isFreeDraw && (
+                  })}
                   <div className="flex items-center gap-1.5 text-primary-brand font-normal text-sm sm:text-base">
                     <Info size={14} />
                     Waiting for players
                   </div>
-                )}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Guess Input Area */}
-            <div 
-              className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 shrink-0 mt-auto bg-transparent"
-              style={{ paddingBottom: 'calc(0.5rem + var(--keyboard-inset, 0px))' }}
-            >
-              <form onSubmit={handleGuessSubmit} className="relative">
-                {!isInputFocused && !isFreeDraw && (
-                  <div
-                    className={`absolute left-4 top-1/2 -translate-y-1/2 transition-opacity duration-200 pointer-events-none ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
-                  >
-                    <Pencil size={18} />
-                  </div>
-                )}
-                <input
-                  ref={guessInputRef}
-                  type="search"
-                  inputMode="text"
-                  enterKeyHint="send"
-                  id="guess-input"
-                  dir="auto"
-                  autoComplete="one-time-code"
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck="false"
-                  name="search"
-                  data-1p-ignore="true"
-                  data-lpignore="true"
-                  data-form-type="other"
-                  disabled={isInputDisabled || isFreeDraw}
-                  value={isInputDisabled || isFreeDraw ? "" : guessInput}
-                  onChange={(e) => setGuessInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      if (guessInput.trim() && !isInputDisabled && !isFreeDraw) {
-                        handleGuessSubmit(e as any);
+            {/* Guess Input Area - Only for Competitive/Normal */}
+            {!isFreeDraw && (
+              <div 
+                className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 shrink-0 mt-auto bg-transparent"
+                style={{ paddingBottom: 'calc(0.5rem + var(--keyboard-inset, 0px))' }}
+              >
+                <form onSubmit={handleGuessSubmit} className="relative">
+                  {!isInputFocused && (
+                    <div
+                      className={`absolute left-4 top-1/2 -translate-y-1/2 transition-opacity duration-200 pointer-events-none ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
+                    >
+                      <Pencil size={18} />
+                    </div>
+                  )}
+                  <input
+                    ref={guessInputRef}
+                    type="search"
+                    inputMode="text"
+                    enterKeyHint="send"
+                    id="guess-input"
+                    dir="auto"
+                    autoComplete="one-time-code"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck="false"
+                    name="search"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
+                    data-form-type="other"
+                    disabled={isInputDisabled}
+                    value={isInputDisabled ? "" : guessInput}
+                    onChange={(e) => setGuessInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        if (guessInput.trim() && !isInputDisabled) {
+                          handleGuessSubmit(e as any);
+                        }
                       }
-                    }
-                  }}
-                  onFocus={() => {
-                    if (isInputDisabled || isFreeDraw) {
-                      guessInputRef.current?.blur();
-                      return;
-                    }
-                    handleIOSFocusBypass();
-                    setIsInputFocused(true);
-                    setIsKeyboardOpen(true);
-                  }}
-                  onBlur={() => {
-                    setIsInputFocused(false);
-                  }}
-                  placeholder={
-                    isFreeDraw
-                      ? ""
-                      : gameState.status === "WAITING"
+                    }}
+                    onFocus={() => {
+                      if (isInputDisabled) {
+                        guessInputRef.current?.blur();
+                        return;
+                      }
+                      handleIOSFocusBypass();
+                      setIsInputFocused(true);
+                      setIsKeyboardOpen(true);
+                    }}
+                    onBlur={() => {
+                      setIsInputFocused(false);
+                    }}
+                    placeholder={
+                      gameState.status === "WAITING"
                         ? "Waiting..."
                         : gameState.status === "ROUND_END"
                           ? gameState.roundEndReason === "skipped"
@@ -2311,12 +2318,13 @@ export default function GameRoom({
                                 : hasGuessedCorrectly
                                   ? "You've found the answer!"
                                   : "Answer here..."
-                  }
-                  className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused || isFreeDraw ? "pl-4" : "pl-11"} pr-4 py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled || isFreeDraw ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
-                  style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
-                />
-              </form>
-            </div>
+                    }
+                    className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused ? "pl-4" : "pl-11"} pr-4 py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
+                    style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
+                  />
+                </form>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2338,7 +2346,7 @@ export default function GameRoom({
       )}
 
       {/* Skip Confirm Modal */}
-      {!isFreeDrawIsolated && (
+      {!isFreeDraw && !isFreeDrawIsolated && (
         <CinematicModal
           isOpen={showSkipConfirm}
           onClose={() => setShowSkipConfirm(false)}
@@ -2429,7 +2437,7 @@ export default function GameRoom({
       )}
 
       {/* Report Confirmation Modal */}
-      {(!isFreeDrawIsolated || showReportConfirm) && (
+      {!isFreeDraw && (!isFreeDrawIsolated || showReportConfirm) && (
         <CinematicModal
           isOpen={showReportConfirm}
           onClose={() => setShowReportConfirm(false)}
@@ -2480,7 +2488,7 @@ export default function GameRoom({
       )}
 
       {/* Global Overlays for CHOOSING state */}
-      {gameState.status === "CHOOSING" && amIDrawer && (
+      {!isFreeDraw && gameState.status === "CHOOSING" && amIDrawer && (
         <div className="fixed inset-0 z-[500] bg-black/70  flex items-center justify-center p-4 touch-none">
           <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
             <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 tracking-wide">
