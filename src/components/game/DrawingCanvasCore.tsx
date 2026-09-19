@@ -284,6 +284,7 @@ interface DrawingCanvasCoreProps {
   deferredReset?: boolean;
   isFreeDraw?: boolean;
   enableInputOptimizations?: boolean;
+  enableBitmapUndoCache?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -301,7 +302,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     onSyncStateChange,
     deferredReset = false,
     isFreeDraw = false,
-    enableInputOptimizations = false
+    enableInputOptimizations = false,
+    enableBitmapUndoCache = false
   },
   ref
 ) => {
@@ -403,7 +405,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const stageFreeDrawPendingCache = () => {
-    if (!propsRef.current.isFreeDraw || propsRef.current.readOnly) return;
+    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    if (!useCache || propsRef.current.readOnly) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const pendingCanvas = ensureCacheCanvas(freeDrawPendingUndoCacheCanvasRef, canvas);
@@ -412,7 +415,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const commitFreeDrawPendingCache = () => {
-    if (!propsRef.current.isFreeDraw) return;
+    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    if (!useCache) return;
     if (hasFreeDrawPendingUndoCacheRef.current && freeDrawPendingUndoCacheCanvasRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
@@ -424,7 +428,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const captureDirectFreeDrawUndoCache = () => {
-    if (!propsRef.current.isFreeDraw || propsRef.current.readOnly) return;
+    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    if (!useCache || propsRef.current.readOnly) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
@@ -435,7 +440,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const invalidateFreeDrawCaches = () => {
-    if (!propsRef.current.isFreeDraw) return;
+    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    if (!useCache) return;
     hasFreeDrawUndoCacheRef.current = false;
     hasFreeDrawRedoCacheRef.current = false;
     hasFreeDrawPendingUndoCacheRef.current = false;
@@ -501,11 +507,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -1509,9 +1515,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       localRedoStackRef.current = [removed];
     }
 
-    // 🛡️ Free Draw Fast-Path: Single Previous-State Canvas Cache (Only for local player's undo)
+    // 🛡️ Fast-Path: Single Previous-State Canvas Cache (Only for local player's undo)
     let restoredViaCache = false;
-    if (emit && propsRef.current.isFreeDraw && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
+    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    if (emit && useCache && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const redoCanvas = ensureCacheCanvas(freeDrawRedoCacheCanvasRef, canvas);
       copyCanvasContent(canvas, redoCanvas);
@@ -1553,9 +1560,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
     }
 
-    // 🛡️ Free Draw Fast-Path: Single Redo-State Canvas Cache (Only for local player's redo)
+    // 🛡️ Fast-Path: Single Redo-State Canvas Cache (Only for local player's redo)
     let restoredViaCache = false;
-    if (emit && propsRef.current.isFreeDraw && hasFreeDrawRedoCacheRef.current && freeDrawRedoCacheCanvasRef.current && canvasRef.current) {
+    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    if (emit && useCache && hasFreeDrawRedoCacheRef.current && freeDrawRedoCacheCanvasRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
       copyCanvasContent(canvas, undoCanvas);
@@ -2923,6 +2931,7 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.isZoomEnabled === nextProps.isZoomEnabled &&
     prevProps.isFreeDraw === nextProps.isFreeDraw &&
     prevProps.enableInputOptimizations === nextProps.enableInputOptimizations &&
+    prevProps.enableBitmapUndoCache === nextProps.enableBitmapUndoCache &&
     prevProps.deferredReset === nextProps.deferredReset &&
     prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
     prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&

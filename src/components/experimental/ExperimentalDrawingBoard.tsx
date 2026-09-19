@@ -45,6 +45,18 @@ export const EXPERIMENTAL_COLOR_WHEEL_TEST = true;
  */
 export const EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST = true;
 
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 2 - Bitmap Undo/Redo Cache):
+ * Enables 1-step Bitmap Canvas snapshot cache in Experimental Draw:
+ * - Instant single-step Undo/Redo via direct pixel blit instead of full history replay
+ * - Invalidates cleanly on multiplayer/remote packets
+ *
+ * When true: Experimental Draw activates the 1-step Bitmap Undo/Redo cache.
+ * When false: Experimental Draw reverts to full command history replay.
+ * Default: true for Batch 2 test.
+ */
+export const EXPERIMENTAL_BITMAP_UNDO_TEST = true;
+
 const LOGICAL_HEIGHT = 430;
 
 export interface ExperimentalDrawingBoardProps {
@@ -325,6 +337,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           isZoomEnabled={zoomEnabled}
           isFreeDraw={isFreeDraw}
           enableInputOptimizations={Boolean(isExperimental && EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST)}
+          enableBitmapUndoCache={Boolean(isExperimental && EXPERIMENTAL_BITMAP_UNDO_TEST)}
           onHistoryStateChange={(idx, len) => {
             setHistoryState({ index: idx, length: len });
             onHistoryLengthChange?.(idx > 0);
