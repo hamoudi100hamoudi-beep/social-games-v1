@@ -6,6 +6,7 @@ export interface IsolatedDrawingLayerProps {
   readOnly: boolean;
   isDrawingMode: boolean;
   isFreeDraw: boolean;
+  isExperimental?: boolean;
   amIDrawer: boolean;
   currentDrawerId?: string;
   status?: string;
@@ -32,6 +33,7 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
   readOnly,
   isDrawingMode,
   isFreeDraw,
+  isExperimental = false,
   amIDrawer,
   currentDrawerId,
   status,
@@ -136,6 +138,7 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
         status={status}
         readOnly={readOnly}
         isFreeDraw={isFreeDraw}
+        isExperimental={isExperimental}
         amIDrawer={amIDrawer}
         onExitFreeDraw={onExitFreeDrawAction}
         onSyncStateChange={onSyncStateChangeAction}
@@ -158,6 +161,7 @@ function areDrawingPropsEqual(
     prev.readOnly === next.readOnly &&
     prev.isDrawingMode === next.isDrawingMode &&
     prev.isFreeDraw === next.isFreeDraw &&
+    prev.isExperimental === next.isExperimental &&
     prev.amIDrawer === next.amIDrawer &&
     prev.currentDrawerId === next.currentDrawerId &&
     prev.status === next.status &&

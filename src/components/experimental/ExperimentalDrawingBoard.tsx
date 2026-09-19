@@ -46,6 +46,7 @@ export interface ExperimentalDrawingBoardProps {
   key?: any;
   onSyncStateChange?: (syncing: boolean) => void;
   isFreeDraw?: boolean;
+  isExperimental?: boolean;
   onHistoryLengthChange?: (hasStrokes: boolean) => void;
   amIDrawer?: boolean;
   onExitFreeDraw?: () => void;
@@ -61,12 +62,16 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
   status,
   onSyncStateChange,
   isFreeDraw = false,
+  isExperimental = false,
   onHistoryLengthChange,
   amIDrawer = false,
   onExitFreeDraw,
 }) => {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // 🧪 Diagnostic flag logic: Color Wheel is active in Free Draw, or in Experimental mode when flag is true
+  const isColorWheelEnabled = isFreeDraw || Boolean(isExperimental && EXPERIMENTAL_COLOR_WHEEL_TEST);
 
   // Layout scale tracking for thickness preview bubble resizing - scheduled via rAF to eliminate layout thrash
   const [baseScale, setBaseScale] = useState(1);
@@ -333,7 +338,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
             currentWidth={currentWidth}
             currentOpacity={currentOpacity}
             baseScale={baseScale}
-            isFreeDraw={isFreeDraw && EXPERIMENTAL_COLOR_WHEEL_TEST}
+            isFreeDraw={isColorWheelEnabled}
             onColorChange={(newColor) => {
               setColor(newColor);
               if (tool === 'eraser') {

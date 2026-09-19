@@ -1643,6 +1643,7 @@ export default function ExperimentalGameRoom({
                 readOnly={!isDrawingMode}
                 isDrawingMode={isDrawingMode}
                 isFreeDraw={isFreeDraw}
+                isExperimental={true}
                 amIDrawer={amIDrawer}
                 currentDrawerId={gameState.currentDrawerId}
                 status={gameState.status}
