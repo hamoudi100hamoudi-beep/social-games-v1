@@ -23,14 +23,27 @@ import { safeLocalStorage } from '../../utils/storage';
 import { expMetrics } from './experimentalInstrumentation';
 
 /**
- * 🧪 DIAGNOSTIC TEST FLAG:
+ * 🧪 DIAGNOSTIC TEST FLAG (Color Wheel):
  * Tests if the presence / mounting / execution of ColorWheelModal in Experimental Draw
  * impacts rendering or tool performance, replicating Free Draw behavior under experiment.
- * When true: ColorWheelModal is enabled and can be opened in Experimental Draw when isFreeDraw is true.
+ * When true: ColorWheelModal is enabled and can be opened in Experimental Draw when isExperimental is true.
  * When false: ColorWheelModal is completely disabled in Experimental Draw.
  * Default: true for diagnostic test.
  */
 export const EXPERIMENTAL_COLOR_WHEEL_TEST = true;
+
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 1 - Input Path Optimizations):
+ * Enables the 3 input optimizations from Free Draw in Experimental Draw:
+ * 1. Native getCoalescedEvents() sub-frame precision
+ * 2. Removal of synthetic manual Lerp interpolation
+ * 3. Edge raw trajectory + unconstrained pointer capture
+ *
+ * When true: Experimental Draw activates these 3 input optimizations.
+ * When false: Experimental Draw reverts to legacy clamped & lerped input handling.
+ * Default: true for Batch 1 test.
+ */
+export const EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST = true;
 
 const LOGICAL_HEIGHT = 430;
 
@@ -311,6 +324,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           status={status}
           isZoomEnabled={zoomEnabled}
           isFreeDraw={isFreeDraw}
+          enableInputOptimizations={Boolean(isExperimental && EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST)}
           onHistoryStateChange={(idx, len) => {
             setHistoryState({ index: idx, length: len });
             onHistoryLengthChange?.(idx > 0);

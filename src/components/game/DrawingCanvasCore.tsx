@@ -283,6 +283,7 @@ interface DrawingCanvasCoreProps {
   onSyncStateChange?: (syncing: boolean) => void;
   deferredReset?: boolean;
   isFreeDraw?: boolean;
+  enableInputOptimizations?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -299,7 +300,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     isZoomEnabled = false,
     onSyncStateChange,
     deferredReset = false,
-    isFreeDraw = false
+    isFreeDraw = false,
+    enableInputOptimizations = false
   },
   ref
 ) => {
@@ -499,11 +501,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -2224,7 +2226,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         return;
       }
 
-      if (!propsRef.current.isFreeDraw && dist > 8) {
+      const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
+
+      if (!useInputOptimizations && dist > 8) {
         const stepSize = 6;
         const stepsCount = Math.floor(dist / stepSize);
         if (stepsCount > 1) {
@@ -2584,9 +2588,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeTool = propsRef.current.tool;
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
+      const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
       if (isDrawingRef.current) {
-        if (propsRef.current.isFreeDraw) {
-          // Free Draw: Continuous un-clamped stroke trajectory across canvas edges
+        if (useInputOptimizations) {
+          // Free Draw & Experimental (Batch 1): Continuous un-clamped stroke trajectory across canvas edges
           // Pointer capture maintains full gesture tracking outside canvas.
           // Native canvas context naturally clips any geometry outside (0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT).
           // Extract native browser coalesced events if available to preserve sub-frame curve fidelity without synthetic Lerp
@@ -2614,7 +2619,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
           }
         }
-      } else if (exitedOutsideWhilePointerDownRef.current && !propsRef.current.isFreeDraw) {
+      } else if (exitedOutsideWhilePointerDownRef.current && !useInputOptimizations) {
         // Normal / Competitive: Was outside while holding down, now re-entered canvas: start new stroke cleanly
         if (isInside) {
           exitedOutsideWhilePointerDownRef.current = false;
@@ -2694,8 +2699,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           } catch (err) {}
 
-          if (propsRef.current.isFreeDraw) {
-            // Free Draw: Continuous un-clamped raw trajectory begins directly from the pointer position.
+          const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
+          if (useInputOptimizations) {
+            // Free Draw & Experimental (Batch 1): Continuous un-clamped raw trajectory begins directly from the pointer position.
             // Native canvas context naturally clips any geometry outside (0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT).
             const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
             startPencilOrEraserStroke(rawCoords.x, rawCoords.y);
@@ -2720,8 +2726,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         } else if (activeTool === 'pencil' || activeTool === 'eraser') {
           const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
           const isInside = rawCoords.x >= 0 && rawCoords.x <= LOGICAL_WIDTH && rawCoords.y >= 0 && rawCoords.y <= LOGICAL_HEIGHT;
+          const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
           if (isDrawingRef.current) {
-            if (propsRef.current.isFreeDraw) {
+            if (useInputOptimizations) {
               const nativeEvt = e.nativeEvent as any;
               const rawEvents: PointerEvent[] = (nativeEvt && typeof nativeEvt.getCoalescedEvents === 'function')
                 ? nativeEvt.getCoalescedEvents()
@@ -2745,7 +2752,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
               }
             }
-          } else if (exitedOutsideWhilePointerDownRef.current && !propsRef.current.isFreeDraw) {
+          } else if (exitedOutsideWhilePointerDownRef.current && !useInputOptimizations) {
             if (isInside) {
               exitedOutsideWhilePointerDownRef.current = false;
               let entryX = rawCoords.x;
@@ -2915,6 +2922,7 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.status === nextProps.status &&
     prevProps.isZoomEnabled === nextProps.isZoomEnabled &&
     prevProps.isFreeDraw === nextProps.isFreeDraw &&
+    prevProps.enableInputOptimizations === nextProps.enableInputOptimizations &&
     prevProps.deferredReset === nextProps.deferredReset &&
     prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
     prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&
