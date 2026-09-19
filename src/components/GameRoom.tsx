@@ -37,6 +37,11 @@ import { soundManager } from "../utils/soundManager";
 import { useRoomEventGate } from "../hooks/useRoomEventGate";
 import { getRoomConfig } from "../types/game";
 
+// 🧪 DIAGNOSTIC TEST: FREE DRAW ISOLATION TEST
+// Isolates Free Draw drawing completely from non-essential Room Shell DOM, background panels, modals, and unneeded re-renders.
+// Set to false to cleanly revert to previous behavior.
+export const FREE_DRAW_ISOLATION_TEST = true;
+
 interface GameRoomProps {
   nickname: string;
   room: string;
@@ -641,9 +646,14 @@ export default function GameRoom({
   const isDrawingMode = isFreeDraw ? amIDrawer : (gameState.status === "DRAWING" && amIDrawer);
   const isDrawingModeRef = React.useRef<boolean>(isDrawingMode);
 
+  // 🛡️ Free Draw Isolation: When drawing in Free Draw, isolate room shell to prevent re-render thrashing & DOM overdraw
+  const isFreeDrawIsolated = Boolean(FREE_DRAW_ISOLATION_TEST && isFreeDraw && isDrawingMode);
+  const isFreeDrawIsolatedRef = React.useRef<boolean>(isFreeDrawIsolated);
+
   React.useEffect(() => {
     isDrawingModeRef.current = isDrawingMode;
-  }, [isDrawingMode]);
+    isFreeDrawIsolatedRef.current = isFreeDrawIsolated;
+  }, [isDrawingMode, isFreeDrawIsolated]);
 
   // 🛡️ When active drawing mode finishes, flush any buffered background data cleanly to React state
   React.useEffect(() => {
@@ -1010,11 +1020,14 @@ export default function GameRoom({
 
       if (!isChatOpenRef.current) {
         unreadCountRef.current += 1;
-        setUnreadCount(unreadCountRef.current);
+        // For Drawer in Free Draw when isolated: keep unreadCount in ref (no rerender) until chat opens or turn ends
+        if (!isFreeDrawIsolatedRef.current) {
+          setUnreadCount(unreadCountRef.current);
+        }
       }
 
-      // If not in drawing mode, or in Free Draw, or if chat overlay is currently open, update React state immediately
-      if (!isDrawingModeRef.current || isFreeDraw || isChatOpenRef.current) {
+      // If not in drawing mode, or in Free Draw (when not isolated), or if chat overlay is currently open, update React state immediately
+      if (!isDrawingModeRef.current || (isFreeDraw && !isFreeDrawIsolatedRef.current) || isChatOpenRef.current) {
         setChatMessages(updated);
       }
     };
@@ -1698,7 +1711,7 @@ export default function GameRoom({
               />
 
               {/* Hit Notifications Overlay (Active only when drawing in fullscreen mode) */}
-              {isDrawingMode && (
+              {isDrawingMode && !isFreeDrawIsolated && (
                 <div className="absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full">
                   <AnimatePresence>
                     {hitNotifications.map((hit) => {
@@ -1813,17 +1826,19 @@ export default function GameRoom({
               </div>
             )}
 
-            <MiniBoardOverlay 
-              gameState={gameState} 
-              amIDrawer={amIDrawer} 
-              currentPlayers={currentPlayers}
-              getCurrentDrawerName={getCurrentDrawerName}
-              isFreeDraw={isFreeDraw}
-              onStartFreeDraw={handleStartFreeDraw}
-              activeDrawersCount={activeDrawers.length}
-              hasEnteredFreeDraw={hasEnteredFreeDraw}
-              hasDrawHistory={hasDrawHistory}
-            />
+            {!isFreeDrawIsolated && (
+              <MiniBoardOverlay 
+                gameState={gameState} 
+                amIDrawer={amIDrawer} 
+                currentPlayers={currentPlayers}
+                getCurrentDrawerName={getCurrentDrawerName}
+                isFreeDraw={isFreeDraw}
+                onStartFreeDraw={handleStartFreeDraw}
+                activeDrawersCount={activeDrawers.length}
+                hasEnteredFreeDraw={hasEnteredFreeDraw}
+                hasDrawHistory={hasDrawHistory}
+              />
+            )}
           </div>
 
           {/* Spectator Timer Slot (hidden in Free Draw mode) */}
@@ -1851,22 +1866,25 @@ export default function GameRoom({
         </div>
 
         {/* Left: Players Sidebar */}
-        <PlayersSidebar
-          slots={slots}
-          gameState={gameState}
-          morphMode={morphMode}
-          socketId={socketId}
-          onPlayerClick={setSelectedProfilePlayer}
-          isFreeDraw={isFreeDraw}
-          amIDrawer={amIDrawer}
-        />
+        {!isFreeDrawIsolated && (
+          <PlayersSidebar
+            slots={slots}
+            gameState={gameState}
+            morphMode={morphMode}
+            socketId={socketId}
+            onPlayerClick={setSelectedProfilePlayer}
+            isFreeDraw={isFreeDraw}
+            amIDrawer={amIDrawer}
+          />
+        )}
 
         {/* Right: Actions & Guess Input */}
-        <div
-          className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-0 pl-1 sm:pb-3 sm:pr-3 sm:pt-0 sm:pl-1.5
-                      ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
-                     `}
-        >
+        {!isFreeDrawIsolated && (
+          <div
+            className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-0 pl-1 sm:pb-3 sm:pr-3 sm:pt-0 sm:pl-1.5
+                        ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
+                       `}
+          >
           <div className="flex-1 flex flex-col bg-bg-dark-brand rounded-xl sm:rounded-2xl shadow-inner border border-white/5 overflow-hidden relative">
             {/* Actions Bar */}
             <div
@@ -2265,156 +2283,165 @@ export default function GameRoom({
             </div>
           </div>
         </div>
+      )}
       </div>
 
       {/* Chat Overlay */}
-      <OverlayChatRoom
-        isChatOpen={isChatOpen}
-        viewportOffsetTop={0}
-        closeChat={closeChat}
-        chatMessages={filteredChatMessages}
-        socketId={socketId}
-        chatInput={chatInput}
-        setChatInput={setChatInput}
-        handleChatSubmit={handleChatSubmit}
-        iosKeyboardHeightCache={iosKeyboardHeightCache}
-      />
+      {(!isFreeDrawIsolated || isChatOpen) && (
+        <OverlayChatRoom
+          isChatOpen={isChatOpen}
+          viewportOffsetTop={0}
+          closeChat={closeChat}
+          chatMessages={filteredChatMessages}
+          socketId={socketId}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          handleChatSubmit={handleChatSubmit}
+          iosKeyboardHeightCache={iosKeyboardHeightCache}
+        />
+      )}
 
       {/* Skip Confirm Modal */}
-      <CinematicModal
-        isOpen={showSkipConfirm}
-        onClose={() => setShowSkipConfirm(false)}
-        titleType="report"
-        titleText="SKIP"
-        buttons={[
-          {
-            id: "skip-confirm-no-btn",
-            text: <span className="text-white font-black">NO</span>,
-            onClick: () => setShowSkipConfirm(false),
-            variant: "primary",
-          },
-          {
-            id: "skip-confirm-yes-btn",
-            text: <span className="text-white font-black">YES</span>,
-            onClick: handleSkipTurn,
-            variant: "danger",
-          },
-        ]}
-      >
-        {/* Animated Skip Drawing Page & Creature Anchor */}
-        <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
-          {/* Inner Canvas Border */}
-          <div className="absolute inset-1 rounded-[14px] border border-dashed border-[#1AAACC]/20 pointer-events-none" />
+      {!isFreeDrawIsolated && (
+        <CinematicModal
+          isOpen={showSkipConfirm}
+          onClose={() => setShowSkipConfirm(false)}
+          titleType="report"
+          titleText="SKIP"
+          buttons={[
+            {
+              id: "skip-confirm-no-btn",
+              text: <span className="text-white font-black">NO</span>,
+              onClick: () => setShowSkipConfirm(false),
+              variant: "primary",
+            },
+            {
+              id: "skip-confirm-yes-btn",
+              text: <span className="text-white font-black">YES</span>,
+              onClick: handleSkipTurn,
+              variant: "danger",
+            },
+          ]}
+        >
+          {/* Animated Skip Drawing Page & Creature Anchor */}
+          <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
+            {/* Inner Canvas Border */}
+            <div className="absolute inset-1 rounded-[14px] border border-dashed border-[#1AAACC]/20 pointer-events-none" />
 
-          {/* Playful Creature (FastForward triangles) leaping out of the drawing sheet */}
-          <div className="relative z-10 flex items-center justify-center animate-skip-escape">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center">
-              <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] ml-0.5" strokeWidth={2.8} />
+            {/* Playful Creature (FastForward triangles) leaping out of the drawing sheet */}
+            <div className="relative z-10 flex items-center justify-center animate-skip-escape">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center">
+                <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] ml-0.5" strokeWidth={2.8} />
+              </div>
             </div>
           </div>
-        </div>
 
-        <h3 id="skip-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
-          Do you want to skip your turn?
-        </h3>
-        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
-          هل تريد تجاوز دورك في الرسم؟
-        </p>
-      </CinematicModal>
+          <h3 id="skip-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
+            Do you want to skip your turn?
+          </h3>
+          <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
+            هل تريد تجاوز دورك في الرسم؟
+          </p>
+        </CinematicModal>
+      )}
 
       {/* AFK Popup Modal */}
-      <CinematicModal
-        isOpen={isAfkPopupOpen}
-        titleType="inactive"
-        titleText="INACTIVE"
-        buttons={[
-          {
-            id: "afk-return-btn",
-            text: "موافق",
-            onClick: handleIHaveReturned,
-            variant: "neutral",
-            icon: <Check strokeWidth={4} size={18} />,
-          },
-        ]}
-      >
-        {/* Animated Warning Sprite */}
-        <div className="flex justify-center mb-3 sm:mb-4 mt-1">
-          <AfkWarningSprite className="w-24 sm:w-34 aspect-[256/326]" />
-        </div>
-
-        {/* Question & Subtext in the same line (RTL reading order) */}
-        <h3 
-          id="afk-title" 
-          dir="rtl"
-          className="text-sm sm:text-base font-black text-[#2E2882] leading-snug mb-3 sm:mb-4 px-1 text-center"
+      {(!isFreeDrawIsolated || isAfkPopupOpen) && (
+        <CinematicModal
+          isOpen={isAfkPopupOpen}
+          titleType="inactive"
+          titleText="INACTIVE"
+          buttons={[
+            {
+              id: "afk-return-btn",
+              text: "موافق",
+              onClick: handleIHaveReturned,
+              variant: "neutral",
+              icon: <Check strokeWidth={4} size={18} />,
+            },
+          ]}
         >
-          <span>هل ما زلت هنا؟ </span>
-          <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
-        </h3>
+          {/* Animated Warning Sprite */}
+          <div className="flex justify-center mb-3 sm:mb-4 mt-1">
+            <AfkWarningSprite className="w-24 sm:w-34 aspect-[256/326]" />
+          </div>
 
-        {/* Compact Remainder Countdown Badge */}
-        <div 
-          dir="rtl"
-          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 sm:mb-4 text-xs sm:text-sm font-black text-[#EF4444] select-none"
-        >
-          <span className="flex h-2 w-2 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]"></span>
-          </span>
-          <span>
-            سيتم فصل الاتصال بعد: <span className="font-extrabold font-mono text-xs sm:text-sm">{afkCountdown}</span> ثانية
-          </span>
-        </div>
-      </CinematicModal>
+          {/* Question & Subtext in the same line (RTL reading order) */}
+          <h3 
+            id="afk-title" 
+            dir="rtl"
+            className="text-sm sm:text-base font-black text-[#2E2882] leading-snug mb-3 sm:mb-4 px-1 text-center"
+          >
+            <span>هل ما زلت هنا؟ </span>
+            <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
+          </h3>
+
+          {/* Compact Remainder Countdown Badge */}
+          <div 
+            dir="rtl"
+            className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 sm:mb-4 text-xs sm:text-sm font-black text-[#EF4444] select-none"
+          >
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]"></span>
+            </span>
+            <span>
+              سيتم فصل الاتصال بعد: <span className="font-extrabold font-mono text-xs sm:text-sm">{afkCountdown}</span> ثانية
+            </span>
+          </div>
+        </CinematicModal>
+      )}
 
       {/* Report Confirmation Modal */}
-      <CinematicModal
-        isOpen={showReportConfirm}
-        onClose={() => setShowReportConfirm(false)}
-        titleType="report"
-        titleText="REPORT"
-        buttons={[
-          {
-            id: "report-confirm-no-btn",
-            text: "NO",
-            onClick: () => setShowReportConfirm(false),
-            variant: "primary",
-          },
-          {
-            id: "report-confirm-yes-btn",
-            text: "YES",
-            onClick: () => {
-              setShowReportConfirm(false);
-              socket?.emit("report_draw");
+      {(!isFreeDrawIsolated || showReportConfirm) && (
+        <CinematicModal
+          isOpen={showReportConfirm}
+          onClose={() => setShowReportConfirm(false)}
+          titleType="report"
+          titleText="REPORT"
+          buttons={[
+            {
+              id: "report-confirm-no-btn",
+              text: "NO",
+              onClick: () => setShowReportConfirm(false),
+              variant: "primary",
             },
-            variant: "danger",
-          },
-        ]}
-      >
-        {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-18 h-18 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative">
-          <motion.div 
-            animate={{
-              rotate: [-4, 4, -4, 4, -4, 4, 0],
-              scale: [1, 1.05, 1, 1.05, 1]
-            }}
-            transition={{
-              delay: 1.5,
-              repeat: Infinity,
-              duration: 0.6,
-              repeatDelay: 1.8,
-              ease: "easeInOut"
-            }}
-          >
-            <AlertTriangle className="w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
-          </motion.div>
-        </div>
+            {
+              id: "report-confirm-yes-btn",
+              text: "YES",
+              onClick: () => {
+                setShowReportConfirm(false);
+                socket?.emit("report_draw");
+              },
+              variant: "danger",
+            },
+          ]}
+        >
+          {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
+          <div className="w-18 h-18 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative">
+            <motion.div 
+              animate={{
+                rotate: [-4, 4, -4, 4, -4, 4, 0],
+                scale: [1, 1.05, 1, 1.05, 1]
+              }}
+              transition={{
+                delay: 1.5,
+                repeat: Infinity,
+                duration: 0.6,
+                repeatDelay: 1.8,
+                ease: "easeInOut"
+              }}
+            >
+              <AlertTriangle className="w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+            </motion.div>
+          </div>
 
-        {/* Content Text unified with golden standard */}
-        <h3 id="report-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
-          Are you sure you wanna report this drawing?
-        </h3>
-      </CinematicModal>
+          {/* Content Text unified with golden standard */}
+          <h3 id="report-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
+            Are you sure you wanna report this drawing?
+          </h3>
+        </CinematicModal>
+      )}
 
       {/* Global Overlays for CHOOSING state */}
       {gameState.status === "CHOOSING" && amIDrawer && (
