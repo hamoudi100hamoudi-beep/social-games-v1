@@ -57,6 +57,18 @@ export const EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST = true;
  */
 export const EXPERIMENTAL_BITMAP_UNDO_TEST = true;
 
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 3 - Fixed DPR = 1.0):
+ * Tests if locking canvas backing store resolution to canonical 1.0 (effectiveDPR = 1.0)
+ * in Experimental Draw affects rendering performance or the low-zoom interaction feel,
+ * matching Free Draw's canonical backing store setup.
+ *
+ * When true: Experimental Draw locks effectiveDPR to 1.0 (canvas backing store 760x430).
+ * When false: Experimental Draw uses adaptive DPR (e.g. 1.5 or 2.0).
+ * Default: true for Batch 3 test.
+ */
+export const EXPERIMENTAL_DPR_1_TEST = true;
+
 const LOGICAL_HEIGHT = 430;
 
 export interface ExperimentalDrawingBoardProps {
@@ -338,6 +350,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           isFreeDraw={isFreeDraw}
           enableInputOptimizations={Boolean(isExperimental && EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST)}
           enableBitmapUndoCache={Boolean(isExperimental && EXPERIMENTAL_BITMAP_UNDO_TEST)}
+          enableFixedDPR={Boolean(isExperimental && EXPERIMENTAL_DPR_1_TEST)}
           onHistoryStateChange={(idx, len) => {
             setHistoryState({ index: idx, length: len });
             onHistoryLengthChange?.(idx > 0);

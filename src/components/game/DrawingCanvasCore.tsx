@@ -285,6 +285,7 @@ interface DrawingCanvasCoreProps {
   isFreeDraw?: boolean;
   enableInputOptimizations?: boolean;
   enableBitmapUndoCache?: boolean;
+  enableFixedDPR?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -303,7 +304,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     deferredReset = false,
     isFreeDraw = false,
     enableInputOptimizations = false,
-    enableBitmapUndoCache = false
+    enableBitmapUndoCache = false,
+    enableFixedDPR = false
   },
   ref
 ) => {
@@ -507,11 +509,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -2105,11 +2107,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCanvas = tempCanvasRef.current;
     if (!canvas || !tempCanvas) return;
 
-    // In Free Draw mode: Canonical Backing Store Resolution (Option B)
-    // Both Main and Temp canvases are strictly locked to 592x344 (effectiveDPR = 1.0)
+    // In Free Draw mode and Experimental (Batch 3 DPR test): Canonical Backing Store Resolution (Option B)
+    // Both Main and Temp canvases are strictly locked to 760x430 (effectiveDPR = 1.0)
     // for 100% deterministic pixel-perfect synchronization across all devices.
     // In Normal/Competitive rooms: Adaptive DPR continues to be used.
-    const effectiveDPR = isFreeDraw ? 1.0 : DPR;
+    const effectiveDPR = (isFreeDraw || enableFixedDPR) ? 1.0 : DPR;
 
     canvas.width = Math.round(LOGICAL_WIDTH * effectiveDPR);
     canvas.height = Math.round(LOGICAL_HEIGHT * effectiveDPR);
@@ -2932,6 +2934,7 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.isFreeDraw === nextProps.isFreeDraw &&
     prevProps.enableInputOptimizations === nextProps.enableInputOptimizations &&
     prevProps.enableBitmapUndoCache === nextProps.enableBitmapUndoCache &&
+    prevProps.enableFixedDPR === nextProps.enableFixedDPR &&
     prevProps.deferredReset === nextProps.deferredReset &&
     prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
     prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&
