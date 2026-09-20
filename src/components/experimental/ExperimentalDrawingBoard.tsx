@@ -142,10 +142,10 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
   const [activeMenu, setActiveMenu] = useState<'tools' | 'controls' | null>(null);
   const [tool, setTool] = useState<ToolType>('pencil');
   const [color, setColor] = useState('#000000');
-  const [penWidth, setPenWidth] = useState(3);
+  const [penWidth, setPenWidth] = useState(2);
   const [penOpacity, setPenOpacity] = useState(1);
-  const [eraserWidth, setEraserWidth] = useState(40);
-  const [eraserOpacity, setEraserOpacity] = useState(1);
+  const [eraserWidth, setEraserWidth] = useState(30);
+  const [eraserOpacity, setEraserOpacity] = useState(0.9);
   const [bucketOpacity, setBucketOpacity] = useState(1);
   const [historyState, setHistoryState] = useState({ index: 0, length: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -165,10 +165,10 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
     const resetToolsToDefault = () => {
       setTool('pencil');
       setColor('#000000');
-      setPenWidth(3);
+      setPenWidth(2);
       setPenOpacity(1);
-      setEraserWidth(40);
-      setEraserOpacity(1);
+      setEraserWidth(30);
+      setEraserOpacity(0.9);
       setBucketOpacity(1);
       setActiveMenu(null);
       previousTool.current = 'pencil';

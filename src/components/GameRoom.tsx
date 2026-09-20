@@ -27,6 +27,7 @@ import {
 import { useSocket } from "./SocketProvider";
 import { motion, AnimatePresence } from "motion/react";
 import { PlayersSidebar } from "./game/PlayersSidebar";
+import { FreeDrawPlayersList } from "./game/FreeDrawPlayersList";
 import { MiniBoardOverlay } from "./game/MiniBoardOverlay";
 import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
 import CinematicModal from "./game/CinematicModal";
@@ -1915,15 +1916,23 @@ export default function GameRoom({
 
         {/* Left: Players Sidebar */}
         {!isFreeDrawIsolated && (
-          <PlayersSidebar
-            slots={slots}
-            gameState={gameState}
-            morphMode={morphMode}
-            socketId={socketId}
-            onPlayerClick={setSelectedProfilePlayer}
-            isFreeDraw={isFreeDraw}
-            amIDrawer={amIDrawer}
-          />
+          isFreeDraw ? (
+            <FreeDrawPlayersList
+              slots={slots}
+              morphMode={morphMode}
+              onPlayerClick={setSelectedProfilePlayer}
+            />
+          ) : (
+            <PlayersSidebar
+              slots={slots}
+              gameState={gameState}
+              morphMode={morphMode}
+              socketId={socketId}
+              onPlayerClick={setSelectedProfilePlayer}
+              isFreeDraw={isFreeDraw}
+              amIDrawer={amIDrawer}
+            />
+          )
         )}
 
         {/* Right: Actions & Guess Input */}
