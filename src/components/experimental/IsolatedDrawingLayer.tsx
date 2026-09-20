@@ -1,6 +1,5 @@
-import React, { memo, useEffect, useMemo, useRef } from 'react';
+import React, { memo, useMemo } from 'react';
 import { ExperimentalDrawingBoard } from './ExperimentalDrawingBoard';
-import { expMetrics } from './experimentalInstrumentation';
 
 export interface IsolatedDrawingLayerProps {
   readOnly: boolean;
@@ -47,68 +46,6 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
   onHistoryLengthChangeAction,
   drawerTimerSlotRef,
 }) => {
-  // Record Drawing Layer render / commit metric
-  expMetrics.recordReactCommit(
-    'IsolatedDrawingLayer',
-    `status=${status}, drawer=${amIDrawer ? 'self' : 'other'}, readOnly=${readOnly}`
-  );
-
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Measure layout / dimension readiness of the drawing container without forced synchronous reflow
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    let rafId: number | null = null;
-
-    rafId = requestAnimationFrame(() => {
-      if (el.clientWidth > 0 && el.clientHeight > 0) {
-        expMetrics.recordLayoutMeasurement(el.clientWidth, el.clientHeight, 'DrawingContainerInitial');
-      }
-    });
-
-    const obs = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          expMetrics.recordLayoutMeasurement(width, height, 'DrawingContainerResize');
-        }
-      }
-    });
-
-    obs.observe(el);
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      obs.disconnect();
-    };
-  }, []);
-
-  // Passive pointer listeners (capture-mode, passive, non-intercepting) to profile hardware-to-JS latency
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const handlePointerDown = (e: PointerEvent) => {
-      if (isDrawingMode && amIDrawer) {
-        expMetrics.recordPointerDown(e);
-      }
-    };
-
-    const handlePointerMove = (e: PointerEvent) => {
-      if (isDrawingMode && amIDrawer) {
-        expMetrics.recordPointerMove(e);
-      }
-    };
-
-    el.addEventListener('pointerdown', handlePointerDown, { passive: true, capture: true });
-    el.addEventListener('pointermove', handlePointerMove, { passive: true, capture: true });
-
-    return () => {
-      el.removeEventListener('pointerdown', handlePointerDown, { capture: true });
-      el.removeEventListener('pointermove', handlePointerMove, { capture: true });
-    };
-  }, [isDrawingMode, amIDrawer]);
-
   // Stable timerBarNode container with invariant reference
   const stableTimerBarNode = useMemo(() => {
     if (isFreeDraw) return undefined;
@@ -131,7 +68,7 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
   }, [canRequestHint, onRequestHintAction]);
 
   return (
-    <div ref={containerRef} className="w-full h-full relative flex flex-col">
+    <div className="w-full h-full relative flex flex-col">
       <ExperimentalDrawingBoard
         key="isolated-shared-board"
         currentDrawerId={currentDrawerId}

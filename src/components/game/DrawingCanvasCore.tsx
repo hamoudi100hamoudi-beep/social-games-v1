@@ -28,30 +28,6 @@ const LOGICAL_WIDTH = CANVAS_WIDTH;
 const LOGICAL_HEIGHT = CANVAS_HEIGHT;
 
 // --- Performance and DPR Tiering ---
-/**
- * 🧪 DIAGNOSTIC TEST FLAG:
- * Tests if Free Draw pinch/zoom-out lag is specifically caused by GPU alpha compositing
- * of transparent canvases over the transformed viewport.
- * When enabled (true):
- * - On 2-finger pinch start, a temporary opaque white canvas snapshots the current drawing.
- * - The diagnostic canvas is shown while transparent canvases are hidden via display='none'.
- * - On pinch end, the diagnostic canvas is hidden and original canvases are restored instantly.
- * Default: false.
- */
-export const FREE_DRAW_OPAQUE_PINCH_TEST = false;
-
-/**
- * 🧪 DIAGNOSTIC TEST FLAG:
- * Tests if Free Draw low-zoom lag is specifically caused by the presence / compositing
- * of the transformWrapper surface itself.
- * When enabled (true):
- * - transformWrapperRef is hidden from rendering/compositing (visibility: hidden)
- *   so its visual surface and children do not participate in rendering or GPU compositing,
- *   while preserving the surrounding layout, toolbar, and controls completely unchanged.
- * Default: false.
- */
-export const FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST = false;
-
 const getPerformanceTier = () => {
   if (typeof window === 'undefined') return 1;
   try {
@@ -283,11 +259,6 @@ interface DrawingCanvasCoreProps {
   onSyncStateChange?: (syncing: boolean) => void;
   deferredReset?: boolean;
   isFreeDraw?: boolean;
-  enableInputOptimizations?: boolean;
-  enableBitmapUndoCache?: boolean;
-  enableFixedDPR?: boolean;
-  enableCanvasAlpha?: boolean;
-  enableDestinationOutEraser?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -304,12 +275,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     isZoomEnabled = false,
     onSyncStateChange,
     deferredReset = false,
-    isFreeDraw = false,
-    enableInputOptimizations = false,
-    enableBitmapUndoCache = false,
-    enableFixedDPR = false,
-    enableCanvasAlpha = false,
-    enableDestinationOutEraser = false
+    isFreeDraw = false
   },
   ref
 ) => {
@@ -411,7 +377,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const stageFreeDrawPendingCache = () => {
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    const useCache = propsRef.current.isFreeDraw;
     if (!useCache || propsRef.current.readOnly) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -421,7 +387,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const commitFreeDrawPendingCache = () => {
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    const useCache = propsRef.current.isFreeDraw;
     if (!useCache) return;
     if (hasFreeDrawPendingUndoCacheRef.current && freeDrawPendingUndoCacheCanvasRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
@@ -434,7 +400,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const captureDirectFreeDrawUndoCache = () => {
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    const useCache = propsRef.current.isFreeDraw;
     if (!useCache || propsRef.current.readOnly) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -446,7 +412,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const invalidateFreeDrawCaches = () => {
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    const useCache = propsRef.current.isFreeDraw;
     if (!useCache) return;
     hasFreeDrawUndoCacheRef.current = false;
     hasFreeDrawRedoCacheRef.current = false;
@@ -468,10 +434,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const activeTouchCountRef = useRef(0);
   const isZoomPinchingRef = useRef(false);
   const redrawRequestedRef = useRef(false);
-
-  // 🧪 Diagnostic Canvas Ref for FREE_DRAW_OPAQUE_PINCH_TEST
-  const diagnosticCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const isDiagnosticActiveRef = useRef(false);
 
   // Safe Edge Stroke Entry refs (تتبع الرسم عند البدء من خارج حدود اللوحة وسحب الإصبع لداخلها)
   const lastOutsideTouchRef = useRef<{ clientX: number; clientY: number } | null>(null);
@@ -513,11 +475,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -659,37 +621,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         e.preventDefault();
         isPinching = true;
         isZoomPinchingRef.current = true;
-
-        // 🧪 FREE_DRAW_OPAQUE_PINCH_TEST: Snapshot to opaque white canvas & hide transparent canvases
-        if (FREE_DRAW_OPAQUE_PINCH_TEST && propsRef.current.isFreeDraw) {
-          const mainCanvas = canvasRef.current;
-          const tempCanvas = tempCanvasRef.current;
-          const diagCanvas = diagnosticCanvasRef.current;
-          if (mainCanvas && diagCanvas) {
-            if (diagCanvas.width !== mainCanvas.width || diagCanvas.height !== mainCanvas.height) {
-              diagCanvas.width = mainCanvas.width;
-              diagCanvas.height = mainCanvas.height;
-            }
-            const diagCtx = diagCanvas.getContext('2d', { alpha: false });
-            if (diagCtx) {
-              diagCtx.save();
-              diagCtx.setTransform(1, 0, 0, 1, 0, 0);
-              diagCtx.fillStyle = '#ffffff';
-              diagCtx.fillRect(0, 0, diagCanvas.width, diagCanvas.height);
-              diagCtx.drawImage(mainCanvas, 0, 0);
-              if (tempCanvas) {
-                diagCtx.drawImage(tempCanvas, 0, 0);
-              }
-              diagCtx.restore();
-            }
-            diagCanvas.style.display = 'block';
-            mainCanvas.style.display = 'none';
-            if (tempCanvas) {
-              tempCanvas.style.display = 'none';
-            }
-            isDiagnosticActiveRef.current = true;
-          }
-        }
 
         const t1 = e.touches[0];
         const t2 = e.touches[1];
@@ -928,23 +859,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         cachedContainerRect = null;
         flushPendingTransform();
 
-        // 🧪 FREE_DRAW_OPAQUE_PINCH_TEST: Hide diagnostic canvas & restore original transparent canvases
-        if (isDiagnosticActiveRef.current) {
-          const mainCanvas = canvasRef.current;
-          const tempCanvas = tempCanvasRef.current;
-          const diagCanvas = diagnosticCanvasRef.current;
-          if (diagCanvas) {
-            diagCanvas.style.display = 'none';
-          }
-          if (mainCanvas) {
-            mainCanvas.style.display = 'block';
-          }
-          if (tempCanvas) {
-            tempCanvas.style.display = 'block';
-          }
-          isDiagnosticActiveRef.current = false;
-        }
-
         // Keep zoom-is-pinching true for 100ms path stabilization after pinch ends
         setTimeout(() => {
           isZoomPinchingRef.current = false;
@@ -961,15 +875,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (gestureRafId !== null) {
         cancelAnimationFrame(gestureRafId);
         gestureRafId = null;
-      }
-      if (isDiagnosticActiveRef.current) {
-        const mainCanvas = canvasRef.current;
-        const tempCanvas = tempCanvasRef.current;
-        const diagCanvas = diagnosticCanvasRef.current;
-        if (diagCanvas) diagCanvas.style.display = 'none';
-        if (mainCanvas) mainCanvas.style.display = 'block';
-        if (tempCanvas) tempCanvas.style.display = 'block';
-        isDiagnosticActiveRef.current = false;
       }
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
@@ -1218,7 +1123,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeCtx.globalAlpha = drawOpacity;
 
     if (drawTool === 'eraser') {
-      if ((propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser) && activeCtx !== tempCtxRef.current) {
+      if (propsRef.current.isFreeDraw && activeCtx !== tempCtxRef.current) {
         activeCtx.globalCompositeOperation = 'destination-out';
         activeCtx.strokeStyle = 'rgba(0,0,0,1)';
         activeCtx.fillStyle = 'rgba(0,0,0,1)';
@@ -1325,7 +1230,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     activeCtx.globalAlpha = drawOpacity;
 
     if (drawTool === 'eraser') {
-      if ((propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser) && activeCtx !== tempCtxRef.current) {
+      if (propsRef.current.isFreeDraw && activeCtx !== tempCtxRef.current) {
         activeCtx.globalCompositeOperation = 'destination-out';
         activeCtx.strokeStyle = 'rgba(0,0,0,1)';
         activeCtx.fillStyle = 'rgba(0,0,0,1)';
@@ -1382,7 +1287,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (activeCtx && activeCtx.canvas) {
       activeCtx.save();
       activeCtx.setTransform(1, 0, 0, 1, 0, 0);
-      if (propsRef.current.isFreeDraw || propsRef.current.enableCanvasAlpha) {
+      if (propsRef.current.isFreeDraw) {
         activeCtx.clearRect(0, 0, activeCtx.canvas.width, activeCtx.canvas.height);
       } else {
         activeCtx.fillStyle = '#ffffff';
@@ -1523,7 +1428,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // 🛡️ Fast-Path: Single Previous-State Canvas Cache (Only for local player's undo)
     let restoredViaCache = false;
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    const useCache = propsRef.current.isFreeDraw;
     if (emit && useCache && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const redoCanvas = ensureCacheCanvas(freeDrawRedoCacheCanvasRef, canvas);
@@ -1568,7 +1473,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // 🛡️ Fast-Path: Single Redo-State Canvas Cache (Only for local player's redo)
     let restoredViaCache = false;
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    const useCache = propsRef.current.isFreeDraw;
     if (emit && useCache && hasFreeDrawRedoCacheRef.current && freeDrawRedoCacheCanvasRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
@@ -2115,21 +2020,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     // Both Main and Temp canvases are strictly locked to 760x430 (effectiveDPR = 1.0)
     // for 100% deterministic pixel-perfect synchronization across all devices.
     // In Normal/Competitive rooms: Adaptive DPR continues to be used.
-    const effectiveDPR = (isFreeDraw || enableFixedDPR) ? 1.0 : DPR;
+    const effectiveDPR = isFreeDraw ? 1.0 : DPR;
 
     canvas.width = Math.round(LOGICAL_WIDTH * effectiveDPR);
     canvas.height = Math.round(LOGICAL_HEIGHT * effectiveDPR);
     tempCanvas.width = Math.round(LOGICAL_WIDTH * effectiveDPR);
     tempCanvas.height = Math.round(LOGICAL_HEIGHT * effectiveDPR);
 
-    const ctx = canvas.getContext('2d', (isFreeDraw || enableCanvasAlpha) ? undefined : { alpha: false });
+    const ctx = canvas.getContext('2d', isFreeDraw ? undefined : { alpha: false });
     const tempCtx = tempCanvas.getContext('2d');
 
     if (ctx && tempCtx) {
-      if (typeof console !== 'undefined' && enableCanvasAlpha) {
-        const attrs = ctx.getContextAttributes ? ctx.getContextAttributes() : null;
-        console.log("[DrawingCanvasCore] Diagnostic Alpha Test: context alpha =", attrs?.alpha);
-      }
       ctx.setTransform(effectiveDPR, 0, 0, effectiveDPR, 0, 0);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -2244,7 +2145,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         return;
       }
 
-      const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
+      const useInputOptimizations = propsRef.current.isFreeDraw;
 
       if (!useInputOptimizations && dist > 8) {
         const stepSize = 6;
@@ -2606,7 +2507,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeTool = propsRef.current.tool;
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
-      const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
+      const useInputOptimizations = propsRef.current.isFreeDraw;
       if (isDrawingRef.current) {
         if (useInputOptimizations) {
           // Free Draw & Experimental (Batch 1): Continuous un-clamped stroke trajectory across canvas edges
@@ -2717,9 +2618,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           } catch (err) {}
 
-          const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
+          const useInputOptimizations = propsRef.current.isFreeDraw;
           if (useInputOptimizations) {
-            // Free Draw & Experimental (Batch 1): Continuous un-clamped raw trajectory begins directly from the pointer position.
+            // Free Draw: Continuous un-clamped raw trajectory begins directly from the pointer position.
             // Native canvas context naturally clips any geometry outside (0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT).
             const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
             startPencilOrEraserStroke(rawCoords.x, rawCoords.y);
@@ -2744,7 +2645,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         } else if (activeTool === 'pencil' || activeTool === 'eraser') {
           const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
           const isInside = rawCoords.x >= 0 && rawCoords.x <= LOGICAL_WIDTH && rawCoords.y >= 0 && rawCoords.y <= LOGICAL_HEIGHT;
-          const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
+          const useInputOptimizations = propsRef.current.isFreeDraw;
           if (isDrawingRef.current) {
             if (useInputOptimizations) {
               const nativeEvt = e.nativeEvent as any;
@@ -2835,21 +2736,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           width: '100%',
           height: '100%',
           transformOrigin: '0 0',
-          willChange: 'transform',
-          ...(FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST ? { visibility: 'hidden' as const } : {})
+          willChange: 'transform'
         } : {
           width: LOGICAL_WIDTH,
           height: LOGICAL_HEIGHT,
           transformOrigin: '0 0',
-          willChange: 'transform',
-          ...(FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST ? { visibility: 'hidden' as const } : {})
+          willChange: 'transform'
         }}
       >
 
         <canvas
           id="drawing-board-layer-primary"
           ref={canvasRef}
-          className={`absolute inset-0 w-full h-full block ${(isFreeDraw || enableCanvasAlpha) ? 'bg-transparent' : 'bg-white'} touch-none ${readOnly ? 'object-contain pointer-events-none' : 'pointer-events-auto cursor-crosshair'}`}
+          className={`absolute inset-0 w-full h-full block ${isFreeDraw ? 'bg-transparent' : 'bg-white'} touch-none ${readOnly ? 'object-contain pointer-events-none' : 'pointer-events-auto cursor-crosshair'}`}
           style={{
             zIndex: 10,
             imageRendering: 'auto'
@@ -2883,16 +2782,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           className={`absolute inset-0 w-full h-full block pointer-events-none touch-none bg-transparent ${readOnly ? 'object-contain' : ''}`}
           style={{
             zIndex: 20
-          }}
-        />
-        {/* 🧪 Diagnostic Canvas for FREE_DRAW_OPAQUE_PINCH_TEST */}
-        <canvas
-          id="drawing-board-layer-diagnostic-opaque"
-          ref={diagnosticCanvasRef}
-          className="absolute inset-0 w-full h-full pointer-events-none touch-none bg-white"
-          style={{
-            zIndex: 15,
-            display: 'none'
           }}
         />
       </div>
@@ -2940,11 +2829,6 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.status === nextProps.status &&
     prevProps.isZoomEnabled === nextProps.isZoomEnabled &&
     prevProps.isFreeDraw === nextProps.isFreeDraw &&
-    prevProps.enableInputOptimizations === nextProps.enableInputOptimizations &&
-    prevProps.enableBitmapUndoCache === nextProps.enableBitmapUndoCache &&
-    prevProps.enableFixedDPR === nextProps.enableFixedDPR &&
-    prevProps.enableCanvasAlpha === nextProps.enableCanvasAlpha &&
-    prevProps.enableDestinationOutEraser === nextProps.enableDestinationOutEraser &&
     prevProps.deferredReset === nextProps.deferredReset &&
     prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
     prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&
