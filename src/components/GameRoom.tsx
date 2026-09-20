@@ -38,6 +38,10 @@ import { soundManager } from "../utils/soundManager";
 import { useRoomEventGate } from "../hooks/useRoomEventGate";
 import { getRoomConfig } from "../types/game";
 
+// 🧪 DIAGNOSTIC TEST: FREE DRAW ISOLATION TEST
+// Isolates Free Draw drawing completely from non-essential Room Shell DOM, background panels, modals, and unneeded re-renders.
+// Set to false to cleanly revert to previous behavior.
+export const FREE_DRAW_ISOLATION_TEST = true;
 
 interface GameRoomProps {
   nickname: string;
@@ -687,7 +691,7 @@ export default function GameRoom({
   const isDrawingModeRef = React.useRef<boolean>(isDrawingMode);
 
   // 🛡️ Free Draw Isolation: When drawing in Free Draw, isolate room shell to prevent re-render thrashing & DOM overdraw
-  const isFreeDrawIsolated = Boolean(isFreeDraw && isDrawingMode);
+  const isFreeDrawIsolated = Boolean(FREE_DRAW_ISOLATION_TEST && isFreeDraw && isDrawingMode);
   const isFreeDrawIsolatedRef = React.useRef<boolean>(isFreeDrawIsolated);
 
   React.useEffect(() => {

@@ -20,6 +20,79 @@ import FlipaClipControls from '../game/FlipaClipControls';
 import ColorWheelModal from '../game/ColorWheelModal';
 import CinematicModal from '../game/CinematicModal';
 import { safeLocalStorage } from '../../utils/storage';
+import { expMetrics } from './experimentalInstrumentation';
+
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Color Wheel):
+ * Tests if the presence / mounting / execution of ColorWheelModal in Experimental Draw
+ * impacts rendering or tool performance, replicating Free Draw behavior under experiment.
+ * When true: ColorWheelModal is enabled and can be opened in Experimental Draw when isExperimental is true.
+ * When false: ColorWheelModal is completely disabled in Experimental Draw.
+ * Default: true for diagnostic test.
+ */
+export const EXPERIMENTAL_COLOR_WHEEL_TEST = true;
+
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 1 - Input Path Optimizations):
+ * Enables the 3 input optimizations from Free Draw in Experimental Draw:
+ * 1. Native getCoalescedEvents() sub-frame precision
+ * 2. Removal of synthetic manual Lerp interpolation
+ * 3. Edge raw trajectory + unconstrained pointer capture
+ *
+ * When true: Experimental Draw activates these 3 input optimizations.
+ * When false: Experimental Draw reverts to legacy clamped & lerped input handling.
+ * Default: true for Batch 1 test.
+ */
+export const EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST = true;
+
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 2 - Bitmap Undo/Redo Cache):
+ * Enables 1-step Bitmap Canvas snapshot cache in Experimental Draw:
+ * - Instant single-step Undo/Redo via direct pixel blit instead of full history replay
+ * - Invalidates cleanly on multiplayer/remote packets
+ *
+ * When true: Experimental Draw activates the 1-step Bitmap Undo/Redo cache.
+ * When false: Experimental Draw reverts to full command history replay.
+ * Default: true for Batch 2 test.
+ */
+export const EXPERIMENTAL_BITMAP_UNDO_TEST = true;
+
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 3 - Fixed DPR = 1.0):
+ * Tests if locking canvas backing store resolution to canonical 1.0 (effectiveDPR = 1.0)
+ * in Experimental Draw affects rendering performance or the low-zoom interaction feel,
+ * matching Free Draw's canonical backing store setup.
+ *
+ * When true: Experimental Draw locks effectiveDPR to 1.0 (canvas backing store 760x430).
+ * When false: Experimental Draw uses adaptive DPR (e.g. 1.5 or 2.0).
+ * Default: true for Batch 3 test.
+ */
+export const EXPERIMENTAL_DPR_1_TEST = true;
+
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 4 - Option B: Canvas Alpha + Transparent Background):
+ * Tests if switching the Primary Drawing Canvas 2D context to alpha: true and CSS background to bg-transparent
+ * (matching Free Draw's compositing model while container provides the solid white background)
+ * induces low-zoom interaction lag.
+ * Note: Eraser logic is completely untouched and continues writing solid white (#ffffff).
+ *
+ * When true: Experimental Draw sets primary canvas to alpha: true and CSS to bg-transparent.
+ * When false: Experimental Draw sets primary canvas to alpha: false with CSS bg-white.
+ * Default: true for Option B diagnostic test.
+ */
+export const EXPERIMENTAL_CANVAS_ALPHA_TEST = true;
+
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG (Batch 5 - Destination-Out Eraser):
+ * Tests if using native destination-out compositing for the Eraser tool
+ * (clearing canvas pixels to transparent instead of drawing solid white #ffffff)
+ * in Experimental Draw triggers low-zoom lag or performance degradation.
+ *
+ * When true: Experimental Draw uses globalCompositeOperation = 'destination-out' for eraser.
+ * When false: Experimental Draw paints solid #ffffff for eraser.
+ * Default: true for final diagnostic test.
+ */
+export const EXPERIMENTAL_DESTINATION_OUT_ERASER_TEST = true;
 
 const LOGICAL_HEIGHT = 430;
 
@@ -59,7 +132,8 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const isColorWheelEnabled = isFreeDraw;
+  // 🧪 Diagnostic flag logic: Color Wheel is active in Free Draw, or in Experimental mode when flag is true
+  const isColorWheelEnabled = isFreeDraw || Boolean(isExperimental && EXPERIMENTAL_COLOR_WHEEL_TEST);
 
   // Layout scale tracking for thickness preview bubble resizing - scheduled via rAF to eliminate layout thrash
   const [baseScale, setBaseScale] = useState(1);
@@ -299,6 +373,11 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           status={status}
           isZoomEnabled={zoomEnabled}
           isFreeDraw={isFreeDraw}
+          enableInputOptimizations={Boolean(isExperimental && EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST)}
+          enableBitmapUndoCache={Boolean(isExperimental && EXPERIMENTAL_BITMAP_UNDO_TEST)}
+          enableFixedDPR={Boolean(isExperimental && EXPERIMENTAL_DPR_1_TEST)}
+          enableCanvasAlpha={Boolean(isExperimental && EXPERIMENTAL_CANVAS_ALPHA_TEST)}
+          enableDestinationOutEraser={Boolean(isExperimental && EXPERIMENTAL_DESTINATION_OUT_ERASER_TEST)}
           onHistoryStateChange={(idx, len) => {
             setHistoryState({ index: idx, length: len });
             onHistoryLengthChange?.(idx > 0);

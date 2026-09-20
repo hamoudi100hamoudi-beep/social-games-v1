@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { IsolatedDrawingLayer } from "./IsolatedDrawingLayer";
+import { ExperimentalDevHUD } from "./ExperimentalDevHUD";
+import { expMetrics } from "./experimentalInstrumentation";
 import { ExperimentalWordOverlay } from "./ExperimentalWordOverlay";
 import { ExperimentalHitOverlay, ExperimentalHitOverlayHandle } from "./ExperimentalHitOverlay";
 import {
@@ -38,6 +40,11 @@ import { safeLocalStorage } from "../../utils/storage";
 import { soundManager } from "../../utils/soundManager";
 import { useRoomEventGate } from "../../hooks/useRoomEventGate";
 import { getRoomConfig } from "../../types/game";
+
+// 🧪 DIAGNOSTIC TEST: FULL DRAWING ISOLATION TEST
+// Isolates drawing completely from all non-essential Game Room UI, modals, sound, and animations.
+// Set to false or delete to cleanly remove this test mode.
+export const FULL_DRAWING_ISOLATION_TEST = true;
 
 interface GameRoomProps {
   nickname: string;
@@ -291,6 +298,9 @@ export default function ExperimentalGameRoom({
   onLeave,
   justJoined,
 }: GameRoomProps) {
+  // 🧪 Dev Instrumentation: Track Game Layer Renders
+  expMetrics.recordReactCommit('ExperimentalGameRoom', 'state_update');
+
   const { socket, isConnected, socketId } = useSocket();
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
@@ -678,6 +688,13 @@ export default function ExperimentalGameRoom({
 
   React.useEffect(() => {
     isDrawingModeRef.current = isDrawingMode;
+    if (isDrawingMode) {
+      expMetrics.startTransition(true);
+      expMetrics.recordOperation('Modal unmount (Word Selection / CHOOSING)', 'NON-CRITICAL', 'Removing choosing overlay');
+      expMetrics.recordOperation('SmoothTimer phase change to DRAWING', 'NON-CRITICAL', 'CSS timer bar transition initiated');
+      expMetrics.recordOperation('DrawingLayer readOnly set to false', 'CRITICAL FOR DRAWING', 'Enabling canvas interactions');
+      expMetrics.recordOperation('HitNotifications overlay mount', 'NON-CRITICAL', 'Floating notification container');
+    }
   }, [isDrawingMode]);
 
   // 🛡️ When active drawing mode finishes, flush any buffered background data cleanly to React state
@@ -1738,12 +1755,13 @@ export default function ExperimentalGameRoom({
           amIDrawer={amIDrawer}
         />
 
-        {/* Right: Actions & Guess Input */}
-        <div
-          className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-0 pl-1 sm:pb-3 sm:pr-3 sm:pt-0 sm:pl-1.5
-                      ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
-                     `}
-        >
+        {/* Right: Actions & Guess Input - Suppressed during FULL DRAWING ISOLATION TEST for active drawer */}
+        {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+          <div
+            className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-0 pl-1 sm:pb-3 sm:pr-3 sm:pt-0 sm:pl-1.5
+                        ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
+                       `}
+          >
           <div className="flex-1 flex flex-col bg-bg-dark-brand rounded-xl sm:rounded-2xl shadow-inner border border-white/5 overflow-hidden relative">
             {/* Actions Bar */}
             <div
@@ -2142,20 +2160,23 @@ export default function ExperimentalGameRoom({
             </div>
           </div>
         </div>
+        )}
       </div>
 
       {/* Chat Overlay */}
-      <OverlayChatRoom
-        isChatOpen={isChatOpen}
-        viewportOffsetTop={0}
-        closeChat={closeChat}
-        chatMessages={filteredChatMessages}
-        socketId={socketId}
-        chatInput={chatInput}
-        setChatInput={setChatInput}
-        handleChatSubmit={handleChatSubmit}
-        iosKeyboardHeightCache={iosKeyboardHeightCache}
-      />
+      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+        <OverlayChatRoom
+          isChatOpen={isChatOpen}
+          viewportOffsetTop={0}
+          closeChat={closeChat}
+          chatMessages={filteredChatMessages}
+          socketId={socketId}
+          chatInput={chatInput}
+          setChatInput={setChatInput}
+          handleChatSubmit={handleChatSubmit}
+          iosKeyboardHeightCache={iosKeyboardHeightCache}
+        />
+      )}
 
       {/* Skip Confirm Modal */}
       <CinematicModal
@@ -2245,11 +2266,12 @@ export default function ExperimentalGameRoom({
       </CinematicModal>
 
       {/* Report Confirmation Modal */}
-      <CinematicModal
-        isOpen={showReportConfirm}
-        onClose={() => setShowReportConfirm(false)}
-        titleType="report"
-        titleText="REPORT"
+      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+        <CinematicModal
+          isOpen={showReportConfirm}
+          onClose={() => setShowReportConfirm(false)}
+          titleType="report"
+          titleText="REPORT"
           buttons={[
             {
               id: "report-confirm-no-btn",
@@ -2292,6 +2314,7 @@ export default function ExperimentalGameRoom({
             Are you sure you wanna report this drawing?
           </h3>
         </CinematicModal>
+      )}
 
       {/* Global Overlays for CHOOSING state */}
       {gameState.status === "CHOOSING" && amIDrawer && (
@@ -2456,48 +2479,50 @@ export default function ExperimentalGameRoom({
         </CinematicModal>
 
       {/* Cooldown Warning Modal */}
-      <CinematicModal
-        isOpen={showCooldownWarning}
-        onClose={() => setShowCooldownWarning(false)}
-        titleType="report"
-        titleText="SLOW DOWN"
-        buttons={[
-          {
-            id: "cooldown-warning-ok-btn",
-            text: "OK",
-            onClick: () => setShowCooldownWarning(false),
-            variant: "custom",
-            className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95",
-          },
-        ]}
-      >
-        {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
-          <motion.div 
-            animate={{
-              rotate: [-4, 4, -4, 4, -4, 4, 0],
-              scale: [1, 1.05, 1, 1.05, 1]
-            }}
-            transition={{
-              delay: 1.5,
-              repeat: Infinity,
-              duration: 0.6,
-              repeatDelay: 1.8,
-              ease: "easeInOut"
-            }}
-          >
-            <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
-          </motion.div>
-        </div>
+      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+        <CinematicModal
+          isOpen={showCooldownWarning}
+          onClose={() => setShowCooldownWarning(false)}
+          titleType="report"
+          titleText="SLOW DOWN"
+          buttons={[
+            {
+              id: "cooldown-warning-ok-btn",
+              text: "OK",
+              onClick: () => setShowCooldownWarning(false),
+              variant: "custom",
+              className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95",
+            },
+          ]}
+        >
+          {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
+          <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
+            <motion.div 
+              animate={{
+                rotate: [-4, 4, -4, 4, -4, 4, 0],
+                scale: [1, 1.05, 1, 1.05, 1]
+              }}
+              transition={{
+                delay: 1.5,
+                repeat: Infinity,
+                duration: 0.6,
+                repeatDelay: 1.8,
+                ease: "easeInOut"
+              }}
+            >
+              <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
+            </motion.div>
+          </div>
 
-        {/* Alert Message */}
-        <h3 id="cooldown-warning-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
-          You voted recently. Please waiting to votekick again
-        </h3>
-        <p id="cooldown-warning-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
-          لقد قمت بالتصويت مؤخراً. يرجى الانتظار للمحاولة مرة أخرى.
-        </p>
-      </CinematicModal>
+          {/* Alert Message */}
+          <h3 id="cooldown-warning-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+            You voted recently. Please waiting to votekick again
+          </h3>
+          <p id="cooldown-warning-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+            لقد قمت بالتصويت مؤخراً. يرجى الانتظار للمحاولة مرة أخرى.
+          </p>
+        </CinematicModal>
+      )}
 
       {/* Kicked Out / Hard Block Screen */}
       <CinematicModal
@@ -2652,6 +2677,9 @@ export default function ExperimentalGameRoom({
           هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>
+
+      {/* 🧪 Dev-Only Performance HUD for Experimental Room */}
+      <ExperimentalDevHUD />
     </>
   );
 }
