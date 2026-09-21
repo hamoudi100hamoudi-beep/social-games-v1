@@ -247,8 +247,8 @@ export interface DrawingCanvasCoreRef {
 
 // 🧪 EXPERIMENTAL NETWORK SAMPLING TEST (Free Draw Only)
 // OFF (false) = Standard network behavior (every local sampled point enters moveBatchRef)
-// ON (true) = Network-only spatial sampling (1.5px min-distance filter for draw_move, keeping local canvas 100% untouched)
-export const EXPERIMENTAL_NETWORK_SAMPLING_TEST = false;
+// ON (true) = Network-only spatial sampling (2.0px min-distance filter for draw_move, keeping local canvas 100% untouched)
+export const EXPERIMENTAL_NETWORK_SAMPLING_TEST = true;
 
 interface DrawingCanvasCoreProps {
   readOnly?: boolean;
@@ -2200,7 +2200,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const lastNetPt = lastNetworkPointRef.current;
       if (lastNetPt) {
         const netDist = Math.hypot(roundedX - lastNetPt.x, roundedY - lastNetPt.y);
-        const networkMinDistance = 1.5; // 1.5 logical pixels for network-only filtering
+        const networkMinDistance = 2.0; // 2.0 logical pixels for network-only filtering
         if (netDist < networkMinDistance) {
           shouldSendToNetwork = false;
         }
