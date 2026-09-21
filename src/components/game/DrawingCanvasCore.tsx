@@ -245,6 +245,11 @@ export interface DrawingCanvasCoreRef {
   resetZoom?: () => void;
 }
 
+// 🧪 EXPERIMENTAL NETWORK SAMPLING TEST (Free Draw Only)
+// OFF (false) = Standard network behavior (every local sampled point enters moveBatchRef)
+// ON (true) = Network-only spatial sampling (1.5px min-distance filter for draw_move, keeping local canvas 100% untouched)
+export const EXPERIMENTAL_NETWORK_SAMPLING_TEST = false;
+
 interface DrawingCanvasCoreProps {
   readOnly?: boolean;
   tool: ToolType;
@@ -264,6 +269,7 @@ interface DrawingCanvasCoreProps {
   enableFixedDPR?: boolean;
   enableCanvasAlpha?: boolean;
   enableDestinationOutEraser?: boolean;
+  enableNetworkSampling?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -285,7 +291,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     enableBitmapUndoCache = false,
     enableFixedDPR = false,
     enableCanvasAlpha = false,
-    enableDestinationOutEraser = false
+    enableDestinationOutEraser = false,
+    enableNetworkSampling = false
   },
   ref
 ) => {
@@ -320,6 +327,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
+  const lastNetworkPointRef = useRef<{ x: number; y: number } | null>(null);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const bucketTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const preventBucketRef = useRef(false);
@@ -485,11 +493,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -1330,6 +1338,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     currentPathRef.current = [];
     activeSessionsRef.current = {};
     moveBatchRef.current = [];
+    lastNetworkPointRef.current = null;
 
     // Clear throttle timeout and bucket timeout
     if (throttleTimeoutRef.current) {
@@ -2099,6 +2108,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     startYRef.current = logicalY;
 
     currentPathRef.current = [{ x: logicalX, y: logicalY }];
+    lastNetworkPointRef.current = { x: logicalX, y: logicalY };
     emitDrawCommand('draw_start', {
       tool: activeTool,
       color: activeColor,
@@ -2121,6 +2131,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       }
       moveBatchRef.current = [];
+      lastNetworkPointRef.current = null;
       emitDrawCommand('draw_end', {
         tool: propsRef.current.tool,
         color: propsRef.current.color,
@@ -2178,7 +2189,30 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const normX = roundedX / LOGICAL_WIDTH;
     const normY = roundedY / LOGICAL_HEIGHT;
 
-    moveBatchRef.current.push({ x: normX, y: normY });
+    // --- Network Path Separation (EXPERIMENTAL_NETWORK_SAMPLING_TEST) ---
+    const isNetworkSamplingActive = Boolean(
+      propsRef.current.isFreeDraw &&
+      (EXPERIMENTAL_NETWORK_SAMPLING_TEST || propsRef.current.enableNetworkSampling)
+    );
+
+    let shouldSendToNetwork = true;
+    if (isNetworkSamplingActive) {
+      const lastNetPt = lastNetworkPointRef.current;
+      if (lastNetPt) {
+        const netDist = Math.hypot(roundedX - lastNetPt.x, roundedY - lastNetPt.y);
+        const networkMinDistance = 1.5; // 1.5 logical pixels for network-only filtering
+        if (netDist < networkMinDistance) {
+          shouldSendToNetwork = false;
+        }
+      }
+    }
+
+    if (shouldSendToNetwork) {
+      moveBatchRef.current.push({ x: normX, y: normY });
+      if (isNetworkSamplingActive) {
+        lastNetworkPointRef.current = { x: roundedX, y: roundedY };
+      }
+    }
 
     const intervalMs = IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16);
 
@@ -2274,6 +2308,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     currentPathRef.current = [];
+    lastNetworkPointRef.current = null;
     saveSnapshot();
   };
 
@@ -2844,6 +2879,7 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.enableFixedDPR === nextProps.enableFixedDPR &&
     prevProps.enableCanvasAlpha === nextProps.enableCanvasAlpha &&
     prevProps.enableDestinationOutEraser === nextProps.enableDestinationOutEraser &&
+    prevProps.enableNetworkSampling === nextProps.enableNetworkSampling &&
     prevProps.deferredReset === nextProps.deferredReset &&
     prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
     prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&
