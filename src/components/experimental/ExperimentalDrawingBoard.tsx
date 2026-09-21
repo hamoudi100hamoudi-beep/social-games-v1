@@ -20,6 +20,7 @@ import FlipaClipControls from '../game/FlipaClipControls';
 import ColorWheelModal from '../game/ColorWheelModal';
 import CinematicModal from '../game/CinematicModal';
 import { safeLocalStorage } from '../../utils/storage';
+import { expMetrics } from './experimentalInstrumentation';
 
 /**
  * 🧪 DIAGNOSTIC TEST FLAG (Color Wheel):

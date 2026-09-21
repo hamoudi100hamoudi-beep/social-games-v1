@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { IsolatedDrawingLayer } from "./IsolatedDrawingLayer";
+import { ExperimentalDevHUD } from "./ExperimentalDevHUD";
+import { expMetrics } from "./experimentalInstrumentation";
 import { ExperimentalWordOverlay } from "./ExperimentalWordOverlay";
 import { ExperimentalHitOverlay, ExperimentalHitOverlayHandle } from "./ExperimentalHitOverlay";
 import {
@@ -296,6 +298,9 @@ export default function ExperimentalGameRoom({
   onLeave,
   justJoined,
 }: GameRoomProps) {
+  // 🧪 Dev Instrumentation: Track Game Layer Renders
+  expMetrics.recordReactCommit('ExperimentalGameRoom', 'state_update');
+
   const { socket, isConnected, socketId } = useSocket();
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
@@ -683,6 +688,13 @@ export default function ExperimentalGameRoom({
 
   React.useEffect(() => {
     isDrawingModeRef.current = isDrawingMode;
+    if (isDrawingMode) {
+      expMetrics.startTransition(true);
+      expMetrics.recordOperation('Modal unmount (Word Selection / CHOOSING)', 'NON-CRITICAL', 'Removing choosing overlay');
+      expMetrics.recordOperation('SmoothTimer phase change to DRAWING', 'NON-CRITICAL', 'CSS timer bar transition initiated');
+      expMetrics.recordOperation('DrawingLayer readOnly set to false', 'CRITICAL FOR DRAWING', 'Enabling canvas interactions');
+      expMetrics.recordOperation('HitNotifications overlay mount', 'NON-CRITICAL', 'Floating notification container');
+    }
   }, [isDrawingMode]);
 
   // 🛡️ When active drawing mode finishes, flush any buffered background data cleanly to React state
@@ -2665,6 +2677,9 @@ export default function ExperimentalGameRoom({
           هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>
+
+      {/* 🧪 Dev-Only Performance HUD for Experimental Room */}
+      <ExperimentalDevHUD />
     </>
   );
 }

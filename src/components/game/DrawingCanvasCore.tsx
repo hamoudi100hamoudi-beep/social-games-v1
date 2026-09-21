@@ -28,6 +28,30 @@ const LOGICAL_WIDTH = CANVAS_WIDTH;
 const LOGICAL_HEIGHT = CANVAS_HEIGHT;
 
 // --- Performance and DPR Tiering ---
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG:
+ * Tests if Free Draw pinch/zoom-out lag is specifically caused by GPU alpha compositing
+ * of transparent canvases over the transformed viewport.
+ * When enabled (true):
+ * - On 2-finger pinch start, a temporary opaque white canvas snapshots the current drawing.
+ * - The diagnostic canvas is shown while transparent canvases are hidden via display='none'.
+ * - On pinch end, the diagnostic canvas is hidden and original canvases are restored instantly.
+ * Default: false.
+ */
+export const FREE_DRAW_OPAQUE_PINCH_TEST = false;
+
+/**
+ * 🧪 DIAGNOSTIC TEST FLAG:
+ * Tests if Free Draw low-zoom lag is specifically caused by the presence / compositing
+ * of the transformWrapper surface itself.
+ * When enabled (true):
+ * - transformWrapperRef is hidden from rendering/compositing (visibility: hidden)
+ *   so its visual surface and children do not participate in rendering or GPU compositing,
+ *   while preserving the surrounding layout, toolbar, and controls completely unchanged.
+ * Default: false.
+ */
+export const FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST = false;
+
 const getPerformanceTier = () => {
   if (typeof window === 'undefined') return 1;
   try {
@@ -245,11 +269,6 @@ export interface DrawingCanvasCoreRef {
   resetZoom?: () => void;
 }
 
-// 🧪 EXPERIMENTAL NETWORK SAMPLING TEST (Free Draw Only)
-// OFF (false) = Standard network behavior (every local sampled point enters moveBatchRef)
-// ON (true) = Network-only spatial sampling (1.5px min-distance filter for draw_move, keeping local canvas 100% untouched)
-export const EXPERIMENTAL_NETWORK_SAMPLING_TEST = false;
-
 interface DrawingCanvasCoreProps {
   readOnly?: boolean;
   tool: ToolType;
@@ -269,7 +288,6 @@ interface DrawingCanvasCoreProps {
   enableFixedDPR?: boolean;
   enableCanvasAlpha?: boolean;
   enableDestinationOutEraser?: boolean;
-  enableNetworkSampling?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -291,8 +309,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     enableBitmapUndoCache = false,
     enableFixedDPR = false,
     enableCanvasAlpha = false,
-    enableDestinationOutEraser = false,
-    enableNetworkSampling = false
+    enableDestinationOutEraser = false
   },
   ref
 ) => {
@@ -327,7 +344,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
-  const lastNetworkPointRef = useRef<{ x: number; y: number } | null>(null);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const bucketTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const preventBucketRef = useRef(false);
@@ -453,6 +469,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const isZoomPinchingRef = useRef(false);
   const redrawRequestedRef = useRef(false);
 
+  // 🧪 Diagnostic Canvas Ref for FREE_DRAW_OPAQUE_PINCH_TEST
+  const diagnosticCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDiagnosticActiveRef = useRef(false);
+
   // Safe Edge Stroke Entry refs (تتبع الرسم عند البدء من خارج حدود اللوحة وسحب الإصبع لداخلها)
   const lastOutsideTouchRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const touchStartedOutsideRef = useRef(false);
@@ -493,11 +513,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -639,6 +659,37 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         e.preventDefault();
         isPinching = true;
         isZoomPinchingRef.current = true;
+
+        // 🧪 FREE_DRAW_OPAQUE_PINCH_TEST: Snapshot to opaque white canvas & hide transparent canvases
+        if (FREE_DRAW_OPAQUE_PINCH_TEST && propsRef.current.isFreeDraw) {
+          const mainCanvas = canvasRef.current;
+          const tempCanvas = tempCanvasRef.current;
+          const diagCanvas = diagnosticCanvasRef.current;
+          if (mainCanvas && diagCanvas) {
+            if (diagCanvas.width !== mainCanvas.width || diagCanvas.height !== mainCanvas.height) {
+              diagCanvas.width = mainCanvas.width;
+              diagCanvas.height = mainCanvas.height;
+            }
+            const diagCtx = diagCanvas.getContext('2d', { alpha: false });
+            if (diagCtx) {
+              diagCtx.save();
+              diagCtx.setTransform(1, 0, 0, 1, 0, 0);
+              diagCtx.fillStyle = '#ffffff';
+              diagCtx.fillRect(0, 0, diagCanvas.width, diagCanvas.height);
+              diagCtx.drawImage(mainCanvas, 0, 0);
+              if (tempCanvas) {
+                diagCtx.drawImage(tempCanvas, 0, 0);
+              }
+              diagCtx.restore();
+            }
+            diagCanvas.style.display = 'block';
+            mainCanvas.style.display = 'none';
+            if (tempCanvas) {
+              tempCanvas.style.display = 'none';
+            }
+            isDiagnosticActiveRef.current = true;
+          }
+        }
 
         const t1 = e.touches[0];
         const t2 = e.touches[1];
@@ -877,6 +928,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         cachedContainerRect = null;
         flushPendingTransform();
 
+        // 🧪 FREE_DRAW_OPAQUE_PINCH_TEST: Hide diagnostic canvas & restore original transparent canvases
+        if (isDiagnosticActiveRef.current) {
+          const mainCanvas = canvasRef.current;
+          const tempCanvas = tempCanvasRef.current;
+          const diagCanvas = diagnosticCanvasRef.current;
+          if (diagCanvas) {
+            diagCanvas.style.display = 'none';
+          }
+          if (mainCanvas) {
+            mainCanvas.style.display = 'block';
+          }
+          if (tempCanvas) {
+            tempCanvas.style.display = 'block';
+          }
+          isDiagnosticActiveRef.current = false;
+        }
+
         // Keep zoom-is-pinching true for 100ms path stabilization after pinch ends
         setTimeout(() => {
           isZoomPinchingRef.current = false;
@@ -893,6 +961,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (gestureRafId !== null) {
         cancelAnimationFrame(gestureRafId);
         gestureRafId = null;
+      }
+      if (isDiagnosticActiveRef.current) {
+        const mainCanvas = canvasRef.current;
+        const tempCanvas = tempCanvasRef.current;
+        const diagCanvas = diagnosticCanvasRef.current;
+        if (diagCanvas) diagCanvas.style.display = 'none';
+        if (mainCanvas) mainCanvas.style.display = 'block';
+        if (tempCanvas) tempCanvas.style.display = 'block';
+        isDiagnosticActiveRef.current = false;
       }
       container.removeEventListener('touchstart', handleTouchStart);
       container.removeEventListener('touchmove', handleTouchMove);
@@ -1338,7 +1415,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     currentPathRef.current = [];
     activeSessionsRef.current = {};
     moveBatchRef.current = [];
-    lastNetworkPointRef.current = null;
 
     // Clear throttle timeout and bucket timeout
     if (throttleTimeoutRef.current) {
@@ -2050,6 +2126,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCtx = tempCanvas.getContext('2d');
 
     if (ctx && tempCtx) {
+      if (typeof console !== 'undefined' && enableCanvasAlpha) {
+        const attrs = ctx.getContextAttributes ? ctx.getContextAttributes() : null;
+        console.log("[DrawingCanvasCore] Diagnostic Alpha Test: context alpha =", attrs?.alpha);
+      }
       ctx.setTransform(effectiveDPR, 0, 0, effectiveDPR, 0, 0);
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -2108,7 +2188,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     startYRef.current = logicalY;
 
     currentPathRef.current = [{ x: logicalX, y: logicalY }];
-    lastNetworkPointRef.current = { x: logicalX, y: logicalY };
     emitDrawCommand('draw_start', {
       tool: activeTool,
       color: activeColor,
@@ -2131,7 +2210,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       }
       moveBatchRef.current = [];
-      lastNetworkPointRef.current = null;
       emitDrawCommand('draw_end', {
         tool: propsRef.current.tool,
         color: propsRef.current.color,
@@ -2189,30 +2267,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const normX = roundedX / LOGICAL_WIDTH;
     const normY = roundedY / LOGICAL_HEIGHT;
 
-    // --- Network Path Separation (EXPERIMENTAL_NETWORK_SAMPLING_TEST) ---
-    const isNetworkSamplingActive = Boolean(
-      propsRef.current.isFreeDraw &&
-      (EXPERIMENTAL_NETWORK_SAMPLING_TEST || propsRef.current.enableNetworkSampling)
-    );
-
-    let shouldSendToNetwork = true;
-    if (isNetworkSamplingActive) {
-      const lastNetPt = lastNetworkPointRef.current;
-      if (lastNetPt) {
-        const netDist = Math.hypot(roundedX - lastNetPt.x, roundedY - lastNetPt.y);
-        const networkMinDistance = 1.5; // 1.5 logical pixels for network-only filtering
-        if (netDist < networkMinDistance) {
-          shouldSendToNetwork = false;
-        }
-      }
-    }
-
-    if (shouldSendToNetwork) {
-      moveBatchRef.current.push({ x: normX, y: normY });
-      if (isNetworkSamplingActive) {
-        lastNetworkPointRef.current = { x: roundedX, y: roundedY };
-      }
-    }
+    moveBatchRef.current.push({ x: normX, y: normY });
 
     const intervalMs = IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16);
 
@@ -2308,7 +2363,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     currentPathRef.current = [];
-    lastNetworkPointRef.current = null;
     saveSnapshot();
   };
 
@@ -2781,12 +2835,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           width: '100%',
           height: '100%',
           transformOrigin: '0 0',
-          willChange: 'transform'
+          willChange: 'transform',
+          ...(FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST ? { visibility: 'hidden' as const } : {})
         } : {
           width: LOGICAL_WIDTH,
           height: LOGICAL_HEIGHT,
           transformOrigin: '0 0',
-          willChange: 'transform'
+          willChange: 'transform',
+          ...(FREE_DRAW_HIDE_TRANSFORM_WRAPPER_TEST ? { visibility: 'hidden' as const } : {})
         }}
       >
 
@@ -2827,6 +2883,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           className={`absolute inset-0 w-full h-full block pointer-events-none touch-none bg-transparent ${readOnly ? 'object-contain' : ''}`}
           style={{
             zIndex: 20
+          }}
+        />
+        {/* 🧪 Diagnostic Canvas for FREE_DRAW_OPAQUE_PINCH_TEST */}
+        <canvas
+          id="drawing-board-layer-diagnostic-opaque"
+          ref={diagnosticCanvasRef}
+          className="absolute inset-0 w-full h-full pointer-events-none touch-none bg-white"
+          style={{
+            zIndex: 15,
+            display: 'none'
           }}
         />
       </div>
@@ -2879,7 +2945,6 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.enableFixedDPR === nextProps.enableFixedDPR &&
     prevProps.enableCanvasAlpha === nextProps.enableCanvasAlpha &&
     prevProps.enableDestinationOutEraser === nextProps.enableDestinationOutEraser &&
-    prevProps.enableNetworkSampling === nextProps.enableNetworkSampling &&
     prevProps.deferredReset === nextProps.deferredReset &&
     prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
     prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&
