@@ -24,8 +24,12 @@ import {
 export const CANVAS_WIDTH = 592;
 export const CANVAS_HEIGHT = 344;
 
-const LOGICAL_WIDTH = CANVAS_WIDTH;
-const LOGICAL_HEIGHT = CANVAS_HEIGHT;
+// Free Draw logical dimensions test: 680 x 396 (exact 1.7171 ratio matching 592 x 344 and 740 x 430)
+export const FREE_DRAW_LOGICAL_WIDTH = 680;
+export const FREE_DRAW_LOGICAL_HEIGHT = 396;
+
+const DEFAULT_LOGICAL_WIDTH = CANVAS_WIDTH;
+const DEFAULT_LOGICAL_HEIGHT = CANVAS_HEIGHT;
 
 // --- Performance and DPR Tiering ---
 const getPerformanceTier = () => {
@@ -93,7 +97,15 @@ const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b:
 let sharedOffscreenCanvas: HTMLCanvasElement | null = null;
 let sharedOffscreenCtx: CanvasRenderingContext2D | null = null;
 
-const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number, fillColorStr: string, fillOpacity: number = 1) => {
+const floodFill = (
+  ctx: CanvasRenderingContext2D,
+  startX: number,
+  startY: number,
+  fillColorStr: string,
+  fillOpacity: number = 1,
+  logicalWidth: number = DEFAULT_LOGICAL_WIDTH,
+  logicalHeight: number = DEFAULT_LOGICAL_HEIGHT
+) => {
   const canvas = ctx.canvas;
   const cw = canvas.width;
   const ch = canvas.height;
@@ -119,11 +131,9 @@ const floodFill = (ctx: CanvasRenderingContext2D, startX: number, startY: number
   const imageData = offscreenCtx.getImageData(0, 0, cw, ch);
   const data = imageData.data;
 
-  // Derive pixel seed coordinates directly from canvas physical backing store scale (cw / LOGICAL_WIDTH)
-  // For Free Draw (cw = 592), scale is 1.0 (exact 1:1 pixel match across all devices)
-  // For Normal/Competitive, scale equals DPR
-  const scaleX = cw / LOGICAL_WIDTH;
-  const scaleY = ch / LOGICAL_HEIGHT;
+  // Derive pixel seed coordinates directly from canvas physical backing store scale (cw / logicalWidth)
+  const scaleX = cw / logicalWidth;
+  const scaleY = ch / logicalHeight;
   const sx = Math.floor(startX * scaleX);
   const sy = Math.floor(startY * scaleY);
 
@@ -298,6 +308,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 ) => {
   const instanceId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
   const { socket, isConnected } = useSocket();
+
+  // Logical coordinate system bounds: 680x396 for Free Draw (isolated test), 592x344 for Normal/Experimental rooms
+  const LOGICAL_WIDTH = isFreeDraw ? FREE_DRAW_LOGICAL_WIDTH : DEFAULT_LOGICAL_WIDTH;
+  const LOGICAL_HEIGHT = isFreeDraw ? FREE_DRAW_LOGICAL_HEIGHT : DEFAULT_LOGICAL_HEIGHT;
 
   // Primary visual and interactive layers
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1617,7 +1631,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         saveSnapshot();
       } else if (event === 'draw_action') {
         if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity);
+          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
           saveSnapshot();
         }
       } else if (event === 'draw_undo') {
@@ -1802,7 +1816,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncHistoryButtons();
       } else if (event === 'draw_action') {
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity);
+          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
           prevCommandsCountRef.current = localCommandsRef.current.length;
           localCommandsRef.current.push({ event: 'draw_binary', data: raw });
           localRedoStackRef.current = [];
@@ -2465,7 +2479,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (activeTool === 'bucket') {
       const runBucket = () => {
         captureDirectFreeDrawUndoCache();
-        floodFill(ctx, x, y, activeColor, activeOpacity);
+        floodFill(ctx, x, y, activeColor, activeOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
         emitDrawCommand('draw_action', {
           tool: 'bucket',
           color: activeColor,
