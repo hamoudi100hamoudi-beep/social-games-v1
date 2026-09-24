@@ -294,7 +294,7 @@ class RoomManager {
       }
     }
 
-    if (this.io) {
+    if (this.io && gameState.status !== "WAITING") {
       this.io
         .to(room.id)
         .emit("timer_tick", {
