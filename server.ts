@@ -210,14 +210,9 @@ async function startServer() {
         if (callback) callback({ success: true, reconnected: false });
 
         try {
-          const player = roomManager.getPlayer(socket.id);
-          if (player) {
-            roomManager.sendStateToPlayer(room, player);
-
-            // Always emit draw_history_sync to guarantee the client's loader disappears instantly
-            socket.emit('draw_history_sync', getJsonSafeHistory(room.gameState.drawHistory || []));
-            socket.emit('draw_redo_sync', getJsonSafeHistory(room.gameState.redoStack || []));
-          }
+          // Always emit draw_history_sync to guarantee the client's loader disappears instantly
+          socket.emit('draw_history_sync', getJsonSafeHistory(room.gameState.drawHistory || []));
+          socket.emit('draw_redo_sync', getJsonSafeHistory(room.gameState.redoStack || []));
         } catch (syncErr) {
           console.error("[Socket] Error during direct sync in join:", syncErr);
         }
