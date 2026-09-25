@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import { roomManager, normalizeArabic } from './server/rooms.js';
-import { getRoomConfig } from './src/types/game.js';
+import { getRoomConfig, ROOM_PRESETS } from './src/types/game.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -135,6 +135,33 @@ async function startServer() {
       } catch (e) {
         console.error(e);
         if (callback) callback({ count: 0, max: 5, winningScore: 30, theme: 'General' });
+      }
+    });
+
+    socket.on('get_rooms_info', (roomIdsOrCallback, maybeCallback) => {
+      try {
+        const callback = typeof roomIdsOrCallback === 'function' ? roomIdsOrCallback : maybeCallback;
+        const requestedIds = Array.isArray(roomIdsOrCallback)
+          ? roomIdsOrCallback
+          : ROOM_PRESETS.map((p) => p.id);
+
+        const stats: Record<string, { count: number; max: number; winningScore: number; theme: string }> = {};
+        for (const id of requestedIds) {
+          const room = roomManager.getRoom(id);
+          const config = getRoomConfig(id);
+          const count = room ? room.players.filter((p) => !p.isOffline).length : 0;
+          stats[id] = {
+            count,
+            max: room?.maxPlayers ?? config.maxPlayers,
+            winningScore: room?.winningScore ?? config.winningScore,
+            theme: room?.theme ?? config.theme,
+          };
+        }
+        if (callback) callback(stats);
+      } catch (e) {
+        console.error("Error in get_rooms_info:", e);
+        const cb = typeof roomIdsOrCallback === 'function' ? roomIdsOrCallback : maybeCallback;
+        if (cb) cb({});
       }
     });
 

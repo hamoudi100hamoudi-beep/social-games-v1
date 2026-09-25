@@ -347,26 +347,25 @@ export default function Lobby({ onPlay }: LobbyProps) {
     if (!socket) return;
     
     const fetchCounts = () => {
-      ROOM_PRESETS.forEach((preset) => {
-        socket.emit('get_room_info', preset.id, (data: any) => {
-          if (data && typeof data.count === 'number') {
-            setRoomStats((prev) => ({
-              ...prev,
-              [preset.id]: {
-                count: data.count,
-                max: data.max || preset.maxPlayers,
-                winningScore: data.winningScore || preset.winningScore,
-                theme: data.theme || preset.theme,
-              },
-            }));
-          }
-        });
+      socket.emit('get_rooms_info', (data: any) => {
+        if (data && typeof data === 'object') {
+          setRoomStats((prev) => ({
+            ...prev,
+            ...data,
+          }));
+        }
       });
     };
     
     fetchCounts();
-    const interval = setInterval(fetchCounts, 3000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchCounts, 10000);
+
+    socket.on('connect', fetchCounts);
+
+    return () => {
+      clearInterval(interval);
+      socket.off('connect', fetchCounts);
+    };
   }, [socket]);
 
   useEffect(() => {
