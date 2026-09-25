@@ -346,7 +346,13 @@ export default function Lobby({ onPlay }: LobbyProps) {
   useEffect(() => {
     if (!socket) return;
     
+    let lastFetchTime = 0;
     const fetchCounts = () => {
+      const now = Date.now();
+      // Prevent duplicate fetches within the same second (e.g. mount + connect event)
+      if (now - lastFetchTime < 1000) return;
+      lastFetchTime = now;
+
       socket.emit('get_rooms_info', (data: any) => {
         if (data && typeof data === 'object') {
           setRoomStats((prev) => ({
@@ -357,7 +363,9 @@ export default function Lobby({ onPlay }: LobbyProps) {
       });
     };
     
-    fetchCounts();
+    if (socket.connected) {
+      fetchCounts();
+    }
     const interval = setInterval(fetchCounts, 10000);
 
     socket.on('connect', fetchCounts);
