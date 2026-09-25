@@ -328,6 +328,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
   // Notice for "NEW ROOM" button click
   const [newRoomNotice, setNewRoomNotice] = useState<string | null>(null);
   const newRoomNoticeTimer = useRef<NodeJS.Timeout | null>(null);
+  const lastFetchTimeRef = useRef<number>(0);
 
   const handleNewRoomClick = () => {
     if (newRoomNoticeTimer.current) clearTimeout(newRoomNoticeTimer.current);
@@ -346,12 +347,11 @@ export default function Lobby({ onPlay }: LobbyProps) {
   useEffect(() => {
     if (!socket) return;
     
-    let lastFetchTime = 0;
     const fetchCounts = () => {
       const now = Date.now();
-      // Prevent duplicate fetches within the same second (e.g. mount + connect event)
-      if (now - lastFetchTime < 1000) return;
-      lastFetchTime = now;
+      // Prevent duplicate fetches within the same second (e.g. mount + connect event or re-renders)
+      if (now - lastFetchTimeRef.current < 1000) return;
+      lastFetchTimeRef.current = now;
 
       socket.emit('get_rooms_info', (data: any) => {
         if (data && typeof data === 'object') {
