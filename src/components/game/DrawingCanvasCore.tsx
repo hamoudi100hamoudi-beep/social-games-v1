@@ -341,6 +341,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
+  const networkStrokePointsRef = useRef<{ x: number; y: number }[]>([]);
   const lastNetworkPointRef = useRef<{ x: number; y: number } | null>(null);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const bucketTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -621,6 +622,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         }
         moveBatchRef.current = [];
+        networkStrokePointsRef.current = [];
         emitDrawCommand('draw_end', {
           tool: propsRef.current.tool,
           color: propsRef.current.color,
@@ -1352,6 +1354,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     currentPathRef.current = [];
     activeSessionsRef.current = {};
     moveBatchRef.current = [];
+    networkStrokePointsRef.current = [];
     lastNetworkPointRef.current = null;
 
     // Clear throttle timeout and bucket timeout
@@ -1450,6 +1453,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (isDrawingRef.current) {
       isDrawingRef.current = false;
       moveBatchRef.current = [];
+      networkStrokePointsRef.current = [];
     }
     exitedOutsideWhilePointerDownRef.current = false;
     lastOutsidePointerRef.current = null;
@@ -2123,6 +2127,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     currentPathRef.current = [{ x: logicalX, y: logicalY }];
     lastNetworkPointRef.current = { x: logicalX, y: logicalY };
+    networkStrokePointsRef.current = [{ x: logicalX / LOGICAL_WIDTH, y: logicalY / LOGICAL_HEIGHT }];
     emitDrawCommand('draw_start', {
       tool: activeTool,
       color: activeColor,
@@ -2145,6 +2150,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       }
       moveBatchRef.current = [];
+      networkStrokePointsRef.current = [];
       lastNetworkPointRef.current = null;
       emitDrawCommand('draw_end', {
         tool: propsRef.current.tool,
@@ -2223,13 +2229,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (shouldSendToNetwork) {
       moveBatchRef.current.push({ x: normX, y: normY });
+      networkStrokePointsRef.current.push({ x: normX, y: normY });
       if (isNetworkSamplingActive) {
         lastNetworkPointRef.current = { x: roundedX, y: roundedY };
       }
     }
 
     const intervalMs = propsRef.current.isFreeDraw
-      ? 100
+      ? 120
       : (IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16));
 
     if (!throttleTimeoutRef.current) {
@@ -2294,11 +2301,31 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           commitFreeDrawPendingCache();
           drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
 
+          const isNetworkSamplingActive = Boolean(
+            propsRef.current.isFreeDraw &&
+            (EXPERIMENTAL_NETWORK_SAMPLING_TEST || propsRef.current.enableNetworkSampling)
+          );
+
+          // Ensure the final lift-off position is captured in networkStrokePointsRef for Free Draw
+          if (isNetworkSamplingActive && networkStrokePointsRef.current.length > 0) {
+            const lastRaw = currentPathRef.current[currentPathRef.current.length - 1];
+            const lastNorm = { x: lastRaw.x / LOGICAL_WIDTH, y: lastRaw.y / LOGICAL_HEIGHT };
+            const netPts = networkStrokePointsRef.current;
+            const prevNet = netPts[netPts.length - 1];
+            if (prevNet.x !== lastNorm.x || prevNet.y !== lastNorm.y) {
+              netPts.push(lastNorm);
+            }
+          }
+
           // Send complete stroke object for precise restoration and history tracking
-          const normalizedPoints = currentPathRef.current.map(pt => ({
-            x: pt.x / LOGICAL_WIDTH,
-            y: pt.y / LOGICAL_HEIGHT
-          }));
+          // In Free Draw: send the exact network-sampled trajectory to match what spectators rendered live and cut payload by ~80%
+          const normalizedPoints = (isNetworkSamplingActive && networkStrokePointsRef.current.length > 0)
+            ? networkStrokePointsRef.current
+            : currentPathRef.current.map(pt => ({
+                x: pt.x / LOGICAL_WIDTH,
+                y: pt.y / LOGICAL_HEIGHT
+              }));
+
           emitDrawCommand('draw_stroke', {
             tool: activeTool,
             color: activeColor,
@@ -2324,6 +2351,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     currentPathRef.current = [];
+    networkStrokePointsRef.current = [];
     lastNetworkPointRef.current = null;
     saveSnapshot();
   };
@@ -2551,6 +2579,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       
       tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
       moveBatchRef.current = [];
+      networkStrokePointsRef.current = [];
       emitDrawCommand('draw_end', {
         tool: propsRef.current.tool,
         color: propsRef.current.color,
