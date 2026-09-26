@@ -56,6 +56,9 @@ const cinematicItemVariants = {
   }
 };
 
+// Module-level timestamp to throttle room info requests across React component remounts and StrictMode cycles
+let lastRoomsInfoFetchTime = 0;
+
 export default function Lobby({ onPlay }: LobbyProps) {
   const { socket } = useSocket();
   const [screen, setScreen] = useState<Screen>('home');
@@ -328,7 +331,6 @@ export default function Lobby({ onPlay }: LobbyProps) {
   // Notice for "NEW ROOM" button click
   const [newRoomNotice, setNewRoomNotice] = useState<string | null>(null);
   const newRoomNoticeTimer = useRef<NodeJS.Timeout | null>(null);
-  const lastFetchTimeRef = useRef<number>(0);
 
   const handleNewRoomClick = () => {
     if (newRoomNoticeTimer.current) clearTimeout(newRoomNoticeTimer.current);
@@ -349,9 +351,9 @@ export default function Lobby({ onPlay }: LobbyProps) {
     
     const fetchCounts = () => {
       const now = Date.now();
-      // Prevent duplicate fetches within the same second (e.g. mount + connect event or re-renders)
-      if (now - lastFetchTimeRef.current < 1000) return;
-      lastFetchTimeRef.current = now;
+      // Prevent duplicate fetches within 1000ms across component remounts (StrictMode) or rapid reconnects
+      if (now - lastRoomsInfoFetchTime < 1000) return;
+      lastRoomsInfoFetchTime = now;
 
       socket.emit('get_rooms_info', (data: any) => {
         if (data && typeof data === 'object') {

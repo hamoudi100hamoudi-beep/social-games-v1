@@ -269,6 +269,9 @@ interface DrawingDiagnosticStats {
   drawStroke: { count: number; points: number; bytes: number };
   drawStart: { count: number; bytes: number };
   drawEnd: { count: number; bytes: number };
+  drawCommit: { count: number };
+  drawRepair: { count: number };
+  drawAbort: { count: number };
 }
 
 interface DrawingCanvasCoreProps {
@@ -348,12 +351,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     width: number;
     opacity: number;
     path: { x: number; y: number }[];
+    strokeId?: number;
+    networkPointCount?: number;
+    rawPoints?: { x: number; y: number }[];
   }>>({});
 
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
   const networkStrokePointsRef = useRef<{ x: number; y: number }[]>([]);
   const lastNetworkPointRef = useRef<{ x: number; y: number } | null>(null);
+  const currentLocalStrokeIdRef = useRef<number>(1);
+  const drawerNetworkPointCountRef = useRef<number>(0);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const bucketTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const preventBucketRef = useRef(false);
@@ -364,6 +372,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     drawStroke: { count: 0, points: 0, bytes: 0 },
     drawStart: { count: 0, bytes: 0 },
     drawEnd: { count: 0, bytes: 0 },
+    drawCommit: { count: 0 },
+    drawRepair: { count: 0 },
+    drawAbort: { count: 0 },
   });
   const [diagSnapshot, setDiagSnapshot] = useState<DrawingDiagnosticStats | null>(null);
   const [isDiagCollapsed, setIsDiagCollapsed] = useState(false);
@@ -376,6 +387,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         drawStroke: { ...drawingDiagRef.current.drawStroke },
         drawStart: { ...drawingDiagRef.current.drawStart },
         drawEnd: { ...drawingDiagRef.current.drawEnd },
+        drawCommit: { ...drawingDiagRef.current.drawCommit },
+        drawRepair: { ...drawingDiagRef.current.drawRepair },
+        drawAbort: { ...drawingDiagRef.current.drawAbort },
       });
     }, 500);
     return () => clearInterval(interval);
@@ -387,12 +401,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       drawStroke: { count: 0, points: 0, bytes: 0 },
       drawStart: { count: 0, bytes: 0 },
       drawEnd: { count: 0, bytes: 0 },
+      drawCommit: { count: 0 },
+      drawRepair: { count: 0 },
+      drawAbort: { count: 0 },
     };
     setDiagSnapshot({
       drawMove: { ...drawingDiagRef.current.drawMove },
       drawStroke: { ...drawingDiagRef.current.drawStroke },
       drawStart: { ...drawingDiagRef.current.drawStart },
       drawEnd: { ...drawingDiagRef.current.drawEnd },
+      drawCommit: { ...drawingDiagRef.current.drawCommit },
+      drawRepair: { ...drawingDiagRef.current.drawRepair },
+      drawAbort: { ...drawingDiagRef.current.drawAbort },
     });
   };
 
@@ -1834,25 +1854,90 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           color: remoteColor,
           width: remoteWidth,
           opacity: remoteOpacity,
-          path: [{ x: rx, y: ry }]
+          path: [{ x: rx, y: ry }],
+          strokeId: data.strokeId || 0,
+          networkPointCount: 1, // Includes p0
+          rawPoints: [{ x: data.x, y: data.y }]
         };
         redrawTempLayer();
       } else if (event === 'draw_move') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
-          const handleMovePoint = (mx: number, my: number) => {
+          const handleMovePoint = (mx: number, my: number, normX: number, normY: number) => {
             session.path.push({ x: mx, y: my });
+            if (!session.rawPoints) session.rawPoints = [];
+            session.rawPoints.push({ x: normX, y: normY });
+            session.networkPointCount = (session.networkPointCount || 0) + 1;
           };
 
           if (data.moves && Array.isArray(data.moves)) {
             data.moves.forEach((m: any) => {
-              handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT);
+              handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT, m.x, m.y);
             });
           } else if (data.x !== undefined && data.y !== undefined) {
-            handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT);
+            handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, data.x, data.y);
           }
           redrawTempLayer();
         }
+      } else if (event === 'draw_commit') {
+        if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw) {
+          drawingDiagRef.current.drawCommit.count++;
+        }
+
+        const session = activeSessionsRef.current[data.instanceId];
+        const serverPointCount = data.pointCount !== undefined ? data.pointCount : 0;
+        const strokeId = data.strokeId !== undefined ? data.strokeId : 0;
+
+        // If this commit belongs to the DRAWER themselves:
+        if (data.instanceId === instanceId) {
+          // Drawer has already recorded local command and drawn on canvasRef in finishCurrentStroke
+          delete activeSessionsRef.current[data.instanceId];
+          return;
+        }
+
+        // For SPECTATORS / VIEWERS:
+        if (session) {
+          const localCount = session.networkPointCount || 0;
+          if (localCount === serverPointCount) {
+            // Happy path: 100% exact match! Promote existing live stroke to permanent canvas WITHOUT receiving duplicate stroke
+            if (session.path.length > 0) {
+              drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
+              
+              // Record in localCommands history for viewer-side undo/redo sync
+              const canonicalStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
+                instanceId: data.instanceId,
+                tool: session.tool,
+                color: session.color,
+                width: session.width,
+                opacity: session.opacity,
+                points: session.rawPoints || []
+              });
+              prevCommandsCountRef.current = localCommandsRef.current.length;
+              localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
+              localRedoStackRef.current = [];
+              invalidateFreeDrawCaches();
+              saveSnapshot();
+              syncHistoryButtons();
+            }
+            delete activeSessionsRef.current[data.instanceId];
+            redrawTempLayer();
+          } else {
+            // Count mismatch! Volatile packet loss occurred: request targeted canonical repair
+            console.warn(`[DrawingCanvasCore] Packet mismatch for stroke ${strokeId}: localCount=${localCount} vs serverCount=${serverPointCount}. Requesting canonical repair...`);
+            if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw) {
+              drawingDiagRef.current.drawRepair.count++;
+            }
+            delete activeSessionsRef.current[data.instanceId];
+            redrawTempLayer();
+            socket.emit('draw_repair_req', { instId: data.instanceId, strokeId });
+          }
+        }
+      } else if (event === 'draw_abort') {
+        if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw) {
+          drawingDiagRef.current.drawAbort.count++;
+        }
+        delete activeSessionsRef.current[data.instanceId];
+        redrawTempLayer();
       } else if (event === 'draw_end') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
@@ -2200,11 +2285,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     currentPathRef.current = [{ x: logicalX, y: logicalY }];
     lastNetworkPointRef.current = { x: logicalX, y: logicalY };
     networkStrokePointsRef.current = [{ x: logicalX / LOGICAL_WIDTH, y: logicalY / LOGICAL_HEIGHT }];
+    
+    // Increment local 16-bit monotonic strokeId
+    currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
+    if (currentLocalStrokeIdRef.current === 0) currentLocalStrokeIdRef.current = 1;
+
+    // Dedicated network point counter initialized to 1 for p0
+    drawerNetworkPointCountRef.current = 1;
+
     emitDrawCommand('draw_start', {
       tool: activeTool,
       color: activeColor,
       width: activeWidth,
       opacity: activeOpacity,
+      strokeId: currentLocalStrokeIdRef.current,
       x: logicalX / LOGICAL_WIDTH,
       y: logicalY / LOGICAL_HEIGHT
     });
@@ -2314,6 +2408,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!throttleTimeoutRef.current) {
       throttleTimeoutRef.current = setTimeout(() => {
         if (moveBatchRef.current.length > 0) {
+          if (propsRef.current.isFreeDraw) {
+            drawerNetworkPointCountRef.current += moveBatchRef.current.length;
+          }
           emitDrawCommand('draw_move', {
             tool: activeTool,
             color: activeColor,
@@ -2351,6 +2448,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
       if (moveBatchRef.current.length > 0) {
+        if (propsRef.current.isFreeDraw) {
+          drawerNetworkPointCountRef.current += moveBatchRef.current.length;
+        }
         emitDrawCommand('draw_move', {
           tool: activeTool,
           color: activeColor,
@@ -2378,33 +2478,37 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             (EXPERIMENTAL_NETWORK_SAMPLING_TEST || propsRef.current.enableNetworkSampling)
           );
 
-          // Ensure the final lift-off position is captured in networkStrokePointsRef for Free Draw
-          if (isNetworkSamplingActive && networkStrokePointsRef.current.length > 0) {
-            const lastRaw = currentPathRef.current[currentPathRef.current.length - 1];
-            const lastNorm = { x: lastRaw.x / LOGICAL_WIDTH, y: lastRaw.y / LOGICAL_HEIGHT };
-            const netPts = networkStrokePointsRef.current;
-            const prevNet = netPts[netPts.length - 1];
-            if (prevNet.x !== lastNorm.x || prevNet.y !== lastNorm.y) {
-              netPts.push(lastNorm);
-            }
+          // In Free Draw: DO NOT send duplicate client draw_stroke in successful path!
+          // Server will commit canonical Type 9 upon draw_end and broadcast draw_commit.
+          if (!propsRef.current.isFreeDraw) {
+            // Normal Rooms: retain original draw_stroke behavior
+            const normalizedPoints = currentPathRef.current.map(pt => ({
+              x: pt.x / LOGICAL_WIDTH,
+              y: pt.y / LOGICAL_HEIGHT
+            }));
+
+            emitDrawCommand('draw_stroke', {
+              tool: activeTool,
+              color: activeColor,
+              width: activeWidth,
+              opacity: activeOpacity,
+              points: normalizedPoints
+            });
+          } else {
+            // Free Draw: Record local command for deterministic drawer-side Undo/Redo without sending over the network
+            const localStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
+              instanceId,
+              tool: activeTool,
+              color: activeColor,
+              width: activeWidth,
+              opacity: activeOpacity,
+              points: networkStrokePointsRef.current
+            });
+            prevCommandsCountRef.current = localCommandsRef.current.length;
+            localCommandsRef.current.push({ event: 'draw_binary', data: localStrokeMsg });
+            localRedoStackRef.current = [];
+            syncHistoryButtons();
           }
-
-          // Send complete stroke object for precise restoration and history tracking
-          // In Free Draw: send the exact network-sampled trajectory to match what spectators rendered live and cut payload by ~80%
-          const normalizedPoints = (isNetworkSamplingActive && networkStrokePointsRef.current.length > 0)
-            ? networkStrokePointsRef.current
-            : currentPathRef.current.map(pt => ({
-                x: pt.x / LOGICAL_WIDTH,
-                y: pt.y / LOGICAL_HEIGHT
-              }));
-
-          emitDrawCommand('draw_stroke', {
-            tool: activeTool,
-            color: activeColor,
-            width: activeWidth,
-            opacity: activeOpacity,
-            points: normalizedPoints
-          });
         } else {
           // Entire gesture stayed outside canvas without entering: discard pending undo cache cleanly
           hasFreeDrawPendingUndoCacheRef.current = false;
@@ -2418,13 +2522,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         color: activeColor,
         width: activeWidth,
         opacity: activeOpacity,
-        isShape: false
+        isShape: false,
+        strokeId: currentLocalStrokeIdRef.current,
+        expectedPointCount: drawerNetworkPointCountRef.current
       });
     }
 
     currentPathRef.current = [];
     networkStrokePointsRef.current = [];
     lastNetworkPointRef.current = null;
+    drawerNetworkPointCountRef.current = 0;
     saveSnapshot();
   };
 

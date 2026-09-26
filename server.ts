@@ -301,20 +301,63 @@ async function startServer() {
       if (buf && Buffer.isBuffer(buf) && buf.length > 0) {
         const type = buf[0];
         if (roomId) {
-          if (type === 5) {
+          const room = roomManager.getRoom(roomId);
+          const isFreeDraw = Boolean(room && room.isFreeDraw);
+
+          if (type === 5) { // draw_clear
             roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
             socket.broadcast.to(roomId).emit('draw_binary', buf);
-          } else if (type === 7) {
+          } else if (type === 7) { // draw_undo
             roomManager.undoLastDrawing(roomId);
             io.to(roomId).emit('draw_binary', buf);
-          } else if (type === 8) {
+          } else if (type === 8) { // draw_redo
             roomManager.redoDrawing(roomId);
             io.to(roomId).emit('draw_binary', buf);
+          } else if (isFreeDraw && type === 1) { // Free Draw draw_start
+            roomManager.handleFreeDrawStart(roomId, socket.id, buf);
+            // Broadcast live draw_start so spectators initialize their local live layer
+            socket.broadcast.to(roomId).emit('draw_binary', buf);
+          } else if (isFreeDraw && type === 2) { // Free Draw draw_move
+            roomManager.handleFreeDrawMove(roomId, socket.id, buf);
+            // Relay volatile moves live to other clients in room
+            socket.broadcast.to(roomId).volatile.emit('draw_binary', buf);
+          } else if (isFreeDraw && type === 3) { // Free Draw draw_end
+            const commitResult = roomManager.handleFreeDrawEnd(roomId, socket.id, buf);
+            if (commitResult && commitResult.committed) {
+              // Construct and broadcast reliable draw_commit (Type 11) to the ENTIRE room INCLUDING drawer
+              // [Type 11 (1B)][instId (7B)][strokeId (2B LE)][pointCount (2B LE)] = 12 bytes
+              const commitBuf = Buffer.alloc(12);
+              commitBuf.writeUInt8(11, 0); // MSG_DRAW_COMMIT = 11
+              commitBuf.write(commitResult.instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
+              commitBuf.writeUInt16LE(commitResult.strokeId & 0xFFFF, 8);
+              commitBuf.writeUInt16LE(commitResult.pointCount & 0xFFFF, 10);
+              io.to(roomId).emit('draw_binary', commitBuf);
+            } else {
+              // End or cancelled relay
+              socket.broadcast.to(roomId).emit('draw_binary', buf);
+            }
           } else {
+            // Normal Rooms or non-commit actions (e.g. shapes, bucket, or Normal room pencil)
             roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
             socket.broadcast.to(roomId).emit('draw_binary', buf);
           }
         }
+      }
+    });
+
+    socket.on('draw_repair_req', (data) => {
+      try {
+        const player = roomManager.getPlayer(socket.id);
+        const roomId = player ? player.roomId : null;
+        if (roomId && data && data.instId !== undefined && data.strokeId !== undefined) {
+          const canonicalStroke = roomManager.getCanonicalFreeDrawStroke(roomId, String(data.instId), Number(data.strokeId));
+          if (canonicalStroke) {
+            // Send canonical Type 9 stroke ONLY to the requesting socket
+            socket.emit('draw_binary', canonicalStroke);
+          }
+        }
+      } catch (err) {
+        console.error("Error handling draw_repair_req:", err);
       }
     });
 

@@ -46,15 +46,17 @@ export const decompressPayload = (comp: any): any => {
   return data;
 };
 
-const MSG_DRAW_START = 1;
-const MSG_DRAW_MOVE = 2;
-const MSG_DRAW_END = 3;
-const MSG_DRAW_ACTION = 4;
-const MSG_DRAW_CLEAR = 5;
-const MSG_DRAW_CANCEL = 6;
-const MSG_DRAW_UNDO = 7;
-const MSG_DRAW_REDO = 8;
-const MSG_DRAW_STROKE = 9;
+export const MSG_DRAW_START = 1;
+export const MSG_DRAW_MOVE = 2;
+export const MSG_DRAW_END = 3;
+export const MSG_DRAW_ACTION = 4;
+export const MSG_DRAW_CLEAR = 5;
+export const MSG_DRAW_CANCEL = 6;
+export const MSG_DRAW_UNDO = 7;
+export const MSG_DRAW_REDO = 8;
+export const MSG_DRAW_STROKE = 9;
+export const MSG_DRAW_COMMIT = 11;
+export const MSG_DRAW_ABORT = 12;
 
 const TOOLS_LIST = ['pencil', 'eraser', 'bucket', 'line', 'strokeRect', 'fillRect', 'strokeCircle', 'fillCircle', 'pipette'];
 
@@ -189,7 +191,8 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
   }
   
   if (event === 'draw_end') {
-    const buffer = new ArrayBuffer(23);
+    const hasExtendedMeta = data.strokeId !== undefined && data.expectedPointCount !== undefined;
+    const buffer = new ArrayBuffer(hasExtendedMeta ? 27 : 23);
     const view = new DataView(buffer);
     view.setUint8(0, MSG_DRAW_END);
     writeString7(view, 1, instId);
@@ -219,6 +222,11 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     view.setInt16(20, scaledY, true);
     
     view.setUint8(22, data.isCancelled ? 1 : 0);
+    
+    if (hasExtendedMeta) {
+      view.setUint16(23, data.strokeId & 0xFFFF, true);
+      view.setUint16(25, data.expectedPointCount & 0xFFFF, true);
+    }
     
     return buffer;
   }
@@ -273,6 +281,25 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     return buffer;
   }
   
+  if (event === 'draw_commit') {
+    const buffer = new ArrayBuffer(12);
+    const view = new DataView(buffer);
+    view.setUint8(0, MSG_DRAW_COMMIT);
+    writeString7(view, 1, instId);
+    view.setUint16(8, (data.strokeId || 0) & 0xFFFF, true);
+    view.setUint16(10, (data.pointCount || 0) & 0xFFFF, true);
+    return buffer;
+  }
+
+  if (event === 'draw_abort') {
+    const buffer = new ArrayBuffer(10);
+    const view = new DataView(buffer);
+    view.setUint8(0, MSG_DRAW_ABORT);
+    writeString7(view, 1, instId);
+    view.setUint16(8, (data.strokeId || 0) & 0xFFFF, true);
+    return buffer;
+  }
+
   let type = 5;
   if (event === 'draw_clear') type = MSG_DRAW_CLEAR;
   else if (event === 'draw_cancel') type = MSG_DRAW_CANCEL;
@@ -418,6 +445,23 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       return {
         event: 'draw_stroke',
         data: { instanceId: instId, tool, color, width, opacity, points }
+      };
+    }
+
+    if (type === MSG_DRAW_COMMIT) {
+      const strokeId = view.getUint16(8, true);
+      const pointCount = view.getUint16(10, true);
+      return {
+        event: 'draw_commit',
+        data: { instanceId: instId, strokeId, pointCount }
+      };
+    }
+
+    if (type === MSG_DRAW_ABORT) {
+      const strokeId = view.getUint16(8, true);
+      return {
+        event: 'draw_abort',
+        data: { instanceId: instId, strokeId }
       };
     }
     

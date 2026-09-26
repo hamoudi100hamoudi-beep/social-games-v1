@@ -50,6 +50,8 @@ export interface Room {
   theme?: string;
   isFreeDraw?: boolean;
   activeDrawers?: string[];
+  freeDrawStrokes?: Map<string, any>;
+  freeDrawCanonicalCache?: Map<string, { buffer: Buffer; createdAt: number }>;
 }
 
 export interface RoomConfig {
