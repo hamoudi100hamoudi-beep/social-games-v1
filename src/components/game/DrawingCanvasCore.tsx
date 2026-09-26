@@ -260,6 +260,17 @@ export interface DrawingCanvasCoreRef {
 // ON (true) = Network-only spatial sampling (2.0px min-distance filter for draw_move, keeping local canvas 100% untouched)
 export const EXPERIMENTAL_NETWORK_SAMPLING_TEST = true;
 
+// 📊 TEMPORARY RUNTIME DIAGNOSTICS (Free Draw Application Drawing Payload)
+// Set to false to disable overlay and measurement completely without affecting runtime drawing
+export const ENABLE_FREE_DRAW_DIAGNOSTICS = true;
+
+interface DrawingDiagnosticStats {
+  drawMove: { count: number; points: number; bytes: number };
+  drawStroke: { count: number; points: number; bytes: number };
+  drawStart: { count: number; bytes: number };
+  drawEnd: { count: number; bytes: number };
+}
+
 interface DrawingCanvasCoreProps {
   readOnly?: boolean;
   tool: ToolType;
@@ -346,6 +357,44 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const bucketTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const preventBucketRef = useRef(false);
+
+  // 📊 Local Diagnostic Counters (Zero network, zero state updates per event)
+  const drawingDiagRef = useRef<DrawingDiagnosticStats>({
+    drawMove: { count: 0, points: 0, bytes: 0 },
+    drawStroke: { count: 0, points: 0, bytes: 0 },
+    drawStart: { count: 0, bytes: 0 },
+    drawEnd: { count: 0, bytes: 0 },
+  });
+  const [diagSnapshot, setDiagSnapshot] = useState<DrawingDiagnosticStats | null>(null);
+  const [isDiagCollapsed, setIsDiagCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (!ENABLE_FREE_DRAW_DIAGNOSTICS || !propsRef.current.isFreeDraw) return;
+    const interval = setInterval(() => {
+      setDiagSnapshot({
+        drawMove: { ...drawingDiagRef.current.drawMove },
+        drawStroke: { ...drawingDiagRef.current.drawStroke },
+        drawStart: { ...drawingDiagRef.current.drawStart },
+        drawEnd: { ...drawingDiagRef.current.drawEnd },
+      });
+    }, 500);
+    return () => clearInterval(interval);
+  }, []);
+
+  const resetDiagnosticStats = () => {
+    drawingDiagRef.current = {
+      drawMove: { count: 0, points: 0, bytes: 0 },
+      drawStroke: { count: 0, points: 0, bytes: 0 },
+      drawStart: { count: 0, bytes: 0 },
+      drawEnd: { count: 0, bytes: 0 },
+    };
+    setDiagSnapshot({
+      drawMove: { ...drawingDiagRef.current.drawMove },
+      drawStroke: { ...drawingDiagRef.current.drawStroke },
+      drawStart: { ...drawingDiagRef.current.drawStart },
+      drawEnd: { ...drawingDiagRef.current.drawEnd },
+    });
+  };
 
   useEffect(() => {
     return () => {
@@ -1105,6 +1154,29 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const emitDrawCommand = (event: string, payload: any) => {
     if (socket?.connected) {
       const msg = encodeBinaryDrawMessage(event, { ...payload, instanceId });
+
+      // 📊 Runtime Diagnostic: capture exact encoded ArrayBuffer byteLength locally
+      if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw && msg) {
+        const byteLen = msg.byteLength;
+        if (event === 'draw_move') {
+          const pts = Array.isArray(payload.moves) ? payload.moves.length : 1;
+          drawingDiagRef.current.drawMove.count++;
+          drawingDiagRef.current.drawMove.points += pts;
+          drawingDiagRef.current.drawMove.bytes += byteLen;
+        } else if (event === 'draw_stroke') {
+          const pts = Array.isArray(payload.points) ? payload.points.length : 0;
+          drawingDiagRef.current.drawStroke.count++;
+          drawingDiagRef.current.drawStroke.points += pts;
+          drawingDiagRef.current.drawStroke.bytes += byteLen;
+        } else if (event === 'draw_start') {
+          drawingDiagRef.current.drawStart.count++;
+          drawingDiagRef.current.drawStart.bytes += byteLen;
+        } else if (event === 'draw_end') {
+          drawingDiagRef.current.drawEnd.count++;
+          drawingDiagRef.current.drawEnd.bytes += byteLen;
+        }
+      }
+
       if (event === 'draw_move' && socket.volatile) {
         socket.volatile.emit('draw_binary', msg);
       } else {
@@ -2875,6 +2947,98 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }}
         />
       </div>
+
+      {/* 📊 Temporary Free Draw Runtime Diagnostic Overlay (Local only) */}
+      {ENABLE_FREE_DRAW_DIAGNOSTICS && isFreeDraw && (
+        <div
+          className="absolute top-2 left-2 z-50 bg-[#120f2e]/90 text-white font-mono text-[10px] sm:text-[11px] p-2.5 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md max-w-[270px] pointer-events-auto select-none"
+          dir="ltr"
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5 mb-2">
+            <span className="font-bold text-amber-400">📊 Drawing Payload Diagnostics</span>
+            <button
+              onClick={() => setIsDiagCollapsed(!isDiagCollapsed)}
+              className="text-white/70 hover:text-white text-[10px] px-1.5 py-0.5 bg-white/10 rounded cursor-pointer"
+            >
+              {isDiagCollapsed ? "Expand" : "Min"}
+            </button>
+          </div>
+
+          {!isDiagCollapsed ? (
+            <div className="space-y-1.5">
+              <div className="bg-white/5 p-1.5 rounded border border-white/5">
+                <div className="font-bold text-sky-300">draw_move:</div>
+                <div>events = <span className="text-white font-bold">{diagSnapshot?.drawMove.count || 0}</span></div>
+                <div>points = <span className="text-white font-bold">{diagSnapshot?.drawMove.points || 0}</span> (avg {(diagSnapshot?.drawMove.points / (diagSnapshot?.drawMove.count || 1)).toFixed(1)}/evt)</div>
+                <div>bytes = <span className="text-emerald-400 font-bold">{diagSnapshot?.drawMove.bytes || 0} B</span> (avg {(diagSnapshot?.drawMove.bytes / (diagSnapshot?.drawMove.count || 1)).toFixed(1)} B/evt)</div>
+              </div>
+
+              <div className="bg-white/5 p-1.5 rounded border border-white/5">
+                <div className="font-bold text-purple-300">draw_stroke:</div>
+                <div>count = <span className="text-white font-bold">{diagSnapshot?.drawStroke.count || 0}</span></div>
+                <div>points = <span className="text-white font-bold">{diagSnapshot?.drawStroke.points || 0}</span> (avg {(diagSnapshot?.drawStroke.points / (diagSnapshot?.drawStroke.count || 1)).toFixed(1)}/evt)</div>
+                <div>bytes = <span className="text-emerald-400 font-bold">{diagSnapshot?.drawStroke.bytes || 0} B</span> (avg {(diagSnapshot?.drawStroke.bytes / (diagSnapshot?.drawStroke.count || 1)).toFixed(1)} B/evt)</div>
+              </div>
+
+              <div className="bg-white/5 p-1.5 rounded border border-white/5 grid grid-cols-2 gap-1 text-[9.5px]">
+                <div>
+                  <div className="font-bold text-blue-300">draw_start:</div>
+                  <div>count = {diagSnapshot?.drawStart.count || 0}</div>
+                  <div>bytes = {diagSnapshot?.drawStart.bytes || 0} B</div>
+                </div>
+                <div>
+                  <div className="font-bold text-pink-300">draw_end:</div>
+                  <div>count = {diagSnapshot?.drawEnd.count || 0}</div>
+                  <div>bytes = {diagSnapshot?.drawEnd.bytes || 0} B</div>
+                </div>
+              </div>
+
+              {(() => {
+                const totalBytes =
+                  (diagSnapshot?.drawMove.bytes || 0) +
+                  (diagSnapshot?.drawStroke.bytes || 0) +
+                  (diagSnapshot?.drawStart.bytes || 0) +
+                  (diagSnapshot?.drawEnd.bytes || 0);
+                const totalEvents =
+                  (diagSnapshot?.drawMove.count || 0) +
+                  (diagSnapshot?.drawStroke.count || 0) +
+                  (diagSnapshot?.drawStart.count || 0) +
+                  (diagSnapshot?.drawEnd.count || 0);
+                return (
+                  <div className="bg-emerald-950/60 border border-emerald-500/30 p-1.5 rounded text-[10px]">
+                    <div className="text-emerald-300 font-bold">TOTAL APP BYTES:</div>
+                    <div className="text-base font-black text-emerald-400">
+                      {(totalBytes / 1024).toFixed(2)} KB <span className="text-xs font-normal text-emerald-300">({totalBytes.toLocaleString()} B)</span>
+                    </div>
+                    <div className="text-emerald-200/70 text-[9px] mt-0.5">
+                      Total Events: {totalEvents}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <button
+                onClick={resetDiagnosticStats}
+                className="w-full mt-1.5 py-1 bg-red-600/80 hover:bg-red-500 text-white rounded font-bold text-center active:scale-95 transition-transform cursor-pointer"
+              >
+                Reset Stats
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-emerald-400 font-bold">
+                {(((diagSnapshot?.drawMove.bytes || 0) + (diagSnapshot?.drawStroke.bytes || 0) + (diagSnapshot?.drawStart.bytes || 0) + (diagSnapshot?.drawEnd.bytes || 0)) / 1024).toFixed(1)} KB
+              </span>
+              <button
+                onClick={resetDiagnosticStats}
+                className="px-1.5 py-0.5 bg-red-600/80 hover:bg-red-500 text-white rounded text-[9px] cursor-pointer"
+              >
+                Reset
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
