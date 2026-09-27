@@ -5,6 +5,7 @@ import { Server } from 'socket.io';
 import path from 'path';
 import { roomManager, normalizeArabic } from './server/rooms.js';
 import { getRoomConfig, ROOM_PRESETS } from './src/types/game.js';
+import { getToolName } from './src/utils/drawBinaryHelper.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -304,6 +305,9 @@ async function startServer() {
           const room = roomManager.getRoom(roomId);
           const isFreeDraw = Boolean(room && room.isFreeDraw);
 
+          const toolName = buf.length >= 9 ? getToolName(buf[8]) : '';
+          const isContinuousTool = toolName === 'pencil' || toolName === 'eraser';
+
           if (type === 5) { // draw_clear
             roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
             socket.broadcast.to(roomId).emit('draw_binary', buf);
@@ -313,7 +317,7 @@ async function startServer() {
           } else if (type === 8) { // draw_redo
             roomManager.redoDrawing(roomId);
             io.to(roomId).emit('draw_binary', buf);
-          } else if (isFreeDraw && type === 1) { // Free Draw draw_start
+          } else if (isFreeDraw && type === 1 && isContinuousTool) { // Free Draw draw_start (Pen/Eraser only)
             roomManager.handleFreeDrawStart(roomId, socket.id, buf);
             // Broadcast live draw_start so spectators initialize their local live layer
             socket.broadcast.to(roomId).emit('draw_binary', buf);
@@ -321,7 +325,7 @@ async function startServer() {
             roomManager.handleFreeDrawMove(roomId, socket.id, buf);
             // Relay volatile moves live to other clients in room
             socket.broadcast.to(roomId).volatile.emit('draw_binary', buf);
-          } else if (isFreeDraw && type === 3) { // Free Draw draw_end
+          } else if (isFreeDraw && type === 3 && isContinuousTool) { // Free Draw draw_end (Pen/Eraser only)
             const commitResult = roomManager.handleFreeDrawEnd(roomId, socket.id, buf);
             if (commitResult && commitResult.committed) {
               // Construct and broadcast reliable draw_commit (Type 11) to the ENTIRE room INCLUDING drawer
