@@ -536,6 +536,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const activeTouchCountRef = useRef(0);
   const isZoomPinchingRef = useRef(false);
   const redrawRequestedRef = useRef(false);
+  const activePointerIdRef = useRef<number | null>(null);
 
   // Safe Edge Stroke Entry refs (تتبع الرسم عند البدء من خارج حدود اللوحة وسحب الإصبع لداخلها)
   const lastOutsideTouchRef = useRef<{ clientX: number; clientY: number } | null>(null);
@@ -1267,19 +1268,25 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       activeCtx.arc(path[0].x, path[0].y, drawWidth / 2, 0, Math.PI * 2);
       activeCtx.fill();
     } else {
-      // Smooth midpoint quadratic curve drawing to eliminate polygonal sharp corners
+      // Smooth midpoint quadratic curve drawing with continuous quadratic end-cap
       activeCtx.beginPath();
       activeCtx.moveTo(path[0].x, path[0].y);
       if (path.length === 2) {
         activeCtx.lineTo(path[1].x, path[1].y);
       } else {
-        let i = 1;
-        for (i = 1; i < path.length - 1; i++) {
+        const lastIdx = path.length - 1;
+        for (let i = 1; i < lastIdx; i++) {
           const xc = (path[i].x + path[i + 1].x) / 2;
           const yc = (path[i].y + path[i + 1].y) / 2;
           activeCtx.quadraticCurveTo(path[i].x, path[i].y, xc, yc);
         }
-        activeCtx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
+        // Terminal transition: smooth quadratic curve into the endpoint rather than a rigid straight lineTo
+        activeCtx.quadraticCurveTo(
+          path[lastIdx].x,
+          path[lastIdx].y,
+          path[lastIdx].x,
+          path[lastIdx].y
+        );
       }
       activeCtx.stroke();
     }
@@ -1441,6 +1448,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // Reset local/remote paths & sessions
     isDrawingRef.current = false;
+    activePointerIdRef.current = null;
     exitedOutsideWhilePointerDownRef.current = false;
     lastOutsidePointerRef.current = null;
     currentPathRef.current = [];
@@ -2649,10 +2657,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.stopPropagation();
     if (propsRef.current.readOnly) return;
     if (isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
     
+    activePointerIdRef.current = e.pointerId;
+
     if (isResetPendingRef.current) {
       flushPendingReset();
     }
@@ -2743,6 +2754,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.stopPropagation();
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) return;
     if (!isDrawingRef.current && !exitedOutsideWhilePointerDownRef.current) return;
 
     const canvas = canvasRef.current;
@@ -2753,6 +2766,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
       isDrawingRef.current = false;
+      activePointerIdRef.current = null;
       exitedOutsideWhilePointerDownRef.current = false;
       lastOutsidePointerRef.current = null;
       
@@ -2771,8 +2785,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       return;
     }
 
-    const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
-    const isInside = rawCoords.x >= 0 && rawCoords.x <= LOGICAL_WIDTH && rawCoords.y >= 0 && rawCoords.y <= LOGICAL_HEIGHT;
+    // Reflow cache: read getBoundingClientRect() ONCE per frame
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    const scaleX = LOGICAL_WIDTH / rect.width;
+    const scaleY = LOGICAL_HEIGHT / rect.height;
+
+    const rawX = Math.round(((e.clientX - rect.left) * scaleX) * 10) / 10;
+    const rawY = Math.round(((e.clientY - rect.top) * scaleY) * 10) / 10;
+    const isInside = rawX >= 0 && rawX <= LOGICAL_WIDTH && rawY >= 0 && rawY <= LOGICAL_HEIGHT;
     const activeTool = propsRef.current.tool;
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
@@ -2780,28 +2801,36 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (isDrawingRef.current) {
         if (useInputOptimizations) {
           // Free Draw & Experimental (Batch 1): Continuous un-clamped stroke trajectory across canvas edges
-          // Pointer capture maintains full gesture tracking outside canvas.
-          // Native canvas context naturally clips any geometry outside (0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT).
           // Extract native browser coalesced events if available to preserve sub-frame curve fidelity without synthetic Lerp
+          let rawEvents: PointerEvent[] = [];
           const nativeEvt = e.nativeEvent as any;
-          const rawEvents: PointerEvent[] = (nativeEvt && typeof nativeEvt.getCoalescedEvents === 'function')
-            ? nativeEvt.getCoalescedEvents()
-            : [];
+          if (nativeEvt && typeof nativeEvt.getCoalescedEvents === 'function') {
+            try {
+              const coalesced = nativeEvt.getCoalescedEvents();
+              if (Array.isArray(coalesced) && coalesced.length > 0) {
+                rawEvents = coalesced;
+              }
+            } catch (err) {}
+          }
+
           if (rawEvents.length > 0) {
             for (let i = 0; i < rawEvents.length; i++) {
-              const pt = getLogicalCoords(rawEvents[i].clientX, rawEvents[i].clientY, canvas, false);
-              processStrokeMove(pt.x, pt.y);
+              const ev = rawEvents[i];
+              const px = Math.round(((ev.clientX - rect.left) * scaleX) * 10) / 10;
+              const py = Math.round(((ev.clientY - rect.top) * scaleY) * 10) / 10;
+              processStrokeMove(px, py);
             }
           } else {
-            processStrokeMove(rawCoords.x, rawCoords.y);
+            processStrokeMove(rawX, rawY);
           }
         } else {
           if (isInside) {
-            processStrokeMove(rawCoords.x, rawCoords.y);
+            processStrokeMove(rawX, rawY);
           } else {
             // Normal / Competitive: Keep existing legacy boundary edge clamp behavior
-            const clamped = getLogicalCoords(e.clientX, e.clientY, canvas, true);
-            processStrokeMove(clamped.x, clamped.y);
+            const clampedX = Math.max(0, Math.min(LOGICAL_WIDTH, rawX));
+            const clampedY = Math.max(0, Math.min(LOGICAL_HEIGHT, rawY));
+            processStrokeMove(clampedX, clampedY);
             finishCurrentStroke();
             exitedOutsideWhilePointerDownRef.current = true;
             lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
@@ -2811,30 +2840,35 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         // Normal / Competitive: Was outside while holding down, now re-entered canvas: start new stroke cleanly
         if (isInside) {
           exitedOutsideWhilePointerDownRef.current = false;
-          let entryX = rawCoords.x;
-          let entryY = rawCoords.y;
+          let entryX = rawX;
+          let entryY = rawY;
           if (lastOutsidePointerRef.current) {
-            const entryCoords = getLogicalCoords(lastOutsidePointerRef.current.clientX, lastOutsidePointerRef.current.clientY, canvas, true);
-            entryX = entryCoords.x;
-            entryY = entryCoords.y;
+            entryX = Math.max(0, Math.min(LOGICAL_WIDTH, Math.round(((lastOutsidePointerRef.current.clientX - rect.left) * scaleX) * 10) / 10));
+            entryY = Math.max(0, Math.min(LOGICAL_HEIGHT, Math.round(((lastOutsidePointerRef.current.clientY - rect.top) * scaleY) * 10) / 10));
           }
           lastOutsidePointerRef.current = null;
           startPencilOrEraserStroke(entryX, entryY);
-          processStrokeMove(rawCoords.x, rawCoords.y);
+          processStrokeMove(rawX, rawY);
         } else {
           // Still outside canvas while dragging: keep tracking last outside pointer position for precise entry
           lastOutsidePointerRef.current = { clientX: e.clientX, clientY: e.clientY };
         }
       }
     } else {
-      processShapeMove(rawCoords.x, rawCoords.y);
+      processShapeMove(rawX, rawY);
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.stopPropagation();
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch (err) {}
+
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
+      return;
+    }
+    activePointerIdRef.current = null;
     exitedOutsideWhilePointerDownRef.current = false;
     lastOutsidePointerRef.current = null;
 
@@ -2853,6 +2887,34 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     } else {
       const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
       finishShapeDrawing(rawCoords.x, rawCoords.y);
+    }
+  };
+
+  const handlePointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    e.stopPropagation();
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
+      return;
+    }
+    activePointerIdRef.current = null;
+    exitedOutsideWhilePointerDownRef.current = false;
+    lastOutsidePointerRef.current = null;
+
+    if (!isDrawingRef.current) return;
+
+    const activeTool = propsRef.current.tool;
+
+    if (activeTool === 'pencil' || activeTool === 'eraser') {
+      finishCurrentStroke();
+    } else {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+        finishShapeDrawing(rawCoords.x, rawCoords.y);
+      }
     }
   };
 
@@ -3025,7 +3087,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
           onPointerEnter={(e) => {
             if (propsRef.current.readOnly) return;
             if (isDrawingRef.current) return;
