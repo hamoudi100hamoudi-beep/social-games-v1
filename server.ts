@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
+import customParser from 'socket.io-msgpack-parser';
 import { roomManager, normalizeArabic } from './server/rooms.js';
 import { getRoomConfig, ROOM_PRESETS } from './src/types/game.js';
 import { getToolName } from './src/utils/drawBinaryHelper.js';
@@ -79,7 +80,8 @@ async function startServer() {
   const io = new Server(httpServer, {
     cors: { origin: '*' },
     transports: ['websocket'],
-    maxHttpBufferSize: 1e8 
+    maxHttpBufferSize: 1e8,
+    parser: customParser
   });
 
   roomManager.setIo(io);
@@ -295,11 +297,19 @@ async function startServer() {
       }
     });
 
-    socket.on('draw_binary', (buf) => {
+    socket.on('draw_binary', (rawBuf) => {
       const player = roomManager.getPlayer(socket.id);
       const roomId = player ? player.roomId : null;
       
-      if (buf && Buffer.isBuffer(buf) && buf.length > 0) {
+      const buf = Buffer.isBuffer(rawBuf)
+        ? rawBuf
+        : (rawBuf instanceof ArrayBuffer
+          ? Buffer.from(rawBuf)
+          : (ArrayBuffer.isView(rawBuf)
+            ? Buffer.from(rawBuf.buffer, rawBuf.byteOffset, rawBuf.byteLength)
+            : null));
+
+      if (buf && buf.length > 0) {
         const type = buf[0];
         if (roomId) {
           const room = roomManager.getRoom(roomId);

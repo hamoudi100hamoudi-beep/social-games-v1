@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
+import customParser from 'socket.io-msgpack-parser';
 
 interface SocketContextData {
   socket: Socket | null;
@@ -23,6 +24,7 @@ const socketInstance = io(typeof window !== 'undefined' ? window.location.origin
   reconnectionDelay: 1000,
   transports: ['websocket'],
   withCredentials: true,
+  parser: customParser,
 });
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
