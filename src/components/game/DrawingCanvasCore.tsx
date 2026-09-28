@@ -355,7 +355,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     strokeId?: number;
     networkPointCount?: number;
     rawPoints?: { x: number; y: number }[];
+    pendingQueue?: { x: number; y: number }[];
   }>>({});
+  const spectatorPlaybackRafRef = useRef<number | null>(null);
 
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
@@ -421,6 +423,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     return () => {
       if (bucketTimeoutRef.current) {
         clearTimeout(bucketTimeoutRef.current);
+      }
+      if (spectatorPlaybackRafRef.current !== null) {
+        cancelAnimationFrame(spectatorPlaybackRafRef.current);
+        spectatorPlaybackRafRef.current = null;
       }
     };
   }, []);
@@ -1336,6 +1342,56 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     });
   };
 
+  // 🚀 Free Draw Spectator Playback Ticker
+  // Decouples the 200ms network batch frequency from the local display refresh rate.
+  // Smoothly drains session.pendingQueue at 60fps across the 200ms arrival window.
+  const triggerSpectatorPlayback = () => {
+    if (spectatorPlaybackRafRef.current !== null) return;
+
+    const tick = () => {
+      let hasRemainingPoints = false;
+      const sessions = activeSessionsRef.current;
+      const instIds = Object.keys(sessions);
+
+      for (let i = 0; i < instIds.length; i++) {
+        const session = sessions[instIds[i]];
+        if (!session || !session.pendingQueue || session.pendingQueue.length === 0) continue;
+
+        const q = session.pendingQueue;
+
+        // Hard safety bound: If queue exceeds 60 points (e.g. background tab or frame drop), fast-forward excess points
+        if (q.length > 60) {
+          const excess = q.length - 15;
+          for (let k = 0; k < excess; k++) {
+            session.path.push(q.shift()!);
+          }
+        }
+
+        // Adaptive drain rate: target draining within ~10-12 frames (approx. 200ms at 60fps)
+        const pointsToDrain = Math.max(1, Math.ceil(q.length / 10));
+        const count = Math.min(pointsToDrain, q.length);
+
+        for (let k = 0; k < count; k++) {
+          session.path.push(q.shift()!);
+        }
+
+        if (q.length > 0) {
+          hasRemainingPoints = true;
+        }
+      }
+
+      redrawTempLayer();
+
+      if (hasRemainingPoints) {
+        spectatorPlaybackRafRef.current = requestAnimationFrame(tick);
+      } else {
+        spectatorPlaybackRafRef.current = null;
+      }
+    };
+
+    spectatorPlaybackRafRef.current = requestAnimationFrame(tick);
+  };
+
   const drawShape = (
     activeCtx: CanvasRenderingContext2D,
     x0: number, y0: number,
@@ -1461,6 +1517,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       bucketTimeoutRef.current = null;
     }
     preventBucketRef.current = false;
+
+    if (spectatorPlaybackRafRef.current !== null) {
+      cancelAnimationFrame(spectatorPlaybackRafRef.current);
+      spectatorPlaybackRafRef.current = null;
+    }
 
     // Reinitialize Undo / Redo stacks
     bufferedSyncRef.current = null;
@@ -1859,17 +1920,26 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           path: [{ x: rx, y: ry }],
           strokeId: data.strokeId || 0,
           networkPointCount: 1, // Includes p0
-          rawPoints: [{ x: data.x, y: data.y }]
+          rawPoints: [{ x: data.x, y: data.y }],
+          pendingQueue: []
         };
         redrawTempLayer();
       } else if (event === 'draw_move') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
+          const isContinuousFreeDraw = Boolean(propsRef.current.isFreeDraw) && (session.tool === 'pencil' || session.tool === 'eraser');
+
           const handleMovePoint = (mx: number, my: number, normX: number, normY: number) => {
-            session.path.push({ x: mx, y: my });
             if (!session.rawPoints) session.rawPoints = [];
             session.rawPoints.push({ x: normX, y: normY });
             session.networkPointCount = (session.networkPointCount || 0) + 1;
+
+            if (isContinuousFreeDraw) {
+              if (!session.pendingQueue) session.pendingQueue = [];
+              session.pendingQueue.push({ x: mx, y: my });
+            } else {
+              session.path.push({ x: mx, y: my });
+            }
           };
 
           if (data.moves && Array.isArray(data.moves)) {
@@ -1879,7 +1949,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           } else if (data.x !== undefined && data.y !== undefined) {
             handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, data.x, data.y);
           }
-          redrawTempLayer();
+
+          if (isContinuousFreeDraw) {
+            triggerSpectatorPlayback();
+          } else {
+            redrawTempLayer();
+          }
         }
       } else if (event === 'draw_commit') {
         if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw) {
@@ -1899,6 +1974,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         // For SPECTATORS / VIEWERS:
         if (session) {
+          // Flush all remaining pending points into session.path immediately before commit evaluation
+          if (session.pendingQueue && session.pendingQueue.length > 0) {
+            for (let k = 0; k < session.pendingQueue.length; k++) {
+              session.path.push(session.pendingQueue[k]);
+            }
+            session.pendingQueue = [];
+          }
+
           const localCount = session.networkPointCount || 0;
           if (localCount === serverPointCount) {
             // Happy path: 100% exact match! Promote existing live stroke to permanent canvas WITHOUT receiving duplicate stroke
@@ -1943,6 +2026,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else if (event === 'draw_end') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
+          if (session.pendingQueue && session.pendingQueue.length > 0) {
+            for (let k = 0; k < session.pendingQueue.length; k++) {
+              session.path.push(session.pendingQueue[k]);
+            }
+            session.pendingQueue = [];
+          }
           const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
           let committed = false;
           if (!data.isCancelled && session.path.length > 0 && !isShape) {
