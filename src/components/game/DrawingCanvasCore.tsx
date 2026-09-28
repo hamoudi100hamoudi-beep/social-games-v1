@@ -359,6 +359,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }>>({});
   const spectatorPlaybackRafRef = useRef<number | null>(null);
 
+  interface DrainingStroke {
+    instanceId: string;
+    strokeId: number;
+    tool: ToolType;
+    color: string;
+    width: number;
+    opacity: number;
+    path: { x: number; y: number }[];
+    pendingQueue: { x: number; y: number }[];
+    rawPoints?: { x: number; y: number }[];
+  }
+  const drainingStrokesRef = useRef<DrainingStroke[]>([]);
+
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
   const networkStrokePointsRef = useRef<{ x: number; y: number }[]>([]);
@@ -428,6 +441,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         cancelAnimationFrame(spectatorPlaybackRafRef.current);
         spectatorPlaybackRafRef.current = null;
       }
+      drainingStrokesRef.current = [];
     };
   }, []);
 
@@ -1331,6 +1345,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }
     });
+
+    drainingStrokesRef.current.forEach((stroke) => {
+      if (stroke && stroke.path && stroke.path.length > 0) {
+        drawEntirePath(tempCtx, stroke.path, stroke.tool, stroke.color, stroke.width, stroke.opacity);
+      }
+    });
   };
 
   const redrawTempLayer = () => {
@@ -1345,14 +1365,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // 🚀 Free Draw Spectator Playback Ticker
   // Decouples the 200ms network batch frequency from the local display refresh rate.
   // Smoothly drains session.pendingQueue at 60fps across the 200ms arrival window.
+  // Smoothly drains committed stroke tails over 2-5 frames (eliminating sudden end-of-stroke jumps).
   const triggerSpectatorPlayback = () => {
     if (spectatorPlaybackRafRef.current !== null) return;
 
     const tick = () => {
       let hasRemainingPoints = false;
+      const ctx = ctxRef.current;
       const sessions = activeSessionsRef.current;
       const instIds = Object.keys(sessions);
 
+      // 1. Drain active in-flight sessions
       for (let i = 0; i < instIds.length; i++) {
         const session = sessions[instIds[i]];
         if (!session || !session.pendingQueue || session.pendingQueue.length === 0) continue;
@@ -1378,6 +1401,52 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (q.length > 0) {
           hasRemainingPoints = true;
         }
+      }
+
+      // 2. Drain committed stroke tails smoothly (slightly accelerated: 2 to 4 points per frame)
+      if (drainingStrokesRef.current.length > 0) {
+        const remainingDraining: DrainingStroke[] = [];
+
+        for (let i = 0; i < drainingStrokesRef.current.length; i++) {
+          const stroke = drainingStrokesRef.current[i];
+          const q = stroke.pendingQueue;
+
+          if (q.length > 0) {
+            const pointsToDrain = Math.max(2, Math.ceil(q.length / 4));
+            const count = Math.min(pointsToDrain, q.length);
+
+            for (let k = 0; k < count; k++) {
+              stroke.path.push(q.shift()!);
+            }
+          }
+
+          if (q.length > 0) {
+            hasRemainingPoints = true;
+            remainingDraining.push(stroke);
+          } else {
+            // Tail completely drained: finalize stroke cleanly to permanent canvas ctx
+            if (ctx && stroke.path.length > 0) {
+              drawEntirePath(ctx, stroke.path, stroke.tool, stroke.color, stroke.width, stroke.opacity);
+
+              const canonicalStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
+                instanceId: stroke.instanceId,
+                tool: stroke.tool,
+                color: stroke.color,
+                width: stroke.width,
+                opacity: stroke.opacity,
+                points: stroke.rawPoints || []
+              });
+              prevCommandsCountRef.current = localCommandsRef.current.length;
+              localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
+              localRedoStackRef.current = [];
+              invalidateFreeDrawCaches();
+              saveSnapshot();
+              syncHistoryButtons();
+            }
+          }
+        }
+
+        drainingStrokesRef.current = remainingDraining;
       }
 
       redrawTempLayer();
@@ -1522,6 +1591,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       cancelAnimationFrame(spectatorPlaybackRafRef.current);
       spectatorPlaybackRafRef.current = null;
     }
+    drainingStrokesRef.current = [];
 
     // Reinitialize Undo / Redo stacks
     bufferedSyncRef.current = null;
@@ -1900,6 +1970,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
           // Solidify the line and wipe the temporary transient trace to prevent artifacts
           delete activeSessionsRef.current[data.instanceId];
+          drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
           redrawTempLayer();
 
           prevCommandsCountRef.current = localCommandsRef.current.length;
@@ -1974,38 +2045,48 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         // For SPECTATORS / VIEWERS:
         if (session) {
-          // Flush all remaining pending points into session.path immediately before commit evaluation
-          if (session.pendingQueue && session.pendingQueue.length > 0) {
-            for (let k = 0; k < session.pendingQueue.length; k++) {
-              session.path.push(session.pendingQueue[k]);
-            }
-            session.pendingQueue = [];
-          }
-
           const localCount = session.networkPointCount || 0;
           if (localCount === serverPointCount) {
-            // Happy path: 100% exact match! Promote existing live stroke to permanent canvas WITHOUT receiving duplicate stroke
-            if (session.path.length > 0) {
-              drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
-              
-              // Record in localCommands history for viewer-side undo/redo sync
-              const canonicalStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
+            // Happy path: 100% exact match!
+            if (session.pendingQueue && session.pendingQueue.length > 0) {
+              // Smooth tail drain over 2-5 frames instead of instant dump (eliminates end-of-stroke jump)
+              drainingStrokesRef.current.push({
                 instanceId: data.instanceId,
+                strokeId,
                 tool: session.tool,
                 color: session.color,
                 width: session.width,
                 opacity: session.opacity,
-                points: session.rawPoints || []
+                path: session.path,
+                pendingQueue: session.pendingQueue,
+                rawPoints: session.rawPoints
               });
-              prevCommandsCountRef.current = localCommandsRef.current.length;
-              localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
-              localRedoStackRef.current = [];
-              invalidateFreeDrawCaches();
-              saveSnapshot();
-              syncHistoryButtons();
+              delete activeSessionsRef.current[data.instanceId];
+              triggerSpectatorPlayback();
+            } else {
+              // Queue already fully drained: promote to permanent canvas immediately
+              if (session.path.length > 0) {
+                drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
+                
+                // Record in localCommands history for viewer-side undo/redo sync
+                const canonicalStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
+                  instanceId: data.instanceId,
+                  tool: session.tool,
+                  color: session.color,
+                  width: session.width,
+                  opacity: session.opacity,
+                  points: session.rawPoints || []
+                });
+                prevCommandsCountRef.current = localCommandsRef.current.length;
+                localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
+                localRedoStackRef.current = [];
+                invalidateFreeDrawCaches();
+                saveSnapshot();
+                syncHistoryButtons();
+              }
+              delete activeSessionsRef.current[data.instanceId];
+              redrawTempLayer();
             }
-            delete activeSessionsRef.current[data.instanceId];
-            redrawTempLayer();
           } else {
             // Count mismatch! Volatile packet loss occurred: request targeted canonical repair
             console.warn(`[DrawingCanvasCore] Packet mismatch for stroke ${strokeId}: localCount=${localCount} vs serverCount=${serverPointCount}. Requesting canonical repair...`);
@@ -2013,6 +2094,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               drawingDiagRef.current.drawRepair.count++;
             }
             delete activeSessionsRef.current[data.instanceId];
+            drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
             redrawTempLayer();
             socket.emit('draw_repair_req', { instId: data.instanceId, strokeId });
           }
@@ -2022,21 +2104,35 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           drawingDiagRef.current.drawAbort.count++;
         }
         delete activeSessionsRef.current[data.instanceId];
+        drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
         redrawTempLayer();
       } else if (event === 'draw_end') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
-          if (session.pendingQueue && session.pendingQueue.length > 0) {
-            for (let k = 0; k < session.pendingQueue.length; k++) {
-              session.path.push(session.pendingQueue[k]);
-            }
-            session.pendingQueue = [];
-          }
           const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
           let committed = false;
           if (!data.isCancelled && session.path.length > 0 && !isShape) {
-            drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
-            committed = true;
+            if (session.pendingQueue && session.pendingQueue.length > 0) {
+              drainingStrokesRef.current.push({
+                instanceId: data.instanceId,
+                strokeId: session.strokeId || 0,
+                tool: session.tool,
+                color: session.color,
+                width: session.width,
+                opacity: session.opacity,
+                path: session.path,
+                pendingQueue: session.pendingQueue,
+                rawPoints: session.rawPoints
+              });
+              delete activeSessionsRef.current[data.instanceId];
+              triggerSpectatorPlayback();
+            } else {
+              drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
+              committed = true;
+              delete activeSessionsRef.current[data.instanceId];
+            }
+          } else {
+            delete activeSessionsRef.current[data.instanceId];
           }
 
           if (!data.isCancelled && isShape && data.startX !== undefined && data.startY !== undefined) {
@@ -2050,7 +2146,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           if (committed) {
             invalidateFreeDrawCaches();
           }
-          delete activeSessionsRef.current[data.instanceId];
         }
         redrawTempLayer();
         if (!data.isCancelled) {
@@ -2058,8 +2153,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       } else if (event === 'draw_cancel') {
         delete activeSessionsRef.current[data.instanceId];
+        drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
         redrawTempLayer();
       } else if (event === 'draw_clear') {
+        drainingStrokesRef.current = [];
         prevCommandsCountRef.current = localCommandsRef.current.length;
         localCommandsRef.current.push({ event: 'draw_binary', data: raw });
         localRedoStackRef.current = [];
