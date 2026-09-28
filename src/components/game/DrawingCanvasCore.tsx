@@ -87,7 +87,7 @@ const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b:
   if (data[i + 3] <= 10) {
     return false;
   }
-  const tolerance = 40;
+  const tolerance = 18;
   return Math.abs(data[i] - r) <= tolerance &&
          Math.abs(data[i + 1] - g) <= tolerance &&
          Math.abs(data[i + 2] - b) <= tolerance &&
