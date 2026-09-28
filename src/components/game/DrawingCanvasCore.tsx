@@ -2404,7 +2404,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     const intervalMs = propsRef.current.isFreeDraw
-      ? 120
+      ? 200
       : (IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16));
 
     if (!throttleTimeoutRef.current) {
