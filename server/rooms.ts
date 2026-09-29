@@ -1163,8 +1163,8 @@ const words = word.split(" ").filter(w => w.length > 0);
     }
 
     for (let i = 0; i < count; i++) {
-      const px = buf.readUInt16LE(10 + i * 4);
-      const py = buf.readUInt16LE(12 + i * 4);
+      const px = buf.readInt16LE(10 + i * 4);
+      const py = buf.readInt16LE(12 + i * 4);
       stroke.points.push({ x: px, y: py });
     }
     stroke.receivedPointCount = stroke.points.length;
