@@ -574,7 +574,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const captureDirectFreeDrawUndoCache = () => {
     const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
-    if (!useCache || propsRef.current.readOnly) return;
+    if (!useCache) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
@@ -1476,6 +1476,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           } else {
             // Tail completely drained: finalize stroke cleanly to permanent canvas ctx
             if (ctx && stroke.path.length > 0) {
+              captureDirectFreeDrawUndoCache();
               drawEntirePath(ctx, stroke.path, stroke.tool, stroke.color, stroke.width, stroke.opacity);
 
               const canonicalStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
@@ -1489,7 +1490,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               prevCommandsCountRef.current = localCommandsRef.current.length;
               localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
               localRedoStackRef.current = [];
-              invalidateFreeDrawCaches();
               saveSnapshot();
               syncHistoryButtons();
             }
@@ -1694,11 +1694,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCtx = tempCtxRef.current;
     if (!ctx || !tempCtx) return;
 
-    if (emit) {
-      captureDirectFreeDrawUndoCache();
-    } else {
-      invalidateFreeDrawCaches();
-    }
+    captureDirectFreeDrawUndoCache();
 
     resetCanvasBackingStores(ctx, tempCtx);
 
@@ -1738,10 +1734,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       localRedoStackRef.current = [removed];
     }
 
-    // 🛡️ Fast-Path: Single Previous-State Canvas Cache (Only for local player's undo)
+    // 🛡️ Fast-Path: Single Previous-State Canvas Cache (For both local player and spectators)
     let restoredViaCache = false;
     const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
-    if (emit && useCache && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
+    if (useCache && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const redoCanvas = ensureCacheCanvas(freeDrawRedoCacheCanvasRef, canvas);
       copyCanvasContent(canvas, redoCanvas);
@@ -1783,10 +1779,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
     }
 
-    // 🛡️ Fast-Path: Single Redo-State Canvas Cache (Only for local player's redo)
+    // 🛡️ Fast-Path: Single Redo-State Canvas Cache (For both local player and spectators)
     let restoredViaCache = false;
     const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
-    if (emit && useCache && hasFreeDrawRedoCacheRef.current && freeDrawRedoCacheCanvasRef.current && canvasRef.current) {
+    if (useCache && hasFreeDrawRedoCacheRef.current && freeDrawRedoCacheCanvasRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
       copyCanvasContent(canvas, undoCanvas);
@@ -2011,6 +2007,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           y: pt.y * LOGICAL_HEIGHT
         }));
         if (scaledPoints.length > 0) {
+          captureDirectFreeDrawUndoCache();
           if (isShape && scaledPoints.length >= 2) {
             const startPt = scaledPoints[0];
             const lastPt = scaledPoints[scaledPoints.length - 1];
@@ -2026,7 +2023,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           prevCommandsCountRef.current = localCommandsRef.current.length;
           localCommandsRef.current.push({ event: 'draw_binary', data: raw });
           localRedoStackRef.current = [];
-          invalidateFreeDrawCaches();
           saveSnapshot();
           syncHistoryButtons();
         }
@@ -2116,6 +2112,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             } else {
               // Queue already fully drained: promote to permanent canvas immediately
               if (session.path.length > 0) {
+                captureDirectFreeDrawUndoCache();
                 drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
                 
                 // Record in localCommands history for viewer-side undo/redo sync
@@ -2130,7 +2127,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 prevCommandsCountRef.current = localCommandsRef.current.length;
                 localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
                 localRedoStackRef.current = [];
-                invalidateFreeDrawCaches();
                 saveSnapshot();
                 syncHistoryButtons();
               }
@@ -2177,6 +2173,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               delete activeSessionsRef.current[data.instanceId];
               triggerSpectatorPlayback();
             } else {
+              captureDirectFreeDrawUndoCache();
               drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
               committed = true;
               delete activeSessionsRef.current[data.instanceId];
@@ -2186,15 +2183,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
 
           if (!data.isCancelled && isShape && data.startX !== undefined && data.startY !== undefined) {
+            captureDirectFreeDrawUndoCache();
             const sX = data.startX * LOGICAL_WIDTH;
             const sY = data.startY * LOGICAL_HEIGHT;
             const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
             const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
             drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity);
             committed = true;
-          }
-          if (committed) {
-            invalidateFreeDrawCaches();
           }
         }
         redrawTempLayer();
@@ -2207,27 +2202,33 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         redrawTempLayer();
       } else if (event === 'draw_clear') {
         drainingStrokesRef.current = [];
+        activeSessionsRef.current = {};
+        redrawTempLayer();
+        captureDirectFreeDrawUndoCache();
         prevCommandsCountRef.current = localCommandsRef.current.length;
         localCommandsRef.current.push({ event: 'draw_binary', data: raw });
         localRedoStackRef.current = [];
         executeClear(false);
-        invalidateFreeDrawCaches();
         syncHistoryButtons();
       } else if (event === 'draw_action') {
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
+          captureDirectFreeDrawUndoCache();
           floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
           prevCommandsCountRef.current = localCommandsRef.current.length;
           localCommandsRef.current.push({ event: 'draw_binary', data: raw });
           localRedoStackRef.current = [];
-          invalidateFreeDrawCaches();
           saveSnapshot();
           syncHistoryButtons();
         }
       } else if (event === 'draw_undo') {
-        invalidateFreeDrawCaches();
+        drainingStrokesRef.current = [];
+        activeSessionsRef.current = {};
+        redrawTempLayer();
         executeUndo(false);
       } else if (event === 'draw_redo') {
-        invalidateFreeDrawCaches();
+        drainingStrokesRef.current = [];
+        activeSessionsRef.current = {};
+        redrawTempLayer();
         executeRedo(false);
       }
     };
