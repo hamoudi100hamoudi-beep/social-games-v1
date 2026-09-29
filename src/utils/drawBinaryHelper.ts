@@ -181,10 +181,10 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     view.setUint16(8, movesLength, true);
     for (let i = 0; i < movesLength; i++) {
       const pt = moves[i];
-      const scaledPtX = Math.min(10000, Math.max(0, Math.round((pt.x || 0) * 10000)));
-      const scaledPtY = Math.min(10000, Math.max(0, Math.round((pt.y || 0) * 10000)));
-      view.setUint16(10 + i * 4, scaledPtX, true);
-      view.setUint16(12 + i * 4, scaledPtY, true);
+      const scaledPtX = Math.min(30000, Math.max(-30000, Math.round((pt.x || 0) * 10000)));
+      const scaledPtY = Math.min(30000, Math.max(-30000, Math.round((pt.y || 0) * 10000)));
+      view.setInt16(10 + i * 4, scaledPtX, true);
+      view.setInt16(12 + i * 4, scaledPtY, true);
     }
     
     return buffer;
@@ -380,8 +380,8 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       const movesLength = view.getUint16(8, true);
       const moves = [];
       for (let i = 0; i < movesLength; i++) {
-        const x = view.getUint16(10 + i * 4, true) / 10000;
-        const y = view.getUint16(12 + i * 4, true) / 10000;
+        const x = view.getInt16(10 + i * 4, true) / 10000;
+        const y = view.getInt16(12 + i * 4, true) / 10000;
         moves.push({ x, y });
       }
       
