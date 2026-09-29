@@ -97,6 +97,23 @@ const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b:
 let sharedOffscreenCanvas: HTMLCanvasElement | null = null;
 let sharedOffscreenCtx: CanvasRenderingContext2D | null = null;
 
+interface TargetRGBA {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+// Bounded seed recovery search offsets within Euclidean distance <= 2.0 physical pixels, ordered by distance
+const RECOVERY_NEIGHBOR_OFFSETS = [
+  // Distance 1.0 (4 orthogonal neighbors)
+  [0, -1], [0, 1], [-1, 0], [1, 0],
+  // Distance ~1.414 (4 diagonal neighbors)
+  [-1, -1], [1, -1], [-1, 1], [1, 1],
+  // Distance 2.0 (4 orthogonal 2-step neighbors)
+  [0, -2], [0, 2], [-2, 0], [2, 0]
+];
+
 const floodFill = (
   ctx: CanvasRenderingContext2D,
   startX: number,
@@ -104,8 +121,9 @@ const floodFill = (
   fillColorStr: string,
   fillOpacity: number = 1,
   logicalWidth: number = DEFAULT_LOGICAL_WIDTH,
-  logicalHeight: number = DEFAULT_LOGICAL_HEIGHT
-) => {
+  logicalHeight: number = DEFAULT_LOGICAL_HEIGHT,
+  expectedTarget?: TargetRGBA
+): TargetRGBA | null => {
   const canvas = ctx.canvas;
   const cw = canvas.width;
   const ch = canvas.height;
@@ -123,7 +141,7 @@ const floodFill = (
   }
 
   const offscreenCtx = sharedOffscreenCtx;
-  if (!offscreenCtx) return;
+  if (!offscreenCtx) return null;
 
   offscreenCtx.clearRect(0, 0, cw, ch);
   offscreenCtx.drawImage(canvas, 0, 0);
@@ -134,16 +152,47 @@ const floodFill = (
   // Derive pixel seed coordinates directly from canvas physical backing store scale (cw / logicalWidth)
   const scaleX = cw / logicalWidth;
   const scaleY = ch / logicalHeight;
-  const sx = Math.floor(startX * scaleX);
-  const sy = Math.floor(startY * scaleY);
+  let sx = Math.floor(startX * scaleX);
+  let sy = Math.floor(startY * scaleY);
 
-  if (sx < 0 || sx >= cw || sy < 0 || sy >= ch) return;
+  if (sx < 0 || sx >= cw || sy < 0 || sy >= ch) return null;
 
-  const targetIdx = (sy * cw + sx) * 4;
-  const tr = data[targetIdx];
-  const tg = data[targetIdx + 1];
-  const tb = data[targetIdx + 2];
-  const ta = data[targetIdx + 3];
+  let targetIdx = (sy * cw + sx) * 4;
+  let tr = data[targetIdx];
+  let tg = data[targetIdx + 1];
+  let tb = data[targetIdx + 2];
+  let ta = data[targetIdx + 3];
+
+  if (expectedTarget) {
+    tr = expectedTarget.r;
+    tg = expectedTarget.g;
+    tb = expectedTarget.b;
+    ta = expectedTarget.a;
+
+    // Check if initial candidate seed pixel matches expected targetRGBA
+    const initialMatches = matchColor(data, targetIdx, tr, tg, tb, ta);
+    if (!initialMatches) {
+      let recovered = false;
+      for (let i = 0; i < RECOVERY_NEIGHBOR_OFFSETS.length; i++) {
+        const nx = sx + RECOVERY_NEIGHBOR_OFFSETS[i][0];
+        const ny = sy + RECOVERY_NEIGHBOR_OFFSETS[i][1];
+        if (nx >= 0 && nx < cw && ny >= 0 && ny < ch) {
+          const nIdx = (ny * cw + nx) * 4;
+          if (matchColor(data, nIdx, tr, tg, tb, ta)) {
+            sx = nx;
+            sy = ny;
+            targetIdx = nIdx;
+            recovered = true;
+            break;
+          }
+        }
+      }
+      if (!recovered) {
+        // Safe Abort: no matching pixel within <= 2 physical pixels
+        return null;
+      }
+    }
+  }
 
   let fillHex = fillColorStr;
   if (fillHex.length === 4) {
@@ -155,7 +204,7 @@ const floodFill = (
   const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
 
   if (ta >= 240 && fillOpacity >= 0.95 && Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5) {
-    return;
+    return { r: tr, g: tg, b: tb, a: ta };
   }
 
   const visited = new Uint8Array(cw * ch);
@@ -244,6 +293,7 @@ const floodFill = (
   }
 
   ctx.putImageData(imageData, 0, 0);
+  return { r: tr, g: tg, b: tb, a: ta };
 };
 
 export interface DrawingCanvasCoreRef {
@@ -1860,7 +1910,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         saveSnapshot();
       } else if (event === 'draw_action') {
         if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
           saveSnapshot();
         }
       } else if (event === 'draw_undo') {
@@ -2165,7 +2215,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncHistoryButtons();
       } else if (event === 'draw_action') {
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
           prevCommandsCountRef.current = localCommandsRef.current.length;
           localCommandsRef.current.push({ event: 'draw_binary', data: raw });
           localRedoStackRef.current = [];
@@ -2877,13 +2927,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (activeTool === 'bucket') {
       const runBucket = () => {
         captureDirectFreeDrawUndoCache();
-        floodFill(ctx, x, y, activeColor, activeOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+        const sampledTarget = floodFill(ctx, x, y, activeColor, activeOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
         emitDrawCommand('draw_action', {
           tool: 'bucket',
           color: activeColor,
           opacity: activeOpacity,
           x: x / LOGICAL_WIDTH,
-          y: y / LOGICAL_HEIGHT
+          y: y / LOGICAL_HEIGHT,
+          targetR: sampledTarget ? sampledTarget.r : undefined,
+          targetG: sampledTarget ? sampledTarget.g : undefined,
+          targetB: sampledTarget ? sampledTarget.b : undefined,
+          targetA: sampledTarget ? sampledTarget.a : undefined
         });
         saveSnapshot();
       };

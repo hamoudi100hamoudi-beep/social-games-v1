@@ -232,7 +232,8 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
   }
   
   if (event === 'draw_action') {
-    const buffer = new ArrayBuffer(17);
+    const hasTarget = data.targetR !== undefined && data.targetG !== undefined && data.targetB !== undefined && data.targetA !== undefined;
+    const buffer = new ArrayBuffer(hasTarget ? 21 : 17);
     const view = new DataView(buffer);
     view.setUint8(0, MSG_DRAW_ACTION);
     writeString7(view, 1, instId);
@@ -250,6 +251,13 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     const scaledY = Math.min(10000, Math.max(0, Math.round((data.y || 0) * 10000)));
     view.setUint16(13, scaledX, true);
     view.setUint16(15, scaledY, true);
+    
+    if (hasTarget) {
+      view.setUint8(17, Math.min(255, Math.max(0, Math.round(data.targetR))));
+      view.setUint8(18, Math.min(255, Math.max(0, Math.round(data.targetG))));
+      view.setUint8(19, Math.min(255, Math.max(0, Math.round(data.targetB))));
+      view.setUint8(20, Math.min(255, Math.max(0, Math.round(data.targetA))));
+    }
     
     return buffer;
   }
@@ -421,9 +429,17 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       const x = view.getUint16(13, true) / 10000;
       const y = view.getUint16(15, true) / 10000;
       
+      const hasTarget = view.byteLength >= 21;
+      const targetRGBA = hasTarget ? {
+        r: view.getUint8(17),
+        g: view.getUint8(18),
+        b: view.getUint8(19),
+        a: view.getUint8(20)
+      } : undefined;
+      
       return {
         event: 'draw_action',
-        data: { instanceId: instId, tool, color, opacity, x, y }
+        data: { instanceId: instId, tool, color, opacity, x, y, targetRGBA }
       };
     }
     
