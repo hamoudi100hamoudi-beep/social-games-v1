@@ -1836,6 +1836,27 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       exitedOutsideWhilePointerDownRef.current = false;
       lastOutsidePointerRef.current = null;
 
+      // 1. Optimistic Local Removal:
+      const [removedCmd] = list.splice(targetIndex, 1);
+      if (removedCmd) {
+        localRedoStackRef.current = [removedCmd];
+      }
+
+      // 2. Filter local draining queue if present:
+      const beforeDrainingCount = drainingStrokesRef.current.length;
+      drainingStrokesRef.current = drainingStrokesRef.current.filter(
+        s => !(s.instanceId === instanceId && s.strokeId === targetStrokeId)
+      );
+      if (drainingStrokesRef.current.length !== beforeDrainingCount) {
+        redrawTempLayer();
+      }
+
+      // 3. Instant 0ms Local Canvas Replay:
+      hasFreeDrawUndoCacheRef.current = false;
+      hasFreeDrawRedoCacheRef.current = false;
+      replayFreeDrawHistorySafely(list);
+
+      // 4. Send authoritative draw_undo to server for room broadcast:
       if (emit) {
         emitDrawCommand('draw_undo', { strokeId: targetStrokeId });
       }
