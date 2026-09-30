@@ -49,6 +49,7 @@ export interface Room {
   winningScore?: number;
   theme?: string;
   isFreeDraw?: boolean;
+  isExperimental?: boolean;
   activeDrawers?: string[];
   freeDrawStrokes?: Map<string, any>;
   freeDrawCanonicalCache?: Map<string, { buffer: Buffer; createdAt: number }>;

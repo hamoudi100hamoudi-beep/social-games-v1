@@ -338,6 +338,7 @@ interface DrawingCanvasCoreProps {
   onSyncStateChange?: (syncing: boolean) => void;
   deferredReset?: boolean;
   isFreeDraw?: boolean;
+  isExperimental?: boolean;
   enableInputOptimizations?: boolean;
   enableBitmapUndoCache?: boolean;
   enableFixedDPR?: boolean;
@@ -361,6 +362,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     onSyncStateChange,
     deferredReset = false,
     isFreeDraw = false,
+    isExperimental = false,
     enableInputOptimizations = false,
     enableBitmapUndoCache = false,
     enableFixedDPR = false,
@@ -648,11 +650,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -2647,7 +2649,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!throttleTimeoutRef.current) {
       throttleTimeoutRef.current = setTimeout(() => {
         if (moveBatchRef.current.length > 0) {
-          if (propsRef.current.isFreeDraw) {
+          if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
             drawerNetworkPointCountRef.current += moveBatchRef.current.length;
           }
           emitDrawCommand('draw_move', {
@@ -2687,7 +2689,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
       if (moveBatchRef.current.length > 0) {
-        if (propsRef.current.isFreeDraw) {
+        if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
           drawerNetworkPointCountRef.current += moveBatchRef.current.length;
         }
         emitDrawCommand('draw_move', {
@@ -2704,7 +2706,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       if (currentPathRef.current.length > 0) {
         // Only commit undo cache and record stroke in history if at least one point is inside/touches canvas viewport
-        const hasVisibleContent = !propsRef.current.isFreeDraw || currentPathRef.current.some(
+        const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
+        const hasVisibleContent = !isContinuousMode || currentPathRef.current.some(
           pt => pt.x >= 0 && pt.x <= LOGICAL_WIDTH && pt.y >= 0 && pt.y <= LOGICAL_HEIGHT
         );
 
@@ -2717,9 +2720,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             (EXPERIMENTAL_NETWORK_SAMPLING_TEST || propsRef.current.enableNetworkSampling)
           );
 
-          // In Free Draw: DO NOT send duplicate client draw_stroke in successful path!
+          // In Free Draw / Experimental: DO NOT send duplicate client draw_stroke in successful path!
           // Server will commit canonical Type 9 upon draw_end and broadcast draw_commit.
-          if (!propsRef.current.isFreeDraw) {
+          if (!isContinuousMode) {
             // Normal Rooms: retain original draw_stroke behavior
             const normalizedPoints = currentPathRef.current.map(pt => ({
               x: pt.x / LOGICAL_WIDTH,
@@ -2734,7 +2737,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               points: normalizedPoints
             });
           } else {
-            // Free Draw: Record local command for deterministic drawer-side Undo/Redo without sending over the network
+            // Free Draw & Experimental: Record local command for deterministic drawer-side Undo/Redo without sending over the network
             const localStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
               instanceId,
               tool: activeTool,
@@ -3446,6 +3449,7 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.status === nextProps.status &&
     prevProps.isZoomEnabled === nextProps.isZoomEnabled &&
     prevProps.isFreeDraw === nextProps.isFreeDraw &&
+    prevProps.isExperimental === nextProps.isExperimental &&
     prevProps.enableInputOptimizations === nextProps.enableInputOptimizations &&
     prevProps.enableBitmapUndoCache === nextProps.enableBitmapUndoCache &&
     prevProps.enableFixedDPR === nextProps.enableFixedDPR &&

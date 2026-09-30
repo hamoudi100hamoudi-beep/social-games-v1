@@ -372,6 +372,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           status={status}
           isZoomEnabled={zoomEnabled}
           isFreeDraw={isFreeDraw}
+          isExperimental={isExperimental}
           enableInputOptimizations={Boolean(isExperimental && EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST)}
           enableBitmapUndoCache={Boolean(isExperimental && EXPERIMENTAL_BITMAP_UNDO_TEST)}
           enableFixedDPR={Boolean(isExperimental && EXPERIMENTAL_DPR_1_TEST)}

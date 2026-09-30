@@ -943,6 +943,7 @@ const words = word.split(" ").filter(w => w.length > 0);
         winningScore: config.winningScore,
         theme: config.theme,
         isFreeDraw: !!config.isFreeDraw,
+        isExperimental: !!config.isExperimental,
         activeDrawers: [],
         players: [],
         gameState: {
@@ -1035,6 +1036,14 @@ const words = word.split(" ").filter(w => w.length > 0);
       room.gameState.redoStack = [];
       room.gameState.isDrawingActive = false;
 
+      // Strict cleanup of in-memory stroke collectors and canonical caches
+      if (room.freeDrawStrokes) {
+        room.freeDrawStrokes.clear();
+      }
+      if (room.freeDrawCanonicalCache) {
+        room.freeDrawCanonicalCache.clear();
+      }
+
       console.log(
         `[Memory Sweeper] Wiped drawing history completely to avoid RAM Bloat`,
       );
@@ -1075,7 +1084,7 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   public handleFreeDrawStart(roomId: string, socketId: string, buf: Buffer): boolean {
     const room = this.rooms.get(roomId);
-    if (!room || !room.isFreeDraw || !Buffer.isBuffer(buf) || buf.length < 18) return false;
+    if (!room || (!room.isFreeDraw && !room.isExperimental) || !Buffer.isBuffer(buf) || buf.length < 18) return false;
     if (buf[0] !== 1) return false; // MSG_DRAW_START
 
     // Header layout:
@@ -1130,7 +1139,7 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   public handleFreeDrawMove(roomId: string, socketId: string, buf: Buffer): boolean {
     const room = this.rooms.get(roomId);
-    if (!room || !room.isFreeDraw || !Buffer.isBuffer(buf) || buf.length < 10) return false;
+    if (!room || (!room.isFreeDraw && !room.isExperimental) || !Buffer.isBuffer(buf) || buf.length < 10) return false;
     if (buf[0] !== 2) return false; // MSG_DRAW_MOVE
 
     let instId = "";
@@ -1178,7 +1187,7 @@ const words = word.split(" ").filter(w => w.length > 0);
     buf: Buffer
   ): { committed: boolean; strokeId: number; pointCount: number; instId: string } | null {
     const room = this.rooms.get(roomId);
-    if (!room || !room.isFreeDraw || !Buffer.isBuffer(buf) || buf.length < 8) return null;
+    if (!room || (!room.isFreeDraw && !room.isExperimental) || !Buffer.isBuffer(buf) || buf.length < 8) return null;
     if (buf[0] !== 3) return null; // MSG_DRAW_END
 
     let instId = "";
@@ -1281,7 +1290,7 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   public abortFreeDrawStroke(roomId: string, socketId: string, instId: string, strokeId: number = 0) {
     const room = this.rooms.get(roomId);
-    if (!room || !room.isFreeDraw) return;
+    if (!room || (!room.isFreeDraw && !room.isExperimental)) return;
     const strokes = this.getOrCreateFreeDrawStrokes(room);
     const key = `${socketId}_${instId}`;
     strokes.delete(key);
@@ -1298,7 +1307,7 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   public abortAllActiveFreeDrawStrokesForSocket(socketId: string) {
     for (const room of this.rooms.values()) {
-      if (room.isFreeDraw && room.freeDrawStrokes) {
+      if ((room.isFreeDraw || room.isExperimental) && room.freeDrawStrokes) {
         for (const [key, stroke] of room.freeDrawStrokes.entries()) {
           if (stroke.socketId === socketId) {
             this.abortFreeDrawStroke(room.id, socketId, stroke.instId);
@@ -1310,7 +1319,7 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   public abortAllActiveFreeDrawStrokesForRoom(roomId: string) {
     const room = this.rooms.get(roomId);
-    if (room && room.isFreeDraw && room.freeDrawStrokes) {
+    if (room && (room.isFreeDraw || room.isExperimental) && room.freeDrawStrokes) {
       for (const stroke of room.freeDrawStrokes.values()) {
         this.abortFreeDrawStroke(room.id, stroke.socketId, stroke.instId);
       }
@@ -1320,7 +1329,7 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   public getCanonicalFreeDrawStroke(roomId: string, instId: string, strokeId: number): Buffer | null {
     const room = this.rooms.get(roomId);
-    if (!room || !room.isFreeDraw || !room.freeDrawCanonicalCache) return null;
+    if (!room || (!room.isFreeDraw && !room.isExperimental) || !room.freeDrawCanonicalCache) return null;
     const cacheKey = `${instId}_${strokeId}`;
     const cached = room.freeDrawCanonicalCache.get(cacheKey);
     return cached ? cached.buffer : null;

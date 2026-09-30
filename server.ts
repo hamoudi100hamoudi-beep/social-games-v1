@@ -314,6 +314,8 @@ async function startServer() {
         if (roomId) {
           const room = roomManager.getRoom(roomId);
           const isFreeDraw = Boolean(room && room.isFreeDraw);
+          const isExperimental = Boolean(room && room.isExperimental);
+          const useCanonicalPipeline = isFreeDraw || isExperimental;
 
           const toolName = buf.length >= 9 ? getToolName(buf[8]) : '';
           const isContinuousTool = toolName === 'pencil' || toolName === 'eraser';
@@ -327,15 +329,15 @@ async function startServer() {
           } else if (type === 8) { // draw_redo
             roomManager.redoDrawing(roomId);
             io.to(roomId).emit('draw_binary', buf);
-          } else if (isFreeDraw && type === 1 && isContinuousTool) { // Free Draw draw_start (Pen/Eraser only)
+          } else if (useCanonicalPipeline && type === 1 && isContinuousTool) { // Canonical draw_start (Pen/Eraser only)
             roomManager.handleFreeDrawStart(roomId, socket.id, buf);
             // Broadcast live draw_start so spectators initialize their local live layer
             socket.broadcast.to(roomId).emit('draw_binary', buf);
-          } else if (isFreeDraw && type === 2) { // Free Draw draw_move
+          } else if (useCanonicalPipeline && type === 2) { // Canonical draw_move
             roomManager.handleFreeDrawMove(roomId, socket.id, buf);
             // Relay volatile moves live to other clients in room
             socket.broadcast.to(roomId).volatile.emit('draw_binary', buf);
-          } else if (isFreeDraw && type === 3 && isContinuousTool) { // Free Draw draw_end (Pen/Eraser only)
+          } else if (useCanonicalPipeline && type === 3 && isContinuousTool) { // Canonical draw_end (Pen/Eraser only)
             const commitResult = roomManager.handleFreeDrawEnd(roomId, socket.id, buf);
             if (commitResult && commitResult.committed) {
               // Construct and broadcast reliable draw_commit (Type 11) to the ENTIRE room INCLUDING drawer
