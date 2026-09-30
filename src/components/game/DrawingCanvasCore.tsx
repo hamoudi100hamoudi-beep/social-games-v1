@@ -1283,7 +1283,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           event: 'draw_binary',
           data: msg,
           instanceId,
-          strokeId: currentLocalStrokeIdRef.current
+          strokeId: payload.strokeId || currentLocalStrokeIdRef.current
         });
         localRedoStackRef.current = []; // Wipe redo stack on new action
         syncHistoryButtons();
@@ -2219,7 +2219,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           redrawTempLayer();
 
           prevCommandsCountRef.current = localCommandsRef.current.length;
-          localCommandsRef.current.push({ event: 'draw_binary', data: raw });
+          localCommandsRef.current.push({
+            event: 'draw_binary',
+            data: raw,
+            instanceId: data.instanceId,
+            strokeId: data.strokeId
+          });
           localRedoStackRef.current = [];
           saveSnapshot();
           syncHistoryButtons();
@@ -2419,7 +2424,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           captureDirectFreeDrawUndoCache();
           floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
           prevCommandsCountRef.current = localCommandsRef.current.length;
-          localCommandsRef.current.push({ event: 'draw_binary', data: raw });
+          localCommandsRef.current.push({
+            event: 'draw_binary',
+            data: raw,
+            instanceId: data.instanceId,
+            strokeId: data.strokeId
+          });
           localRedoStackRef.current = [];
           saveSnapshot();
           syncHistoryButtons();
@@ -3031,6 +3041,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
 
+    // Increment monotonic strokeId for this Shape operation
+    currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
+    if (currentLocalStrokeIdRef.current === 0) currentLocalStrokeIdRef.current = 1;
+
     stageFreeDrawPendingCache();
 
     emitDrawCommand('draw_start', {
@@ -3038,6 +3052,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       color: activeColor,
       width: activeWidth,
       opacity: activeOpacity,
+      strokeId: currentLocalStrokeIdRef.current,
       x: rawX / LOGICAL_WIDTH,
       y: rawY / LOGICAL_HEIGHT
     });
@@ -3086,6 +3101,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     // Draw shape to the primary canvas context (hardware-clipped naturally at canvas bounds)
     drawShape(ctx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity);
 
+    const shapeStrokeId = currentLocalStrokeIdRef.current;
+
     // Send complete stroke object for shapes (straight lines, rectangles, circles, etc.)
     const normalizedPoints = [
       { x: startXRef.current / LOGICAL_WIDTH, y: startYRef.current / LOGICAL_HEIGHT },
@@ -3096,6 +3113,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       color: activeColor,
       width: activeWidth,
       opacity: activeOpacity,
+      strokeId: shapeStrokeId,
       points: normalizedPoints
     });
 
@@ -3105,6 +3123,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       width: activeWidth,
       opacity: activeOpacity,
       isShape: true,
+      strokeId: shapeStrokeId,
+      expectedPointCount: 2,
       startX: startXRef.current / LOGICAL_WIDTH,
       startY: startYRef.current / LOGICAL_HEIGHT,
       endX: rawX / LOGICAL_WIDTH,
@@ -3171,10 +3191,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const runBucket = () => {
         captureDirectFreeDrawUndoCache();
         const sampledTarget = floodFill(ctx, x, y, activeColor, activeOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+
+        // Increment monotonic strokeId for this Bucket operation
+        currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
+        if (currentLocalStrokeIdRef.current === 0) currentLocalStrokeIdRef.current = 1;
+        const thisBucketStrokeId = currentLocalStrokeIdRef.current;
+
         emitDrawCommand('draw_action', {
           tool: 'bucket',
           color: activeColor,
           opacity: activeOpacity,
+          strokeId: thisBucketStrokeId,
           x: x / LOGICAL_WIDTH,
           y: y / LOGICAL_HEIGHT,
           targetR: sampledTarget ? sampledTarget.r : undefined,

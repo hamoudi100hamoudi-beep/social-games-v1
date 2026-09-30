@@ -1362,6 +1362,21 @@ const words = word.split(" ").filter(w => w.length > 0);
     if (strokeId === undefined && isBinary && Buffer.isBuffer(data)) {
       if ((type === 1 || type === 3) && data.length >= 25) {
         strokeId = data.readUInt16LE(23);
+      } else if (type === 4) {
+        // draw_action (bucket)
+        const hasTarget = data.length >= 21;
+        if (hasTarget && data.length >= 23) {
+          strokeId = data.readUInt16LE(21);
+        } else if (!hasTarget && data.length >= 19) {
+          strokeId = data.readUInt16LE(17);
+        }
+      } else if (type === 9) {
+        // draw_stroke (shapes / consolidated strokes)
+        const pointsLen = data.length >= 16 ? data.readUInt16LE(14) : 0;
+        const expectedLen = 16 + pointsLen * 4;
+        if (data.length >= expectedLen + 2) {
+          strokeId = data.readUInt16LE(expectedLen);
+        }
       }
     }
 

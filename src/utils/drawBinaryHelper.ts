@@ -233,7 +233,9 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
   
   if (event === 'draw_action') {
     const hasTarget = data.targetR !== undefined && data.targetG !== undefined && data.targetB !== undefined && data.targetA !== undefined;
-    const buffer = new ArrayBuffer(hasTarget ? 21 : 17);
+    const hasStrokeId = data.strokeId !== undefined;
+    const baseLen = hasTarget ? 21 : 17;
+    const buffer = new ArrayBuffer(hasStrokeId ? baseLen + 2 : baseLen);
     const view = new DataView(buffer);
     view.setUint8(0, MSG_DRAW_ACTION);
     writeString7(view, 1, instId);
@@ -259,13 +261,18 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
       view.setUint8(20, Math.min(255, Math.max(0, Math.round(data.targetA))));
     }
     
+    if (hasStrokeId) {
+      view.setUint16(baseLen, (data.strokeId || 0) & 0xFFFF, true);
+    }
+    
     return buffer;
   }
   
   if (event === 'draw_stroke') {
     const points = Array.isArray(data.points) ? data.points : [];
     const pointsLength = points.length;
-    const buffer = new ArrayBuffer(16 + pointsLength * 4);
+    const hasStrokeId = data.strokeId !== undefined;
+    const buffer = new ArrayBuffer(16 + pointsLength * 4 + (hasStrokeId ? 2 : 0));
     const view = new DataView(buffer);
     view.setUint8(0, MSG_DRAW_STROKE);
     writeString7(view, 1, instId);
@@ -285,6 +292,9 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
       const scaledPtY = Math.min(30000, Math.max(-30000, Math.round((pt.y || 0) * 10000)));
       view.setInt16(16 + i * 4, scaledPtX, true);
       view.setInt16(18 + i * 4, scaledPtY, true);
+    }
+    if (hasStrokeId) {
+      view.setUint16(16 + pointsLength * 4, (data.strokeId || 0) & 0xFFFF, true);
     }
     return buffer;
   }
@@ -446,9 +456,16 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
         a: view.getUint8(20)
       } : undefined;
       
+      let strokeId: number | undefined;
+      if (hasTarget && view.byteLength >= 23) {
+        strokeId = view.getUint16(21, true);
+      } else if (!hasTarget && view.byteLength >= 19) {
+        strokeId = view.getUint16(17, true);
+      }
+
       return {
         event: 'draw_action',
-        data: { instanceId: instId, tool, color, opacity, x, y, targetRGBA }
+        data: { instanceId: instId, tool, color, opacity, x, y, targetRGBA, strokeId }
       };
     }
     
@@ -467,9 +484,16 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
         const y = view.getInt16(18 + i * 4, true) / 10000;
         points.push({ x, y });
       }
+
+      let strokeId: number | undefined;
+      const expectedLen = 16 + pointsLength * 4;
+      if (view.byteLength >= expectedLen + 2) {
+        strokeId = view.getUint16(expectedLen, true);
+      }
+
       return {
         event: 'draw_stroke',
-        data: { instanceId: instId, tool, color, width, opacity, points }
+        data: { instanceId: instId, tool, color, width, opacity, points, strokeId }
       };
     }
 
