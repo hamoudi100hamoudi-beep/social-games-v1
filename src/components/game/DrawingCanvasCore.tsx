@@ -2616,7 +2616,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // --- Network Path Separation (EXPERIMENTAL_NETWORK_SAMPLING_TEST) ---
     const isNetworkSamplingActive = Boolean(
-      propsRef.current.isFreeDraw &&
+      (propsRef.current.isFreeDraw || propsRef.current.enableNetworkSampling) &&
       (EXPERIMENTAL_NETWORK_SAMPLING_TEST || propsRef.current.enableNetworkSampling)
     );
 
@@ -2713,7 +2713,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
 
           const isNetworkSamplingActive = Boolean(
-            propsRef.current.isFreeDraw &&
+            (propsRef.current.isFreeDraw || propsRef.current.enableNetworkSampling) &&
             (EXPERIMENTAL_NETWORK_SAMPLING_TEST || propsRef.current.enableNetworkSampling)
           );
 
