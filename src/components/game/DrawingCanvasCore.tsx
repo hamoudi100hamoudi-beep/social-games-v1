@@ -375,9 +375,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const instanceId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
   const { socket, isConnected } = useSocket();
 
-  // Logical coordinate system bounds: 680x396 for Free Draw (isolated test), 592x344 for Normal/Experimental rooms
-  const LOGICAL_WIDTH = isFreeDraw ? FREE_DRAW_LOGICAL_WIDTH : DEFAULT_LOGICAL_WIDTH;
-  const LOGICAL_HEIGHT = isFreeDraw ? FREE_DRAW_LOGICAL_HEIGHT : DEFAULT_LOGICAL_HEIGHT;
+  // Logical coordinate system bounds: 680x396 for Free Draw & Experimental Draw, 592x344 for Normal rooms
+  const LOGICAL_WIDTH = (isFreeDraw || isExperimental) ? FREE_DRAW_LOGICAL_WIDTH : DEFAULT_LOGICAL_WIDTH;
+  const LOGICAL_HEIGHT = (isFreeDraw || isExperimental) ? FREE_DRAW_LOGICAL_HEIGHT : DEFAULT_LOGICAL_HEIGHT;
 
   // Primary visual and interactive layers
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2516,10 +2516,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!canvas || !tempCanvas) return;
 
     // In Free Draw mode and Experimental (Batch 3 DPR test): Canonical Backing Store Resolution (Option B)
-    // Both Main and Temp canvases are strictly locked to 760x430 (effectiveDPR = 1.0)
-    // for 100% deterministic pixel-perfect synchronization across all devices.
+    // Both Main and Temp canvases are strictly locked to effectiveDPR = 1.0 (680x396 physical pixels)
+    // for 100% deterministic pixel-perfect synchronization across all devices and zero memory bloat on mobile.
     // In Normal/Competitive rooms: Adaptive DPR continues to be used.
-    const effectiveDPR = (isFreeDraw || enableFixedDPR) ? 1.0 : DPR;
+    const effectiveDPR = (isFreeDraw || isExperimental || enableFixedDPR) ? 1.0 : DPR;
 
     canvas.width = Math.round(LOGICAL_WIDTH * effectiveDPR);
     canvas.height = Math.round(LOGICAL_HEIGHT * effectiveDPR);
