@@ -1513,6 +1513,65 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     spectatorPlaybackRafRef.current = requestAnimationFrame(tick);
   };
 
+  // ⚡ Fast-forward flush all pending spectator points and draining strokes immediately to canvas
+  const fastForwardFlushSpectatorQueue = () => {
+    const ctx = ctxRef.current;
+    let didFlushAnything = false;
+
+    // 1. Drain all pending in-flight spectator points directly to session paths
+    const sessions = activeSessionsRef.current;
+    const instIds = Object.keys(sessions);
+    for (let i = 0; i < instIds.length; i++) {
+      const session = sessions[instIds[i]];
+      if (session && session.pendingQueue && session.pendingQueue.length > 0) {
+        while (session.pendingQueue.length > 0) {
+          session.path.push(session.pendingQueue.shift()!);
+        }
+        didFlushAnything = true;
+      }
+    }
+
+    // 2. Finalize any stroke tails in drainingStrokesRef immediately to permanent canvas
+    if (drainingStrokesRef.current.length > 0) {
+      for (let i = 0; i < drainingStrokesRef.current.length; i++) {
+        const stroke = drainingStrokesRef.current[i];
+        if (stroke.pendingQueue && stroke.pendingQueue.length > 0) {
+          while (stroke.pendingQueue.length > 0) {
+            stroke.path.push(stroke.pendingQueue.shift()!);
+          }
+        }
+        if (ctx && stroke.path.length > 0) {
+          captureDirectFreeDrawUndoCache();
+          drawEntirePath(ctx, stroke.path, stroke.tool, stroke.color, stroke.width, stroke.opacity);
+          const canonicalStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
+            instanceId: stroke.instanceId,
+            tool: stroke.tool,
+            color: stroke.color,
+            width: stroke.width,
+            opacity: stroke.opacity,
+            points: stroke.rawPoints || []
+          });
+          prevCommandsCountRef.current = localCommandsRef.current.length;
+          localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
+          localRedoStackRef.current = [];
+          didFlushAnything = true;
+        }
+      }
+      drainingStrokesRef.current = [];
+    }
+
+    if (spectatorPlaybackRafRef.current !== null) {
+      cancelAnimationFrame(spectatorPlaybackRafRef.current);
+      spectatorPlaybackRafRef.current = null;
+    }
+
+    if (didFlushAnything) {
+      redrawTempLayer();
+      saveSnapshot();
+      syncHistoryButtons();
+    }
+  };
+
   const drawShape = (
     activeCtx: CanvasRenderingContext2D,
     x0: number, y0: number,
@@ -1639,6 +1698,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
     preventBucketRef.current = false;
 
+    fastForwardFlushSpectatorQueue();
     if (spectatorPlaybackRafRef.current !== null) {
       cancelAnimationFrame(spectatorPlaybackRafRef.current);
       spectatorPlaybackRafRef.current = null;
@@ -2046,14 +2106,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else if (event === 'draw_move') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
-          const isContinuousFreeDraw = Boolean(propsRef.current.isFreeDraw) && (session.tool === 'pencil' || session.tool === 'eraser');
+          const isContinuousStream = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental) && (session.tool === 'pencil' || session.tool === 'eraser');
 
           const handleMovePoint = (mx: number, my: number, normX: number, normY: number) => {
             if (!session.rawPoints) session.rawPoints = [];
             session.rawPoints.push({ x: normX, y: normY });
             session.networkPointCount = (session.networkPointCount || 0) + 1;
 
-            if (isContinuousFreeDraw) {
+            if (isContinuousStream) {
               if (!session.pendingQueue) session.pendingQueue = [];
               session.pendingQueue.push({ x: mx, y: my });
             } else {
@@ -2069,7 +2129,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, data.x, data.y);
           }
 
-          if (isContinuousFreeDraw) {
+          if (isContinuousStream) {
             triggerSpectatorPlayback();
           } else {
             redrawTempLayer();
@@ -2203,6 +2263,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
         redrawTempLayer();
       } else if (event === 'draw_clear') {
+        fastForwardFlushSpectatorQueue();
         drainingStrokesRef.current = [];
         activeSessionsRef.current = {};
         redrawTempLayer();
@@ -2421,6 +2482,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const previousStateRef = useRef({ currentDrawerId, status });
   useEffect(() => {
     if (previousStateRef.current.currentDrawerId !== currentDrawerId || previousStateRef.current.status !== status) {
+      if (previousStateRef.current.status === 'DRAWING' || status !== 'DRAWING' || previousStateRef.current.currentDrawerId !== currentDrawerId) {
+        fastForwardFlushSpectatorQueue();
+      }
       if (hasSyncedOnce && !isSyncing) {
         console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
         if (deferredReset && status === 'DRAWING') {
@@ -2642,7 +2706,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
     }
 
-    const intervalMs = propsRef.current.isFreeDraw
+    const intervalMs = (propsRef.current.isFreeDraw || propsRef.current.isExperimental)
       ? 200
       : (IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16));
 
