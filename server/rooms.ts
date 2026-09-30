@@ -1258,11 +1258,11 @@ const words = word.split(" ").filter(w => w.length > 0);
     }
 
     // Record canonical stroke into standard drawHistory through existing protected path
-    this.recordDrawCommand(roomId, 'draw_binary', type9Buf);
+    this.recordDrawCommand(roomId, 'draw_binary', type9Buf, instId, strokeId);
 
     // Also record the normal draw_end (Type 3) into drawHistory so undoLastDrawing
     // cleanly pops both Type 9 + Type 3 as an atomic pair (lines 1205-1216 in rooms.ts)
-    this.recordDrawCommand(roomId, 'draw_binary', buf);
+    this.recordDrawCommand(roomId, 'draw_binary', buf, instId, strokeId);
 
     // Cache canonical Type 9 temporarily for targeted client repair requests
     const cache = this.getOrCreateFreeDrawCanonicalCache(room);
@@ -1335,7 +1335,7 @@ const words = word.split(" ").filter(w => w.length > 0);
     return cached ? cached.buffer : null;
   }
 
-  recordDrawCommand(roomId: string, event: string, data: any) {
+  recordDrawCommand(roomId: string, event: string, data: any, customInstId?: string, customStrokeId?: number) {
     const room = this.rooms.get(roomId);
     if (!room) return;
     if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
@@ -1357,7 +1357,13 @@ const words = word.split(" ").filter(w => w.length > 0);
 
     const isBinary = event === "draw_binary" && Buffer.isBuffer(data) && data.length > 0;
     const type = isBinary ? data[0] : 0;
-    const instId = isBinary ? extractInstanceIdFromBuffer(data) : "";
+    const instId = customInstId || (isBinary ? extractInstanceIdFromBuffer(data) : "");
+    let strokeId = customStrokeId;
+    if (strokeId === undefined && isBinary && Buffer.isBuffer(data)) {
+      if ((type === 1 || type === 3) && data.length >= 25) {
+        strokeId = data.readUInt16LE(23);
+      }
+    }
 
     // If we already have a solidified draw_stroke (type 9) in history for this instId, do not append any further transient drawing actions
     if (isBinary && instId && (type === 1 || type === 2 || type === 3 || type === 6)) {
@@ -1413,9 +1419,60 @@ const words = word.split(" ").filter(w => w.length > 0);
       return;
     }
 
-    room.gameState.drawHistory.push({ event, data });
+    const historyEntry: any = { event, data };
+    if (instId) historyEntry.instId = instId;
+    if (strokeId !== undefined) historyEntry.strokeId = strokeId;
+    room.gameState.drawHistory.push(historyEntry);
 
     room.gameState.redoStack = [];
+  }
+
+  public undoFreeDrawStroke(roomId: string, targetInstId: string, targetStrokeId: number): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room || !room.gameState.drawHistory || room.gameState.drawHistory.length === 0) {
+      return false;
+    }
+
+    const history = room.gameState.drawHistory;
+
+    const matchesTarget = (cmd: any): boolean => {
+      if (!cmd) return false;
+      if (cmd.instId === targetInstId && cmd.strokeId === targetStrokeId) {
+        return true;
+      }
+      if (cmd.event === 'draw_binary' && Buffer.isBuffer(cmd.data) && cmd.data.length >= 8) {
+        const b = cmd.data;
+        const type = b[0];
+        let inst = "";
+        for (let i = 0; i < 7; i++) {
+          const code = b[1 + i];
+          if (code > 0) inst += String.fromCharCode(code);
+        }
+        if (inst !== targetInstId) return false;
+        if ((type === 1 || type === 3) && b.length >= 25) {
+          const sId = b.readUInt16LE(23);
+          if (sId === targetStrokeId) return true;
+        }
+      }
+      return false;
+    };
+
+    const hasMatch = history.some(matchesTarget);
+    if (!hasMatch) {
+      return false; // NO-OP: Target not found! Do not touch drawHistory.
+    }
+
+    // Filter out ONLY the matching element(s) for this target stroke,
+    // keeping the order of all other elements and buckets completely intact!
+    room.gameState.drawHistory = history.filter(cmd => !matchesTarget(cmd));
+
+    // Invalidate canonical cache for this stroke if present
+    if (room.freeDrawCanonicalCache) {
+      const cacheKey = `${targetInstId}_${targetStrokeId}`;
+      room.freeDrawCanonicalCache.delete(cacheKey);
+    }
+
+    return true;
   }
 
   private getLastStrokeStartIndex(drawHistory: any[]): number {

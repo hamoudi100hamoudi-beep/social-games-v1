@@ -324,8 +324,21 @@ async function startServer() {
             roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
             socket.broadcast.to(roomId).emit('draw_binary', buf);
           } else if (type === 7) { // draw_undo
-            roomManager.undoLastDrawing(roomId);
-            io.to(roomId).emit('draw_binary', buf);
+            if (isFreeDraw && buf.length >= 10) {
+              let targetInstId = "";
+              for (let i = 0; i < 7; i++) {
+                const code = buf[1 + i];
+                if (code > 0) targetInstId += String.fromCharCode(code);
+              }
+              const targetStrokeId = buf.readUInt16LE(8);
+              const removed = roomManager.undoFreeDrawStroke(roomId, targetInstId, targetStrokeId);
+              if (removed) {
+                io.to(roomId).emit('draw_binary', buf);
+              }
+            } else {
+              roomManager.undoLastDrawing(roomId);
+              io.to(roomId).emit('draw_binary', buf);
+            }
           } else if (type === 8) { // draw_redo
             roomManager.redoDrawing(roomId);
             io.to(roomId).emit('draw_binary', buf);

@@ -1279,7 +1279,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // Record local durable drawing history for deterministic undo / redo
       if (event === 'draw_stroke' || event === 'draw_clear' || (event === 'draw_action' && payload.tool === 'bucket')) {
         prevCommandsCountRef.current = localCommandsRef.current.length;
-        localCommandsRef.current.push({ event: 'draw_binary', data: msg });
+        localCommandsRef.current.push({
+          event: 'draw_binary',
+          data: msg,
+          instanceId,
+          strokeId: currentLocalStrokeIdRef.current
+        });
         localRedoStackRef.current = []; // Wipe redo stack on new action
         syncHistoryButtons();
       }
@@ -1490,7 +1495,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 points: stroke.rawPoints || []
               });
               prevCommandsCountRef.current = localCommandsRef.current.length;
-              localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
+              localCommandsRef.current.push({
+                event: 'draw_binary',
+                data: canonicalStrokeMsg,
+                instanceId: stroke.instanceId,
+                strokeId: stroke.strokeId
+              });
               localRedoStackRef.current = [];
               saveSnapshot();
               syncHistoryButtons();
@@ -1552,7 +1562,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             points: stroke.rawPoints || []
           });
           prevCommandsCountRef.current = localCommandsRef.current.length;
-          localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
+          localCommandsRef.current.push({
+            event: 'draw_binary',
+            data: canonicalStrokeMsg,
+            instanceId: stroke.instanceId,
+            strokeId: stroke.strokeId
+          });
           localRedoStackRef.current = [];
           didFlushAnything = true;
         }
@@ -1768,7 +1783,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const syncHistoryButtons = () => {
     const list = localCommandsRef.current;
-    const canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
+    let canUndo = false;
+    if (propsRef.current.isFreeDraw) {
+      canUndo = list.some(cmd => {
+        if (!cmd) return false;
+        const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
+        return cmdInstId === instanceId && cmd.strokeId !== undefined;
+      });
+    } else {
+      canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
+    }
     const canRedo = localRedoStackRef.current.length > 0;
     const index = canUndo ? 1 : 0;
     const length = index + (canRedo ? 1 : 0) + 1;
@@ -1780,6 +1804,45 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       flushPendingReset();
     }
     const list = localCommandsRef.current;
+
+    // 🎯 Free Draw: Per-User Undo (Exact Target Identification)
+    // Searches backwards for the last completed stroke belonging to THIS player only (using their instanceId)
+    // and extracts its strokeId. Strictly NO-OP if no stroke belongs to this player.
+    if (propsRef.current.isFreeDraw) {
+      let targetIndex = -1;
+      let targetStrokeId: number | undefined;
+
+      for (let i = list.length - 1; i >= 0; i--) {
+        const cmd = list[i];
+        if (cmd) {
+          const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
+          if (cmdInstId === instanceId && cmd.strokeId !== undefined) {
+            targetIndex = i;
+            targetStrokeId = cmd.strokeId;
+            break;
+          }
+        }
+      }
+
+      if (targetIndex === -1 || targetStrokeId === undefined) {
+        return; // NO-OP: No strokes found for this player
+      }
+
+      if (isDrawingRef.current) {
+        isDrawingRef.current = false;
+        moveBatchRef.current = [];
+        networkStrokePointsRef.current = [];
+      }
+      exitedOutsideWhilePointerDownRef.current = false;
+      lastOutsidePointerRef.current = null;
+
+      if (emit) {
+        emitDrawCommand('draw_undo', { strokeId: targetStrokeId });
+      }
+      return;
+    }
+
+    // Normal / Competitive Rooms: Keep existing global undo behavior intact
     const canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
     if (!canUndo) return;
 
@@ -1798,7 +1861,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // 🛡️ Fast-Path: Single Previous-State Canvas Cache (For both local player and spectators)
     let restoredViaCache = false;
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
+    const useCache = Boolean(propsRef.current.enableBitmapUndoCache);
     if (useCache && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
       const canvas = canvasRef.current;
       const redoCanvas = ensureCacheCanvas(freeDrawRedoCacheCanvasRef, canvas);
@@ -2040,6 +2103,54 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
+  // 🛡️ Safe Mid-History Replay for Free Draw Per-User Undo:
+  // Clears and reconstructs ONLY the committed base canvas (ctx).
+  // Strictly PRESERVES tempCtx, activeSessionsRef, and drainingStrokesRef so ongoing live drawing is never interrupted.
+  const replayFreeDrawHistorySafely = (commands: any[]) => {
+    try {
+      const ctx = ctxRef.current;
+      if (!ctx) return;
+
+      // 1. Clear ONLY the permanent base canvas
+      ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+
+      // 2. Replay all remaining committed commands
+      isReplayingRef.current = true;
+      const replayPaths: Record<string, { x: number; y: number }[]> = {};
+      const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
+
+      commands.forEach((cmdObj) => {
+        applyReplayCommand(ctx, cmdObj, replayPaths, replaySessions);
+      });
+
+      // Render any leftover committed strokes
+      Object.keys(replaySessions).forEach((instId) => {
+        try {
+          const session = replaySessions[instId];
+          const path = replayPaths[instId];
+          if (session && path && path.length > 0) {
+            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+            if (isShape) {
+              const startPt = path[0];
+              const lastPt = path[path.length - 1];
+              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+            } else {
+              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+            }
+          }
+        } catch (itemErr) {
+          // Ignore
+        }
+      });
+    } catch (err) {
+      console.error("[DrawingCanvasCore] Error in replayFreeDrawHistorySafely: ", err);
+    } finally {
+      isReplayingRef.current = false;
+      saveSnapshot();
+      syncHistoryButtons();
+    }
+  };
+
   // --- Real-time Socket Event Receivers ---
   useEffect(() => {
     if (!socket) return;
@@ -2187,7 +2298,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                   points: session.rawPoints || []
                 });
                 prevCommandsCountRef.current = localCommandsRef.current.length;
-                localCommandsRef.current.push({ event: 'draw_binary', data: canonicalStrokeMsg });
+                localCommandsRef.current.push({
+                  event: 'draw_binary',
+                  data: canonicalStrokeMsg,
+                  instanceId: data.instanceId,
+                  strokeId
+                });
                 localRedoStackRef.current = [];
                 saveSnapshot();
                 syncHistoryButtons();
@@ -2284,10 +2400,43 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           syncHistoryButtons();
         }
       } else if (event === 'draw_undo') {
-        drainingStrokesRef.current = [];
-        activeSessionsRef.current = {};
-        redrawTempLayer();
-        executeUndo(false);
+        if (propsRef.current.isFreeDraw && data.strokeId !== undefined && data.instanceId) {
+          const targetInst = data.instanceId;
+          const targetStrId = data.strokeId;
+
+          // 1. Safe Filter of Spectator Playback Queue:
+          // Filter OUT only the stroke matching (targetInst + targetStrId).
+          // Strictly PRESERVE all other strokes in drainingStrokesRef!
+          const beforeDrainingCount = drainingStrokesRef.current.length;
+          drainingStrokesRef.current = drainingStrokesRef.current.filter(
+            s => !(s.instanceId === targetInst && s.strokeId === targetStrId)
+          );
+          if (drainingStrokesRef.current.length !== beforeDrainingCount) {
+            redrawTempLayer();
+          }
+
+          // 2. Safe Mid-History Undo on Committed Commands:
+          const list = localCommandsRef.current;
+          const index = list.findIndex(cmd => {
+            if (!cmd) return false;
+            const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
+            return cmdInstId === targetInst && cmd.strokeId === targetStrId;
+          });
+
+          if (index !== -1) {
+            list.splice(index, 1);
+            hasFreeDrawUndoCacheRef.current = false;
+            hasFreeDrawRedoCacheRef.current = false;
+            replayFreeDrawHistorySafely(list);
+          }
+        } else {
+          // Normal Rooms: retain original behavior
+          fastForwardFlushSpectatorQueue();
+          drainingStrokesRef.current = [];
+          activeSessionsRef.current = {};
+          redrawTempLayer();
+          executeUndo(false);
+        }
       } else if (event === 'draw_redo') {
         drainingStrokesRef.current = [];
         activeSessionsRef.current = {};
@@ -2706,14 +2855,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
     }
 
-    const intervalMs = (propsRef.current.isFreeDraw || propsRef.current.isExperimental)
+    const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
+    const intervalMs = isContinuousMode
       ? 200
       : (IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16));
 
     if (!throttleTimeoutRef.current) {
       throttleTimeoutRef.current = setTimeout(() => {
         if (moveBatchRef.current.length > 0) {
-          if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
+          if (isContinuousMode) {
             drawerNetworkPointCountRef.current += moveBatchRef.current.length;
           }
           emitDrawCommand('draw_move', {
@@ -2743,6 +2893,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeColor = propsRef.current.color;
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
+    const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
 
     isDrawingRef.current = false;
 
@@ -2753,7 +2904,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
       if (moveBatchRef.current.length > 0) {
-        if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
+        if (isContinuousMode) {
           drawerNetworkPointCountRef.current += moveBatchRef.current.length;
         }
         emitDrawCommand('draw_move', {
@@ -2770,7 +2921,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       if (currentPathRef.current.length > 0) {
         // Only commit undo cache and record stroke in history if at least one point is inside/touches canvas viewport
-        const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
         const hasVisibleContent = !isContinuousMode || currentPathRef.current.some(
           pt => pt.x >= 0 && pt.x <= LOGICAL_WIDTH && pt.y >= 0 && pt.y <= LOGICAL_HEIGHT
         );
@@ -2778,11 +2928,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (hasVisibleContent) {
           commitFreeDrawPendingCache();
           drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
-
-          const isNetworkSamplingActive = Boolean(
-            (propsRef.current.isFreeDraw || propsRef.current.enableNetworkSampling) &&
-            (EXPERIMENTAL_NETWORK_SAMPLING_TEST || propsRef.current.enableNetworkSampling)
-          );
 
           // In Free Draw / Experimental: DO NOT send duplicate client draw_stroke in successful path!
           // Server will commit canonical Type 9 upon draw_end and broadcast draw_commit.
@@ -2811,7 +2956,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               points: networkStrokePointsRef.current
             });
             prevCommandsCountRef.current = localCommandsRef.current.length;
-            localCommandsRef.current.push({ event: 'draw_binary', data: localStrokeMsg });
+            localCommandsRef.current.push({
+              event: 'draw_binary',
+              data: localStrokeMsg,
+              instanceId,
+              strokeId: currentLocalStrokeIdRef.current
+            });
             localRedoStackRef.current = [];
             syncHistoryButtons();
           }

@@ -308,6 +308,15 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
     return buffer;
   }
 
+  if (event === 'draw_undo' && data.strokeId !== undefined) {
+    const buffer = new ArrayBuffer(10);
+    const view = new DataView(buffer);
+    view.setUint8(0, MSG_DRAW_UNDO);
+    writeString7(view, 1, instId);
+    view.setUint16(8, data.strokeId & 0xFFFF, true);
+    return buffer;
+  }
+
   let type = 5;
   if (event === 'draw_clear') type = MSG_DRAW_CLEAR;
   else if (event === 'draw_cancel') type = MSG_DRAW_CANCEL;
@@ -486,9 +495,14 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     else if (type === MSG_DRAW_UNDO) eventName = 'draw_undo';
     else if (type === MSG_DRAW_REDO) eventName = 'draw_redo';
     
+    let strokeId: number | undefined;
+    if (type === MSG_DRAW_UNDO && view.byteLength >= 10) {
+      strokeId = view.getUint16(8, true);
+    }
+
     return {
       event: eventName,
-      data: { instanceId: instId }
+      data: { instanceId: instId, strokeId }
     };
   } catch (parseError) {
     console.error("[decodeBinaryDrawMessage] RangeError or Parsing Exception:", parseError, input);
