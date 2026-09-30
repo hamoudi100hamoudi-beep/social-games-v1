@@ -2162,7 +2162,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const decoded = decodeBinaryDrawMessage(raw);
       if (!decoded) return;
       const { event, data } = decoded;
-      if (!data || data.instanceId === instanceId) return;
+      if (!data) return;
+
+      // In Free Draw, allow draw_undo to reach the sender so their canvas stays 100% authoritative and synchronized with the server broadcast
+      const isFreeDrawUndo = Boolean(propsRef.current.isFreeDraw) && event === 'draw_undo';
+      if (data.instanceId === instanceId && !isFreeDrawUndo) return;
 
       const remoteTool = data.tool || 'pencil';
       const remoteColor = data.color || '#000000';
