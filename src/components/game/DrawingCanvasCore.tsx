@@ -27,6 +27,7 @@ export const CANVAS_HEIGHT = 344;
 // Free Draw logical dimensions test: 680 x 396 (exact 1.7171 ratio matching 592 x 344 and 740 x 430)
 export const FREE_DRAW_LOGICAL_WIDTH = 680;
 export const FREE_DRAW_LOGICAL_HEIGHT = 396;
+export const FREE_DRAW_TAIL_SIZE = 40;
 
 const DEFAULT_LOGICAL_WIDTH = CANVAS_WIDTH;
 const DEFAULT_LOGICAL_HEIGHT = CANVAS_HEIGHT;
@@ -592,6 +593,97 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     hasFreeDrawUndoCacheRef.current = false;
     hasFreeDrawRedoCacheRef.current = false;
     hasFreeDrawPendingUndoCacheRef.current = false;
+  };
+
+  // 🛡️ Free Draw Sliding Checkpoint Refs & Helpers (Strategy C: Incremental Forward Baking)
+  const checkpointCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const checkpointIndexRef = useRef<number>(0);
+  const checkpointAnchorSignatureRef = useRef<string | null>(null);
+
+  const getCommandSignature = (cmd: any): string => {
+    if (!cmd) return "";
+    const instId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : "");
+    const sId = cmd.strokeId !== undefined ? cmd.strokeId : -1;
+    return `${instId}_${sId}`;
+  };
+
+  const ensureCheckpointCanvas = () => {
+    if (!checkpointCanvasRef.current) {
+      checkpointCanvasRef.current = document.createElement('canvas');
+    }
+    const effectiveDPR = (propsRef.current.isFreeDraw || propsRef.current.isExperimental || enableFixedDPR) ? 1.0 : DPR;
+    const targetW = Math.round(LOGICAL_WIDTH * effectiveDPR);
+    const targetH = Math.round(LOGICAL_HEIGHT * effectiveDPR);
+    if (checkpointCanvasRef.current.width !== targetW || checkpointCanvasRef.current.height !== targetH) {
+      checkpointCanvasRef.current.width = targetW;
+      checkpointCanvasRef.current.height = targetH;
+    }
+    const cCtx = checkpointCanvasRef.current.getContext('2d');
+    if (cCtx) {
+      cCtx.setTransform(effectiveDPR, 0, 0, effectiveDPR, 0, 0);
+      cCtx.lineCap = 'round';
+      cCtx.lineJoin = 'round';
+      cCtx.imageSmoothingEnabled = true;
+      cCtx.imageSmoothingQuality = 'high';
+    }
+    return checkpointCanvasRef.current;
+  };
+
+  const invalidateCheckpoint = () => {
+    checkpointIndexRef.current = 0;
+    checkpointAnchorSignatureRef.current = null;
+    if (checkpointCanvasRef.current) {
+      const cCtx = checkpointCanvasRef.current.getContext('2d');
+      if (cCtx) {
+        cCtx.clearRect(0, 0, checkpointCanvasRef.current.width, checkpointCanvasRef.current.height);
+      }
+    }
+  };
+
+  const advanceCheckpointIncremental = () => {
+    if (!propsRef.current.isFreeDraw) return;
+    const list = localCommandsRef.current;
+    const N = list.length;
+    if (N - checkpointIndexRef.current < FREE_DRAW_TAIL_SIZE * 2) return;
+
+    const targetIndex = N - FREE_DRAW_TAIL_SIZE;
+    const fromIndex = checkpointIndexRef.current;
+    if (targetIndex <= fromIndex) return;
+
+    const canvas = ensureCheckpointCanvas();
+    const cCtx = canvas.getContext('2d');
+    if (!cCtx) return;
+
+    if (fromIndex === 0) {
+      cCtx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    const replayPaths: Record<string, { x: number; y: number }[]> = {};
+    const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
+
+    for (let i = fromIndex; i < targetIndex; i++) {
+      applyReplayCommand(cCtx, list[i], replayPaths, replaySessions);
+    }
+
+    Object.keys(replaySessions).forEach((instId) => {
+      try {
+        const session = replaySessions[instId];
+        const path = replayPaths[instId];
+        if (session && path && path.length > 0) {
+          const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+          if (isShape) {
+            const startPt = path[0];
+            const lastPt = path[path.length - 1];
+            drawShape(cCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+          } else {
+            drawEntirePath(cCtx, path, session.tool, session.color, session.width, session.opacity);
+          }
+        }
+      } catch (err) {}
+    });
+
+    checkpointIndexRef.current = targetIndex;
+    checkpointAnchorSignatureRef.current = getCommandSignature(list[targetIndex - 1]);
   };
 
   // Buffering history syncing before ref ready
@@ -1285,6 +1377,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           instanceId,
           strokeId: payload.strokeId || currentLocalStrokeIdRef.current
         });
+        advanceCheckpointIncremental();
         localRedoStackRef.current = []; // Wipe redo stack on new action
         syncHistoryButtons();
       }
@@ -1775,6 +1868,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCtx = tempCtxRef.current;
     if (!ctx || !tempCtx) return;
 
+    invalidateCheckpoint();
     captureDirectFreeDrawUndoCache();
 
     resetCanvasBackingStores(ctx, tempCtx);
@@ -1841,6 +1935,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       lastOutsidePointerRef.current = null;
 
       // 1. Optimistic Local Removal:
+      if (targetIndex < checkpointIndexRef.current) {
+        invalidateCheckpoint();
+      }
       const [removedCmd] = list.splice(targetIndex, 1);
       if (removedCmd) {
         localRedoStackRef.current.push(removedCmd);
@@ -1979,6 +2076,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         hasFreeDrawUndoCacheRef.current = false;
         hasFreeDrawRedoCacheRef.current = false;
         replayFreeDrawHistorySafely(localCommandsRef.current);
+        advanceCheckpointIncremental();
         syncHistoryButtons();
 
         if (emit && socket?.connected) {
@@ -2147,6 +2245,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       console.log("[DrawingCanvasCore] Instantly rebuilding room drawing history...", commands.length);
 
+      invalidateCheckpoint();
+
       // Initial clear
       resetCanvasBackingStores(ctx, tempCtx);
 
@@ -2194,6 +2294,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       isReplayingRef.current = false;
       saveSnapshot();
       syncHistoryButtons();
+      if (propsRef.current.isFreeDraw && commands.length >= FREE_DRAW_TAIL_SIZE * 2) {
+        advanceCheckpointIncremental();
+      }
     }
   };
 
@@ -2205,17 +2308,40 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const ctx = ctxRef.current;
       if (!ctx) return;
 
-      // 1. Clear ONLY the permanent base canvas
-      ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      const N = commands.length;
+      let startIndex = 0;
+
+      const isCheckpointValid =
+        Boolean(propsRef.current.isFreeDraw) &&
+        checkpointCanvasRef.current !== null &&
+        checkpointIndexRef.current > 0 &&
+        checkpointIndexRef.current <= N &&
+        getCommandSignature(commands[checkpointIndexRef.current - 1]) === checkpointAnchorSignatureRef.current;
+
+      if (isCheckpointValid && checkpointCanvasRef.current) {
+        // 1. Clear ONLY the permanent base canvas
+        ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        // 2. Blit baked checkpoint canvas instantly (1:1 pixel exact copy)
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(checkpointCanvasRef.current, 0, 0);
+        ctx.restore();
+        startIndex = checkpointIndexRef.current;
+      } else {
+        // Fallback: Full Replay from 0
+        invalidateCheckpoint();
+        ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        startIndex = 0;
+      }
 
       // 2. Replay all remaining committed commands
       isReplayingRef.current = true;
       const replayPaths: Record<string, { x: number; y: number }[]> = {};
       const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
-      commands.forEach((cmdObj) => {
-        applyReplayCommand(ctx, cmdObj, replayPaths, replaySessions);
-      });
+      for (let i = startIndex; i < N; i++) {
+        applyReplayCommand(ctx, commands[i], replayPaths, replaySessions);
+      }
 
       // Render any leftover committed strokes
       Object.keys(replaySessions).forEach((instId) => {
@@ -2236,6 +2362,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           // Ignore
         }
       });
+
+      // If we performed a full replay and have enough commands, immediately bake a checkpoint
+      if (!isCheckpointValid && Boolean(propsRef.current.isFreeDraw) && N >= FREE_DRAW_TAIL_SIZE * 2) {
+        advanceCheckpointIncremental();
+      }
     } catch (err) {
       console.error("[DrawingCanvasCore] Error in replayFreeDrawHistorySafely: ", err);
     } finally {
@@ -2298,6 +2429,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             instanceId: data.instanceId,
             strokeId: data.strokeId
           });
+          advanceCheckpointIncremental();
           if (!propsRef.current.isFreeDraw) {
             localRedoStackRef.current = [];
           }
@@ -2409,6 +2541,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                   instanceId: data.instanceId,
                   strokeId
                 });
+                advanceCheckpointIncremental();
                 if (!propsRef.current.isFreeDraw) {
                   localRedoStackRef.current = [];
                 }
@@ -2486,6 +2619,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
         redrawTempLayer();
       } else if (event === 'draw_clear') {
+        invalidateCheckpoint();
         fastForwardFlushSpectatorQueue();
         drainingStrokesRef.current = [];
         activeSessionsRef.current = {};
@@ -2507,6 +2641,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             instanceId: data.instanceId,
             strokeId: data.strokeId
           });
+          advanceCheckpointIncremental();
           if (!propsRef.current.isFreeDraw) {
             localRedoStackRef.current = [];
           }
@@ -2538,6 +2673,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           });
 
           if (index !== -1) {
+            if (index < checkpointIndexRef.current) {
+              invalidateCheckpoint();
+            }
             list.splice(index, 1);
             hasFreeDrawUndoCacheRef.current = false;
             hasFreeDrawRedoCacheRef.current = false;
@@ -2568,6 +2706,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (!ctx || !tempCtx) return;
 
         console.log("[DrawingCanvasCore] Starting Deferred Queue & Forced Multi-Snapshots chunking...", commands.length);
+
+        invalidateCheckpoint();
 
         resetCanvasBackingStores(ctx, tempCtx);
 
@@ -2625,6 +2765,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (syncTimeoutRef.current) {
               clearTimeout(syncTimeoutRef.current);
               syncTimeoutRef.current = null;
+            }
+            if (propsRef.current.isFreeDraw && commands.length >= FREE_DRAW_TAIL_SIZE * 2) {
+              advanceCheckpointIncremental();
             }
             console.log("[DrawingCanvasCore] Deferred queue fully rendered.");
           }
@@ -2822,6 +2965,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       tempCtx.stroke();
       resetCanvasBackingStores(ctx, tempCtx);
 
+      invalidateCheckpoint();
       saveSnapshot();
 
       if (bufferedSyncRef.current) {
@@ -2829,6 +2973,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         bufferedSyncRef.current = null;
       }
     }
+
+    const handleOrientationOrResize = () => {
+      invalidateCheckpoint();
+    };
+    window.addEventListener('resize', handleOrientationOrResize);
+    window.addEventListener('orientationchange', handleOrientationOrResize);
+    return () => {
+      window.removeEventListener('resize', handleOrientationOrResize);
+      window.removeEventListener('orientationchange', handleOrientationOrResize);
+    };
   }, []);
 
   // --- Drawing Pointer Events Hooks & Stroke Pipeline ---
@@ -3083,6 +3237,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               instanceId,
               strokeId: currentLocalStrokeIdRef.current
             });
+            advanceCheckpointIncremental();
             localRedoStackRef.current = [];
             syncHistoryButtons();
           }
