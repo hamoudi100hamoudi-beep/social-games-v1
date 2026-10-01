@@ -429,6 +429,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
   const networkStrokePointsRef = useRef<{ x: number; y: number }[]>([]);
   const lastNetworkPointRef = useRef<{ x: number; y: number } | null>(null);
+  const lastNetworkDirXRef = useRef<number>(0);
+  const lastNetworkDirYRef = useRef<number>(0);
+  const lastNetworkSegmentLenRef = useRef<number>(0);
+  const consecutiveTurnsRef = useRef<number>(0);
   const currentLocalStrokeIdRef = useRef<number>(1);
   const drawerNetworkPointCountRef = useRef<number>(0);
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1433,12 +1437,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       activeCtx.fillStyle = drawColor;
     }
 
-    const isTinyDot = path.length === 1 || (
-      path.length <= 2 && 
-      Math.hypot(path[path.length - 1].x - path[0].x, path[path.length - 1].y - path[0].y) < Math.max(drawWidth * 0.5, 2.0)
-    );
-
-    if (isTinyDot) {
+    if (path.length === 1) {
       activeCtx.beginPath();
       activeCtx.arc(path[0].x, path[0].y, drawWidth / 2, 0, Math.PI * 2);
       activeCtx.fill();
@@ -1803,6 +1802,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     moveBatchRef.current = [];
     networkStrokePointsRef.current = [];
     lastNetworkPointRef.current = null;
+    lastNetworkDirXRef.current = 0;
+    lastNetworkDirYRef.current = 0;
+    lastNetworkSegmentLenRef.current = 0;
+    consecutiveTurnsRef.current = 0;
 
     // Clear throttle timeout and bucket timeout
     if (throttleTimeoutRef.current) {
@@ -3018,6 +3021,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     currentPathRef.current = [{ x: logicalX, y: logicalY }];
     lastNetworkPointRef.current = { x: logicalX, y: logicalY };
+    lastNetworkDirXRef.current = 0;
+    lastNetworkDirYRef.current = 0;
+    lastNetworkSegmentLenRef.current = 0;
+    consecutiveTurnsRef.current = 0;
     networkStrokePointsRef.current = [{ x: logicalX / LOGICAL_WIDTH, y: logicalY / LOGICAL_HEIGHT }];
     
     // Increment local 16-bit monotonic strokeId
@@ -3052,6 +3059,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       moveBatchRef.current = [];
       networkStrokePointsRef.current = [];
       lastNetworkPointRef.current = null;
+      lastNetworkDirXRef.current = 0;
+      lastNetworkDirYRef.current = 0;
+      lastNetworkSegmentLenRef.current = 0;
+      consecutiveTurnsRef.current = 0;
       emitDrawCommand('draw_end', {
         tool: propsRef.current.tool,
         color: propsRef.current.color,
@@ -3119,10 +3130,46 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (isNetworkSamplingActive) {
       const lastNetPt = lastNetworkPointRef.current;
       if (lastNetPt) {
-        const netDist = Math.hypot(roundedX - lastNetPt.x, roundedY - lastNetPt.y);
-        const networkMinDistance = 2.0; // 2.0 logical pixels for network-only filtering
-        if (netDist < networkMinDistance) {
+        const dx = roundedX - lastNetPt.x;
+        const dy = roundedY - lastNetPt.y;
+        const dist = Math.hypot(dx, dy);
+
+        const MIN_TURN_DIST = 1.6;
+        const MIN_CONSECUTIVE_TURN_DIST = 2.0;
+        const MAX_DIST = 3.6;
+        const COS_TURN_THRESHOLD = 0.82;
+
+        const minDistRequired =
+          consecutiveTurnsRef.current > 0
+            ? MIN_CONSECUTIVE_TURN_DIST
+            : MIN_TURN_DIST;
+
+        if (dist < minDistRequired) {
           shouldSendToNetwork = false;
+        } else if (dist >= MAX_DIST) {
+          shouldSendToNetwork = true;
+          consecutiveTurnsRef.current = 0;
+        } else {
+          const prevLen = lastNetworkSegmentLenRef.current;
+          if (prevLen > 0.1) {
+            const dot =
+              (dx * lastNetworkDirXRef.current) +
+              (dy * lastNetworkDirYRef.current);
+            const cosTheta = dot / (dist * prevLen);
+            shouldSendToNetwork = cosTheta < COS_TURN_THRESHOLD;
+            if (shouldSendToNetwork) {
+              consecutiveTurnsRef.current++;
+            }
+          } else {
+            shouldSendToNetwork = dist >= 2.0;
+            consecutiveTurnsRef.current = 0;
+          }
+        }
+
+        if (shouldSendToNetwork) {
+          lastNetworkDirXRef.current = dx;
+          lastNetworkDirYRef.current = dy;
+          lastNetworkSegmentLenRef.current = dist;
         }
       }
     }
@@ -3183,6 +3230,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
+      if (isContinuousMode && currentPathRef.current.length >= 2 && lastNetworkPointRef.current) {
+        const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
+        const endDist = Math.hypot(
+          lastPt.x - lastNetworkPointRef.current.x,
+          lastPt.y - lastNetworkPointRef.current.y
+        );
+        if (endDist >= 1.0) {
+          const normX = lastPt.x / LOGICAL_WIDTH;
+          const normY = lastPt.y / LOGICAL_HEIGHT;
+          moveBatchRef.current.push({ x: normX, y: normY });
+          networkStrokePointsRef.current.push({ x: normX, y: normY });
+          lastNetworkPointRef.current = { x: lastPt.x, y: lastPt.y };
+        }
+      }
+
       if (moveBatchRef.current.length > 0) {
         if (isContinuousMode) {
           drawerNetworkPointCountRef.current += moveBatchRef.current.length;
@@ -3207,11 +3269,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         if (hasVisibleContent) {
           commitFreeDrawPendingCache();
+          drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
 
           // In Free Draw / Experimental: DO NOT send duplicate client draw_stroke in successful path!
           // Server will commit canonical Type 9 upon draw_end and broadcast draw_commit.
           if (!isContinuousMode) {
-            drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
             // Normal Rooms: retain original draw_stroke behavior
             const normalizedPoints = currentPathRef.current.map(pt => ({
               x: pt.x / LOGICAL_WIDTH,
@@ -3226,16 +3288,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               points: normalizedPoints
             });
           } else {
-            // Free Draw & Experimental: Draw canonical points to base canvas ctx
-            // to guarantee 100% pixel-perfect match with localCommandsRef, replay, and checkpoint
-            const canonicalPoints = networkStrokePointsRef.current.map(pt => ({
-              x: pt.x * LOGICAL_WIDTH,
-              y: pt.y * LOGICAL_HEIGHT
-            }));
-            const pathToRender = canonicalPoints.length > 0 ? canonicalPoints : currentPathRef.current;
-            drawEntirePath(ctx, pathToRender, activeTool, activeColor, activeWidth, activeOpacity);
-
-            // Record local command for deterministic drawer-side Undo/Redo without sending over the network
+            // Free Draw & Experimental: Record local command for deterministic drawer-side Undo/Redo without sending over the network
             const localStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
               instanceId,
               tool: activeTool,
@@ -3277,6 +3330,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     currentPathRef.current = [];
     networkStrokePointsRef.current = [];
     lastNetworkPointRef.current = null;
+    lastNetworkDirXRef.current = 0;
+    lastNetworkDirYRef.current = 0;
+    lastNetworkSegmentLenRef.current = 0;
+    consecutiveTurnsRef.current = 0;
     drawerNetworkPointCountRef.current = 0;
     saveSnapshot();
   };
