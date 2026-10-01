@@ -501,7 +501,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Deterministic local command queue for flawless client-side undo/redo and late-joiner state recovery
   const localCommandsRef = useRef<any[]>([]);
-  const localRedoStackRef = useRef<any[][]>([]);
+  const localRedoStackRef = useRef<any[]>([]);
   const prevCommandsCountRef = useRef<number>(-1);
 
   // 🛡️ Free Draw 1-Step Undo/Redo Canvas Caches (Prevents O(N) full replays in long sessions)
@@ -1501,7 +1501,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 instanceId: stroke.instanceId,
                 strokeId: stroke.strokeId
               });
-              localRedoStackRef.current = [];
+              if (!propsRef.current.isFreeDraw) {
+                localRedoStackRef.current = [];
+              }
               saveSnapshot();
               syncHistoryButtons();
             }
@@ -1568,7 +1570,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             instanceId: stroke.instanceId,
             strokeId: stroke.strokeId
           });
-          localRedoStackRef.current = [];
+          if (!propsRef.current.isFreeDraw) {
+            localRedoStackRef.current = [];
+          }
           didFlushAnything = true;
         }
       }
@@ -1839,7 +1843,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // 1. Optimistic Local Removal:
       const [removedCmd] = list.splice(targetIndex, 1);
       if (removedCmd) {
-        localRedoStackRef.current = [removedCmd];
+        localRedoStackRef.current.push(removedCmd);
       }
 
       // 2. Filter local draining queue if present:
@@ -1916,6 +1920,75 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const canRedo = localRedoStackRef.current.length > 0;
     if (!canRedo) return;
 
+    // 🎯 Free Draw Branch: Collaborative Redo
+    if (propsRef.current.isFreeDraw) {
+      const cmdToRestore = localRedoStackRef.current.pop();
+      if (!cmdToRestore) return;
+
+      const rawCmd = Array.isArray(cmdToRestore) ? cmdToRestore[0] : cmdToRestore;
+      if (!rawCmd || !rawCmd.data) return;
+
+      const decoded = decodeBinaryDrawMessage(rawCmd.data);
+      if (!decoded || !decoded.data) return;
+
+      // Increment monotonic strokeId for the redone command
+      currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
+      if (currentLocalStrokeIdRef.current === 0) currentLocalStrokeIdRef.current = 1;
+      const newStrokeId = currentLocalStrokeIdRef.current;
+
+      let newMsg: ArrayBuffer | null = null;
+
+      if (decoded.event === 'draw_stroke') {
+        const payload = {
+          tool: decoded.data.tool,
+          color: decoded.data.color,
+          width: decoded.data.width,
+          opacity: decoded.data.opacity,
+          points: decoded.data.points,
+          strokeId: newStrokeId,
+          instanceId
+        };
+        newMsg = encodeBinaryDrawMessage('draw_stroke', payload);
+      } else if (decoded.event === 'draw_action') {
+        const targetRGBA = decoded.data.targetRGBA;
+        const payload = {
+          tool: 'bucket',
+          color: decoded.data.color,
+          opacity: decoded.data.opacity,
+          x: decoded.data.x,
+          y: decoded.data.y,
+          targetR: targetRGBA ? targetRGBA.r : undefined,
+          targetG: targetRGBA ? targetRGBA.g : undefined,
+          targetB: targetRGBA ? targetRGBA.b : undefined,
+          targetA: targetRGBA ? targetRGBA.a : undefined,
+          strokeId: newStrokeId,
+          instanceId
+        };
+        newMsg = encodeBinaryDrawMessage('draw_action', payload);
+      }
+
+      if (newMsg) {
+        prevCommandsCountRef.current = localCommandsRef.current.length;
+        localCommandsRef.current.push({
+          event: 'draw_binary',
+          data: newMsg,
+          instanceId,
+          strokeId: newStrokeId
+        });
+
+        hasFreeDrawUndoCacheRef.current = false;
+        hasFreeDrawRedoCacheRef.current = false;
+        replayFreeDrawHistorySafely(localCommandsRef.current);
+        syncHistoryButtons();
+
+        if (emit && socket?.connected) {
+          socket.emit('draw_binary', newMsg);
+        }
+      }
+      return;
+    }
+
+    // Normal / Competitive Rooms: Keep existing global redo behavior intact
     const commandsToRestore = localRedoStackRef.current.pop();
     if (commandsToRestore) {
       if (Array.isArray(commandsToRestore)) {
@@ -2225,7 +2298,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             instanceId: data.instanceId,
             strokeId: data.strokeId
           });
-          localRedoStackRef.current = [];
+          if (!propsRef.current.isFreeDraw) {
+            localRedoStackRef.current = [];
+          }
           saveSnapshot();
           syncHistoryButtons();
         }
@@ -2334,7 +2409,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                   instanceId: data.instanceId,
                   strokeId
                 });
-                localRedoStackRef.current = [];
+                if (!propsRef.current.isFreeDraw) {
+                  localRedoStackRef.current = [];
+                }
                 saveSnapshot();
                 syncHistoryButtons();
               }
@@ -2430,7 +2507,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             instanceId: data.instanceId,
             strokeId: data.strokeId
           });
-          localRedoStackRef.current = [];
+          if (!propsRef.current.isFreeDraw) {
+            localRedoStackRef.current = [];
+          }
           saveSnapshot();
           syncHistoryButtons();
         }
@@ -2473,10 +2552,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           executeUndo(false);
         }
       } else if (event === 'draw_redo') {
-        drainingStrokesRef.current = [];
-        activeSessionsRef.current = {};
-        redrawTempLayer();
-        executeRedo(false);
+        if (!propsRef.current.isFreeDraw) {
+          drainingStrokesRef.current = [];
+          activeSessionsRef.current = {};
+          redrawTempLayer();
+          executeRedo(false);
+        }
       }
     };
 
@@ -2771,6 +2852,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     startXRef.current = logicalX;
     startYRef.current = logicalY;
 
+    if (localRedoStackRef.current.length > 0) {
+      localRedoStackRef.current = [];
+      syncHistoryButtons();
+    }
+
     currentPathRef.current = [{ x: logicalX, y: logicalY }];
     lastNetworkPointRef.current = { x: logicalX, y: logicalY };
     networkStrokePointsRef.current = [{ x: logicalX / LOGICAL_WIDTH, y: logicalY / LOGICAL_HEIGHT }];
@@ -3036,6 +3122,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     isDrawingRef.current = true;
     currentPathRef.current = [{ x: rawX, y: rawY }];
 
+    if (localRedoStackRef.current.length > 0) {
+      localRedoStackRef.current = [];
+      syncHistoryButtons();
+    }
+
     const activeTool = propsRef.current.tool;
     const activeColor = propsRef.current.color;
     const activeWidth = propsRef.current.thickness;
@@ -3191,6 +3282,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const runBucket = () => {
         captureDirectFreeDrawUndoCache();
         const sampledTarget = floodFill(ctx, x, y, activeColor, activeOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+
+        if (localRedoStackRef.current.length > 0) {
+          localRedoStackRef.current = [];
+          syncHistoryButtons();
+        }
 
         // Increment monotonic strokeId for this Bucket operation
         currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
