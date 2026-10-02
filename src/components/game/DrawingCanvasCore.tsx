@@ -680,7 +680,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             const lastPt = path[path.length - 1];
             drawShape(cCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
           } else {
-            drawEntirePath(cCtx, path, session.tool, session.color, session.width, session.opacity);
+            drawEntirePath(cCtx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw));
           }
         }
       } catch (err) {}
@@ -1413,7 +1413,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     drawTool: ToolType,
     drawColor: string,
     drawWidth: number,
-    drawOpacity: number
+    drawOpacity: number,
+    preserveCorners: boolean = false
   ) => {
     if (path.length === 0) return;
 
@@ -1452,7 +1453,35 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         for (i = 1; i < path.length - 1; i++) {
           const xc = (path[i].x + path[i + 1].x) / 2;
           const yc = (path[i].y + path[i + 1].y) / 2;
-          activeCtx.quadraticCurveTo(path[i].x, path[i].y, xc, yc);
+
+          if (preserveCorners) {
+            const pPrev = path[i - 1];
+            const pCurr = path[i];
+            const pNext = path[i + 1];
+
+            const v1x = pCurr.x - pPrev.x;
+            const v1y = pCurr.y - pPrev.y;
+            const v2x = pNext.x - pCurr.x;
+            const v2y = pNext.y - pCurr.y;
+
+            const len1Sq = v1x * v1x + v1y * v1y;
+            const len2Sq = v2x * v2x + v2y * v2y;
+
+            // Conservative sharp corner check:
+            // len1Sq > 0.5 and len2Sq > 0.5 ensures we don't divide by near-zero.
+            // cosTheta < 0.5 represents a sharp turn greater than 60 degrees.
+            const isSharpCorner = (len1Sq > 0.5 && len2Sq > 0.5) &&
+              ((v1x * v2x + v1y * v2y) / Math.sqrt(len1Sq * len2Sq) < 0.5);
+
+            if (isSharpCorner) {
+              activeCtx.lineTo(pCurr.x, pCurr.y);
+              activeCtx.lineTo(xc, yc);
+            } else {
+              activeCtx.quadraticCurveTo(pCurr.x, pCurr.y, xc, yc);
+            }
+          } else {
+            activeCtx.quadraticCurveTo(path[i].x, path[i].y, xc, yc);
+          }
         }
         activeCtx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
       }
@@ -2170,7 +2199,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             const lastPt = scaledPoints[scaledPoints.length - 1];
             drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, cmdTool, cmdColor, cmdWidth, cmdOpacity);
           } else {
-            drawEntirePath(ctx, scaledPoints, cmdTool, cmdColor, cmdWidth, cmdOpacity);
+            drawEntirePath(ctx, scaledPoints, cmdTool, cmdColor, cmdWidth, cmdOpacity, Boolean(propsRef.current.isFreeDraw));
           }
         }
         saveSnapshot();
@@ -2206,7 +2235,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         };
         const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
         if (!data.isCancelled && path.length > 0 && !isShape) {
-          drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+          drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw));
         }
 
         if (!data.isCancelled && isShape && data.startX !== undefined && data.startY !== undefined) {
@@ -2285,7 +2314,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               const lastPt = path[path.length - 1];
               drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
             } else {
-              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw));
             }
           }
         } catch (itemErr) {
@@ -2363,7 +2392,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               const lastPt = path[path.length - 1];
               drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
             } else {
-              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, true);
             }
           }
         } catch (itemErr) {
@@ -2757,7 +2786,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                     const lastPt = path[path.length - 1];
                     drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
                   } else {
-                    drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+                    drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw));
                   }
                 }
                 if (path) path.length = 0;
@@ -3269,7 +3298,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         if (hasVisibleContent) {
           commitFreeDrawPendingCache();
-          drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
+          drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity, false);
 
           // In Free Draw / Experimental: DO NOT send duplicate client draw_stroke in successful path!
           // Server will commit canonical Type 9 upon draw_end and broadcast draw_commit.
