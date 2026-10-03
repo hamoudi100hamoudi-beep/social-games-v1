@@ -323,6 +323,10 @@ export const CANONICAL_MIN_CONSECUTIVE_TURN_DIST = 1.6; // Min distance when con
 export const CANONICAL_MAX_DIST = 2.8; // Max distance before forcing canonical anchor (logical px)
 export const CANONICAL_COS_TURN_THRESHOLD = 0.85; // Angle turn threshold (~32 degrees)
 
+// Phase 5A.2B: Renderer Sharp Turn Threshold
+// Deflection angles >= 60° (cos <= 0.50) are rendered directly to corner vertex to eliminate inward Bézier pull
+export const RENDERER_SHARP_TURN_COS = 0.5;
+
 // 📊 TEMPORARY RUNTIME DIAGNOSTICS (Free Draw Application Drawing Payload)
 // Set to false to disable overlay and measurement completely without affecting runtime drawing
 export const ENABLE_FREE_DRAW_DIAGNOSTICS = true;
@@ -337,6 +341,12 @@ export interface CanonicalMetrics {
   strokesCount: number;
 }
 
+export interface RendererMetrics {
+  sharpTurns: number;
+  lineSegments: number;
+  quadraticSegments: number;
+}
+
 interface DrawingDiagnosticStats {
   drawMove: { count: number; points: number; bytes: number };
   drawStroke: { count: number; points: number; bytes: number };
@@ -346,6 +356,7 @@ interface DrawingDiagnosticStats {
   drawRepair: { count: number };
   drawAbort: { count: number };
   canonicalMetrics?: CanonicalMetrics;
+  rendererMetrics?: RendererMetrics;
 }
 
 interface DrawingCanvasCoreProps {
@@ -496,10 +507,36 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     drawAbort: { count: 0 },
   });
   const [diagSnapshot, setDiagSnapshot] = useState<DrawingDiagnosticStats | null>(null);
-  const [isDiagCollapsed, setIsDiagCollapsed] = useState(false);
+  const [isDiagnosticsVisible, setIsDiagnosticsVisible] = useState(false);
+  const isDiagnosticsVisibleRef = useRef(false);
+  isDiagnosticsVisibleRef.current = isDiagnosticsVisible;
 
+  // Phase 5A.2B: Lazy Renderer Segments Metrics (only updated when diagnostics panel is active)
+  const rendererDiagRef = useRef<RendererMetrics>({
+    sharpTurns: 0,
+    lineSegments: 0,
+    quadraticSegments: 0
+  });
+
+  // 📊 Lazy Diagnostics: Only active and polling when explicitly opened by user
   useEffect(() => {
-    if (!ENABLE_FREE_DRAW_DIAGNOSTICS || !propsRef.current.isFreeDraw) return;
+    if (!ENABLE_FREE_DRAW_DIAGNOSTICS || !propsRef.current.isFreeDraw || !isDiagnosticsVisible) {
+      return;
+    }
+
+    // Capture initial snapshot immediately on open
+    setDiagSnapshot({
+      drawMove: { ...drawingDiagRef.current.drawMove },
+      drawStroke: { ...drawingDiagRef.current.drawStroke },
+      drawStart: { ...drawingDiagRef.current.drawStart },
+      drawEnd: { ...drawingDiagRef.current.drawEnd },
+      drawCommit: { ...drawingDiagRef.current.drawCommit },
+      drawRepair: { ...drawingDiagRef.current.drawRepair },
+      drawAbort: { ...drawingDiagRef.current.drawAbort },
+      canonicalMetrics: { ...canonicalStatsRef.current },
+      rendererMetrics: { ...rendererDiagRef.current }
+    });
+
     const interval = setInterval(() => {
       setDiagSnapshot({
         drawMove: { ...drawingDiagRef.current.drawMove },
@@ -509,11 +546,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         drawCommit: { ...drawingDiagRef.current.drawCommit },
         drawRepair: { ...drawingDiagRef.current.drawRepair },
         drawAbort: { ...drawingDiagRef.current.drawAbort },
-        canonicalMetrics: { ...canonicalStatsRef.current }
+        canonicalMetrics: { ...canonicalStatsRef.current },
+        rendererMetrics: { ...rendererDiagRef.current }
       });
-    }, 500);
+    }, 600);
     return () => clearInterval(interval);
-  }, []);
+  }, [isDiagnosticsVisible]);
 
   const resetDiagnosticStats = () => {
     drawingDiagRef.current = {
@@ -534,6 +572,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       totalDensePoints: 0,
       strokesCount: 0
     };
+    rendererDiagRef.current = {
+      sharpTurns: 0,
+      lineSegments: 0,
+      quadraticSegments: 0
+    };
     setDiagSnapshot({
       drawMove: { ...drawingDiagRef.current.drawMove },
       drawStroke: { ...drawingDiagRef.current.drawStroke },
@@ -542,7 +585,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       drawCommit: { ...drawingDiagRef.current.drawCommit },
       drawRepair: { ...drawingDiagRef.current.drawRepair },
       drawAbort: { ...drawingDiagRef.current.drawAbort },
-      canonicalMetrics: { ...canonicalStatsRef.current }
+      canonicalMetrics: { ...canonicalStatsRef.current },
+      rendererMetrics: { ...rendererDiagRef.current }
     });
   };
 
@@ -1499,19 +1543,80 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       activeCtx.arc(path[0].x, path[0].y, drawWidth / 2, 0, Math.PI * 2);
       activeCtx.fill();
     } else {
-      // Smooth midpoint quadratic curve drawing to eliminate polygonal sharp corners
       activeCtx.beginPath();
       activeCtx.moveTo(path[0].x, path[0].y);
       if (path.length === 2) {
         activeCtx.lineTo(path[1].x, path[1].y);
+        if (isDiagnosticsVisibleRef.current) {
+          rendererDiagRef.current.lineSegments++;
+        }
       } else {
-        let i = 1;
-        for (i = 1; i < path.length - 1; i++) {
-          const xc = (path[i].x + path[i + 1].x) / 2;
-          const yc = (path[i].y + path[i + 1].y) / 2;
-          activeCtx.quadraticCurveTo(path[i].x, path[i].y, xc, yc);
+        // Phase 5A.2B: Corner-Preserving Hybrid Midpoint Quadratic Renderer
+        // Detects sharp corners (deflection >= 60°, cos <= RENDERER_SHARP_TURN_COS) and draws
+        // directly to the corner vertex to eliminate inward Bézier shrinkage, while retaining
+        // natural, continuous C1 quadratic smoothing across all curves and handwriting.
+        let prevWasSharp = false;
+
+        let v1x = path[1].x - path[0].x;
+        let v1y = path[1].y - path[0].y;
+        let d1 = Math.hypot(v1x, v1y);
+
+        for (let i = 1; i < path.length - 1; i++) {
+          const pPrev = path[i - 1];
+          const pCurr = path[i];
+          const pNext = path[i + 1];
+
+          const v2x = pNext.x - pCurr.x;
+          const v2y = pNext.y - pCurr.y;
+          const d2 = Math.hypot(v2x, v2y);
+
+          let isSharp = false;
+          if (d1 >= 0.5 && d2 >= 0.5) {
+            const dot = v1x * v2x + v1y * v2y;
+            const cosTheta = dot / (d1 * d2);
+            isSharp = cosTheta < RENDERER_SHARP_TURN_COS;
+          }
+
+          const xc = (pCurr.x + pNext.x) / 2;
+          const yc = (pCurr.y + pNext.y) / 2;
+
+          if (isSharp) {
+            // Draw straight to the exact corner vertex to prevent inward Bézier shrink
+            activeCtx.lineTo(pCurr.x, pCurr.y);
+            prevWasSharp = true;
+            if (isDiagnosticsVisibleRef.current) {
+              rendererDiagRef.current.sharpTurns++;
+              rendererDiagRef.current.lineSegments++;
+            }
+          } else {
+            if (prevWasSharp) {
+              // Smoothly resume quadratic curve from segment midpoint
+              const midX = (pPrev.x + pCurr.x) / 2;
+              const midY = (pPrev.y + pCurr.y) / 2;
+              activeCtx.lineTo(midX, midY);
+              activeCtx.quadraticCurveTo(pCurr.x, pCurr.y, xc, yc);
+              if (isDiagnosticsVisibleRef.current) {
+                rendererDiagRef.current.lineSegments++;
+                rendererDiagRef.current.quadraticSegments++;
+              }
+            } else {
+              // Standard smooth midpoint quadratic Bézier segment
+              activeCtx.quadraticCurveTo(pCurr.x, pCurr.y, xc, yc);
+              if (isDiagnosticsVisibleRef.current) {
+                rendererDiagRef.current.quadraticSegments++;
+              }
+            }
+            prevWasSharp = false;
+          }
+
+          v1x = v2x;
+          v1y = v2y;
+          d1 = d2;
         }
         activeCtx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
+        if (isDiagnosticsVisibleRef.current) {
+          rendererDiagRef.current.lineSegments++;
+        }
       }
       activeCtx.stroke();
     }
@@ -3200,52 +3305,82 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     path.push({ x: roundedX, y: roundedY });
 
-    // Phase 5A: Online Canonical Processor (runs parallel in Free Draw without touching network)
+    // Phase 5A.2A: Online Canonical Processor (Extrema- & Corner-Preserving Decimator)
     if (propsRef.current.isFreeDraw) {
       const cPath = canonicalStrokeRef.current;
       if (cPath.length > 0) {
         const lastCanPt = cPath[cPath.length - 1];
-        const cdx = roundedX - lastCanPt.x;
-        const cdy = roundedY - lastCanPt.y;
-        const distSq = cdx * cdx + cdy * cdy;
+        const pTail = provisionalTailRef.current;
+
+        // 1. Preserve local extremum or corner apex before it gets bypassed
+        if (pTail) {
+          const v1x = pTail.x - lastCanPt.x;
+          const v1y = pTail.y - lastCanPt.y;
+          const d1 = Math.hypot(v1x, v1y);
+
+          const v2x = roundedX - pTail.x;
+          const v2y = roundedY - pTail.y;
+          const d2 = Math.hypot(v2x, v2y);
+
+          // Check if legs exceed minimum subpixel movement to filter touch jitter
+          if (d1 >= 0.7 && d2 >= 0.5) {
+            const dot = v1x * v2x + v1y * v2y;
+            const cosTurn = dot / (d1 * d2);
+
+            const isAngleTurn = cosTurn < CANONICAL_COS_TURN_THRESHOLD;
+            const isAxisReversal = (v1x * v2x < -0.01 && Math.abs(v1x) >= 0.6 && Math.abs(v2x) >= 0.5) ||
+                                  (v1y * v2y < -0.01 && Math.abs(v1y) >= 0.6 && Math.abs(v2y) >= 0.5);
+
+            if (isAngleTurn || isAxisReversal) {
+              // Commit pTail as a critical canonical corner / extremum point!
+              cPath.push({ x: pTail.x, y: pTail.y });
+              lastCanonicalDirXRef.current = v1x;
+              lastCanonicalDirYRef.current = v1y;
+              lastCanonicalSegmentLenRef.current = d1;
+              canonicalTurnsRef.current++;
+              provisionalTailRef.current = null;
+            }
+          }
+        }
+
+        // 2. Evaluate current point against the active anchor (either previous anchor or newly committed apex)
+        const currentAnchor = cPath[cPath.length - 1];
+        const cdx = roundedX - currentAnchor.x;
+        const cdy = roundedY - currentAnchor.y;
+        const dist = Math.hypot(cdx, cdy);
 
         const minDist = canonicalTurnsRef.current > 0
           ? CANONICAL_MIN_CONSECUTIVE_TURN_DIST
           : CANONICAL_MIN_TURN_DIST;
 
-        if (distSq < minDist * minDist) {
-          provisionalTailRef.current = { x: roundedX, y: roundedY };
-        } else {
-          const dist = Math.sqrt(distSq);
-          let acceptCanonical = false;
+        let acceptCanonical = false;
 
-          if (dist >= CANONICAL_MAX_DIST) {
-            acceptCanonical = true;
-            canonicalTurnsRef.current = 0;
-          } else {
-            const prevLen = lastCanonicalSegmentLenRef.current;
-            if (prevLen > 0.1) {
-              const dot = (cdx * lastCanonicalDirXRef.current) + (cdy * lastCanonicalDirYRef.current);
-              const cosTheta = dot / (dist * prevLen);
-              acceptCanonical = cosTheta < CANONICAL_COS_TURN_THRESHOLD;
-              if (acceptCanonical) {
-                canonicalTurnsRef.current++;
-              }
-            } else {
-              acceptCanonical = dist >= CANONICAL_MIN_TURN_DIST;
-              canonicalTurnsRef.current = 0;
+        if (dist >= CANONICAL_MAX_DIST) {
+          acceptCanonical = true;
+          canonicalTurnsRef.current = 0;
+        } else if (dist >= minDist) {
+          const prevLen = lastCanonicalSegmentLenRef.current;
+          if (prevLen > 0.1) {
+            const dot = (cdx * lastCanonicalDirXRef.current) + (cdy * lastCanonicalDirYRef.current);
+            const cosTheta = dot / (dist * prevLen);
+            acceptCanonical = cosTheta < CANONICAL_COS_TURN_THRESHOLD;
+            if (acceptCanonical) {
+              canonicalTurnsRef.current++;
             }
-          }
-
-          if (acceptCanonical) {
-            cPath.push({ x: roundedX, y: roundedY });
-            provisionalTailRef.current = null;
-            lastCanonicalDirXRef.current = cdx;
-            lastCanonicalDirYRef.current = cdy;
-            lastCanonicalSegmentLenRef.current = dist;
           } else {
-            provisionalTailRef.current = { x: roundedX, y: roundedY };
+            acceptCanonical = dist >= CANONICAL_MIN_TURN_DIST;
+            canonicalTurnsRef.current = 0;
           }
+        }
+
+        if (acceptCanonical) {
+          cPath.push({ x: roundedX, y: roundedY });
+          provisionalTailRef.current = null;
+          lastCanonicalDirXRef.current = cdx;
+          lastCanonicalDirYRef.current = cdy;
+          lastCanonicalSegmentLenRef.current = dist;
+        } else {
+          provisionalTailRef.current = { x: roundedX, y: roundedY };
         }
       } else {
         cPath.push({ x: roundedX, y: roundedY });
@@ -3419,7 +3554,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               const lastPt = cPath[cPath.length - 1];
               const pTail = provisionalTailRef.current;
               const dEnd = Math.hypot(pTail.x - lastPt.x, pTail.y - lastPt.y);
-              if (dEnd >= 0.5) {
+              if (dEnd >= 0.4) {
                 cPath.push(pTail);
               }
             }
@@ -4079,23 +4214,42 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         />
       </div>
 
-      {/* 📊 Temporary Free Draw Runtime Diagnostic Overlay (Local only) */}
-      {ENABLE_FREE_DRAW_DIAGNOSTICS && isFreeDraw && (
-        <div
-          className="absolute top-2 left-2 z-50 bg-[#120f2e]/90 text-white font-mono text-[10px] sm:text-[11px] p-2.5 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md max-w-[270px] pointer-events-auto select-none"
-          dir="ltr"
-        >
-          <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5 mb-2">
-            <span className="font-bold text-amber-400">📊 Drawing Payload Diagnostics</span>
-            <button
-              onClick={() => setIsDiagCollapsed(!isDiagCollapsed)}
-              className="text-white/70 hover:text-white text-[10px] px-1.5 py-0.5 bg-white/10 rounded cursor-pointer"
-            >
-              {isDiagCollapsed ? "Expand" : "Min"}
-            </button>
-          </div>
+      {/* 📊 Temporary Free Draw Runtime Diagnostic Overlay (Local only & Opt-in) */}
+      {ENABLE_FREE_DRAW_DIAGNOSTICS && isFreeDraw && !readOnly && (
+        !isDiagnosticsVisible ? (
+          <button
+            onClick={() => setIsDiagnosticsVisible(true)}
+            className="absolute top-2 left-2 z-40 bg-black/40 hover:bg-black/80 text-white/60 hover:text-white text-[10px] font-mono px-2 py-1 rounded-md border border-white/10 backdrop-blur-sm transition-all pointer-events-auto select-none flex items-center gap-1 shadow"
+            title="Open Drawing Diagnostics"
+          >
+            <span>📊</span>
+            <span className="hidden sm:inline">Stats</span>
+          </button>
+        ) : (
+          <div
+            className="absolute top-2 left-2 z-50 bg-[#120f2e]/95 text-white font-mono text-[10px] sm:text-[11px] p-2.5 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md max-w-[275px] max-h-[90vh] overflow-y-auto pointer-events-auto select-none"
+            dir="ltr"
+          >
+            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5 mb-2">
+              <span className="font-bold text-amber-400">📊 Drawing Diagnostics</span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={resetDiagnosticStats}
+                  className="text-white/60 hover:text-white text-[9.5px] px-1.5 py-0.5 bg-white/10 hover:bg-white/20 rounded cursor-pointer"
+                  title="Reset counters"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={() => setIsDiagnosticsVisible(false)}
+                  className="text-white/60 hover:text-rose-400 text-[11px] px-1.5 py-0.5 bg-white/10 hover:bg-white/20 rounded cursor-pointer font-bold leading-none"
+                  title="Close Diagnostics"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
 
-          {!isDiagCollapsed ? (
             <div className="space-y-1.5">
               {/* Phase 5A: Local Canonical Prototype Toggle */}
               <div className="flex items-center justify-between bg-indigo-950/70 border border-indigo-400/40 p-1.5 rounded text-[10px]">
@@ -4161,6 +4315,28 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 )}
               </div>
 
+              {/* Phase 5A.2B: Renderer Segments Metrics Card */}
+              <div className="bg-white/5 p-1.5 rounded border border-white/5 space-y-1 text-[9.5px]">
+                <div className="font-bold text-teal-300 flex items-center justify-between">
+                  <span>Renderer Segments:</span>
+                  <span className="text-gray-400 font-normal">cos &le; {RENDERER_SHARP_TURN_COS}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 text-[9px] bg-black/20 p-1 rounded text-center">
+                  <div>
+                    <div className="text-gray-400">Sharp</div>
+                    <div className="font-bold text-amber-300">{diagSnapshot?.rendererMetrics?.sharpTurns || 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400">Lines</div>
+                    <div className="font-bold text-sky-300">{diagSnapshot?.rendererMetrics?.lineSegments || 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-400">Curves</div>
+                    <div className="font-bold text-purple-300">{diagSnapshot?.rendererMetrics?.quadraticSegments || 0}</div>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-white/5 p-1.5 rounded border border-white/5">
                 <div className="font-bold text-sky-300">draw_move:</div>
                 <div>events = <span className="text-white font-bold">{diagSnapshot?.drawMove.count || 0}</span></div>
@@ -4219,20 +4395,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 Reset Stats
               </button>
             </div>
-          ) : (
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-emerald-400 font-bold">
-                {(((diagSnapshot?.drawMove.bytes || 0) + (diagSnapshot?.drawStroke.bytes || 0) + (diagSnapshot?.drawStart.bytes || 0) + (diagSnapshot?.drawEnd.bytes || 0)) / 1024).toFixed(1)} KB
-              </span>
-              <button
-                onClick={resetDiagnosticStats}
-                className="px-1.5 py-0.5 bg-red-600/80 hover:bg-red-500 text-white rounded text-[9px] cursor-pointer"
-              >
-                Reset
-              </button>
-            </div>
-          )}
-        </div>
+          </div>
+        )
       )}
 
       {typeof document !== 'undefined' && createPortal(
