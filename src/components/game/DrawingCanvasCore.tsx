@@ -322,10 +322,7 @@ export const CANONICAL_MIN_TURN_DIST = 1.3; // Min distance when sharp turn dete
 export const CANONICAL_MIN_CONSECUTIVE_TURN_DIST = 1.6; // Min distance when consecutive turns (logical px)
 export const CANONICAL_MAX_DIST = 2.8; // Max distance before forcing canonical anchor (logical px)
 export const CANONICAL_COS_TURN_THRESHOLD = 0.85; // Angle turn threshold (~32 degrees)
-
-// Phase 5A.2B: Renderer Sharp Turn Threshold
-// Deflection angles >= 60° (cos <= 0.50) are rendered directly to corner vertex to eliminate inward Bézier pull
-export const RENDERER_SHARP_TURN_COS = 0.5;
+export const SPLINE_CUSP_COS = 0.5; // Turn angle threshold for cusp clamping (~60 degrees) in Hybrid Spline Renderer
 
 // 📊 TEMPORARY RUNTIME DIAGNOSTICS (Free Draw Application Drawing Payload)
 // Set to false to disable overlay and measurement completely without affecting runtime drawing
@@ -341,12 +338,6 @@ export interface CanonicalMetrics {
   strokesCount: number;
 }
 
-export interface RendererMetrics {
-  sharpTurns: number;
-  lineSegments: number;
-  quadraticSegments: number;
-}
-
 interface DrawingDiagnosticStats {
   drawMove: { count: number; points: number; bytes: number };
   drawStroke: { count: number; points: number; bytes: number };
@@ -356,7 +347,6 @@ interface DrawingDiagnosticStats {
   drawRepair: { count: number };
   drawAbort: { count: number };
   canonicalMetrics?: CanonicalMetrics;
-  rendererMetrics?: RendererMetrics;
 }
 
 interface DrawingCanvasCoreProps {
@@ -508,16 +498,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   });
   const [diagSnapshot, setDiagSnapshot] = useState<DrawingDiagnosticStats | null>(null);
   const [isDiagnosticsVisible, setIsDiagnosticsVisible] = useState(false);
-  const isDiagnosticsVisibleRef = useRef(false);
-  isDiagnosticsVisibleRef.current = isDiagnosticsVisible;
-
-  // Phase 5A.2B: Lazy Renderer Segments Metrics (only updated when diagnostics panel is active)
-  const rendererDiagRef = useRef<RendererMetrics>({
-    sharpTurns: 0,
-    lineSegments: 0,
-    quadraticSegments: 0
-  });
-
   // 📊 Lazy Diagnostics: Only active and polling when explicitly opened by user
   useEffect(() => {
     if (!ENABLE_FREE_DRAW_DIAGNOSTICS || !propsRef.current.isFreeDraw || !isDiagnosticsVisible) {
@@ -533,8 +513,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       drawCommit: { ...drawingDiagRef.current.drawCommit },
       drawRepair: { ...drawingDiagRef.current.drawRepair },
       drawAbort: { ...drawingDiagRef.current.drawAbort },
-      canonicalMetrics: { ...canonicalStatsRef.current },
-      rendererMetrics: { ...rendererDiagRef.current }
+      canonicalMetrics: { ...canonicalStatsRef.current }
     });
 
     const interval = setInterval(() => {
@@ -546,8 +525,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         drawCommit: { ...drawingDiagRef.current.drawCommit },
         drawRepair: { ...drawingDiagRef.current.drawRepair },
         drawAbort: { ...drawingDiagRef.current.drawAbort },
-        canonicalMetrics: { ...canonicalStatsRef.current },
-        rendererMetrics: { ...rendererDiagRef.current }
+        canonicalMetrics: { ...canonicalStatsRef.current }
       });
     }, 600);
     return () => clearInterval(interval);
@@ -572,11 +550,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       totalDensePoints: 0,
       strokesCount: 0
     };
-    rendererDiagRef.current = {
-      sharpTurns: 0,
-      lineSegments: 0,
-      quadraticSegments: 0
-    };
     setDiagSnapshot({
       drawMove: { ...drawingDiagRef.current.drawMove },
       drawStroke: { ...drawingDiagRef.current.drawStroke },
@@ -585,8 +558,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       drawCommit: { ...drawingDiagRef.current.drawCommit },
       drawRepair: { ...drawingDiagRef.current.drawRepair },
       drawAbort: { ...drawingDiagRef.current.drawAbort },
-      canonicalMetrics: { ...canonicalStatsRef.current },
-      rendererMetrics: { ...rendererDiagRef.current }
+      canonicalMetrics: { ...canonicalStatsRef.current }
     });
   };
 
@@ -1545,77 +1517,107 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     } else {
       activeCtx.beginPath();
       activeCtx.moveTo(path[0].x, path[0].y);
+
       if (path.length === 2) {
         activeCtx.lineTo(path[1].x, path[1].y);
-        if (isDiagnosticsVisibleRef.current) {
-          rendererDiagRef.current.lineSegments++;
-        }
       } else {
-        // Phase 5A.2B: Corner-Preserving Hybrid Midpoint Quadratic Renderer
-        // Detects sharp corners (deflection >= 60°, cos <= RENDERER_SHARP_TURN_COS) and draws
-        // directly to the corner vertex to eliminate inward Bézier shrinkage, while retaining
-        // natural, continuous C1 quadratic smoothing across all curves and handwriting.
-        let prevWasSharp = false;
+        const len = path.length;
+        // 8 Primitive Stack Variables for Zero-Allocation Hybrid Interpolating Spline
+        let cp1x = 0;
+        let cp1y = 0;
+        let cp2x = 0;
+        let cp2y = 0;
+        let t1x = 0;
+        let t1y = 0;
+        let t2x = 0;
+        let t2y = 0;
 
-        let v1x = path[1].x - path[0].x;
-        let v1y = path[1].y - path[0].y;
-        let d1 = Math.hypot(v1x, v1y);
-
-        for (let i = 1; i < path.length - 1; i++) {
-          const pPrev = path[i - 1];
+        for (let i = 0; i < len - 1; i++) {
           const pCurr = path[i];
           const pNext = path[i + 1];
 
-          const v2x = pNext.x - pCurr.x;
-          const v2y = pNext.y - pCurr.y;
-          const d2 = Math.hypot(v2x, v2y);
+          const dx = pNext.x - pCurr.x;
+          const dy = pNext.y - pCurr.y;
+          const d = Math.hypot(dx, dy);
 
-          let isSharp = false;
-          if (d1 >= 0.5 && d2 >= 0.5) {
-            const dot = v1x * v2x + v1y * v2y;
-            const cosTheta = dot / (d1 * d2);
-            isSharp = cosTheta < RENDERER_SHARP_TURN_COS;
+          if (d < 0.001) {
+            // Degenerate zero-length segment: connect directly
+            activeCtx.lineTo(pNext.x, pNext.y);
+            continue;
           }
 
-          const xc = (pCurr.x + pNext.x) / 2;
-          const yc = (pCurr.y + pNext.y) / 2;
-
-          if (isSharp) {
-            // Draw straight to the exact corner vertex to prevent inward Bézier shrink
-            activeCtx.lineTo(pCurr.x, pCurr.y);
-            prevWasSharp = true;
-            if (isDiagnosticsVisibleRef.current) {
-              rendererDiagRef.current.sharpTurns++;
-              rendererDiagRef.current.lineSegments++;
-            }
+          // 1. Compute Tangent T1 at pCurr
+          if (i === 0) {
+            // Boundary: Start of stroke -> clamp tangent along initial chord
+            t1x = dx;
+            t1y = dy;
           } else {
-            if (prevWasSharp) {
-              // Smoothly resume quadratic curve from segment midpoint
-              const midX = (pPrev.x + pCurr.x) / 2;
-              const midY = (pPrev.y + pCurr.y) / 2;
-              activeCtx.lineTo(midX, midY);
-              activeCtx.quadraticCurveTo(pCurr.x, pCurr.y, xc, yc);
-              if (isDiagnosticsVisibleRef.current) {
-                rendererDiagRef.current.lineSegments++;
-                rendererDiagRef.current.quadraticSegments++;
-              }
+            const pPrev = path[i - 1];
+            const dx0 = pCurr.x - pPrev.x;
+            const dy0 = pCurr.y - pPrev.y;
+            const d0 = Math.hypot(dx0, dy0);
+
+            const cosTurn = d0 > 0.001 ? (dx0 * dx + dy0 * dy) / (d0 * d) : 1;
+
+            if (cosTurn < SPLINE_CUSP_COS) {
+              // Cusp detected at pCurr: clamp tangent along outgoing chord to preserve sharp corner
+              t1x = dx;
+              t1y = dy;
             } else {
-              // Standard smooth midpoint quadratic Bézier segment
-              activeCtx.quadraticCurveTo(pCurr.x, pCurr.y, xc, yc);
-              if (isDiagnosticsVisibleRef.current) {
-                rendererDiagRef.current.quadraticSegments++;
+              // Smooth Catmull-Rom tangent
+              t1x = (pNext.x - pPrev.x) * 0.5;
+              t1y = (pNext.y - pPrev.y) * 0.5;
+
+              // Shape-preserving tangent clamping against overshoot/looping
+              const lenT1 = Math.hypot(t1x, t1y);
+              if (lenT1 > d) {
+                const scale = d / lenT1;
+                t1x *= scale;
+                t1y *= scale;
               }
             }
-            prevWasSharp = false;
           }
 
-          v1x = v2x;
-          v1y = v2y;
-          d1 = d2;
-        }
-        activeCtx.lineTo(path[path.length - 1].x, path[path.length - 1].y);
-        if (isDiagnosticsVisibleRef.current) {
-          rendererDiagRef.current.lineSegments++;
+          // 2. Compute Tangent T2 at pNext
+          if (i + 1 === len - 1) {
+            // Boundary: End of stroke -> clamp tangent along final chord
+            t2x = dx;
+            t2y = dy;
+          } else {
+            const pNextNext = path[i + 2];
+            const dx2 = pNextNext.x - pNext.x;
+            const dy2 = pNextNext.y - pNext.y;
+            const d2 = Math.hypot(dx2, dy2);
+
+            const cosTurnNext = d2 > 0.001 ? (dx * dx2 + dy * dy2) / (d * d2) : 1;
+
+            if (cosTurnNext < SPLINE_CUSP_COS) {
+              // Cusp detected at pNext: clamp tangent along incoming chord to preserve sharp corner
+              t2x = dx;
+              t2y = dy;
+            } else {
+              // Smooth Catmull-Rom tangent
+              t2x = (pNextNext.x - pCurr.x) * 0.5;
+              t2y = (pNextNext.y - pCurr.y) * 0.5;
+
+              // Shape-preserving tangent clamping against overshoot/looping
+              const lenT2 = Math.hypot(t2x, t2y);
+              if (lenT2 > d) {
+                const scale = d / lenT2;
+                t2x *= scale;
+                t2y *= scale;
+              }
+            }
+          }
+
+          // 3. Compute Cubic Bézier Control Points directly on the stack
+          cp1x = pCurr.x + t1x / 3;
+          cp1y = pCurr.y + t1y / 3;
+          cp2x = pNext.x - t2x / 3;
+          cp2y = pNext.y - t2y / 3;
+
+          // 4. Direct Canvas API invocation - Zero intermediate allocations
+          activeCtx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, pNext.x, pNext.y);
         }
       }
       activeCtx.stroke();
@@ -4313,28 +4315,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                     </div>
                   </div>
                 )}
-              </div>
-
-              {/* Phase 5A.2B: Renderer Segments Metrics Card */}
-              <div className="bg-white/5 p-1.5 rounded border border-white/5 space-y-1 text-[9.5px]">
-                <div className="font-bold text-teal-300 flex items-center justify-between">
-                  <span>Renderer Segments:</span>
-                  <span className="text-gray-400 font-normal">cos &le; {RENDERER_SHARP_TURN_COS}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-1 text-[9px] bg-black/20 p-1 rounded text-center">
-                  <div>
-                    <div className="text-gray-400">Sharp</div>
-                    <div className="font-bold text-amber-300">{diagSnapshot?.rendererMetrics?.sharpTurns || 0}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-400">Lines</div>
-                    <div className="font-bold text-sky-300">{diagSnapshot?.rendererMetrics?.lineSegments || 0}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-400">Curves</div>
-                    <div className="font-bold text-purple-300">{diagSnapshot?.rendererMetrics?.quadraticSegments || 0}</div>
-                  </div>
-                </div>
               </div>
 
               <div className="bg-white/5 p-1.5 rounded border border-white/5">
