@@ -17,7 +17,8 @@ import {
 import {
   ShadowCompressionMetrics,
   INITIAL_SHADOW_METRICS,
-  evaluateShadowCompression
+  evaluateShadowCompression,
+  validateCanonicalCodec
 } from '../../utils/shadowCompression';
 
 // --- Constants ---
@@ -3678,10 +3679,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             canonicalStatsRef.current.totalDensePoints += denseCount;
             canonicalStatsRef.current.strokesCount++;
 
-            // 🧪 Shadow Compression Evaluation over the Canonical Point Stream
+            // 🧪 Real Lossless Codec Execution & Validation over the Canonical Point Stream
             // Input: ONLY the Canonical Point Stream ("Canonical Geometry in")
             if (cCount > 0) {
-              const shadowResult = evaluateShadowCompression(
+              const codecResult = validateCanonicalCodec(
                 canonicalStrokeRef.current,
                 LOGICAL_WIDTH,
                 LOGICAL_HEIGHT,
@@ -3691,30 +3692,39 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               );
 
               const prevShadow = canonicalStatsRef.current.shadow || { ...INITIAL_SHADOW_METRICS };
-              const newTotalPoints = prevShadow.totalPoints + shadowResult.pointsCount;
-              const newTotalWireBytes = prevShadow.totalWireBytes + shadowResult.currentWireBytes;
-              const newTotalShadowBytes = prevShadow.totalShadowBytes + shadowResult.shadowBytes;
+              const newTotalPoints = prevShadow.totalPoints + codecResult.originalPointsCount;
+              const newTotalWireBytes = prevShadow.totalWireBytes + codecResult.currentWireBytes;
+              const newTotalShadowBytes = prevShadow.totalShadowBytes + codecResult.actualTotalBytes;
+              const newTotalActualEncoded = prevShadow.totalActualEncodedBytes + codecResult.actualEncodedBytes;
               const newTotalSavedBytes = Math.max(0, newTotalWireBytes - newTotalShadowBytes);
               const newTotalCompPercent = newTotalWireBytes > 0 ? (newTotalSavedBytes / newTotalWireBytes) * 100 : 0;
               const newTotalWireBpt = newTotalPoints > 0 ? newTotalWireBytes / newTotalPoints : 0;
               const newTotalShadowBpt = newTotalPoints > 0 ? newTotalShadowBytes / newTotalPoints : 0;
+              const newTotalPass = prevShadow.totalRoundTripPass && codecResult.pass;
 
               canonicalStatsRef.current.shadow = {
-                lastPoints: shadowResult.pointsCount,
-                lastWireBytes: shadowResult.currentWireBytes,
-                lastShadowBytes: shadowResult.shadowBytes,
-                lastSavedBytes: shadowResult.savedBytes,
-                lastCompressionPercent: shadowResult.compressionPercent,
-                lastWireBpt: shadowResult.wireBytesPerPoint,
-                lastShadowBpt: shadowResult.shadowBytesPerPoint,
+                lastPoints: codecResult.originalPointsCount,
+                lastWireBytes: codecResult.currentWireBytes,
+                lastShadowBytes: codecResult.actualTotalBytes,
+                lastSavedBytes: codecResult.savedBytes,
+                lastCompressionPercent: codecResult.compressionPercent,
+                lastWireBpt: codecResult.wireBytesPerPoint,
+                lastShadowBpt: codecResult.actualBytesPerPoint,
+
+                lastActualEncodedBytes: codecResult.actualEncodedBytes,
+                lastDecodedPoints: codecResult.decodedPointsCount,
+                lastRoundTripPass: codecResult.pass,
+                lastCodecDiff: codecResult.codecEstimatedDiff,
 
                 totalPoints: newTotalPoints,
                 totalWireBytes: newTotalWireBytes,
                 totalShadowBytes: newTotalShadowBytes,
+                totalActualEncodedBytes: newTotalActualEncoded,
                 totalSavedBytes: newTotalSavedBytes,
                 totalCompressionPercent: newTotalCompPercent,
                 totalWireBpt: newTotalWireBpt,
-                totalShadowBpt: newTotalShadowBpt
+                totalShadowBpt: newTotalShadowBpt,
+                totalRoundTripPass: newTotalPass
               };
             }
           }
@@ -4501,22 +4511,38 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 )}
               </div>
 
-              {/* 🧪 Shadow Compression Diagnostic Card (Delta + VarInt on Canonical Stream) */}
+              {/* 🧪 Lossless Codec Diagnostic Card (Delta + VarInt on Canonical Stream) */}
               <div className="bg-white/5 p-1.5 rounded border border-purple-500/30 space-y-1 text-[9.5px]">
                 <div className="font-bold text-purple-300 flex items-center justify-between">
-                  <span>🧪 Shadow Compression (Delta + VarInt)</span>
+                  <span>🧪 Lossless Codec (Delta + VarInt)</span>
                   <span className="text-[8px] bg-purple-900/60 text-purple-200 px-1 py-0.5 rounded border border-purple-400/30">
-                    Measurement Only
+                    Real Codec
                   </span>
                 </div>
 
                 {diagSnapshot?.canonicalMetrics?.shadow && diagSnapshot.canonicalMetrics.shadow.lastPoints > 0 ? (
                   <div className="space-y-1.5 pt-0.5">
+                    {/* Round-Trip Integrity Badge */}
+                    <div className="flex items-center justify-between bg-black/40 px-1.5 py-1 rounded text-[9px]">
+                      <span className="text-gray-300">Round-Trip:</span>
+                      {diagSnapshot.canonicalMetrics.shadow.lastRoundTripPass ? (
+                        <span className="text-emerald-400 font-bold flex items-center gap-0.5">
+                          ✓ PASS (100% Lossless)
+                        </span>
+                      ) : (
+                        <span className="text-rose-400 font-bold">
+                          ✗ FAIL (Mismatch)
+                        </span>
+                      )}
+                    </div>
+
                     {/* Last Stroke */}
                     <div className="bg-black/30 p-1.5 rounded border border-white/5 space-y-0.5">
                       <div className="font-bold text-amber-200/90 text-[9px] flex justify-between">
                         <span>Last Stroke:</span>
-                        <span className="text-white font-mono">{diagSnapshot.canonicalMetrics.shadow.lastPoints} pts</span>
+                        <span className="text-white font-mono">
+                          {diagSnapshot.canonicalMetrics.shadow.lastPoints} pts (dec: {diagSnapshot.canonicalMetrics.shadow.lastDecodedPoints})
+                        </span>
                       </div>
                       <div className="flex justify-between text-[9px]">
                         <span className="text-gray-400">Current Wire:</span>
@@ -4526,8 +4552,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                         </span>
                       </div>
                       <div className="flex justify-between text-[9px]">
-                        <span className="text-gray-400">Shadow Size:</span>
+                        <span className="text-gray-400">Actual Encoded:</span>
                         <span className="text-purple-300 font-mono font-bold">
+                          {diagSnapshot.canonicalMetrics.shadow.lastActualEncodedBytes.toLocaleString()} B
+                          <span className="text-emerald-300/80 font-normal ml-1">(Diff: {diagSnapshot.canonicalMetrics.shadow.lastCodecDiff} B)</span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[9px]">
+                        <span className="text-gray-400">Total + Headers:</span>
+                        <span className="text-purple-200 font-mono font-bold">
                           {diagSnapshot.canonicalMetrics.shadow.lastShadowBytes.toLocaleString()} B
                           <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.lastShadowBpt.toFixed(1)} B/pt)</span>
                         </span>
@@ -4555,8 +4588,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                         </span>
                       </div>
                       <div className="flex justify-between text-[9px]">
-                        <span className="text-gray-400">Shadow Size:</span>
+                        <span className="text-gray-400">Actual Encoded:</span>
                         <span className="text-purple-300 font-mono font-bold">
+                          {diagSnapshot.canonicalMetrics.shadow.totalActualEncodedBytes.toLocaleString()} B
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[9px]">
+                        <span className="text-gray-400">Total + Headers:</span>
+                        <span className="text-purple-200 font-mono font-bold">
                           {diagSnapshot.canonicalMetrics.shadow.totalShadowBytes.toLocaleString()} B
                           <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.totalShadowBpt.toFixed(1)} B/pt)</span>
                         </span>
@@ -4572,7 +4611,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                   </div>
                 ) : (
                   <div className="text-[8.5px] text-gray-400 italic text-center py-1">
-                    Draw a stroke to view shadow compression metrics
+                    Draw a stroke to view lossless codec validation
                   </div>
                 )}
               </div>
