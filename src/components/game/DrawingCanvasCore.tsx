@@ -3452,9 +3452,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (shouldSendToNetwork) {
       moveBatchRef.current.push({ x: normX, y: normY });
       networkStrokePointsRef.current.push({ x: normX, y: normY });
-      if (isNetworkSamplingActive) {
-        lastNetworkPointRef.current = { x: roundedX, y: roundedY };
-      }
+      lastNetworkPointRef.current = { x: roundedX, y: roundedY };
     }
 
     const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
