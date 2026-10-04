@@ -14,6 +14,11 @@ import {
   encodeBinaryDrawMessage,
   decodeBinaryDrawMessage
 } from '../../utils/drawBinaryHelper';
+import {
+  ShadowCompressionMetrics,
+  INITIAL_SHADOW_METRICS,
+  evaluateShadowCompression
+} from '../../utils/shadowCompression';
 
 // --- Constants ---
 /* 
@@ -343,6 +348,7 @@ export interface CanonicalMetrics {
   totalNetworkPoints: number;
   totalDensePoints: number;
   strokesCount: number;
+  shadow?: ShadowCompressionMetrics;
 }
 
 interface DrawingDiagnosticStats {
@@ -458,8 +464,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     totalCanonicalPoints: 0,
     totalNetworkPoints: 0,
     totalDensePoints: 0,
-    strokesCount: 0
+    strokesCount: 0,
+    shadow: { ...INITIAL_SHADOW_METRICS }
   });
+  const strokeWireBytesRef = useRef<number>(0);
+  const strokeBatchCountRef = useRef<number>(0);
   const activeSessionsRef = useRef<Record<string, {
     tool: ToolType;
     color: string;
@@ -562,7 +571,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       totalCanonicalPoints: 0,
       totalNetworkPoints: 0,
       totalDensePoints: 0,
-      strokesCount: 0
+      strokesCount: 0,
+      shadow: { ...INITIAL_SHADOW_METRICS }
     };
     setDiagSnapshot({
       drawMove: { ...drawingDiagRef.current.drawMove },
@@ -1439,6 +1449,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           drawingDiagRef.current.drawMove.count++;
           drawingDiagRef.current.drawMove.points += pts;
           drawingDiagRef.current.drawMove.bytes += byteLen;
+          strokeWireBytesRef.current += byteLen;
+          strokeBatchCountRef.current++;
         } else if (event === 'draw_stroke') {
           const pts = Array.isArray(payload.points) ? payload.points.length : 0;
           drawingDiagRef.current.drawStroke.count++;
@@ -3244,6 +3256,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     consecutiveTurnsRef.current = 0;
     networkStrokePointsRef.current = [{ x: startNormX, y: startNormY }];
 
+    // Reset per-stroke wire byte accumulator for shadow compression evaluation
+    strokeWireBytesRef.current = 0;
+    strokeBatchCountRef.current = 0;
+
     // Phase 5A: Initialize Parallel Canonical Stroke
     canonicalStrokeRef.current = [{ x: startX, y: startY }];
     provisionalTailRef.current = null;
@@ -3661,6 +3677,46 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             canonicalStatsRef.current.totalNetworkPoints += netCount;
             canonicalStatsRef.current.totalDensePoints += denseCount;
             canonicalStatsRef.current.strokesCount++;
+
+            // 🧪 Shadow Compression Evaluation over the Canonical Point Stream
+            // Input: ONLY the Canonical Point Stream ("Canonical Geometry in")
+            if (cCount > 0) {
+              const shadowResult = evaluateShadowCompression(
+                canonicalStrokeRef.current,
+                LOGICAL_WIDTH,
+                LOGICAL_HEIGHT,
+                false,
+                strokeWireBytesRef.current,
+                strokeBatchCountRef.current
+              );
+
+              const prevShadow = canonicalStatsRef.current.shadow || { ...INITIAL_SHADOW_METRICS };
+              const newTotalPoints = prevShadow.totalPoints + shadowResult.pointsCount;
+              const newTotalWireBytes = prevShadow.totalWireBytes + shadowResult.currentWireBytes;
+              const newTotalShadowBytes = prevShadow.totalShadowBytes + shadowResult.shadowBytes;
+              const newTotalSavedBytes = Math.max(0, newTotalWireBytes - newTotalShadowBytes);
+              const newTotalCompPercent = newTotalWireBytes > 0 ? (newTotalSavedBytes / newTotalWireBytes) * 100 : 0;
+              const newTotalWireBpt = newTotalPoints > 0 ? newTotalWireBytes / newTotalPoints : 0;
+              const newTotalShadowBpt = newTotalPoints > 0 ? newTotalShadowBytes / newTotalPoints : 0;
+
+              canonicalStatsRef.current.shadow = {
+                lastPoints: shadowResult.pointsCount,
+                lastWireBytes: shadowResult.currentWireBytes,
+                lastShadowBytes: shadowResult.shadowBytes,
+                lastSavedBytes: shadowResult.savedBytes,
+                lastCompressionPercent: shadowResult.compressionPercent,
+                lastWireBpt: shadowResult.wireBytesPerPoint,
+                lastShadowBpt: shadowResult.shadowBytesPerPoint,
+
+                totalPoints: newTotalPoints,
+                totalWireBytes: newTotalWireBytes,
+                totalShadowBytes: newTotalShadowBytes,
+                totalSavedBytes: newTotalSavedBytes,
+                totalCompressionPercent: newTotalCompPercent,
+                totalWireBpt: newTotalWireBpt,
+                totalShadowBpt: newTotalShadowBpt
+              };
+            }
           }
 
           // In Free Draw / Experimental: DO NOT send duplicate client draw_stroke in successful path!
@@ -4441,6 +4497,82 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                         {((diagSnapshot.canonicalMetrics.totalCanonicalPoints / Math.max(1, diagSnapshot.canonicalMetrics.totalNetworkPoints)) * 173.88).toFixed(1)} KB
                       </span>
                     </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 🧪 Shadow Compression Diagnostic Card (Delta + VarInt on Canonical Stream) */}
+              <div className="bg-white/5 p-1.5 rounded border border-purple-500/30 space-y-1 text-[9.5px]">
+                <div className="font-bold text-purple-300 flex items-center justify-between">
+                  <span>🧪 Shadow Compression (Delta + VarInt)</span>
+                  <span className="text-[8px] bg-purple-900/60 text-purple-200 px-1 py-0.5 rounded border border-purple-400/30">
+                    Measurement Only
+                  </span>
+                </div>
+
+                {diagSnapshot?.canonicalMetrics?.shadow && diagSnapshot.canonicalMetrics.shadow.lastPoints > 0 ? (
+                  <div className="space-y-1.5 pt-0.5">
+                    {/* Last Stroke */}
+                    <div className="bg-black/30 p-1.5 rounded border border-white/5 space-y-0.5">
+                      <div className="font-bold text-amber-200/90 text-[9px] flex justify-between">
+                        <span>Last Stroke:</span>
+                        <span className="text-white font-mono">{diagSnapshot.canonicalMetrics.shadow.lastPoints} pts</span>
+                      </div>
+                      <div className="flex justify-between text-[9px]">
+                        <span className="text-gray-400">Current Wire:</span>
+                        <span className="text-sky-300 font-mono font-bold">
+                          {diagSnapshot.canonicalMetrics.shadow.lastWireBytes.toLocaleString()} B
+                          <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.lastWireBpt.toFixed(1)} B/pt)</span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[9px]">
+                        <span className="text-gray-400">Shadow Size:</span>
+                        <span className="text-purple-300 font-mono font-bold">
+                          {diagSnapshot.canonicalMetrics.shadow.lastShadowBytes.toLocaleString()} B
+                          <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.lastShadowBpt.toFixed(1)} B/pt)</span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[9px] border-t border-white/10 pt-0.5">
+                        <span className="text-gray-300 font-semibold">Saved:</span>
+                        <span className="text-emerald-400 font-mono font-bold">
+                          {diagSnapshot.canonicalMetrics.shadow.lastSavedBytes.toLocaleString()} B
+                          <span className="ml-1 text-emerald-300 font-normal">({diagSnapshot.canonicalMetrics.shadow.lastCompressionPercent.toFixed(1)}%)</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Cumulative (All Strokes) */}
+                    <div className="bg-black/30 p-1.5 rounded border border-white/5 space-y-0.5">
+                      <div className="font-bold text-amber-200/90 text-[9px] flex justify-between">
+                        <span>Cumulative ({diagSnapshot.canonicalMetrics.strokesCount} {diagSnapshot.canonicalMetrics.strokesCount === 1 ? 'stroke' : 'strokes'}):</span>
+                        <span className="text-white font-mono">{diagSnapshot.canonicalMetrics.shadow.totalPoints.toLocaleString()} pts</span>
+                      </div>
+                      <div className="flex justify-between text-[9px]">
+                        <span className="text-gray-400">Current Wire:</span>
+                        <span className="text-sky-300 font-mono font-bold">
+                          {diagSnapshot.canonicalMetrics.shadow.totalWireBytes.toLocaleString()} B
+                          <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.totalWireBpt.toFixed(1)} B/pt)</span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[9px]">
+                        <span className="text-gray-400">Shadow Size:</span>
+                        <span className="text-purple-300 font-mono font-bold">
+                          {diagSnapshot.canonicalMetrics.shadow.totalShadowBytes.toLocaleString()} B
+                          <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.totalShadowBpt.toFixed(1)} B/pt)</span>
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[9px] border-t border-white/10 pt-0.5">
+                        <span className="text-gray-300 font-semibold">Total Saved:</span>
+                        <span className="text-emerald-400 font-mono font-bold">
+                          {diagSnapshot.canonicalMetrics.shadow.totalSavedBytes.toLocaleString()} B
+                          <span className="ml-1 text-emerald-300 font-normal">({diagSnapshot.canonicalMetrics.shadow.totalCompressionPercent.toFixed(1)}%)</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-[8.5px] text-gray-400 italic text-center py-1">
+                    Draw a stroke to view shadow compression metrics
                   </div>
                 )}
               </div>
