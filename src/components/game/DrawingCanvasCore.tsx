@@ -309,7 +309,7 @@ export interface DrawingCanvasCoreRef {
 // 🧪 EXPERIMENTAL NETWORK SAMPLING TEST (Free Draw Only)
 // OFF (false) = Standard network behavior (every local sampled point enters moveBatchRef)
 // ON (true) = Network-only spatial sampling (2.0px min-distance filter for draw_move, keeping local canvas 100% untouched)
-export const EXPERIMENTAL_NETWORK_SAMPLING_TEST = true;
+export const EXPERIMENTAL_NETWORK_SAMPLING_TEST = false;
 
 // 🧪 EXPERIMENTAL CANONICAL LOCAL STROKE PROTOTYPE (Phase 5A - Free Draw Only)
 // Disabled (false) by default: Standard current behavior works 100% untouched.
