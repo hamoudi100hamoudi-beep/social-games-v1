@@ -346,8 +346,12 @@ async function startServer() {
             roomManager.handleFreeDrawStart(roomId, socket.id, buf);
             // Broadcast live draw_start so spectators initialize their local live layer
             socket.broadcast.to(roomId).emit('draw_binary', buf);
-          } else if (useCanonicalPipeline && type === 2) { // Canonical draw_move
-            roomManager.handleFreeDrawMove(roomId, socket.id, buf);
+          } else if (useCanonicalPipeline && (type === 2 || type === 13)) { // Canonical draw_move (Type 2: standard, Type 13: compressed)
+            if (type === 13) {
+              roomManager.handleFreeDrawMoveCompressed(roomId, socket.id, buf);
+            } else {
+              roomManager.handleFreeDrawMove(roomId, socket.id, buf);
+            }
             // Relay volatile moves live to other clients in room
             socket.broadcast.to(roomId).volatile.emit('draw_binary', buf);
           } else if (useCanonicalPipeline && type === 3 && isContinuousTool) { // Canonical draw_end (Pen/Eraser only)

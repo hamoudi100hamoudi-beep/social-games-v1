@@ -330,6 +330,11 @@ export const EXPERIMENTAL_CANONICAL_LOCAL_TEST = false;
 //              Used identically for: Live Temp Preview, Committed Stroke, Network draw_move, Local History & Undo/Redo Replay
 export const EXPERIMENTAL_SINGLE_SOURCE_CANONICAL = false;
 
+// ⚡ EXPERIMENTAL REAL COMPRESSED DRAW TRANSPORT (A/B Test - Free Draw Only)
+// OFF (false) = Standard baseline Type 2 draw_move (10B header + 4B per point)
+// ON (true)  = Real Type 13 self-contained compressed transport (VarInt/ZigZag delta per batch)
+export const EXPERIMENTAL_COMPRESSED_DRAW_TRANSPORT = false;
+
 // Online Canonical Processor Configuration Constants (Configurable for calibration)
 export const CANONICAL_MIN_TURN_DIST = 1.3; // Min distance when sharp turn detected (logical px)
 export const CANONICAL_MIN_CONSECUTIVE_TURN_DIST = 1.6; // Min distance when consecutive turns (logical px)
@@ -352,8 +357,25 @@ export interface CanonicalMetrics {
   shadow?: ShadowCompressionMetrics;
 }
 
+export interface TransportMetrics {
+  sentBatches: number;
+  sentPoints: number;
+  compressedWireBytes: number;
+  baselineWireBytes: number;
+  savedBytes: number;
+  compressionPercent: number;
+  receivedBatches: number;
+  receivedPoints: number;
+  decodeErrors: number;
+  repairCount: number;
+  serverPointCount: number;
+  decodedPointCount: number;
+  lastCommitMatch: boolean | null;
+}
+
 interface DrawingDiagnosticStats {
   drawMove: { count: number; points: number; bytes: number };
+  drawMoveCompressed: { count: number; points: number; bytes: number; baselineBytes: number };
   drawStroke: { count: number; points: number; bytes: number };
   drawStart: { count: number; bytes: number };
   drawEnd: { count: number; bytes: number };
@@ -361,6 +383,7 @@ interface DrawingDiagnosticStats {
   drawRepair: { count: number };
   drawAbort: { count: number };
   canonicalMetrics?: CanonicalMetrics;
+  transportMetrics?: TransportMetrics;
 }
 
 interface DrawingCanvasCoreProps {
@@ -386,6 +409,7 @@ interface DrawingCanvasCoreProps {
   enableNetworkSampling?: boolean;
   enableCanonicalLocalTest?: boolean;
   enableSingleSourceCanonical?: boolean;
+  enableCompressedTransport?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -411,7 +435,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     enableDestinationOutEraser = false,
     enableNetworkSampling = false,
     enableCanonicalLocalTest = false,
-    enableSingleSourceCanonical = false
+    enableSingleSourceCanonical = false,
+    enableCompressedTransport = false
   },
   ref
 ) => {
@@ -425,6 +450,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const [isSingleSourceActive, setIsSingleSourceActive] = useState(EXPERIMENTAL_SINGLE_SOURCE_CANONICAL);
   const isSingleSourceActiveRef = useRef(isSingleSourceActive);
   isSingleSourceActiveRef.current = isSingleSourceActive;
+
+  // ⚡ Experimental Compressed Draw Transport (Type 13) Toggle (Free Draw Only)
+  const [isCompressedTransportActive, setIsCompressedTransportActive] = useState(EXPERIMENTAL_COMPRESSED_DRAW_TRANSPORT);
+  const isCompressedTransportActiveRef = useRef(isCompressedTransportActive);
+  isCompressedTransportActiveRef.current = isCompressedTransportActive;
 
   // Logical coordinate system bounds: 680x396 for Free Draw & Experimental Draw, 592x344 for Normal rooms
   const LOGICAL_WIDTH = (isFreeDraw || isExperimental) ? FREE_DRAW_LOGICAL_WIDTH : DEFAULT_LOGICAL_WIDTH;
@@ -513,12 +543,28 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // 📊 Local Diagnostic Counters (Zero network, zero state updates per event)
   const drawingDiagRef = useRef<DrawingDiagnosticStats>({
     drawMove: { count: 0, points: 0, bytes: 0 },
+    drawMoveCompressed: { count: 0, points: 0, bytes: 0, baselineBytes: 0 },
     drawStroke: { count: 0, points: 0, bytes: 0 },
     drawStart: { count: 0, bytes: 0 },
     drawEnd: { count: 0, bytes: 0 },
     drawCommit: { count: 0 },
     drawRepair: { count: 0 },
     drawAbort: { count: 0 },
+    transportMetrics: {
+      sentBatches: 0,
+      sentPoints: 0,
+      compressedWireBytes: 0,
+      baselineWireBytes: 0,
+      savedBytes: 0,
+      compressionPercent: 0,
+      receivedBatches: 0,
+      receivedPoints: 0,
+      decodeErrors: 0,
+      repairCount: 0,
+      serverPointCount: 0,
+      decodedPointCount: 0,
+      lastCommitMatch: null
+    }
   });
   const [diagSnapshot, setDiagSnapshot] = useState<DrawingDiagnosticStats | null>(null);
   const [isDiagnosticsVisible, setIsDiagnosticsVisible] = useState(false);
@@ -531,25 +577,29 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     // Capture initial snapshot immediately on open
     setDiagSnapshot({
       drawMove: { ...drawingDiagRef.current.drawMove },
+      drawMoveCompressed: { ...drawingDiagRef.current.drawMoveCompressed },
       drawStroke: { ...drawingDiagRef.current.drawStroke },
       drawStart: { ...drawingDiagRef.current.drawStart },
       drawEnd: { ...drawingDiagRef.current.drawEnd },
       drawCommit: { ...drawingDiagRef.current.drawCommit },
       drawRepair: { ...drawingDiagRef.current.drawRepair },
       drawAbort: { ...drawingDiagRef.current.drawAbort },
-      canonicalMetrics: { ...canonicalStatsRef.current }
+      canonicalMetrics: { ...canonicalStatsRef.current },
+      transportMetrics: drawingDiagRef.current.transportMetrics ? { ...drawingDiagRef.current.transportMetrics } : undefined
     });
 
     const interval = setInterval(() => {
       setDiagSnapshot({
         drawMove: { ...drawingDiagRef.current.drawMove },
+        drawMoveCompressed: { ...drawingDiagRef.current.drawMoveCompressed },
         drawStroke: { ...drawingDiagRef.current.drawStroke },
         drawStart: { ...drawingDiagRef.current.drawStart },
         drawEnd: { ...drawingDiagRef.current.drawEnd },
         drawCommit: { ...drawingDiagRef.current.drawCommit },
         drawRepair: { ...drawingDiagRef.current.drawRepair },
         drawAbort: { ...drawingDiagRef.current.drawAbort },
-        canonicalMetrics: { ...canonicalStatsRef.current }
+        canonicalMetrics: { ...canonicalStatsRef.current },
+        transportMetrics: drawingDiagRef.current.transportMetrics ? { ...drawingDiagRef.current.transportMetrics } : undefined
       });
     }, 600);
     return () => clearInterval(interval);
@@ -558,12 +608,28 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const resetDiagnosticStats = () => {
     drawingDiagRef.current = {
       drawMove: { count: 0, points: 0, bytes: 0 },
+      drawMoveCompressed: { count: 0, points: 0, bytes: 0, baselineBytes: 0 },
       drawStroke: { count: 0, points: 0, bytes: 0 },
       drawStart: { count: 0, bytes: 0 },
       drawEnd: { count: 0, bytes: 0 },
       drawCommit: { count: 0 },
       drawRepair: { count: 0 },
       drawAbort: { count: 0 },
+      transportMetrics: {
+        sentBatches: 0,
+        sentPoints: 0,
+        compressedWireBytes: 0,
+        baselineWireBytes: 0,
+        savedBytes: 0,
+        compressionPercent: 0,
+        receivedBatches: 0,
+        receivedPoints: 0,
+        decodeErrors: 0,
+        repairCount: 0,
+        serverPointCount: 0,
+        decodedPointCount: 0,
+        lastCommitMatch: null
+      }
     };
     canonicalStatsRef.current = {
       lastCanonicalPoints: 0,
@@ -577,6 +643,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
     setDiagSnapshot({
       drawMove: { ...drawingDiagRef.current.drawMove },
+      drawMoveCompressed: { ...drawingDiagRef.current.drawMoveCompressed },
       drawStroke: { ...drawingDiagRef.current.drawStroke },
       drawStart: { ...drawingDiagRef.current.drawStart },
       drawEnd: { ...drawingDiagRef.current.drawEnd },
@@ -844,11 +911,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical, enableCompressedTransport });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical, enableCompressedTransport };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical, enableCompressedTransport };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical, enableCompressedTransport]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -1445,11 +1512,29 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // 📊 Runtime Diagnostic: capture exact encoded ArrayBuffer byteLength locally
       if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw && msg) {
         const byteLen = msg.byteLength;
-        if (event === 'draw_move') {
+        if (event === 'draw_move' || event === 'draw_move_compressed') {
           const pts = Array.isArray(payload.moves) ? payload.moves.length : 1;
-          drawingDiagRef.current.drawMove.count++;
-          drawingDiagRef.current.drawMove.points += pts;
-          drawingDiagRef.current.drawMove.bytes += byteLen;
+          const baselineBytes = 10 + pts * 4;
+          if (event === 'draw_move_compressed') {
+            drawingDiagRef.current.drawMoveCompressed.count++;
+            drawingDiagRef.current.drawMoveCompressed.points += pts;
+            drawingDiagRef.current.drawMoveCompressed.bytes += byteLen;
+            drawingDiagRef.current.drawMoveCompressed.baselineBytes += baselineBytes;
+
+            if (drawingDiagRef.current.transportMetrics) {
+              const tm = drawingDiagRef.current.transportMetrics;
+              tm.sentBatches++;
+              tm.sentPoints += pts;
+              tm.compressedWireBytes += byteLen;
+              tm.baselineWireBytes += baselineBytes;
+              tm.savedBytes = Math.max(0, tm.baselineWireBytes - tm.compressedWireBytes);
+              tm.compressionPercent = tm.baselineWireBytes > 0 ? (tm.savedBytes / tm.baselineWireBytes) * 100 : 0;
+            }
+          } else {
+            drawingDiagRef.current.drawMove.count++;
+            drawingDiagRef.current.drawMove.points += pts;
+            drawingDiagRef.current.drawMove.bytes += byteLen;
+          }
           strokeWireBytesRef.current += byteLen;
           strokeBatchCountRef.current++;
         } else if (event === 'draw_stroke') {
@@ -1466,7 +1551,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }
 
-      if (event === 'draw_move' && socket.volatile) {
+      if ((event === 'draw_move' || event === 'draw_move_compressed') && socket.volatile) {
         socket.volatile.emit('draw_binary', msg);
       } else {
         socket.emit('draw_binary', msg);
@@ -2694,8 +2779,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             data.moves.forEach((m: any) => {
               handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT, m.x, m.y);
             });
+            if (data.isCompressed && drawingDiagRef.current.transportMetrics) {
+              const tm = drawingDiagRef.current.transportMetrics;
+              tm.receivedBatches++;
+              tm.receivedPoints += data.moves.length;
+            }
           } else if (data.x !== undefined && data.y !== undefined) {
             handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, data.x, data.y);
+            if (data.isCompressed && drawingDiagRef.current.transportMetrics) {
+              const tm = drawingDiagRef.current.transportMetrics;
+              tm.receivedBatches++;
+              tm.receivedPoints += 1;
+            }
           }
 
           if (isContinuousStream) {
@@ -2712,6 +2807,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const session = activeSessionsRef.current[data.instanceId];
         const serverPointCount = data.pointCount !== undefined ? data.pointCount : 0;
         const strokeId = data.strokeId !== undefined ? data.strokeId : 0;
+
+        if (drawingDiagRef.current.transportMetrics) {
+          const tm = drawingDiagRef.current.transportMetrics;
+          const localCount = session ? (session.networkPointCount || 0) : 0;
+          tm.serverPointCount = serverPointCount;
+          tm.decodedPointCount = localCount;
+          tm.lastCommitMatch = localCount === serverPointCount;
+        }
 
         // If this commit belongs to the DRAWER themselves:
         if (data.instanceId === instanceId) {
@@ -3545,7 +3648,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           if (isContinuousMode) {
             drawerNetworkPointCountRef.current += moveBatchRef.current.length;
           }
-          emitDrawCommand('draw_move', {
+          const isCompressed = Boolean(
+            propsRef.current.isFreeDraw &&
+            (isCompressedTransportActiveRef.current || propsRef.current.enableCompressedTransport)
+          );
+          emitDrawCommand(isCompressed ? 'draw_move_compressed' : 'draw_move', {
             tool: activeTool,
             color: activeColor,
             width: activeWidth,
@@ -3616,7 +3723,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (isContinuousMode) {
           drawerNetworkPointCountRef.current += moveBatchRef.current.length;
         }
-        emitDrawCommand('draw_move', {
+        const isCompressed = Boolean(
+          propsRef.current.isFreeDraw &&
+          (isCompressedTransportActiveRef.current || propsRef.current.enableCompressedTransport)
+        );
+        emitDrawCommand(isCompressed ? 'draw_move_compressed' : 'draw_move', {
           tool: activeTool,
           color: activeColor,
           width: activeWidth,
@@ -4439,6 +4550,24 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 </button>
               </div>
 
+              {/* ⚡ Experimental Compressed Transport (Type 13) Toggle */}
+              <div className="flex items-center justify-between bg-purple-950/70 border border-purple-400/40 p-1.5 rounded text-[10px]">
+                <div>
+                  <span className="font-bold text-purple-300">Compressed Transport:</span>
+                  <div className="text-[8.5px] text-purple-200/70">Type 13 Real Network Transport</div>
+                </div>
+                <button
+                  onClick={() => setIsCompressedTransportActive(!isCompressedTransportActive)}
+                  className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-colors text-[9.5px] ${
+                    isCompressedTransportActive
+                      ? "bg-purple-600 text-white shadow-sm shadow-purple-500/50"
+                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  }`}
+                >
+                  {isCompressedTransportActive ? "ON (Type 13)" : "OFF (Type 2)"}
+                </button>
+              </div>
+
               {/* Phase 5A: Points Ratio & Simulation Card */}
               <div className="bg-white/5 p-1.5 rounded border border-white/5 space-y-1 text-[9.5px]">
                 <div className="font-bold text-amber-300 flex items-center justify-between">
@@ -4616,6 +4745,81 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 )}
               </div>
 
+              {/* ⚡ Real Compressed Transport (Type 13) Card */}
+              <div className="bg-white/5 p-1.5 rounded border border-purple-500/30 space-y-1 text-[9.5px]">
+                <div className="font-bold text-purple-300 flex items-center justify-between">
+                  <span>⚡ Compressed Transport (Type 13)</span>
+                  <span className={`text-[8px] px-1 py-0.5 rounded border ${
+                    isCompressedTransportActive
+                      ? "bg-purple-900/60 text-purple-200 border-purple-400/40 font-bold"
+                      : "bg-gray-800 text-gray-400 border-gray-600 font-normal"
+                  }`}>
+                    {isCompressedTransportActive ? "Active" : "Disabled"}
+                  </span>
+                </div>
+
+                <div className="bg-black/30 p-1.5 rounded border border-white/5 space-y-0.5">
+                  <div className="flex justify-between text-[9px]">
+                    <span className="text-gray-400">Current Wire (Type 2):</span>
+                    <span className="text-sky-300 font-mono font-bold">
+                      {(diagSnapshot?.transportMetrics?.baselineWireBytes || 0).toLocaleString()} B
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[9px]">
+                    <span className="text-gray-400">Compressed Wire (Type 13):</span>
+                    <span className="text-purple-300 font-mono font-bold">
+                      {(diagSnapshot?.transportMetrics?.compressedWireBytes || 0).toLocaleString()} B
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-[9px] border-t border-white/10 pt-0.5">
+                    <span className="text-gray-300 font-semibold">Saved:</span>
+                    <span className="text-emerald-400 font-mono font-bold">
+                      {(diagSnapshot?.transportMetrics?.savedBytes || 0).toLocaleString()} B
+                      <span className="ml-1 text-emerald-300 font-normal">
+                        ({(diagSnapshot?.transportMetrics?.compressionPercent || 0).toFixed(1)}%)
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1 text-[8.5px] bg-black/20 p-1 rounded">
+                  <div>
+                    <span className="text-gray-400">Sent Points: </span>
+                    <span className="text-white font-mono font-bold">{diagSnapshot?.transportMetrics?.sentPoints || 0}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Recv Points: </span>
+                    <span className="text-white font-mono font-bold">{diagSnapshot?.transportMetrics?.receivedPoints || 0}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Decode Errors: </span>
+                    <span className="text-emerald-400 font-mono font-bold">{diagSnapshot?.transportMetrics?.decodeErrors || 0}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Repair Count: </span>
+                    <span className="text-white font-mono font-bold">{diagSnapshot?.transportMetrics?.repairCount || 0}</span>
+                  </div>
+                </div>
+
+                {/* Commit Point Count Match */}
+                <div className="flex items-center justify-between text-[9px] bg-black/30 px-1.5 py-1 rounded">
+                  <span className="text-gray-300">Commit Verification:</span>
+                  {diagSnapshot?.transportMetrics && diagSnapshot.transportMetrics.lastCommitMatch !== null ? (
+                    diagSnapshot.transportMetrics.lastCommitMatch ? (
+                      <span className="text-emerald-400 font-bold flex items-center gap-0.5">
+                        ✓ Decoded ({diagSnapshot.transportMetrics.decodedPointCount}) == Server ({diagSnapshot.transportMetrics.serverPointCount})
+                      </span>
+                    ) : (
+                      <span className="text-rose-400 font-bold">
+                        ✗ Mismatch ({diagSnapshot.transportMetrics.decodedPointCount} vs {diagSnapshot.transportMetrics.serverPointCount})
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-gray-400">No commit yet</span>
+                  )}
+                </div>
+              </div>
+
               <div className="bg-white/5 p-1.5 rounded border border-white/5">
                 <div className="font-bold text-sky-300">draw_move:</div>
                 <div>events = <span className="text-white font-bold">{diagSnapshot?.drawMove.count || 0}</span></div>
@@ -4646,11 +4850,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               {(() => {
                 const totalBytes =
                   (diagSnapshot?.drawMove.bytes || 0) +
+                  (diagSnapshot?.drawMoveCompressed?.bytes || 0) +
                   (diagSnapshot?.drawStroke.bytes || 0) +
                   (diagSnapshot?.drawStart.bytes || 0) +
                   (diagSnapshot?.drawEnd.bytes || 0);
                 const totalEvents =
                   (diagSnapshot?.drawMove.count || 0) +
+                  (diagSnapshot?.drawMoveCompressed?.count || 0) +
                   (diagSnapshot?.drawStroke.count || 0) +
                   (diagSnapshot?.drawStart.count || 0) +
                   (diagSnapshot?.drawEnd.count || 0);

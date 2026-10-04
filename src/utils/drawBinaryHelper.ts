@@ -1,4 +1,10 @@
 import { ToolType, PooledPoint } from '../types/draw';
+import {
+  encodeZigZag,
+  decodeZigZag,
+  writeVarInt,
+  readVarInt
+} from './shadowCompression';
 
 export const TOP_COLORS = ['#000000', '#666666', '#0018F6', '#FFFFFF', '#AAAAAA', '#25C8FF', '#008D25', '#A9220C', '#954112', '#00FF4C', '#FF0012', '#FF7729'];
 export const BOT_COLORS = ['#B1701C', '#99014E', '#946867', '#FFCA26', '#FF018F', '#FEAFA8', '#00D9A4', '#85B200', '#7F00FF', '#052C6D', '#BA73FF', '#FFF63F'];
@@ -57,6 +63,7 @@ export const MSG_DRAW_REDO = 8;
 export const MSG_DRAW_STROKE = 9;
 export const MSG_DRAW_COMMIT = 11;
 export const MSG_DRAW_ABORT = 12;
+export const MSG_DRAW_MOVE_COMPRESSED = 13;
 
 const TOOLS_LIST = ['pencil', 'eraser', 'bucket', 'line', 'strokeRect', 'fillRect', 'strokeCircle', 'fillCircle', 'pipette'];
 
@@ -187,6 +194,51 @@ export const encodeBinaryDrawMessage = (event: string, data: any): ArrayBuffer =
       view.setInt16(12 + i * 4, scaledPtY, true);
     }
     
+    return buffer;
+  }
+  
+  if (event === 'draw_move_compressed') {
+    const moves = Array.isArray(data.moves) ? data.moves : (data.x !== undefined ? [{ x: data.x, y: data.y }] : []);
+    const movesLength = moves.length;
+
+    // Self-contained packet compression:
+    // Point 0 = Absolute qx, qy (ZigZag + VarInt)
+    // Points 1..N-1 = Delta relative to previous point within this packet (ZigZag + VarInt)
+    const payloadBytes: number[] = [];
+    let prevQx = 0;
+    let prevQy = 0;
+
+    for (let i = 0; i < movesLength; i++) {
+      const pt = moves[i];
+      const qx = Math.min(30000, Math.max(-30000, Math.round((pt.x || 0) * 10000)));
+      const qy = Math.min(30000, Math.max(-30000, Math.round((pt.y || 0) * 10000)));
+
+      if (i === 0) {
+        writeVarInt(payloadBytes, encodeZigZag(qx));
+        writeVarInt(payloadBytes, encodeZigZag(qy));
+        prevQx = qx;
+        prevQy = qy;
+      } else {
+        const deltaX = (qx - prevQx) | 0;
+        const deltaY = (qy - prevQy) | 0;
+        prevQx = qx;
+        prevQy = qy;
+
+        writeVarInt(payloadBytes, encodeZigZag(deltaX));
+        writeVarInt(payloadBytes, encodeZigZag(deltaY));
+      }
+    }
+
+    const totalByteLen = 10 + payloadBytes.length;
+    const buffer = new ArrayBuffer(totalByteLen);
+    const view = new DataView(buffer);
+    const uint8View = new Uint8Array(buffer);
+
+    view.setUint8(0, MSG_DRAW_MOVE_COMPRESSED); // Type 13
+    writeString7(view, 1, instId);
+    view.setUint16(8, movesLength, true);
+    uint8View.set(payloadBytes, 10);
+
     return buffer;
   }
   
@@ -415,6 +467,38 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
           data: { instanceId: instId, moves }
         };
       }
+    }
+
+    if (type === MSG_DRAW_MOVE_COMPRESSED) {
+      const movesLength = view.getUint16(8, true);
+      const moves: { x: number; y: number }[] = [];
+      const cursor = { offset: 10 };
+      const uint8View = new Uint8Array(buffer);
+      let prevQx = 0;
+      let prevQy = 0;
+
+      for (let i = 0; i < movesLength; i++) {
+        if (cursor.offset >= uint8View.length) break;
+        const zzX = readVarInt(uint8View, cursor);
+        const zzY = readVarInt(uint8View, cursor);
+        const valX = decodeZigZag(zzX);
+        const valY = decodeZigZag(zzY);
+
+        if (i === 0) {
+          prevQx = valX;
+          prevQy = valY;
+        } else {
+          prevQx = (prevQx + valX) | 0;
+          prevQy = (prevQy + valY) | 0;
+        }
+
+        moves.push({ x: prevQx / 10000, y: prevQy / 10000 });
+      }
+
+      return {
+        event: 'draw_move',
+        data: { instanceId: instId, moves, isCompressed: true }
+      };
     }
     
     if (type === MSG_DRAW_END) {

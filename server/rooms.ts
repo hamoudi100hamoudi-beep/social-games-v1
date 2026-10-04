@@ -25,6 +25,25 @@ function getLevenshteinDistance(a: string, b: string): number {
   return matrix[b.length][a.length];
 }
 
+function decodeZigZag(z: number): number {
+  return (z >>> 1) ^ -(z & 1);
+}
+
+function readVarIntFromBuffer(buf: Buffer, cursor: { offset: number }): number {
+  let result = 0;
+  let shift = 0;
+  while (cursor.offset < buf.length) {
+    const b = buf[cursor.offset++];
+    result |= (b & 0x7f) << shift;
+    if ((b & 0x80) === 0) {
+      return result >>> 0;
+    }
+    shift += 7;
+    if (shift > 35) throw new Error("VarInt overflow");
+  }
+  throw new Error("Unexpected end of VarInt buffer");
+}
+
 export function normalizeArabic(str: string): string {
   return str
     .replace(/[أإآٱ]/g, "ا")
@@ -1175,6 +1194,69 @@ const words = word.split(" ").filter(w => w.length > 0);
       const px = buf.readInt16LE(10 + i * 4);
       const py = buf.readInt16LE(12 + i * 4);
       stroke.points.push({ x: px, y: py });
+    }
+    stroke.receivedPointCount = stroke.points.length;
+
+    return true;
+  }
+
+  public handleFreeDrawMoveCompressed(roomId: string, socketId: string, buf: Buffer): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room || (!room.isFreeDraw && !room.isExperimental) || !Buffer.isBuffer(buf) || buf.length < 10) return false;
+    if (buf[0] !== 13) return false; // MSG_DRAW_MOVE_COMPRESSED
+
+    let instId = "";
+    for (let i = 0; i < 7; i++) {
+      const code = buf[1 + i];
+      if (code > 0) instId += String.fromCharCode(code);
+    }
+
+    const strokes = this.getOrCreateFreeDrawStrokes(room);
+    const key = `${socketId}_${instId}`;
+    const stroke = strokes.get(key);
+    if (!stroke || stroke.status !== 'ACTIVE') return false;
+
+    // Safety check 1: Hard absolute duration limit (60s)
+    if (Date.now() - stroke.createdAt > 60000) {
+      console.warn(`[FreeDraw Server] Stroke exceeded 60s hard lifetime limit. Aborting: ${key}`);
+      this.abortFreeDrawStroke(roomId, socketId, instId);
+      return false;
+    }
+
+    const count = buf.readUInt16LE(8);
+    if (count === 0) return true;
+
+    // Safety check 2: Buffer point limit (3,000 points)
+    if (stroke.points.length + count > 3000) {
+      console.warn(`[FreeDraw Server] Stroke exceeded 3000 point limit. Aborting: ${key}`);
+      this.abortFreeDrawStroke(roomId, socketId, instId);
+      return false;
+    }
+
+    // Decode self-contained batch (Point 0: absolute, Points 1..N-1: delta)
+    const cursor = { offset: 10 };
+    let prevQx = 0;
+    let prevQy = 0;
+
+    for (let i = 0; i < count; i++) {
+      if (cursor.offset >= buf.length) {
+        console.warn(`[FreeDraw Server] Truncated compressed move packet: ${key}`);
+        return false;
+      }
+      const zzX = readVarIntFromBuffer(buf, cursor);
+      const zzY = readVarIntFromBuffer(buf, cursor);
+      const valX = decodeZigZag(zzX);
+      const valY = decodeZigZag(zzY);
+
+      if (i === 0) {
+        prevQx = valX;
+        prevQy = valY;
+      } else {
+        prevQx = (prevQx + valX) | 0;
+        prevQy = (prevQy + valY) | 0;
+      }
+
+      stroke.points.push({ x: prevQx, y: prevQy });
     }
     stroke.receivedPointCount = stroke.points.length;
 
