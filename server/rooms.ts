@@ -25,11 +25,11 @@ function getLevenshteinDistance(a: string, b: string): number {
   return matrix[b.length][a.length];
 }
 
-function decodeZigZag(z: number): number {
+export function decodeZigZag(z: number): number {
   return (z >>> 1) ^ -(z & 1);
 }
 
-function readVarIntFromBuffer(buf: Buffer, cursor: { offset: number }): number {
+export function readVarIntFromBuffer(buf: Buffer, cursor: { offset: number }): number {
   let result = 0;
   let shift = 0;
   while (cursor.offset < buf.length) {
@@ -39,9 +39,103 @@ function readVarIntFromBuffer(buf: Buffer, cursor: { offset: number }): number {
       return result >>> 0;
     }
     shift += 7;
-    if (shift > 35) throw new Error("VarInt overflow");
+    if (shift > 28) throw new Error("VarInt overflow");
   }
   throw new Error("Unexpected end of VarInt buffer");
+}
+
+export function decodeType13BufferSafely(buf: Buffer): {
+  success: boolean;
+  instId?: string;
+  count?: number;
+  points?: { x: number; y: number }[];
+  error?: string;
+} {
+  if (!buf || !Buffer.isBuffer(buf) || buf.length < 10) {
+    return { success: false, error: 'header_too_small' };
+  }
+  if (buf[0] !== 13) {
+    return { success: false, error: 'invalid_type' };
+  }
+
+  let instId = "";
+  for (let i = 0; i < 7; i++) {
+    const code = buf[1 + i];
+    if (code > 0) instId += String.fromCharCode(code);
+  }
+  if (!instId) {
+    return { success: false, error: 'invalid_inst_id' };
+  }
+
+  const count = buf.readUInt16LE(8);
+  if (count > 3000) {
+    return { success: false, error: 'count_exceeds_max' };
+  }
+
+  if (count === 0) {
+    if (buf.length !== 10) {
+      return { success: false, error: 'unexpected_trailing_bytes' };
+    }
+    return { success: true, instId, count: 0, points: [] };
+  }
+
+  const tempPoints: { x: number; y: number }[] = [];
+  const cursor = { offset: 10 };
+  let prevQx = 0;
+  let prevQy = 0;
+
+  try {
+    for (let i = 0; i < count; i++) {
+      if (cursor.offset >= buf.length) {
+        return { success: false, error: 'truncated_payload' };
+      }
+      const zzX = readVarIntFromBuffer(buf, cursor);
+      const zzY = readVarIntFromBuffer(buf, cursor);
+      const valX = decodeZigZag(zzX);
+      const valY = decodeZigZag(zzY);
+
+      if (i === 0) {
+        prevQx = valX;
+        prevQy = valY;
+      } else {
+        prevQx = (prevQx + valX) | 0;
+        prevQy = (prevQy + valY) | 0;
+      }
+
+      // Bounds validation: ensure coordinates fit in Int16 (-32768 to 32767)
+      if (prevQx < -32768 || prevQx > 32767 || prevQy < -32768 || prevQy > 32767) {
+        return { success: false, error: 'coordinates_out_of_bounds' };
+      }
+
+      tempPoints.push({ x: prevQx, y: prevQy });
+    }
+
+    if (tempPoints.length !== count) {
+      return { success: false, error: 'point_count_mismatch' };
+    }
+
+    // Strict payload end check: no unexpected trailing bytes
+    if (cursor.offset !== buf.length) {
+      return { success: false, error: 'unexpected_trailing_bytes' };
+    }
+
+    return { success: true, instId, count, points: tempPoints };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'malformed_payload' };
+  }
+}
+
+export function createType2Buffer(instId: string, points: { x: number; y: number }[]): Buffer {
+  const count = points.length;
+  const buf = Buffer.alloc(10 + count * 4);
+  buf.writeUInt8(2, 0); // MSG_DRAW_MOVE = 2
+  buf.write(instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
+  buf.writeUInt16LE(count & 0xFFFF, 8);
+  for (let i = 0; i < count; i++) {
+    buf.writeInt16LE(points[i].x, 10 + i * 4);
+    buf.writeInt16LE(points[i].y, 12 + i * 4);
+  }
+  return buf;
 }
 
 export function normalizeArabic(str: string): string {
@@ -162,12 +256,26 @@ const ALL_WORDS = [
   "باب","حاجب","رموش","أحمر شفاه","طلاء أظافر"
 ];
 
-class RoomManager {
+export class RoomManager {
   private rooms: Map<string, Room> = new Map();
   private players: Map<string, Player> = new Map();
   private evictionTimers: Map<string, NodeJS.Timeout> = new Map();
   private io: Server | null = null;
   private tickInterval: NodeJS.Timeout | null = null;
+  private clientCapabilities: Map<string, { supportsType13?: boolean }> = new Map();
+
+  public setClientCapabilities(socketId: string, caps: { supportsType13?: boolean }) {
+    const existing = this.clientCapabilities.get(socketId) || {};
+    this.clientCapabilities.set(socketId, { ...existing, ...caps });
+  }
+
+  public removeClientCapabilities(socketId: string) {
+    this.clientCapabilities.delete(socketId);
+  }
+
+  public isClientType13Capable(socketId: string): boolean {
+    return Boolean(this.clientCapabilities.get(socketId)?.supportsType13);
+  }
 
   setIo(io: Server) {
     this.io = io;
@@ -1200,67 +1308,47 @@ const words = word.split(" ").filter(w => w.length > 0);
     return true;
   }
 
-  public handleFreeDrawMoveCompressed(roomId: string, socketId: string, buf: Buffer): boolean {
+  public handleFreeDrawMoveCompressed(
+    roomId: string,
+    socketId: string,
+    buf: Buffer
+  ): { success: boolean; instId?: string; points?: { x: number; y: number }[] } {
     const room = this.rooms.get(roomId);
-    if (!room || (!room.isFreeDraw && !room.isExperimental) || !Buffer.isBuffer(buf) || buf.length < 10) return false;
-    if (buf[0] !== 13) return false; // MSG_DRAW_MOVE_COMPRESSED
+    if (!room || (!room.isFreeDraw && !room.isExperimental)) return { success: false };
 
-    let instId = "";
-    for (let i = 0; i < 7; i++) {
-      const code = buf[1 + i];
-      if (code > 0) instId += String.fromCharCode(code);
+    // 1. Strict Payload Validation & Temporary Local Decode
+    const decoded = decodeType13BufferSafely(buf);
+    if (!decoded.success || !decoded.points || !decoded.instId) {
+      return { success: false };
     }
 
+    const instId = decoded.instId;
     const strokes = this.getOrCreateFreeDrawStrokes(room);
     const key = `${socketId}_${instId}`;
     const stroke = strokes.get(key);
-    if (!stroke || stroke.status !== 'ACTIVE') return false;
+    if (!stroke || stroke.status !== 'ACTIVE') return { success: false };
 
     // Safety check 1: Hard absolute duration limit (60s)
     if (Date.now() - stroke.createdAt > 60000) {
       console.warn(`[FreeDraw Server] Stroke exceeded 60s hard lifetime limit. Aborting: ${key}`);
       this.abortFreeDrawStroke(roomId, socketId, instId);
-      return false;
+      return { success: false };
     }
-
-    const count = buf.readUInt16LE(8);
-    if (count === 0) return true;
 
     // Safety check 2: Buffer point limit (3,000 points)
-    if (stroke.points.length + count > 3000) {
+    if (stroke.points.length + decoded.points.length > 3000) {
       console.warn(`[FreeDraw Server] Stroke exceeded 3000 point limit. Aborting: ${key}`);
       this.abortFreeDrawStroke(roomId, socketId, instId);
-      return false;
+      return { success: false };
     }
 
-    // Decode self-contained batch (Point 0: absolute, Points 1..N-1: delta)
-    const cursor = { offset: 10 };
-    let prevQx = 0;
-    let prevQy = 0;
-
-    for (let i = 0; i < count; i++) {
-      if (cursor.offset >= buf.length) {
-        console.warn(`[FreeDraw Server] Truncated compressed move packet: ${key}`);
-        return false;
-      }
-      const zzX = readVarIntFromBuffer(buf, cursor);
-      const zzY = readVarIntFromBuffer(buf, cursor);
-      const valX = decodeZigZag(zzX);
-      const valY = decodeZigZag(zzY);
-
-      if (i === 0) {
-        prevQx = valX;
-        prevQy = valY;
-      } else {
-        prevQx = (prevQx + valX) | 0;
-        prevQy = (prevQy + valY) | 0;
-      }
-
-      stroke.points.push({ x: prevQx, y: prevQy });
+    // 2. ATOMIC COMMIT: Append points to stroke.points ONLY after complete verification
+    for (let i = 0; i < decoded.points.length; i++) {
+      stroke.points.push(decoded.points[i]);
     }
     stroke.receivedPointCount = stroke.points.length;
 
-    return true;
+    return { success: true, instId, points: decoded.points };
   }
 
   public handleFreeDrawEnd(
@@ -1884,6 +1972,7 @@ const words = word.split(" ").filter(w => w.length > 0);
   }
 
   public handleDisconnect(socketId: string) {
+    this.removeClientCapabilities(socketId);
     try {
       const player = this.players.get(socketId);
 

@@ -85,7 +85,7 @@ export function readVarInt(bytes: Uint8Array, cursor: { offset: number }): numbe
       return result >>> 0;
     }
     shift += 7;
-    if (shift > 35) {
+    if (shift > 28) {
       throw new Error('VarInt overflow');
     }
   }

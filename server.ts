@@ -4,7 +4,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import path from 'path';
 import customParser from 'socket.io-msgpack-parser';
-import { roomManager, normalizeArabic } from './server/rooms.js';
+import { roomManager, normalizeArabic, createType2Buffer } from './server/rooms.js';
 import { getRoomConfig, ROOM_PRESETS } from './src/types/game.js';
 import { getToolName } from './src/utils/drawBinaryHelper.js';
 
@@ -107,6 +107,35 @@ async function startServer() {
     return true; // Allowed
   };
 
+  function relayFreeDrawMove(
+    roomId: string,
+    senderSocket: any,
+    compressedBuf: Buffer,
+    instId: string,
+    points: { x: number; y: number }[]
+  ) {
+    const roomSockets = io.sockets.adapter.rooms.get(roomId);
+    if (!roomSockets || roomSockets.size <= 1) return;
+
+    let type2FallbackBuf: Buffer | null = null;
+
+    for (const targetSocketId of roomSockets) {
+      if (targetSocketId === senderSocket.id) continue;
+
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (!targetSocket) continue;
+
+      if (roomManager.isClientType13Capable(targetSocketId)) {
+        targetSocket.volatile.emit('draw_binary', compressedBuf);
+      } else {
+        if (!type2FallbackBuf) {
+          type2FallbackBuf = createType2Buffer(instId, points);
+        }
+        targetSocket.volatile.emit('draw_binary', type2FallbackBuf);
+      }
+    }
+  }
+
   io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
 
@@ -168,7 +197,20 @@ async function startServer() {
       }
     });
 
-    socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly }, callback) => {
+    socket.on('client_capabilities', (caps) => {
+      try {
+        if (caps && typeof caps === 'object') {
+          roomManager.setClientCapabilities(socket.id, caps);
+        }
+      } catch (err) {
+        console.error("Error setting client capabilities:", err);
+      }
+    });
+
+    socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly, supportsType13 }, callback) => {
+      if (supportsType13) {
+        roomManager.setClientCapabilities(socket.id, { supportsType13: true });
+      }
       try {
         const checkRoom = roomManager.getRoom(roomId);
         if (checkRoom) {
@@ -348,12 +390,20 @@ async function startServer() {
             socket.broadcast.to(roomId).emit('draw_binary', buf);
           } else if (useCanonicalPipeline && (type === 2 || type === 13)) { // Canonical draw_move (Type 2: standard, Type 13: compressed)
             if (type === 13) {
-              roomManager.handleFreeDrawMoveCompressed(roomId, socket.id, buf);
+              const res = roomManager.handleFreeDrawMoveCompressed(roomId, socket.id, buf);
+              if (!res || !res.success || !res.points || !res.instId) {
+                // Production Hardening: Reject invalid, malformed, or truncated packet!
+                // Do NOT broadcast corrupted/partial packets to viewers!
+                return;
+              }
+              // Production Hardening: Broadcast safely with legacy Type 2 fallback
+              relayFreeDrawMove(roomId, socket, buf, res.instId, res.points);
             } else {
-              roomManager.handleFreeDrawMove(roomId, socket.id, buf);
+              const ok = roomManager.handleFreeDrawMove(roomId, socket.id, buf);
+              if (!ok) return;
+              // Relay standard Type 2 volatile move live to other clients in room
+              socket.broadcast.to(roomId).volatile.emit('draw_binary', buf);
             }
-            // Relay volatile moves live to other clients in room
-            socket.broadcast.to(roomId).volatile.emit('draw_binary', buf);
           } else if (useCanonicalPipeline && type === 3 && isContinuousTool) { // Canonical draw_end (Pen/Eraser only)
             const commitResult = roomManager.handleFreeDrawEnd(roomId, socket.id, buf);
             if (commitResult && commitResult.committed) {

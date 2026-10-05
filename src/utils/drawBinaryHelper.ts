@@ -470,6 +470,7 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
 
     if (type === MSG_DRAW_MOVE_COMPRESSED) {
+      if (view.byteLength < 10) return null;
       const movesLength = view.getUint16(8, true);
       const moves: { x: number; y: number }[] = [];
       const cursor = { offset: 10 };
@@ -477,28 +478,55 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       let prevQx = 0;
       let prevQy = 0;
 
-      for (let i = 0; i < movesLength; i++) {
-        if (cursor.offset >= uint8View.length) break;
-        const zzX = readVarInt(uint8View, cursor);
-        const zzY = readVarInt(uint8View, cursor);
-        const valX = decodeZigZag(zzX);
-        const valY = decodeZigZag(zzY);
-
-        if (i === 0) {
-          prevQx = valX;
-          prevQy = valY;
-        } else {
-          prevQx = (prevQx + valX) | 0;
-          prevQy = (prevQy + valY) | 0;
-        }
-
-        moves.push({ x: prevQx / 10000, y: prevQy / 10000 });
+      if (movesLength === 0) {
+        if (uint8View.length !== 10) return null; // trailing bytes check
+        return {
+          event: 'draw_move',
+          data: { instanceId: instId, moves: [], isCompressed: true }
+        };
       }
 
-      return {
-        event: 'draw_move',
-        data: { instanceId: instId, moves, isCompressed: true }
-      };
+      if (movesLength > 3000) return null;
+
+      try {
+        for (let i = 0; i < movesLength; i++) {
+          if (cursor.offset >= uint8View.length) {
+            return null; // Truncated packet: never return partial moves!
+          }
+          const zzX = readVarInt(uint8View, cursor);
+          const zzY = readVarInt(uint8View, cursor);
+          const valX = decodeZigZag(zzX);
+          const valY = decodeZigZag(zzY);
+
+          if (i === 0) {
+            prevQx = valX;
+            prevQy = valY;
+          } else {
+            prevQx = (prevQx + valX) | 0;
+            prevQy = (prevQy + valY) | 0;
+          }
+
+          // Strict coordinate bounds validation (-32768 to 32767)
+          if (prevQx < -32768 || prevQx > 32767 || prevQy < -32768 || prevQy > 32767) {
+            return null;
+          }
+
+          moves.push({ x: prevQx / 10000, y: prevQy / 10000 });
+        }
+
+        // Strict end of payload check: exact point count and no trailing bytes
+        if (moves.length !== movesLength || cursor.offset !== uint8View.length) {
+          return null;
+        }
+
+        return {
+          event: 'draw_move',
+          data: { instanceId: instId, moves, isCompressed: true }
+        };
+      } catch (e) {
+        // VarInt overflow or truncated VarInt read error
+        return null;
+      }
     }
     
     if (type === MSG_DRAW_END) {

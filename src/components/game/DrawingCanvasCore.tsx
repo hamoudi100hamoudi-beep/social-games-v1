@@ -2686,6 +2686,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   useEffect(() => {
     if (!socket) return;
 
+    // Register modern client capabilities (supports Type 13 compressed transport)
+    socket.emit('client_capabilities', { supportsType13: true });
+
     const onDrawBinary = (raw: any) => {
       if (isResetPendingRef.current) {
         flushPendingReset();
@@ -3169,6 +3172,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const handleConnect = () => {
       console.log("[DrawingCanvasCore] System connection established. Loader active until drawing sync finishes.");
+      socket.emit('client_capabilities', { supportsType13: true });
       setIsSyncing(true);
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
