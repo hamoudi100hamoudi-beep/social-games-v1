@@ -366,7 +366,7 @@ async function startServer() {
             roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
             socket.broadcast.to(roomId).emit('draw_binary', buf);
           } else if (type === 7) { // draw_undo
-            if (isFreeDraw && buf.length >= 10) {
+            if ((isFreeDraw || isExperimental) && buf.length >= 10) {
               let targetInstId = "";
               for (let i = 0; i < 7; i++) {
                 const code = buf[1 + i];

@@ -367,6 +367,8 @@ export interface TransportMetrics {
   receivedBatches: number;
   receivedPoints: number;
   decodeErrors: number;
+  rejectedPackets: number;
+  fallbackPackets: number;
   repairCount: number;
   serverPointCount: number;
   decodedPointCount: number;
@@ -560,6 +562,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       receivedBatches: 0,
       receivedPoints: 0,
       decodeErrors: 0,
+      rejectedPackets: 0,
+      fallbackPackets: 0,
       repairCount: 0,
       serverPointCount: 0,
       decodedPointCount: 0,
@@ -570,7 +574,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const [isDiagnosticsVisible, setIsDiagnosticsVisible] = useState(false);
   // 📊 Lazy Diagnostics: Only active and polling when explicitly opened by user
   useEffect(() => {
-    if (!ENABLE_FREE_DRAW_DIAGNOSTICS || !propsRef.current.isFreeDraw || !isDiagnosticsVisible) {
+    if (!ENABLE_FREE_DRAW_DIAGNOSTICS || (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) || !isDiagnosticsVisible) {
       return;
     }
 
@@ -625,6 +629,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         receivedBatches: 0,
         receivedPoints: 0,
         decodeErrors: 0,
+        rejectedPackets: 0,
+        fallbackPackets: 0,
         repairCount: 0,
         serverPointCount: 0,
         decodedPointCount: 0,
@@ -1510,7 +1516,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const msg = encodeBinaryDrawMessage(event, { ...payload, instanceId });
 
       // 📊 Runtime Diagnostic: capture exact encoded ArrayBuffer byteLength locally
-      if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw && msg) {
+      if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental) && msg) {
         const byteLen = msg.byteLength;
         if (event === 'draw_move' || event === 'draw_move_compressed') {
           const pts = Array.isArray(payload.moves) ? payload.moves.length : 1;
@@ -1752,7 +1758,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       if (activeTool === 'pencil' || activeTool === 'eraser') {
         const isSingleSource = Boolean(
-          propsRef.current.isFreeDraw &&
+          (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
           (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
         );
 
@@ -2188,7 +2194,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const syncHistoryButtons = () => {
     const list = localCommandsRef.current;
     let canUndo = false;
-    if (propsRef.current.isFreeDraw) {
+    if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
       canUndo = list.some(cmd => {
         if (!cmd) return false;
         const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
@@ -2209,10 +2215,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
     const list = localCommandsRef.current;
 
-    // 🎯 Free Draw: Per-User Undo (Exact Target Identification)
+    // 🎯 Free Draw & Experimental: Per-User Undo (Exact Target Identification)
     // Searches backwards for the last completed stroke belonging to THIS player only (using their instanceId)
     // and extracts its strokeId. Strictly NO-OP if no stroke belongs to this player.
-    if (propsRef.current.isFreeDraw) {
+    if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
       let targetIndex = -1;
       let targetStrokeId: number | undefined;
 
@@ -2323,8 +2329,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const canRedo = localRedoStackRef.current.length > 0;
     if (!canRedo) return;
 
-    // 🎯 Free Draw Branch: Collaborative Redo
-    if (propsRef.current.isFreeDraw) {
+    // 🎯 Free Draw & Experimental Branch: Collaborative Redo
+    if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
       const cmdToRestore = localRedoStackRef.current.pop();
       if (!cmdToRestore) return;
 
@@ -2694,12 +2700,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         flushPendingReset();
       }
       const decoded = decodeBinaryDrawMessage(raw);
-      if (!decoded) return;
+      if (!decoded) {
+        if (raw && (raw[0] === 13 || (raw instanceof ArrayBuffer && new Uint8Array(raw)[0] === 13))) {
+          if (drawingDiagRef.current.transportMetrics) {
+            drawingDiagRef.current.transportMetrics.decodeErrors++;
+          }
+        }
+        return;
+      }
       const { event, data } = decoded;
       if (!data) return;
 
-      // In Free Draw, allow draw_undo to reach the sender so their canvas stays 100% authoritative and synchronized with the server broadcast
-      const isFreeDrawUndo = Boolean(propsRef.current.isFreeDraw) && event === 'draw_undo';
+      // In Free Draw / Experimental, allow draw_undo to reach the sender so their canvas stays 100% authoritative and synchronized with the server broadcast
+      const isFreeDrawUndo = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental) && event === 'draw_undo';
       if (data.instanceId === instanceId && !isFreeDrawUndo) return;
 
       const remoteTool = data.tool || 'pencil';
@@ -2782,17 +2795,25 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             data.moves.forEach((m: any) => {
               handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT, m.x, m.y);
             });
-            if (data.isCompressed && drawingDiagRef.current.transportMetrics) {
+            if (drawingDiagRef.current.transportMetrics) {
               const tm = drawingDiagRef.current.transportMetrics;
-              tm.receivedBatches++;
-              tm.receivedPoints += data.moves.length;
+              if (data.isCompressed) {
+                tm.receivedBatches++;
+                tm.receivedPoints += data.moves.length;
+              } else if (propsRef.current.enableCompressedTransport || isCompressedTransportActiveRef.current) {
+                tm.fallbackPackets++;
+              }
             }
           } else if (data.x !== undefined && data.y !== undefined) {
             handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, data.x, data.y);
-            if (data.isCompressed && drawingDiagRef.current.transportMetrics) {
+            if (drawingDiagRef.current.transportMetrics) {
               const tm = drawingDiagRef.current.transportMetrics;
-              tm.receivedBatches++;
-              tm.receivedPoints += 1;
+              if (data.isCompressed) {
+                tm.receivedBatches++;
+                tm.receivedPoints += 1;
+              } else if (propsRef.current.enableCompressedTransport || isCompressedTransportActiveRef.current) {
+                tm.fallbackPackets++;
+              }
             }
           }
 
@@ -2803,7 +2824,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
       } else if (event === 'draw_commit') {
-        if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw) {
+        if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
           drawingDiagRef.current.drawCommit.count++;
         }
 
@@ -2881,8 +2902,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           } else {
             // Count mismatch! Volatile packet loss occurred: request targeted canonical repair
             console.warn(`[DrawingCanvasCore] Packet mismatch for stroke ${strokeId}: localCount=${localCount} vs serverCount=${serverPointCount}. Requesting canonical repair...`);
-            if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw) {
+            if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
               drawingDiagRef.current.drawRepair.count++;
+              if (drawingDiagRef.current.transportMetrics) {
+                drawingDiagRef.current.transportMetrics.repairCount++;
+              }
             }
             delete activeSessionsRef.current[data.instanceId];
             drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
@@ -2891,8 +2915,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
       } else if (event === 'draw_abort') {
-        if (ENABLE_FREE_DRAW_DIAGNOSTICS && propsRef.current.isFreeDraw) {
+        if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
           drawingDiagRef.current.drawAbort.count++;
+          if (drawingDiagRef.current.transportMetrics) {
+            drawingDiagRef.current.transportMetrics.rejectedPackets++;
+          }
         }
         delete activeSessionsRef.current[data.instanceId];
         drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
@@ -2976,7 +3003,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           syncHistoryButtons();
         }
       } else if (event === 'draw_undo') {
-        if (propsRef.current.isFreeDraw && data.strokeId !== undefined && data.instanceId) {
+        if ((propsRef.current.isFreeDraw || propsRef.current.isExperimental) && data.strokeId !== undefined && data.instanceId) {
           const targetInst = data.instanceId;
           const targetStrId = data.strokeId;
 
@@ -3340,7 +3367,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     const isSingleSource = Boolean(
-      propsRef.current.isFreeDraw &&
+      (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
       (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
     );
 
@@ -3472,7 +3499,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     path.push({ x: roundedX, y: roundedY });
 
     const isSingleSource = Boolean(
-      propsRef.current.isFreeDraw &&
+      (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
       (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
     );
 
@@ -3653,7 +3680,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             drawerNetworkPointCountRef.current += moveBatchRef.current.length;
           }
           const isCompressed = Boolean(
-            propsRef.current.isFreeDraw &&
+            (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
             (isCompressedTransportActiveRef.current || propsRef.current.enableCompressedTransport)
           );
           emitDrawCommand(isCompressed ? 'draw_move_compressed' : 'draw_move', {
@@ -3701,7 +3728,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         );
         if (endDist >= 1.0) {
           const isSingleSource = Boolean(
-            propsRef.current.isFreeDraw &&
+            (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
             (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
           );
           if (isSingleSource) {
@@ -3728,7 +3755,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           drawerNetworkPointCountRef.current += moveBatchRef.current.length;
         }
         const isCompressed = Boolean(
-          propsRef.current.isFreeDraw &&
+          (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
           (isCompressedTransportActiveRef.current || propsRef.current.enableCompressedTransport)
         );
         emitDrawCommand(isCompressed ? 'draw_move_compressed' : 'draw_move', {
@@ -3753,7 +3780,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           commitFreeDrawPendingCache();
 
           const isSingleSource = Boolean(
-            propsRef.current.isFreeDraw &&
+            (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
             (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
           );
 
@@ -3781,7 +3808,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             }
           }
 
-          if (propsRef.current.isFreeDraw) {
+          if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
             const cCount = canonicalStrokeRef.current.length;
             const netCount = networkStrokePointsRef.current.length;
             const denseCount = currentPathRef.current.length;
@@ -4481,8 +4508,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         />
       </div>
 
-      {/* 📊 Temporary Free Draw Runtime Diagnostic Overlay (Local only & Opt-in) */}
-      {ENABLE_FREE_DRAW_DIAGNOSTICS && isFreeDraw && !readOnly && (
+      {/* 📊 Temporary Free Draw / Experimental Runtime Diagnostic Overlay (Local only & Opt-in) */}
+      {ENABLE_FREE_DRAW_DIAGNOSTICS && (isFreeDraw || isExperimental) && !readOnly && (
         !isDiagnosticsVisible ? (
           <button
             onClick={() => setIsDiagnosticsVisible(true)}
@@ -4524,16 +4551,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                   <span className="font-bold text-emerald-300">Single-Source Canonical:</span>
                   <div className="text-[8.5px] text-emerald-200/70">Unified Geometry Pipeline</div>
                 </div>
-                <button
-                  onClick={() => setIsSingleSourceActive(!isSingleSourceActive)}
-                  className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-colors text-[9.5px] ${
-                    isSingleSourceActive
-                      ? "bg-emerald-600 text-white shadow-sm shadow-emerald-500/50"
-                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                  }`}
-                >
-                  {isSingleSourceActive ? "ON (Canonical)" : "OFF (Baseline)"}
-                </button>
+                {propsRef.current.enableSingleSourceCanonical ? (
+                  <span className="px-2 py-0.5 rounded font-bold text-[9.5px] bg-emerald-600 text-white shadow-sm shadow-emerald-500/50">
+                    ON (Trial Active)
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setIsSingleSourceActive(!isSingleSourceActive)}
+                    className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-colors text-[9.5px] ${
+                      isSingleSourceActive
+                        ? "bg-emerald-600 text-white shadow-sm shadow-emerald-500/50"
+                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    }`}
+                  >
+                    {isSingleSourceActive ? "ON (Canonical)" : "OFF (Baseline)"}
+                  </button>
+                )}
               </div>
 
               {/* Phase 5A: Local Canonical Prototype Toggle */}
@@ -4560,24 +4593,30 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                   <span className="font-bold text-purple-300">Compressed Transport:</span>
                   <div className="text-[8.5px] text-purple-200/70">Type 13 Real Network Transport</div>
                 </div>
-                <button
-                  onClick={() => setIsCompressedTransportActive(!isCompressedTransportActive)}
-                  className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-colors text-[9.5px] ${
-                    isCompressedTransportActive
-                      ? "bg-purple-600 text-white shadow-sm shadow-purple-500/50"
-                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                  }`}
-                >
-                  {isCompressedTransportActive ? "ON (Type 13)" : "OFF (Type 2)"}
-                </button>
+                {propsRef.current.enableCompressedTransport ? (
+                  <span className="px-2 py-0.5 rounded font-bold text-[9.5px] bg-purple-600 text-white shadow-sm shadow-purple-500/50">
+                    ON (Type 13 Trial)
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => setIsCompressedTransportActive(!isCompressedTransportActive)}
+                    className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-colors text-[9.5px] ${
+                      isCompressedTransportActive
+                        ? "bg-purple-600 text-white shadow-sm shadow-purple-500/50"
+                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    }`}
+                  >
+                    {isCompressedTransportActive ? "ON (Type 13)" : "OFF (Type 2)"}
+                  </button>
+                )}
               </div>
 
               {/* Phase 5A: Points Ratio & Simulation Card */}
               <div className="bg-white/5 p-1.5 rounded border border-white/5 space-y-1 text-[9.5px]">
                 <div className="font-bold text-amber-300 flex items-center justify-between">
                   <span>Stroke Points Ratio:</span>
-                  <span className={isSingleSourceActive ? "text-emerald-400 font-bold" : (isCanonicalLocalTestActive ? "text-indigo-400 font-bold" : "text-gray-400 font-normal")}>
-                    {isSingleSourceActive ? "Single Source" : (isCanonicalLocalTestActive ? "Live Canonical" : "Shadow Mode")}
+                  <span className={(isSingleSourceActive || propsRef.current.enableSingleSourceCanonical) ? "text-emerald-400 font-bold" : (isCanonicalLocalTestActive ? "text-indigo-400 font-bold" : "text-gray-400 font-normal")}>
+                    {(isSingleSourceActive || propsRef.current.enableSingleSourceCanonical) ? "Single Source" : (isCanonicalLocalTestActive ? "Live Canonical" : "Shadow Mode")}
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-1 text-[9px] bg-black/20 p-1 rounded text-center">
@@ -4754,11 +4793,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 <div className="font-bold text-purple-300 flex items-center justify-between">
                   <span>⚡ Compressed Transport (Type 13)</span>
                   <span className={`text-[8px] px-1 py-0.5 rounded border ${
-                    isCompressedTransportActive
+                    (isCompressedTransportActive || propsRef.current.enableCompressedTransport)
                       ? "bg-purple-900/60 text-purple-200 border-purple-400/40 font-bold"
                       : "bg-gray-800 text-gray-400 border-gray-600 font-normal"
                   }`}>
-                    {isCompressedTransportActive ? "Active" : "Disabled"}
+                    {(isCompressedTransportActive || propsRef.current.enableCompressedTransport) ? "Active (Type 13)" : "Disabled (Type 2)"}
                   </span>
                 </div>
 
@@ -4796,8 +4835,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                     <span className="text-white font-mono font-bold">{diagSnapshot?.transportMetrics?.receivedPoints || 0}</span>
                   </div>
                   <div>
+                    <span className="text-gray-400">Type 2 Fallback: </span>
+                    <span className="text-amber-300 font-mono font-bold">{diagSnapshot?.transportMetrics?.fallbackPackets || 0}</span>
+                  </div>
+                  <div>
                     <span className="text-gray-400">Decode Errors: </span>
                     <span className="text-emerald-400 font-mono font-bold">{diagSnapshot?.transportMetrics?.decodeErrors || 0}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400">Rejected Pkts: </span>
+                    <span className="text-rose-400 font-mono font-bold">{diagSnapshot?.transportMetrics?.rejectedPackets || 0}</span>
                   </div>
                   <div>
                     <span className="text-gray-400">Repair Count: </span>
