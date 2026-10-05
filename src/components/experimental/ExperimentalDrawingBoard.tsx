@@ -15,7 +15,7 @@ import {
   TOP_COLORS,
   BOT_COLORS
 } from '../../utils/drawBinaryHelper';
-import DrawingCanvasCore, { DrawingCanvasCoreRef, EXPERIMENTAL_NETWORK_SAMPLING_TEST } from '../game/DrawingCanvasCore';
+import DrawingCanvasCore, { DrawingCanvasCoreRef } from '../game/DrawingCanvasCore';
 import FlipaClipControls from '../game/FlipaClipControls';
 import ColorWheelModal from '../game/ColorWheelModal';
 import CinematicModal from '../game/CinematicModal';
@@ -373,14 +373,11 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           isZoomEnabled={zoomEnabled}
           isFreeDraw={isFreeDraw}
           isExperimental={isExperimental}
-          enableSingleSourceCanonical={Boolean(isExperimental)}
-          enableCompressedTransport={Boolean(isExperimental)}
           enableInputOptimizations={Boolean(isExperimental && EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST)}
           enableBitmapUndoCache={Boolean(isExperimental && EXPERIMENTAL_BITMAP_UNDO_TEST)}
           enableFixedDPR={Boolean(isExperimental && EXPERIMENTAL_DPR_1_TEST)}
           enableCanvasAlpha={Boolean(isExperimental && EXPERIMENTAL_CANVAS_ALPHA_TEST)}
           enableDestinationOutEraser={Boolean(isExperimental && EXPERIMENTAL_DESTINATION_OUT_ERASER_TEST)}
-          enableNetworkSampling={Boolean(isExperimental && EXPERIMENTAL_NETWORK_SAMPLING_TEST)}
           onHistoryStateChange={(idx, len) => {
             setHistoryState({ index: idx, length: len });
             onHistoryLengthChange?.(idx > 0);

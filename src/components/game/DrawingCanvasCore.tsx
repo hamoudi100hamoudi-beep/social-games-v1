@@ -312,35 +312,8 @@ export interface DrawingCanvasCoreRef {
   resetZoom?: () => void;
 }
 
-// 🧪 EXPERIMENTAL NETWORK SAMPLING TEST (Free Draw Only)
-// OFF (false) = Standard network behavior (every local sampled point enters moveBatchRef)
-// ON (true) = Network-only spatial sampling (2.0px min-distance filter for draw_move, keeping local canvas 100% untouched)
-export const EXPERIMENTAL_NETWORK_SAMPLING_TEST = false;
-
-// 🧪 EXPERIMENTAL CANONICAL LOCAL STROKE PROTOTYPE (Phase 5A - Free Draw Only)
-// Disabled (false) by default: Standard current behavior works 100% untouched.
-// Enabled (true): Live drawing renders via canonicalStrokeRef (online decimated points + provisional tail)
-//                 with zero network changes and zero morph at pointerup.
-export const EXPERIMENTAL_CANONICAL_LOCAL_TEST = false;
-
-// 🧪 EXPERIMENTAL SINGLE-SOURCE CANONICAL GEOMETRY PIPELINE (A/B Test)
-// OFF (false) = Standard baseline behavior (currentPathRef for live canvas, network receives raw points, history records network points)
-// ON (true)  = 100% Single-Source of Truth:
-//              Raw Input -> Protocol-precision representation -> Unified Canonical Stream
-//              Used identically for: Live Temp Preview, Committed Stroke, Network draw_move, Local History & Undo/Redo Replay
-export const EXPERIMENTAL_SINGLE_SOURCE_CANONICAL = false;
-
-// ⚡ EXPERIMENTAL REAL COMPRESSED DRAW TRANSPORT (A/B Test - Free Draw Only)
-// OFF (false) = Standard baseline Type 2 draw_move (10B header + 4B per point)
-// ON (true)  = Real Type 13 self-contained compressed transport (VarInt/ZigZag delta per batch)
-export const EXPERIMENTAL_COMPRESSED_DRAW_TRANSPORT = false;
-
-// Online Canonical Processor Configuration Constants (Configurable for calibration)
-export const CANONICAL_MIN_TURN_DIST = 1.3; // Min distance when sharp turn detected (logical px)
-export const CANONICAL_MIN_CONSECUTIVE_TURN_DIST = 1.6; // Min distance when consecutive turns (logical px)
-export const CANONICAL_MAX_DIST = 2.8; // Max distance before forcing canonical anchor (logical px)
-export const CANONICAL_COS_TURN_THRESHOLD = 0.85; // Angle turn threshold (~32 degrees)
-export const SPLINE_CUSP_COS = 0.5; // Turn angle threshold for cusp clamping (~60 degrees) in Hybrid Spline Renderer
+// Turn angle threshold for cusp clamping (~60 degrees) in Hybrid Spline Renderer
+export const SPLINE_CUSP_COS = 0.5;
 
 // 📊 TEMPORARY RUNTIME DIAGNOSTICS (Free Draw Application Drawing Payload)
 // Set to false to disable overlay and measurement completely without affecting runtime drawing
@@ -408,10 +381,6 @@ interface DrawingCanvasCoreProps {
   enableFixedDPR?: boolean;
   enableCanvasAlpha?: boolean;
   enableDestinationOutEraser?: boolean;
-  enableNetworkSampling?: boolean;
-  enableCanonicalLocalTest?: boolean;
-  enableSingleSourceCanonical?: boolean;
-  enableCompressedTransport?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -434,29 +403,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     enableBitmapUndoCache = false,
     enableFixedDPR = false,
     enableCanvasAlpha = false,
-    enableDestinationOutEraser = false,
-    enableNetworkSampling = false,
-    enableCanonicalLocalTest = false,
-    enableSingleSourceCanonical = false,
-    enableCompressedTransport = false
+    enableDestinationOutEraser = false
   },
   ref
 ) => {
   const instanceId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
   const { socket, isConnected } = useSocket();
-
-  // Phase 5A Local Test Toggle (Free Draw Only)
-  const [isCanonicalLocalTestActive, setIsCanonicalLocalTestActive] = useState(EXPERIMENTAL_CANONICAL_LOCAL_TEST);
-
-  // Experimental Single-Source Canonical Geometry Pipeline Toggle (Free Draw Only)
-  const [isSingleSourceActive, setIsSingleSourceActive] = useState(EXPERIMENTAL_SINGLE_SOURCE_CANONICAL);
-  const isSingleSourceActiveRef = useRef(isSingleSourceActive);
-  isSingleSourceActiveRef.current = isSingleSourceActive;
-
-  // ⚡ Experimental Compressed Draw Transport (Type 13) Toggle (Free Draw Only)
-  const [isCompressedTransportActive, setIsCompressedTransportActive] = useState(EXPERIMENTAL_COMPRESSED_DRAW_TRANSPORT);
-  const isCompressedTransportActiveRef = useRef(isCompressedTransportActive);
-  isCompressedTransportActiveRef.current = isCompressedTransportActive;
 
   // Logical coordinate system bounds: 680x396 for Free Draw & Experimental Draw, 592x344 for Normal rooms
   const LOGICAL_WIDTH = (isFreeDraw || isExperimental) ? FREE_DRAW_LOGICAL_WIDTH : DEFAULT_LOGICAL_WIDTH;
@@ -482,13 +434,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const startYRef = useRef(0);
   const currentPathRef = useRef<{ x: number; y: number }[]>([]);
 
-  // Phase 5A: Parallel Canonical Stroke Prototype Refs (Shadow / Local-Only)
+  // Single-Source Canonical Stroke Ref (Unified Geometry Stream for Free Draw & Experimental)
   const canonicalStrokeRef = useRef<{ x: number; y: number }[]>([]);
-  const provisionalTailRef = useRef<{ x: number; y: number } | null>(null);
-  const lastCanonicalDirXRef = useRef<number>(0);
-  const lastCanonicalDirYRef = useRef<number>(0);
-  const lastCanonicalSegmentLenRef = useRef<number>(0);
-  const canonicalTurnsRef = useRef<number>(0);
 
   const canonicalStatsRef = useRef<CanonicalMetrics>({
     lastCanonicalPoints: 0,
@@ -917,11 +864,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical, enableCompressedTransport });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical, enableCompressedTransport };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical, enableCompressedTransport };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, enableNetworkSampling, enableCanonicalLocalTest, enableSingleSourceCanonical, enableCompressedTransport]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -1757,30 +1704,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const activeOpacity = propsRef.current.opacity;
 
       if (activeTool === 'pencil' || activeTool === 'eraser') {
-        const isSingleSource = Boolean(
-          (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
-          (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
-        );
+        const isSingleSource = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
 
         if (isSingleSource && canonicalStrokeRef.current.length > 0) {
           drawEntirePath(tempCtx, canonicalStrokeRef.current, activeTool, activeColor, activeWidth, activeOpacity);
-        } else {
-          const isCanonicalActive = Boolean(
-            propsRef.current.isFreeDraw &&
-            (isCanonicalLocalTestActive || propsRef.current.enableCanonicalLocalTest)
-          );
-
-          if (isCanonicalActive && canonicalStrokeRef.current.length > 0) {
-            const cPath = canonicalStrokeRef.current;
-            const pTail = provisionalTailRef.current;
-            if (pTail) {
-              drawEntirePath(tempCtx, [...cPath, pTail], activeTool, activeColor, activeWidth, activeOpacity);
-            } else {
-              drawEntirePath(tempCtx, cPath, activeTool, activeColor, activeWidth, activeOpacity);
-            }
-          } else if (currentPathRef.current.length > 0) {
-            drawEntirePath(tempCtx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
-          }
+        } else if (currentPathRef.current.length > 0) {
+          drawEntirePath(tempCtx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
         }
       } else {
         if (currentPathRef.current.length > 0) {
@@ -2800,7 +2729,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               if (data.isCompressed) {
                 tm.receivedBatches++;
                 tm.receivedPoints += data.moves.length;
-              } else if (propsRef.current.enableCompressedTransport || isCompressedTransportActiveRef.current) {
+              } else if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
                 tm.fallbackPackets++;
               }
             }
@@ -2811,7 +2740,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               if (data.isCompressed) {
                 tm.receivedBatches++;
                 tm.receivedPoints += 1;
-              } else if (propsRef.current.enableCompressedTransport || isCompressedTransportActiveRef.current) {
+              } else if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
                 tm.fallbackPackets++;
               }
             }
@@ -3366,10 +3295,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       syncHistoryButtons();
     }
 
-    const isSingleSource = Boolean(
-      (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
-      (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
-    );
+    const isSingleSource = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
 
     let startX = logicalX;
     let startY = logicalY;
@@ -3395,13 +3321,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     strokeWireBytesRef.current = 0;
     strokeBatchCountRef.current = 0;
 
-    // Phase 5A: Initialize Parallel Canonical Stroke
+    // Initialize Canonical Stroke for Single-Source Pipeline
     canonicalStrokeRef.current = [{ x: startX, y: startY }];
-    provisionalTailRef.current = null;
-    lastCanonicalDirXRef.current = 0;
-    lastCanonicalDirYRef.current = 0;
-    lastCanonicalSegmentLenRef.current = 0;
-    canonicalTurnsRef.current = 0;
     
     // Increment local 16-bit monotonic strokeId
     currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
@@ -3440,11 +3361,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       lastNetworkSegmentLenRef.current = 0;
       consecutiveTurnsRef.current = 0;
       canonicalStrokeRef.current = [];
-      provisionalTailRef.current = null;
-      lastCanonicalDirXRef.current = 0;
-      lastCanonicalDirYRef.current = 0;
-      lastCanonicalSegmentLenRef.current = 0;
-      canonicalTurnsRef.current = 0;
       emitDrawCommand('draw_end', {
         tool: propsRef.current.tool,
         color: propsRef.current.color,
@@ -3500,7 +3416,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const isSingleSource = Boolean(
       (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
-      (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
+      (activeTool === 'pencil' || activeTool === 'eraser')
     );
 
     if (isSingleSource) {
@@ -3519,153 +3435,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       redrawTempLayer();
     } else {
-      // Phase 5A.2A: Online Canonical Processor (Extrema- & Corner-Preserving Decimator)
-      if (propsRef.current.isFreeDraw) {
-        const cPath = canonicalStrokeRef.current;
-        if (cPath.length > 0) {
-          const lastCanPt = cPath[cPath.length - 1];
-          const pTail = provisionalTailRef.current;
-
-          // 1. Preserve local extremum or corner apex before it gets bypassed
-          if (pTail) {
-            const v1x = pTail.x - lastCanPt.x;
-            const v1y = pTail.y - lastCanPt.y;
-            const d1 = Math.hypot(v1x, v1y);
-
-            const v2x = roundedX - pTail.x;
-            const v2y = roundedY - pTail.y;
-            const d2 = Math.hypot(v2x, v2y);
-
-            // Check if legs exceed minimum subpixel movement to filter touch jitter
-            if (d1 >= 0.7 && d2 >= 0.5) {
-              const dot = v1x * v2x + v1y * v2y;
-              const cosTurn = dot / (d1 * d2);
-
-              const isAngleTurn = cosTurn < CANONICAL_COS_TURN_THRESHOLD;
-              const isAxisReversal = (v1x * v2x < -0.01 && Math.abs(v1x) >= 0.6 && Math.abs(v2x) >= 0.5) ||
-                                    (v1y * v2y < -0.01 && Math.abs(v1y) >= 0.6 && Math.abs(v2y) >= 0.5);
-
-              if (isAngleTurn || isAxisReversal) {
-                // Commit pTail as a critical canonical corner / extremum point!
-                cPath.push({ x: pTail.x, y: pTail.y });
-                lastCanonicalDirXRef.current = v1x;
-                lastCanonicalDirYRef.current = v1y;
-                lastCanonicalSegmentLenRef.current = d1;
-                canonicalTurnsRef.current++;
-                provisionalTailRef.current = null;
-              }
-            }
-          }
-
-          // 2. Evaluate current point against the active anchor (either previous anchor or newly committed apex)
-          const currentAnchor = cPath[cPath.length - 1];
-          const cdx = roundedX - currentAnchor.x;
-          const cdy = roundedY - currentAnchor.y;
-          const dist = Math.hypot(cdx, cdy);
-
-          const minDist = canonicalTurnsRef.current > 0
-            ? CANONICAL_MIN_CONSECUTIVE_TURN_DIST
-            : CANONICAL_MIN_TURN_DIST;
-
-          let acceptCanonical = false;
-
-          if (dist >= CANONICAL_MAX_DIST) {
-            acceptCanonical = true;
-            canonicalTurnsRef.current = 0;
-          } else if (dist >= minDist) {
-            const prevLen = lastCanonicalSegmentLenRef.current;
-            if (prevLen > 0.1) {
-              const dot = (cdx * lastCanonicalDirXRef.current) + (cdy * lastCanonicalDirYRef.current);
-              const cosTheta = dot / (dist * prevLen);
-              acceptCanonical = cosTheta < CANONICAL_COS_TURN_THRESHOLD;
-              if (acceptCanonical) {
-                canonicalTurnsRef.current++;
-              }
-            } else {
-              acceptCanonical = dist >= CANONICAL_MIN_TURN_DIST;
-              canonicalTurnsRef.current = 0;
-            }
-          }
-
-          if (acceptCanonical) {
-            cPath.push({ x: roundedX, y: roundedY });
-            provisionalTailRef.current = null;
-            lastCanonicalDirXRef.current = cdx;
-            lastCanonicalDirYRef.current = cdy;
-            lastCanonicalSegmentLenRef.current = dist;
-          } else {
-            provisionalTailRef.current = { x: roundedX, y: roundedY };
-          }
-        } else {
-          cPath.push({ x: roundedX, y: roundedY });
-          provisionalTailRef.current = null;
-        }
-      }
-
       redrawTempLayer();
 
       const normX = roundedX / LOGICAL_WIDTH;
       const normY = roundedY / LOGICAL_HEIGHT;
 
-      // --- Network Path Separation (EXPERIMENTAL_NETWORK_SAMPLING_TEST) ---
-      const isNetworkSamplingActive = Boolean(
-        (propsRef.current.isFreeDraw || propsRef.current.enableNetworkSampling) &&
-        (EXPERIMENTAL_NETWORK_SAMPLING_TEST || propsRef.current.enableNetworkSampling)
-      );
-
-      let shouldSendToNetwork = true;
-      if (isNetworkSamplingActive) {
-        const lastNetPt = lastNetworkPointRef.current;
-        if (lastNetPt) {
-          const dx = roundedX - lastNetPt.x;
-          const dy = roundedY - lastNetPt.y;
-          const dist = Math.hypot(dx, dy);
-
-          const MIN_TURN_DIST = 1.6;
-          const MIN_CONSECUTIVE_TURN_DIST = 2.0;
-          const MAX_DIST = 3.6;
-          const COS_TURN_THRESHOLD = 0.82;
-
-          const minDistRequired =
-            consecutiveTurnsRef.current > 0
-              ? MIN_CONSECUTIVE_TURN_DIST
-              : MIN_TURN_DIST;
-
-          if (dist < minDistRequired) {
-            shouldSendToNetwork = false;
-          } else if (dist >= MAX_DIST) {
-            shouldSendToNetwork = true;
-            consecutiveTurnsRef.current = 0;
-          } else {
-            const prevLen = lastNetworkSegmentLenRef.current;
-            if (prevLen > 0.1) {
-              const dot =
-                (dx * lastNetworkDirXRef.current) +
-                (dy * lastNetworkDirYRef.current);
-              const cosTheta = dot / (dist * prevLen);
-              shouldSendToNetwork = cosTheta < COS_TURN_THRESHOLD;
-              if (shouldSendToNetwork) {
-                consecutiveTurnsRef.current++;
-              }
-            } else {
-              shouldSendToNetwork = dist >= 2.0;
-              consecutiveTurnsRef.current = 0;
-            }
-          }
-
-          if (shouldSendToNetwork) {
-            lastNetworkDirXRef.current = dx;
-            lastNetworkDirYRef.current = dy;
-            lastNetworkSegmentLenRef.current = dist;
-          }
-        }
-      }
-
-      if (shouldSendToNetwork) {
-        moveBatchRef.current.push({ x: normX, y: normY });
-        networkStrokePointsRef.current.push({ x: normX, y: normY });
-        lastNetworkPointRef.current = { x: roundedX, y: roundedY };
-      }
+      moveBatchRef.current.push({ x: normX, y: normY });
+      networkStrokePointsRef.current.push({ x: normX, y: normY });
+      lastNetworkPointRef.current = { x: roundedX, y: roundedY };
     }
 
     const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
@@ -3679,10 +3456,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           if (isContinuousMode) {
             drawerNetworkPointCountRef.current += moveBatchRef.current.length;
           }
-          const isCompressed = Boolean(
-            (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
-            (isCompressedTransportActiveRef.current || propsRef.current.enableCompressedTransport)
-          );
+          const isCompressed = isContinuousMode;
           emitDrawCommand(isCompressed ? 'draw_move_compressed' : 'draw_move', {
             tool: activeTool,
             color: activeColor,
@@ -3727,11 +3501,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           lastPt.y - lastNetworkPointRef.current.y
         );
         if (endDist >= 1.0) {
-          const isSingleSource = Boolean(
-            (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
-            (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
-          );
-          if (isSingleSource) {
+          if (isContinuousMode) {
             const normX = Math.round((lastPt.x / LOGICAL_WIDTH) * 10000) / 10000;
             const normY = Math.round((lastPt.y / LOGICAL_HEIGHT) * 10000) / 10000;
             const canX = normX * LOGICAL_WIDTH;
@@ -3754,10 +3524,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (isContinuousMode) {
           drawerNetworkPointCountRef.current += moveBatchRef.current.length;
         }
-        const isCompressed = Boolean(
-          (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
-          (isCompressedTransportActiveRef.current || propsRef.current.enableCompressedTransport)
-        );
+        const isCompressed = isContinuousMode;
         emitDrawCommand(isCompressed ? 'draw_move_compressed' : 'draw_move', {
           tool: activeTool,
           color: activeColor,
@@ -3781,31 +3548,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
           const isSingleSource = Boolean(
             (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
-            (isSingleSourceActiveRef.current || propsRef.current.enableSingleSourceCanonical)
+            (activeTool === 'pencil' || activeTool === 'eraser')
           );
 
           if (isSingleSource && canonicalStrokeRef.current.length > 0) {
             drawEntirePath(ctx, canonicalStrokeRef.current, activeTool, activeColor, activeWidth, activeOpacity);
           } else {
-            const isCanonicalActive = Boolean(
-              propsRef.current.isFreeDraw &&
-              (isCanonicalLocalTestActive || propsRef.current.enableCanonicalLocalTest)
-            );
-
-            if (isCanonicalActive && canonicalStrokeRef.current.length > 0) {
-              const cPath = canonicalStrokeRef.current;
-              if (provisionalTailRef.current) {
-                const lastPt = cPath[cPath.length - 1];
-                const pTail = provisionalTailRef.current;
-                const dEnd = Math.hypot(pTail.x - lastPt.x, pTail.y - lastPt.y);
-                if (dEnd >= 0.4) {
-                  cPath.push(pTail);
-                }
-              }
-              drawEntirePath(ctx, cPath, activeTool, activeColor, activeWidth, activeOpacity);
-            } else {
-              drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
-            }
+            drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
           }
 
           if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
@@ -3930,11 +3679,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     currentPathRef.current = [];
     networkStrokePointsRef.current = [];
     canonicalStrokeRef.current = [];
-    provisionalTailRef.current = null;
-    lastCanonicalDirXRef.current = 0;
-    lastCanonicalDirYRef.current = 0;
-    lastCanonicalSegmentLenRef.current = 0;
-    canonicalTurnsRef.current = 0;
     lastNetworkPointRef.current = null;
     lastNetworkDirXRef.current = 0;
     lastNetworkDirYRef.current = 0;
@@ -4545,78 +4289,34 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             </div>
 
             <div className="space-y-1.5">
-              {/* Single-Source Canonical Geometry Pipeline Toggle */}
+              {/* Single-Source Canonical Geometry Pipeline Status */}
               <div className="flex items-center justify-between bg-emerald-950/70 border border-emerald-400/40 p-1.5 rounded text-[10px]">
                 <div>
                   <span className="font-bold text-emerald-300">Single-Source Canonical:</span>
                   <div className="text-[8.5px] text-emerald-200/70">Unified Geometry Pipeline</div>
                 </div>
-                {propsRef.current.enableSingleSourceCanonical ? (
-                  <span className="px-2 py-0.5 rounded font-bold text-[9.5px] bg-emerald-600 text-white shadow-sm shadow-emerald-500/50">
-                    ON (Trial Active)
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => setIsSingleSourceActive(!isSingleSourceActive)}
-                    className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-colors text-[9.5px] ${
-                      isSingleSourceActive
-                        ? "bg-emerald-600 text-white shadow-sm shadow-emerald-500/50"
-                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                    }`}
-                  >
-                    {isSingleSourceActive ? "ON (Canonical)" : "OFF (Baseline)"}
-                  </button>
-                )}
+                <span className="px-2 py-0.5 rounded font-bold text-[9.5px] bg-emerald-600 text-white shadow-sm shadow-emerald-500/50">
+                  Permanent (Active)
+                </span>
               </div>
 
-              {/* Phase 5A: Local Canonical Prototype Toggle */}
-              <div className="flex items-center justify-between bg-indigo-950/70 border border-indigo-400/40 p-1.5 rounded text-[10px]">
-                <div>
-                  <span className="font-bold text-indigo-300">Phase 5A Canonical:</span>
-                  <div className="text-[8.5px] text-indigo-200/70">Local-only prototype</div>
-                </div>
-                <button
-                  onClick={() => setIsCanonicalLocalTestActive(!isCanonicalLocalTestActive)}
-                  className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-colors text-[9.5px] ${
-                    isCanonicalLocalTestActive
-                      ? "bg-emerald-600 text-white shadow-sm shadow-emerald-500/50"
-                      : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                  }`}
-                >
-                  {isCanonicalLocalTestActive ? "ON (Active)" : "OFF (Dense)"}
-                </button>
-              </div>
-
-              {/* ⚡ Experimental Compressed Transport (Type 13) Toggle */}
+              {/* ⚡ Compressed Transport (Type 13) Status */}
               <div className="flex items-center justify-between bg-purple-950/70 border border-purple-400/40 p-1.5 rounded text-[10px]">
                 <div>
                   <span className="font-bold text-purple-300">Compressed Transport:</span>
                   <div className="text-[8.5px] text-purple-200/70">Type 13 Real Network Transport</div>
                 </div>
-                {propsRef.current.enableCompressedTransport ? (
-                  <span className="px-2 py-0.5 rounded font-bold text-[9.5px] bg-purple-600 text-white shadow-sm shadow-purple-500/50">
-                    ON (Type 13 Trial)
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => setIsCompressedTransportActive(!isCompressedTransportActive)}
-                    className={`px-2 py-0.5 rounded font-bold cursor-pointer transition-colors text-[9.5px] ${
-                      isCompressedTransportActive
-                        ? "bg-purple-600 text-white shadow-sm shadow-purple-500/50"
-                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                    }`}
-                  >
-                    {isCompressedTransportActive ? "ON (Type 13)" : "OFF (Type 2)"}
-                  </button>
-                )}
+                <span className="px-2 py-0.5 rounded font-bold text-[9.5px] bg-purple-600 text-white shadow-sm shadow-purple-500/50">
+                  Permanent (Type 13)
+                </span>
               </div>
 
-              {/* Phase 5A: Points Ratio & Simulation Card */}
+              {/* Stroke Points Ratio & Simulation Card */}
               <div className="bg-white/5 p-1.5 rounded border border-white/5 space-y-1 text-[9.5px]">
                 <div className="font-bold text-amber-300 flex items-center justify-between">
                   <span>Stroke Points Ratio:</span>
-                  <span className={(isSingleSourceActive || propsRef.current.enableSingleSourceCanonical) ? "text-emerald-400 font-bold" : (isCanonicalLocalTestActive ? "text-indigo-400 font-bold" : "text-gray-400 font-normal")}>
-                    {(isSingleSourceActive || propsRef.current.enableSingleSourceCanonical) ? "Single Source" : (isCanonicalLocalTestActive ? "Live Canonical" : "Shadow Mode")}
+                  <span className="text-emerald-400 font-bold">
+                    Single Source
                   </span>
                 </div>
                 <div className="grid grid-cols-3 gap-1 text-[9px] bg-black/20 p-1 rounded text-center">
@@ -4792,12 +4492,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               <div className="bg-white/5 p-1.5 rounded border border-purple-500/30 space-y-1 text-[9.5px]">
                 <div className="font-bold text-purple-300 flex items-center justify-between">
                   <span>⚡ Compressed Transport (Type 13)</span>
-                  <span className={`text-[8px] px-1 py-0.5 rounded border ${
-                    (isCompressedTransportActive || propsRef.current.enableCompressedTransport)
-                      ? "bg-purple-900/60 text-purple-200 border-purple-400/40 font-bold"
-                      : "bg-gray-800 text-gray-400 border-gray-600 font-normal"
-                  }`}>
-                    {(isCompressedTransportActive || propsRef.current.enableCompressedTransport) ? "Active (Type 13)" : "Disabled (Type 2)"}
+                  <span className="text-[8px] px-1 py-0.5 rounded border bg-purple-900/60 text-purple-200 border-purple-400/40 font-bold">
+                    Active (Type 13)
                   </span>
                 </div>
 
@@ -4984,8 +4680,6 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.enableFixedDPR === nextProps.enableFixedDPR &&
     prevProps.enableCanvasAlpha === nextProps.enableCanvasAlpha &&
     prevProps.enableDestinationOutEraser === nextProps.enableDestinationOutEraser &&
-    prevProps.enableNetworkSampling === nextProps.enableNetworkSampling &&
-    prevProps.enableCanonicalLocalTest === nextProps.enableCanonicalLocalTest &&
     prevProps.deferredReset === nextProps.deferredReset &&
     prevProps.onHistoryStateChange === nextProps.onHistoryStateChange &&
     prevProps.onPipetteColorPicked === nextProps.onPipetteColorPicked &&
