@@ -440,6 +440,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     rawPoints?: { x: number; y: number }[];
     pendingQueue?: { x: number; y: number }[];
     repairPending?: boolean;
+    visualStatus?: 'LIVE' | 'DRAINING' | 'COMMITTED';
   }>>({});
   const spectatorPlaybackRafRef = useRef<number | null>(null);
 
@@ -455,6 +456,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     rawPoints?: { x: number; y: number }[];
   }
   const drainingStrokesRef = useRef<DrainingStroke[]>([]);
+
+  // 🎯 Visual Ownership Invariant: Pending commits queue & last committed tracking
+  interface PendingRemoteCommit {
+    instanceId: string;
+    strokeId: number;
+    tool: ToolType;
+    color: string;
+    width: number;
+    opacity: number;
+    path: { x: number; y: number }[];
+    rawPoints?: { x: number; y: number }[];
+  }
+  const pendingCommitsRef = useRef<PendingRemoteCommit[]>([]);
+  const lastCommittedStrokeIdRef = useRef<Record<string, number>>({});
 
   // Batch network throttle
   const moveBatchRef = useRef<{ x: number; y: number }[]>([]);
@@ -1668,6 +1683,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (cleanupTemporaryState) {
       cleanupTemporaryState();
+    } else {
+      delete activeSessionsRef.current[instId];
+      drainingStrokesRef.current = drainingStrokesRef.current.filter(
+        s => !(s.instanceId === instId && (strId === undefined || s.strokeId === strId))
+      );
     }
 
     // Synchronously clear & rebuild the temp layer for remaining active strokes within the same frame
@@ -1754,7 +1774,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             stroke.width,
             stroke.opacity,
             stroke.path,
-            stroke.rawPoints
+            stroke.rawPoints,
+            () => {
+              delete activeSessionsRef.current[stroke.instanceId];
+              drainingStrokesRef.current = drainingStrokesRef.current.filter(
+                s => !(s.instanceId === stroke.instanceId && s.strokeId === stroke.strokeId)
+              );
+            }
           );
         }
       }
@@ -1832,7 +1858,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     if (didFlushAnything) {
-      redrawTempLayer();
+      executeRedrawTempLayer();
       saveSnapshot();
       syncHistoryButtons();
     }
@@ -2623,7 +2649,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             // Normal Type 9 reception path (unaltered)
             delete activeSessionsRef.current[data.instanceId];
             drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
-            redrawTempLayer();
+            executeRedrawTempLayer();
 
             prevCommandsCountRef.current = localCommandsRef.current.length;
             localCommandsRef.current.push({
@@ -2643,6 +2669,42 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else if (event === 'draw_start') {
         const rx = data.x * LOGICAL_WIDTH;
         const ry = data.y * LOGICAL_HEIGHT;
+
+        // If there is any in-flight draining stroke for this drawer, finalize it immediately to permanent canvas
+        if (drainingStrokesRef.current.some(s => s.instanceId === data.instanceId)) {
+          const priorDraining = drainingStrokesRef.current.filter(s => s.instanceId === data.instanceId);
+          drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
+          for (let i = 0; i < priorDraining.length; i++) {
+            const stroke = priorDraining[i];
+            if (stroke.pendingQueue && stroke.pendingQueue.length > 0) {
+              while (stroke.pendingQueue.length > 0) {
+                stroke.path.push(stroke.pendingQueue.shift()!);
+              }
+            }
+            commitRemoteStrokeAtomically(
+              stroke.instanceId,
+              stroke.strokeId,
+              stroke.tool,
+              stroke.color,
+              stroke.width,
+              stroke.opacity,
+              stroke.path,
+              stroke.rawPoints,
+              () => {
+                delete activeSessionsRef.current[stroke.instanceId];
+                drainingStrokesRef.current = drainingStrokesRef.current.filter(
+                  s => !(s.instanceId === stroke.instanceId && s.strokeId === stroke.strokeId)
+                );
+              }
+            );
+          }
+        }
+
+        // Clean up any stale active session for this instanceId
+        if (activeSessionsRef.current[data.instanceId]) {
+          delete activeSessionsRef.current[data.instanceId];
+        }
+
         activeSessionsRef.current[data.instanceId] = {
           tool: remoteTool,
           color: remoteColor,
@@ -2752,61 +2814,26 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               delete activeSessionsRef.current[data.instanceId];
               triggerSpectatorPlayback();
             } else {
-              // Queue already fully drained: promote to permanent canvas atomically inside requestAnimationFrame
-              // The remote stroke remains visible on tempCanvas until the rAF callback executes!
-              const commitData = {
-                instId: data.instanceId,
-                strId: strokeId,
-                tool: session.tool,
-                color: session.color,
-                width: session.width,
-                opacity: session.opacity,
-                path: session.path,
-                rawPoints: session.rawPoints
-              };
-
-              requestAnimationFrame(() => {
-                const currentSession = activeSessionsRef.current[commitData.instId];
-                // If points arrived into pendingQueue before this rAF fired, route through smooth spectator draining
-                if (
-                  currentSession &&
-                  currentSession.strokeId === commitData.strId &&
-                  currentSession.pendingQueue &&
-                  currentSession.pendingQueue.length > 0
-                ) {
-                  drainingStrokesRef.current.push({
-                    instanceId: commitData.instId,
-                    strokeId: commitData.strId,
-                    tool: currentSession.tool,
-                    color: currentSession.color,
-                    width: currentSession.width,
-                    opacity: currentSession.opacity,
-                    path: currentSession.path,
-                    pendingQueue: currentSession.pendingQueue,
-                    rawPoints: currentSession.rawPoints
-                  });
-                  delete activeSessionsRef.current[commitData.instId];
-                  triggerSpectatorPlayback();
-                  return;
+              // Queue already fully drained: promote to permanent canvas atomically right now!
+              // Single dot strokes, slow drawing, or paused touches have nothing left to drain.
+              // Synchronous handover guarantees that the stroke is drawn on ctx and removed from tempCtx
+              // in the exact same JavaScript transaction before the browser can paint.
+              commitRemoteStrokeAtomically(
+                data.instanceId,
+                strokeId,
+                session.tool,
+                session.color,
+                session.width,
+                session.opacity,
+                session.path,
+                session.rawPoints,
+                () => {
+                  delete activeSessionsRef.current[data.instanceId];
+                  drainingStrokesRef.current = drainingStrokesRef.current.filter(
+                    s => !(s.instanceId === data.instanceId && s.strokeId === strokeId)
+                  );
                 }
-
-                commitRemoteStrokeAtomically(
-                  commitData.instId,
-                  commitData.strId,
-                  commitData.tool,
-                  commitData.color,
-                  commitData.width,
-                  commitData.opacity,
-                  commitData.path,
-                  commitData.rawPoints,
-                  () => {
-                    // Only delete from activeSessions if it still belongs to this committed stroke
-                    if (activeSessionsRef.current[commitData.instId]?.strokeId === commitData.strId) {
-                      delete activeSessionsRef.current[commitData.instId];
-                    }
-                  }
-                );
-              });
+              );
             }
           } else {
             // Count mismatch! Volatile packet loss occurred: request targeted canonical repair
@@ -2846,7 +2873,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
         delete activeSessionsRef.current[data.instanceId];
         drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
-        redrawTempLayer();
+        executeRedrawTempLayer();
       } else if (event === 'draw_end') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
@@ -2887,14 +2914,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             committed = true;
           }
         }
-        redrawTempLayer();
+        executeRedrawTempLayer();
         if (!data.isCancelled) {
           saveSnapshot();
         }
       } else if (event === 'draw_cancel') {
         delete activeSessionsRef.current[data.instanceId];
         drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
-        redrawTempLayer();
+        executeRedrawTempLayer();
       } else if (event === 'draw_clear') {
         invalidateCheckpoint();
         fastForwardFlushSpectatorQueue();
