@@ -547,6 +547,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const hasFreeDrawRedoCacheRef = useRef<boolean>(false);
   const hasFreeDrawPendingUndoCacheRef = useRef<boolean>(false);
 
+  // 🛡️ Single-Flight Undo Guard (Locks concurrent/queued repeat invocations during undo processing)
+  const undoInProgressRef = useRef<boolean>(false);
+
+  // 🛡️ Free Draw Single Undo Cache Historical Metadata (Guarantees cache authenticity before restoration)
+  interface FreeDrawUndoCacheMeta {
+    baseHistoryLength: number;
+    targetInstanceId: string;
+    targetStrokeId: number;
+    prevAnchorSignature: string | null;
+  }
+  const freeDrawUndoCacheMetaRef = useRef<FreeDrawUndoCacheMeta | null>(null);
+
   // Free Draw Cache Lifecycle Helpers
   const ensureCacheCanvas = (cacheRef: React.MutableRefObject<HTMLCanvasElement | null>, targetCanvas: HTMLCanvasElement) => {
     if (!cacheRef.current) {
@@ -596,7 +608,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     hasFreeDrawPendingUndoCacheRef.current = true;
   };
 
-  const commitFreeDrawPendingCache = () => {
+  const commitFreeDrawPendingCache = (targetInstId?: string, targetStrId?: number) => {
     const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
     if (!useCache) return;
     if (hasFreeDrawPendingUndoCacheRef.current && freeDrawPendingUndoCacheCanvasRef.current && canvasRef.current) {
@@ -606,10 +618,24 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       hasFreeDrawUndoCacheRef.current = true;
       hasFreeDrawPendingUndoCacheRef.current = false;
       hasFreeDrawRedoCacheRef.current = false;
+
+      if (targetInstId !== undefined && targetStrId !== undefined) {
+        const list = localCommandsRef.current;
+        const baseLen = list.length;
+        const prevSig = baseLen > 0 ? getCommandSignature(list[baseLen - 1]) : null;
+        freeDrawUndoCacheMetaRef.current = {
+          baseHistoryLength: baseLen,
+          targetInstanceId: targetInstId,
+          targetStrokeId: targetStrId,
+          prevAnchorSignature: prevSig
+        };
+      } else {
+        freeDrawUndoCacheMetaRef.current = null;
+      }
     }
   };
 
-  const captureDirectFreeDrawUndoCache = () => {
+  const captureDirectFreeDrawUndoCache = (targetInstId?: string, targetStrId?: number) => {
     const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
     if (!useCache) return;
     const canvas = canvasRef.current;
@@ -619,6 +645,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     hasFreeDrawUndoCacheRef.current = true;
     hasFreeDrawPendingUndoCacheRef.current = false;
     hasFreeDrawRedoCacheRef.current = false;
+
+    if (targetInstId !== undefined && targetStrId !== undefined) {
+      const list = localCommandsRef.current;
+      const baseLen = list.length;
+      const prevSig = baseLen > 0 ? getCommandSignature(list[baseLen - 1]) : null;
+      freeDrawUndoCacheMetaRef.current = {
+        baseHistoryLength: baseLen,
+        targetInstanceId: targetInstId,
+        targetStrokeId: targetStrId,
+        prevAnchorSignature: prevSig
+      };
+    } else {
+      freeDrawUndoCacheMetaRef.current = null;
+    }
   };
 
   const invalidateFreeDrawCaches = () => {
@@ -627,6 +667,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     hasFreeDrawUndoCacheRef.current = false;
     hasFreeDrawRedoCacheRef.current = false;
     hasFreeDrawPendingUndoCacheRef.current = false;
+    freeDrawUndoCacheMetaRef.current = null;
   };
 
   // 🛡️ Free Draw Sliding Checkpoint Refs & Helpers (Strategy C: Incremental Forward Baking)
@@ -1654,7 +1695,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!ctx) return;
 
     if (path.length > 0) {
-      captureDirectFreeDrawUndoCache();
+      captureDirectFreeDrawUndoCache(instId, strId);
       drawEntirePath(ctx, path, tool, color, width, opacity);
 
       // Record in localCommands history for viewer-side deterministic undo/redo sync
@@ -1826,7 +1867,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
         if (ctx && stroke.path.length > 0) {
-          captureDirectFreeDrawUndoCache();
+          captureDirectFreeDrawUndoCache(stroke.instanceId, stroke.strokeId);
           drawEntirePath(ctx, stroke.path, stroke.tool, stroke.color, stroke.width, stroke.opacity);
           const canonicalStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
             instanceId: stroke.instanceId,
@@ -2081,34 +2122,189 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     onHistoryStateChange?.(index, length);
   };
 
-  const executeUndo = (emit: boolean = true) => {
-    if (isResetPendingRef.current) {
-      flushPendingReset();
+  // ⚡ Fast-Path Undo Helper: Restores pre-target bitmap directly and replays ONLY subsequent commands (if any),
+  // completely bypassing full historical replay and eliminating redundant floodFill executions.
+  const tryFastPathUndo = (
+    targetInst: string,
+    targetStrId: number,
+    targetIndex: number,
+    list: any[]
+  ): boolean => {
+    const canvas = canvasRef.current;
+    const ctx = ctxRef.current;
+    if (!canvas || !ctx) return false;
+
+    // 1. Verify single-step cache exists
+    if (!hasFreeDrawUndoCacheRef.current || !freeDrawUndoCacheCanvasRef.current) {
+      return false;
     }
-    const list = localCommandsRef.current;
+    const meta = freeDrawUndoCacheMetaRef.current;
+    if (!meta) return false;
 
-    // 🎯 Free Draw & Experimental: Per-User Undo (Exact Target Identification)
-    // Searches backwards for the last completed stroke belonging to THIS player only (using their instanceId)
-    // and extracts its strokeId. Strictly NO-OP if no stroke belongs to this player.
-    if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
-      let targetIndex = -1;
-      let targetStrokeId: number | undefined;
+    // 2. Strict Metadata & Chain Integrity Verification:
+    // Ensure the cache was captured specifically for this target command at its exact historical offset
+    if (meta.targetInstanceId !== targetInst || meta.targetStrokeId !== targetStrId) {
+      return false;
+    }
+    if (meta.baseHistoryLength !== targetIndex) {
+      return false;
+    }
 
-      for (let i = list.length - 1; i >= 0; i--) {
-        const cmd = list[i];
-        if (cmd) {
-          const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
-          if (cmdInstId === instanceId && cmd.strokeId !== undefined) {
-            targetIndex = i;
-            targetStrokeId = cmd.strokeId;
-            break;
+    if (targetIndex > 0) {
+      const prevCmd = list[targetIndex - 1];
+      if (getCommandSignature(prevCmd) !== meta.prevAnchorSignature) {
+        return false;
+      }
+    }
+    const targetCmd = list[targetIndex];
+    if (getCommandSignature(targetCmd) !== `${targetInst}_${targetStrId}`) {
+      return false;
+    }
+
+    // 3. Fast-Path is 100% VALID:
+    // Invalidate checkpoint only if target was strictly before the checkpoint boundary
+    if (targetIndex < checkpointIndexRef.current) {
+      invalidateCheckpoint();
+    }
+
+    // Remove target command from list
+    const [removedCmd] = list.splice(targetIndex, 1);
+    if (removedCmd && targetInst === instanceId) {
+      localRedoStackRef.current.push(removedCmd);
+    }
+
+    // 4. Restore pre-target bitmap directly (1:1 pixel exact)
+    const restored = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
+    if (!restored) {
+      return false;
+    }
+
+    if (tempCtxRef.current) {
+      tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    }
+
+    // 5. Replay ONLY commands that occurred after target (if any)
+    if (targetIndex < list.length) {
+      isReplayingRef.current = true;
+      const replayPaths: Record<string, { x: number; y: number }[]> = {};
+      const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
+
+      for (let i = targetIndex; i < list.length; i++) {
+        applyReplayCommand(ctx, list[i], replayPaths, replaySessions);
+      }
+
+      Object.keys(replaySessions).forEach((instId) => {
+        try {
+          const session = replaySessions[instId];
+          const path = replayPaths[instId];
+          if (session && path && path.length > 0) {
+            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+            if (isShape) {
+              const startPt = path[0];
+              const lastPt = path[path.length - 1];
+              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+            } else {
+              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+            }
+          }
+        } catch (itemErr) {
+          // Ignore
+        }
+      });
+      isReplayingRef.current = false;
+    }
+
+    // 6. Invalidate single-step cache once consumed
+    hasFreeDrawUndoCacheRef.current = false;
+    hasFreeDrawRedoCacheRef.current = false;
+    freeDrawUndoCacheMetaRef.current = null;
+
+    saveSnapshot();
+    syncHistoryButtons();
+    return true;
+  };
+
+  const executeUndo = (emit: boolean = true) => {
+    // 🛡️ Single-Flight Undo Guard: Prevent double-undo on rapid presses or queued touch events
+    if (undoInProgressRef.current) {
+      return;
+    }
+    undoInProgressRef.current = true;
+
+    try {
+      if (isResetPendingRef.current) {
+        flushPendingReset();
+      }
+      const list = localCommandsRef.current;
+
+      // 🎯 Free Draw & Experimental: Per-User Undo (Exact Target Identification)
+      // Searches backwards for the last completed stroke belonging to THIS player only (using their instanceId)
+      // and extracts its strokeId. Strictly NO-OP if no stroke belongs to this player.
+      if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
+        let targetIndex = -1;
+        let targetStrokeId: number | undefined;
+
+        for (let i = list.length - 1; i >= 0; i--) {
+          const cmd = list[i];
+          if (cmd) {
+            const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
+            if (cmdInstId === instanceId && cmd.strokeId !== undefined) {
+              targetIndex = i;
+              targetStrokeId = cmd.strokeId;
+              break;
+            }
           }
         }
+
+        if (targetIndex === -1 || targetStrokeId === undefined) {
+          return; // NO-OP: No strokes found for this player
+        }
+
+        if (isDrawingRef.current) {
+          isDrawingRef.current = false;
+          moveBatchRef.current = [];
+          networkStrokePointsRef.current = [];
+        }
+        exitedOutsideWhilePointerDownRef.current = false;
+        lastOutsidePointerRef.current = null;
+
+        // 1. Filter local draining queue if present:
+        const beforeDrainingCount = drainingStrokesRef.current.length;
+        drainingStrokesRef.current = drainingStrokesRef.current.filter(
+          s => !(s.instanceId === instanceId && s.strokeId === targetStrokeId)
+        );
+        if (drainingStrokesRef.current.length !== beforeDrainingCount) {
+          redrawTempLayer();
+        }
+
+        // 2. Try Fast-Path Bitmap Undo:
+        const fastPathSucceeded = tryFastPathUndo(instanceId, targetStrokeId, targetIndex, list);
+
+        if (!fastPathSucceeded) {
+          // Fallback: Safe Mid-History Replay
+          if (targetIndex < checkpointIndexRef.current) {
+            invalidateCheckpoint();
+          }
+          const [removedCmd] = list.splice(targetIndex, 1);
+          if (removedCmd) {
+            localRedoStackRef.current.push(removedCmd);
+          }
+          hasFreeDrawUndoCacheRef.current = false;
+          hasFreeDrawRedoCacheRef.current = false;
+          freeDrawUndoCacheMetaRef.current = null;
+          replayFreeDrawHistorySafely(list);
+        }
+
+        // 3. Send authoritative draw_undo to server for room broadcast:
+        if (emit) {
+          emitDrawCommand('draw_undo', { strokeId: targetStrokeId });
+        }
+        return;
       }
 
-      if (targetIndex === -1 || targetStrokeId === undefined) {
-        return; // NO-OP: No strokes found for this player
-      }
+      // Normal / Competitive Rooms: Keep existing global undo behavior intact
+      const canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
+      if (!canUndo) return;
 
       if (isDrawingRef.current) {
         isDrawingRef.current = false;
@@ -2118,79 +2314,43 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       exitedOutsideWhilePointerDownRef.current = false;
       lastOutsidePointerRef.current = null;
 
-      // 1. Optimistic Local Removal:
-      if (targetIndex < checkpointIndexRef.current) {
-        invalidateCheckpoint();
-      }
-      const [removedCmd] = list.splice(targetIndex, 1);
-      if (removedCmd) {
-        localRedoStackRef.current.push(removedCmd);
+      const removed = list.pop();
+      if (removed) {
+        localRedoStackRef.current = [removed];
       }
 
-      // 2. Filter local draining queue if present:
-      const beforeDrainingCount = drainingStrokesRef.current.length;
-      drainingStrokesRef.current = drainingStrokesRef.current.filter(
-        s => !(s.instanceId === instanceId && s.strokeId === targetStrokeId)
-      );
-      if (drainingStrokesRef.current.length !== beforeDrainingCount) {
-        redrawTempLayer();
-      }
+      // 🛡️ Fast-Path: Single Previous-State Canvas Cache (For both local player and spectators)
+      let restoredViaCache = false;
+      const useCache = Boolean(propsRef.current.enableBitmapUndoCache);
+      if (useCache && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
+        const canvas = canvasRef.current;
+        const redoCanvas = ensureCacheCanvas(freeDrawRedoCacheCanvasRef, canvas);
+        copyCanvasContent(canvas, redoCanvas);
+        hasFreeDrawRedoCacheRef.current = true;
 
-      // 3. Instant 0ms Local Canvas Replay:
-      hasFreeDrawUndoCacheRef.current = false;
-      hasFreeDrawRedoCacheRef.current = false;
-      replayFreeDrawHistorySafely(list);
-
-      // 4. Send authoritative draw_undo to server for room broadcast:
-      if (emit) {
-        emitDrawCommand('draw_undo', { strokeId: targetStrokeId });
-      }
-      return;
-    }
-
-    // Normal / Competitive Rooms: Keep existing global undo behavior intact
-    const canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
-    if (!canUndo) return;
-
-    if (isDrawingRef.current) {
-      isDrawingRef.current = false;
-      moveBatchRef.current = [];
-      networkStrokePointsRef.current = [];
-    }
-    exitedOutsideWhilePointerDownRef.current = false;
-    lastOutsidePointerRef.current = null;
-
-    const removed = list.pop();
-    if (removed) {
-      localRedoStackRef.current = [removed];
-    }
-
-    // 🛡️ Fast-Path: Single Previous-State Canvas Cache (For both local player and spectators)
-    let restoredViaCache = false;
-    const useCache = Boolean(propsRef.current.enableBitmapUndoCache);
-    if (useCache && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const redoCanvas = ensureCacheCanvas(freeDrawRedoCacheCanvasRef, canvas);
-      copyCanvasContent(canvas, redoCanvas);
-      hasFreeDrawRedoCacheRef.current = true;
-
-      restoredViaCache = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
-      if (restoredViaCache) {
-        if (tempCtxRef.current) {
-          tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        restoredViaCache = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
+        if (restoredViaCache) {
+          if (tempCtxRef.current) {
+            tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+          }
+          hasFreeDrawUndoCacheRef.current = false;
         }
-        hasFreeDrawUndoCacheRef.current = false;
       }
-    }
 
-    if (!restoredViaCache) {
-      applySyncedHistory(list);
-    }
+      if (!restoredViaCache) {
+        applySyncedHistory(list);
+      }
 
-    syncHistoryButtons();
+      syncHistoryButtons();
 
-    if (emit) {
-      emitDrawCommand('draw_undo', {});
+      if (emit) {
+        emitDrawCommand('draw_undo', {});
+      }
+    } finally {
+      // Release lock on next frame to absorb any queued duplicate taps from same gesture
+      requestAnimationFrame(() => {
+        undoInProgressRef.current = false;
+      });
     }
   };
 
@@ -2610,7 +2770,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           y: pt.y * LOGICAL_HEIGHT
         }));
         if (scaledPoints.length > 0) {
-          captureDirectFreeDrawUndoCache();
+          captureDirectFreeDrawUndoCache(data.instanceId, data.strokeId);
           if (isShape && scaledPoints.length >= 2) {
             const startPt = scaledPoints[0];
             const lastPt = scaledPoints[scaledPoints.length - 1];
@@ -2895,7 +3055,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               delete activeSessionsRef.current[data.instanceId];
               triggerSpectatorPlayback();
             } else {
-              captureDirectFreeDrawUndoCache();
+              captureDirectFreeDrawUndoCache(data.instanceId, session.strokeId);
               drawEntirePath(ctx, session.path, session.tool, session.color, session.width, session.opacity);
               committed = true;
               delete activeSessionsRef.current[data.instanceId];
@@ -2905,7 +3065,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
 
           if (!data.isCancelled && isShape && data.startX !== undefined && data.startY !== undefined) {
-            captureDirectFreeDrawUndoCache();
+            captureDirectFreeDrawUndoCache(data.instanceId, session.strokeId);
             const sX = data.startX * LOGICAL_WIDTH;
             const sY = data.startY * LOGICAL_HEIGHT;
             const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
@@ -2936,7 +3096,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncHistoryButtons();
       } else if (event === 'draw_action') {
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          captureDirectFreeDrawUndoCache();
+          captureDirectFreeDrawUndoCache(data.instanceId, data.strokeId);
           floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
           prevCommandsCountRef.current = localCommandsRef.current.length;
           localCommandsRef.current.push({
@@ -2982,13 +3142,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           });
 
           if (index !== -1) {
-            if (index < checkpointIndexRef.current) {
-              invalidateCheckpoint();
+            const fastPathSucceeded = tryFastPathUndo(targetInst, targetStrId, index, list);
+            if (!fastPathSucceeded) {
+              if (index < checkpointIndexRef.current) {
+                invalidateCheckpoint();
+              }
+              list.splice(index, 1);
+              hasFreeDrawUndoCacheRef.current = false;
+              hasFreeDrawRedoCacheRef.current = false;
+              freeDrawUndoCacheMetaRef.current = null;
+              replayFreeDrawHistorySafely(list);
             }
-            list.splice(index, 1);
-            hasFreeDrawUndoCacheRef.current = false;
-            hasFreeDrawRedoCacheRef.current = false;
-            replayFreeDrawHistorySafely(list);
           }
         } else {
           // Normal Rooms: retain original behavior
@@ -3566,7 +3730,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         );
 
         if (hasVisibleContent) {
-          commitFreeDrawPendingCache();
+          commitFreeDrawPendingCache(instanceId, currentLocalStrokeIdRef.current);
 
           const isSingleSource = Boolean(
             (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
@@ -3722,12 +3886,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
 
-    commitFreeDrawPendingCache();
+    const shapeStrokeId = currentLocalStrokeIdRef.current;
+    commitFreeDrawPendingCache(instanceId, shapeStrokeId);
 
     // Draw shape to the primary canvas context (hardware-clipped naturally at canvas bounds)
     drawShape(ctx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity);
-
-    const shapeStrokeId = currentLocalStrokeIdRef.current;
 
     // Send complete stroke object for shapes (straight lines, rectangles, circles, etc.)
     const normalizedPoints = [
@@ -3815,18 +3978,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (activeTool === 'bucket') {
       const runBucket = () => {
-        captureDirectFreeDrawUndoCache();
+        // Increment monotonic strokeId for this Bucket operation
+        currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
+        if (currentLocalStrokeIdRef.current === 0) currentLocalStrokeIdRef.current = 1;
+        const thisBucketStrokeId = currentLocalStrokeIdRef.current;
+
+        captureDirectFreeDrawUndoCache(instanceId, thisBucketStrokeId);
         const sampledTarget = floodFill(ctx, x, y, activeColor, activeOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
         if (localRedoStackRef.current.length > 0) {
           localRedoStackRef.current = [];
           syncHistoryButtons();
         }
-
-        // Increment monotonic strokeId for this Bucket operation
-        currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
-        if (currentLocalStrokeIdRef.current === 0) currentLocalStrokeIdRef.current = 1;
-        const thisBucketStrokeId = currentLocalStrokeIdRef.current;
 
         emitDrawCommand('draw_action', {
           tool: 'bucket',
