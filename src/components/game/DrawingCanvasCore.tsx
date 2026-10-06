@@ -14,12 +14,6 @@ import {
   encodeBinaryDrawMessage,
   decodeBinaryDrawMessage
 } from '../../utils/drawBinaryHelper';
-import {
-  ShadowCompressionMetrics,
-  INITIAL_SHADOW_METRICS,
-  evaluateShadowCompression,
-  validateCanonicalCodec
-} from '../../utils/shadowCompression';
 
 // --- Constants ---
 /* 
@@ -319,17 +313,6 @@ export const SPLINE_CUSP_COS = 0.5;
 // Set to false to disable overlay and measurement completely without affecting runtime drawing
 export const ENABLE_FREE_DRAW_DIAGNOSTICS = true;
 
-export interface CanonicalMetrics {
-  lastCanonicalPoints: number;
-  lastNetworkPoints: number;
-  lastDensePoints: number;
-  totalCanonicalPoints: number;
-  totalNetworkPoints: number;
-  totalDensePoints: number;
-  strokesCount: number;
-  shadow?: ShadowCompressionMetrics;
-}
-
 export interface TransportMetrics {
   sentBatches: number;
   sentPoints: number;
@@ -348,17 +331,26 @@ export interface TransportMetrics {
   lastCommitMatch: boolean | null;
 }
 
+const createInitialTransportMetrics = (): TransportMetrics => ({
+  sentBatches: 0,
+  sentPoints: 0,
+  compressedWireBytes: 0,
+  baselineWireBytes: 0,
+  savedBytes: 0,
+  compressionPercent: 0,
+  receivedBatches: 0,
+  receivedPoints: 0,
+  decodeErrors: 0,
+  rejectedPackets: 0,
+  fallbackPackets: 0,
+  repairCount: 0,
+  serverPointCount: 0,
+  decodedPointCount: 0,
+  lastCommitMatch: null
+});
+
 interface DrawingDiagnosticStats {
-  drawMove: { count: number; points: number; bytes: number };
-  drawMoveCompressed: { count: number; points: number; bytes: number; baselineBytes: number };
-  drawStroke: { count: number; points: number; bytes: number };
-  drawStart: { count: number; bytes: number };
-  drawEnd: { count: number; bytes: number };
-  drawCommit: { count: number };
-  drawRepair: { count: number };
-  drawAbort: { count: number };
-  canonicalMetrics?: CanonicalMetrics;
-  transportMetrics?: TransportMetrics;
+  transportMetrics: TransportMetrics;
 }
 
 interface DrawingCanvasCoreProps {
@@ -437,18 +429,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // Single-Source Canonical Stroke Ref (Unified Geometry Stream for Free Draw & Experimental)
   const canonicalStrokeRef = useRef<{ x: number; y: number }[]>([]);
 
-  const canonicalStatsRef = useRef<CanonicalMetrics>({
-    lastCanonicalPoints: 0,
-    lastNetworkPoints: 0,
-    lastDensePoints: 0,
-    totalCanonicalPoints: 0,
-    totalNetworkPoints: 0,
-    totalDensePoints: 0,
-    strokesCount: 0,
-    shadow: { ...INITIAL_SHADOW_METRICS }
-  });
-  const strokeWireBytesRef = useRef<number>(0);
-  const strokeBatchCountRef = useRef<number>(0);
   const activeSessionsRef = useRef<Record<string, {
     tool: ToolType;
     color: string;
@@ -491,31 +471,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // 📊 Local Diagnostic Counters (Zero network, zero state updates per event)
   const drawingDiagRef = useRef<DrawingDiagnosticStats>({
-    drawMove: { count: 0, points: 0, bytes: 0 },
-    drawMoveCompressed: { count: 0, points: 0, bytes: 0, baselineBytes: 0 },
-    drawStroke: { count: 0, points: 0, bytes: 0 },
-    drawStart: { count: 0, bytes: 0 },
-    drawEnd: { count: 0, bytes: 0 },
-    drawCommit: { count: 0 },
-    drawRepair: { count: 0 },
-    drawAbort: { count: 0 },
-    transportMetrics: {
-      sentBatches: 0,
-      sentPoints: 0,
-      compressedWireBytes: 0,
-      baselineWireBytes: 0,
-      savedBytes: 0,
-      compressionPercent: 0,
-      receivedBatches: 0,
-      receivedPoints: 0,
-      decodeErrors: 0,
-      rejectedPackets: 0,
-      fallbackPackets: 0,
-      repairCount: 0,
-      serverPointCount: 0,
-      decodedPointCount: 0,
-      lastCommitMatch: null
-    }
+    transportMetrics: createInitialTransportMetrics()
   });
   const [diagSnapshot, setDiagSnapshot] = useState<DrawingDiagnosticStats | null>(null);
   const [isDiagnosticsVisible, setIsDiagnosticsVisible] = useState(false);
@@ -527,30 +483,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // Capture initial snapshot immediately on open
     setDiagSnapshot({
-      drawMove: { ...drawingDiagRef.current.drawMove },
-      drawMoveCompressed: { ...drawingDiagRef.current.drawMoveCompressed },
-      drawStroke: { ...drawingDiagRef.current.drawStroke },
-      drawStart: { ...drawingDiagRef.current.drawStart },
-      drawEnd: { ...drawingDiagRef.current.drawEnd },
-      drawCommit: { ...drawingDiagRef.current.drawCommit },
-      drawRepair: { ...drawingDiagRef.current.drawRepair },
-      drawAbort: { ...drawingDiagRef.current.drawAbort },
-      canonicalMetrics: { ...canonicalStatsRef.current },
-      transportMetrics: drawingDiagRef.current.transportMetrics ? { ...drawingDiagRef.current.transportMetrics } : undefined
+      transportMetrics: { ...drawingDiagRef.current.transportMetrics }
     });
 
     const interval = setInterval(() => {
       setDiagSnapshot({
-        drawMove: { ...drawingDiagRef.current.drawMove },
-        drawMoveCompressed: { ...drawingDiagRef.current.drawMoveCompressed },
-        drawStroke: { ...drawingDiagRef.current.drawStroke },
-        drawStart: { ...drawingDiagRef.current.drawStart },
-        drawEnd: { ...drawingDiagRef.current.drawEnd },
-        drawCommit: { ...drawingDiagRef.current.drawCommit },
-        drawRepair: { ...drawingDiagRef.current.drawRepair },
-        drawAbort: { ...drawingDiagRef.current.drawAbort },
-        canonicalMetrics: { ...canonicalStatsRef.current },
-        transportMetrics: drawingDiagRef.current.transportMetrics ? { ...drawingDiagRef.current.transportMetrics } : undefined
+        transportMetrics: { ...drawingDiagRef.current.transportMetrics }
       });
     }, 600);
     return () => clearInterval(interval);
@@ -558,52 +496,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const resetDiagnosticStats = () => {
     drawingDiagRef.current = {
-      drawMove: { count: 0, points: 0, bytes: 0 },
-      drawMoveCompressed: { count: 0, points: 0, bytes: 0, baselineBytes: 0 },
-      drawStroke: { count: 0, points: 0, bytes: 0 },
-      drawStart: { count: 0, bytes: 0 },
-      drawEnd: { count: 0, bytes: 0 },
-      drawCommit: { count: 0 },
-      drawRepair: { count: 0 },
-      drawAbort: { count: 0 },
-      transportMetrics: {
-        sentBatches: 0,
-        sentPoints: 0,
-        compressedWireBytes: 0,
-        baselineWireBytes: 0,
-        savedBytes: 0,
-        compressionPercent: 0,
-        receivedBatches: 0,
-        receivedPoints: 0,
-        decodeErrors: 0,
-        rejectedPackets: 0,
-        fallbackPackets: 0,
-        repairCount: 0,
-        serverPointCount: 0,
-        decodedPointCount: 0,
-        lastCommitMatch: null
-      }
-    };
-    canonicalStatsRef.current = {
-      lastCanonicalPoints: 0,
-      lastNetworkPoints: 0,
-      lastDensePoints: 0,
-      totalCanonicalPoints: 0,
-      totalNetworkPoints: 0,
-      totalDensePoints: 0,
-      strokesCount: 0,
-      shadow: { ...INITIAL_SHADOW_METRICS }
+      transportMetrics: createInitialTransportMetrics()
     };
     setDiagSnapshot({
-      drawMove: { ...drawingDiagRef.current.drawMove },
-      drawMoveCompressed: { ...drawingDiagRef.current.drawMoveCompressed },
-      drawStroke: { ...drawingDiagRef.current.drawStroke },
-      drawStart: { ...drawingDiagRef.current.drawStart },
-      drawEnd: { ...drawingDiagRef.current.drawEnd },
-      drawCommit: { ...drawingDiagRef.current.drawCommit },
-      drawRepair: { ...drawingDiagRef.current.drawRepair },
-      drawAbort: { ...drawingDiagRef.current.drawAbort },
-      canonicalMetrics: { ...canonicalStatsRef.current }
+      transportMetrics: createInitialTransportMetrics()
     });
   };
 
@@ -1465,42 +1361,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // 📊 Runtime Diagnostic: capture exact encoded ArrayBuffer byteLength locally
       if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental) && msg) {
         const byteLen = msg.byteLength;
-        if (event === 'draw_move' || event === 'draw_move_compressed') {
+        if (event === 'draw_move_compressed') {
           const pts = Array.isArray(payload.moves) ? payload.moves.length : 1;
           const baselineBytes = 10 + pts * 4;
-          if (event === 'draw_move_compressed') {
-            drawingDiagRef.current.drawMoveCompressed.count++;
-            drawingDiagRef.current.drawMoveCompressed.points += pts;
-            drawingDiagRef.current.drawMoveCompressed.bytes += byteLen;
-            drawingDiagRef.current.drawMoveCompressed.baselineBytes += baselineBytes;
-
-            if (drawingDiagRef.current.transportMetrics) {
-              const tm = drawingDiagRef.current.transportMetrics;
-              tm.sentBatches++;
-              tm.sentPoints += pts;
-              tm.compressedWireBytes += byteLen;
-              tm.baselineWireBytes += baselineBytes;
-              tm.savedBytes = Math.max(0, tm.baselineWireBytes - tm.compressedWireBytes);
-              tm.compressionPercent = tm.baselineWireBytes > 0 ? (tm.savedBytes / tm.baselineWireBytes) * 100 : 0;
-            }
-          } else {
-            drawingDiagRef.current.drawMove.count++;
-            drawingDiagRef.current.drawMove.points += pts;
-            drawingDiagRef.current.drawMove.bytes += byteLen;
-          }
-          strokeWireBytesRef.current += byteLen;
-          strokeBatchCountRef.current++;
-        } else if (event === 'draw_stroke') {
-          const pts = Array.isArray(payload.points) ? payload.points.length : 0;
-          drawingDiagRef.current.drawStroke.count++;
-          drawingDiagRef.current.drawStroke.points += pts;
-          drawingDiagRef.current.drawStroke.bytes += byteLen;
-        } else if (event === 'draw_start') {
-          drawingDiagRef.current.drawStart.count++;
-          drawingDiagRef.current.drawStart.bytes += byteLen;
-        } else if (event === 'draw_end') {
-          drawingDiagRef.current.drawEnd.count++;
-          drawingDiagRef.current.drawEnd.bytes += byteLen;
+          const tm = drawingDiagRef.current.transportMetrics;
+          tm.sentBatches++;
+          tm.sentPoints += pts;
+          tm.compressedWireBytes += byteLen;
+          tm.baselineWireBytes += baselineBytes;
+          tm.savedBytes = Math.max(0, tm.baselineWireBytes - tm.compressedWireBytes);
+          tm.compressionPercent = tm.baselineWireBytes > 0 ? (tm.savedBytes / tm.baselineWireBytes) * 100 : 0;
         }
       }
 
@@ -2753,15 +2623,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
       } else if (event === 'draw_commit') {
-        if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
-          drawingDiagRef.current.drawCommit.count++;
-        }
-
         const session = activeSessionsRef.current[data.instanceId];
         const serverPointCount = data.pointCount !== undefined ? data.pointCount : 0;
         const strokeId = data.strokeId !== undefined ? data.strokeId : 0;
 
-        if (drawingDiagRef.current.transportMetrics) {
+        if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
           const tm = drawingDiagRef.current.transportMetrics;
           const localCount = session ? (session.networkPointCount || 0) : 0;
           tm.serverPointCount = serverPointCount;
@@ -2832,10 +2698,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             // Count mismatch! Volatile packet loss occurred: request targeted canonical repair
             console.warn(`[DrawingCanvasCore] Packet mismatch for stroke ${strokeId}: localCount=${localCount} vs serverCount=${serverPointCount}. Requesting canonical repair...`);
             if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
-              drawingDiagRef.current.drawRepair.count++;
-              if (drawingDiagRef.current.transportMetrics) {
-                drawingDiagRef.current.transportMetrics.repairCount++;
-              }
+              drawingDiagRef.current.transportMetrics.repairCount++;
             }
             delete activeSessionsRef.current[data.instanceId];
             drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
@@ -2845,10 +2708,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       } else if (event === 'draw_abort') {
         if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
-          drawingDiagRef.current.drawAbort.count++;
-          if (drawingDiagRef.current.transportMetrics) {
-            drawingDiagRef.current.transportMetrics.rejectedPackets++;
-          }
+          drawingDiagRef.current.transportMetrics.rejectedPackets++;
         }
         delete activeSessionsRef.current[data.instanceId];
         drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
@@ -3317,10 +3177,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     consecutiveTurnsRef.current = 0;
     networkStrokePointsRef.current = [{ x: startNormX, y: startNormY }];
 
-    // Reset per-stroke wire byte accumulator for shadow compression evaluation
-    strokeWireBytesRef.current = 0;
-    strokeBatchCountRef.current = 0;
-
     // Initialize Canonical Stroke for Single-Source Pipeline
     canonicalStrokeRef.current = [{ x: startX, y: startY }];
     
@@ -3555,69 +3411,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             drawEntirePath(ctx, canonicalStrokeRef.current, activeTool, activeColor, activeWidth, activeOpacity);
           } else {
             drawEntirePath(ctx, currentPathRef.current, activeTool, activeColor, activeWidth, activeOpacity);
-          }
-
-          if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
-            const cCount = canonicalStrokeRef.current.length;
-            const netCount = networkStrokePointsRef.current.length;
-            const denseCount = currentPathRef.current.length;
-
-            canonicalStatsRef.current.lastCanonicalPoints = cCount;
-            canonicalStatsRef.current.lastNetworkPoints = netCount;
-            canonicalStatsRef.current.lastDensePoints = denseCount;
-            canonicalStatsRef.current.totalCanonicalPoints += cCount;
-            canonicalStatsRef.current.totalNetworkPoints += netCount;
-            canonicalStatsRef.current.totalDensePoints += denseCount;
-            canonicalStatsRef.current.strokesCount++;
-
-            // 🧪 Real Lossless Codec Execution & Validation over the Canonical Point Stream
-            // Input: ONLY the Canonical Point Stream ("Canonical Geometry in")
-            if (cCount > 0) {
-              const codecResult = validateCanonicalCodec(
-                canonicalStrokeRef.current,
-                LOGICAL_WIDTH,
-                LOGICAL_HEIGHT,
-                false,
-                strokeWireBytesRef.current,
-                strokeBatchCountRef.current
-              );
-
-              const prevShadow = canonicalStatsRef.current.shadow || { ...INITIAL_SHADOW_METRICS };
-              const newTotalPoints = prevShadow.totalPoints + codecResult.originalPointsCount;
-              const newTotalWireBytes = prevShadow.totalWireBytes + codecResult.currentWireBytes;
-              const newTotalShadowBytes = prevShadow.totalShadowBytes + codecResult.actualTotalBytes;
-              const newTotalActualEncoded = prevShadow.totalActualEncodedBytes + codecResult.actualEncodedBytes;
-              const newTotalSavedBytes = Math.max(0, newTotalWireBytes - newTotalShadowBytes);
-              const newTotalCompPercent = newTotalWireBytes > 0 ? (newTotalSavedBytes / newTotalWireBytes) * 100 : 0;
-              const newTotalWireBpt = newTotalPoints > 0 ? newTotalWireBytes / newTotalPoints : 0;
-              const newTotalShadowBpt = newTotalPoints > 0 ? newTotalShadowBytes / newTotalPoints : 0;
-              const newTotalPass = prevShadow.totalRoundTripPass && codecResult.pass;
-
-              canonicalStatsRef.current.shadow = {
-                lastPoints: codecResult.originalPointsCount,
-                lastWireBytes: codecResult.currentWireBytes,
-                lastShadowBytes: codecResult.actualTotalBytes,
-                lastSavedBytes: codecResult.savedBytes,
-                lastCompressionPercent: codecResult.compressionPercent,
-                lastWireBpt: codecResult.wireBytesPerPoint,
-                lastShadowBpt: codecResult.actualBytesPerPoint,
-
-                lastActualEncodedBytes: codecResult.actualEncodedBytes,
-                lastDecodedPoints: codecResult.decodedPointsCount,
-                lastRoundTripPass: codecResult.pass,
-                lastCodecDiff: codecResult.codecEstimatedDiff,
-
-                totalPoints: newTotalPoints,
-                totalWireBytes: newTotalWireBytes,
-                totalShadowBytes: newTotalShadowBytes,
-                totalActualEncodedBytes: newTotalActualEncoded,
-                totalSavedBytes: newTotalSavedBytes,
-                totalCompressionPercent: newTotalCompPercent,
-                totalWireBpt: newTotalWireBpt,
-                totalShadowBpt: newTotalShadowBpt,
-                totalRoundTripPass: newTotalPass
-              };
-            }
           }
 
           // In Free Draw / Experimental: DO NOT send duplicate client draw_stroke in successful path!
@@ -4265,15 +4058,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           </button>
         ) : (
           <div
-            className="absolute top-2 left-2 z-50 bg-[#120f2e]/95 text-white font-mono text-[10px] sm:text-[11px] p-2.5 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md max-w-[275px] max-h-[90vh] overflow-y-auto pointer-events-auto select-none"
+            className="absolute top-2 left-2 z-50 bg-[#120f2e]/95 text-white font-mono text-[10px] sm:text-[11px] p-2.5 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md w-[265px] max-h-[48vh] overflow-y-auto pointer-events-auto select-none"
             dir="ltr"
           >
-            <div className="flex items-center justify-between gap-2 border-b border-white/10 pb-1.5 mb-2">
-              <span className="font-bold text-amber-400">📊 Drawing Diagnostics</span>
-              <div className="flex items-center gap-1">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-1 border-b border-white/10 pb-1.5 mb-2">
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="font-bold text-amber-400 text-[10px]">📊 Drawing Diagnostics</span>
+                <span className="text-[8px] bg-purple-900/60 text-purple-200 border border-purple-400/30 px-1 py-0.5 rounded font-bold shrink-0">
+                  Canonical + Type 13
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={resetDiagnosticStats}
-                  className="text-white/60 hover:text-white text-[9.5px] px-1.5 py-0.5 bg-white/10 hover:bg-white/20 rounded cursor-pointer"
+                  className="text-white/60 hover:text-white text-[9px] px-1.5 py-0.5 bg-white/10 hover:bg-white/20 rounded cursor-pointer"
                   title="Reset counters"
                 >
                   Reset
@@ -4288,345 +4087,94 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               </div>
             </div>
 
-            <div className="space-y-1.5">
-              {/* Single-Source Canonical Geometry Pipeline Status */}
-              <div className="flex items-center justify-between bg-emerald-950/70 border border-emerald-400/40 p-1.5 rounded text-[10px]">
-                <div>
-                  <span className="font-bold text-emerald-300">Single-Source Canonical:</span>
-                  <div className="text-[8.5px] text-emerald-200/70">Unified Geometry Pipeline</div>
-                </div>
-                <span className="px-2 py-0.5 rounded font-bold text-[9.5px] bg-emerald-600 text-white shadow-sm shadow-emerald-500/50">
-                  Permanent (Active)
-                </span>
+            {/* Network & Transport Stats Card */}
+            <div className="bg-white/5 p-2 rounded-lg border border-white/10 space-y-2 text-[9.5px]">
+              <div className="font-bold text-sky-300 text-[10px] border-b border-white/10 pb-1">
+                Network &amp; Transport Stats
               </div>
 
-              {/* ⚡ Compressed Transport (Type 13) Status */}
-              <div className="flex items-center justify-between bg-purple-950/70 border border-purple-400/40 p-1.5 rounded text-[10px]">
-                <div>
-                  <span className="font-bold text-purple-300">Compressed Transport:</span>
-                  <div className="text-[8.5px] text-purple-200/70">Type 13 Real Network Transport</div>
+              <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                <div className="bg-black/30 p-1.5 rounded">
+                  <div className="text-gray-400">Sent Points</div>
+                  <div className="text-white font-mono font-bold text-[10px]">
+                    {(diagSnapshot?.transportMetrics?.sentPoints || 0).toLocaleString()}
+                  </div>
                 </div>
-                <span className="px-2 py-0.5 rounded font-bold text-[9.5px] bg-purple-600 text-white shadow-sm shadow-purple-500/50">
-                  Permanent (Type 13)
-                </span>
+                <div className="bg-black/30 p-1.5 rounded">
+                  <div className="text-gray-400">Compressed</div>
+                  <div className="text-purple-300 font-mono font-bold text-[10px]">
+                    {(diagSnapshot?.transportMetrics?.compressedWireBytes || 0).toLocaleString()} B
+                  </div>
+                </div>
+                <div className="bg-black/30 p-1.5 rounded">
+                  <div className="text-gray-400">Baseline</div>
+                  <div className="text-sky-300 font-mono font-bold text-[10px]">
+                    {(diagSnapshot?.transportMetrics?.baselineWireBytes || 0).toLocaleString()} B
+                  </div>
+                </div>
+                <div className="bg-black/30 p-1.5 rounded">
+                  <div className="text-gray-400">Saved</div>
+                  <div className="text-emerald-400 font-mono font-bold text-[10px]">
+                    {(diagSnapshot?.transportMetrics?.savedBytes || 0).toLocaleString()} B
+                    <span className="text-[8px] font-normal text-emerald-300 ml-0.5">
+                      ({(diagSnapshot?.transportMetrics?.compressionPercent || 0).toFixed(1)}%)
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {/* Stroke Points Ratio & Simulation Card */}
-              <div className="bg-white/5 p-1.5 rounded border border-white/5 space-y-1 text-[9.5px]">
-                <div className="font-bold text-amber-300 flex items-center justify-between">
-                  <span>Stroke Points Ratio:</span>
-                  <span className="text-emerald-400 font-bold">
-                    Single Source
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-1 text-[9px] bg-black/20 p-1 rounded text-center">
-                  <div>
-                    <div className="text-gray-400">Canonical</div>
-                    <div className="font-bold text-amber-300">{diagSnapshot?.canonicalMetrics?.lastCanonicalPoints || 0}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-400">Network</div>
-                    <div className="font-bold text-sky-300">{diagSnapshot?.canonicalMetrics?.lastNetworkPoints || 0}</div>
-                  </div>
-                  <div>
-                    <div className="text-gray-400">Dense</div>
-                    <div className="font-bold text-purple-300">{diagSnapshot?.canonicalMetrics?.lastDensePoints || 0}</div>
+              <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                <div className="bg-black/20 p-1.5 rounded">
+                  <div className="text-gray-400">Type 2 Fallback</div>
+                  <div className="text-amber-300 font-mono font-bold text-[10px]">
+                    {(diagSnapshot?.transportMetrics?.fallbackPackets || 0).toLocaleString()}
                   </div>
                 </div>
+                <div className="bg-black/20 p-1.5 rounded">
+                  <div className="text-gray-400">Decode Errors</div>
+                  <div className="text-emerald-400 font-mono font-bold text-[10px]">
+                    {(diagSnapshot?.transportMetrics?.decodeErrors || 0).toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-black/20 p-1.5 rounded">
+                  <div className="text-gray-400">Rejected Pkts</div>
+                  <div className="text-rose-400 font-mono font-bold text-[10px]">
+                    {(diagSnapshot?.transportMetrics?.rejectedPackets || 0).toLocaleString()}
+                  </div>
+                </div>
+                <div className="bg-black/20 p-1.5 rounded">
+                  <div className="text-gray-400">Repairs</div>
+                  <div className="text-white font-mono font-bold text-[10px]">
+                    {(diagSnapshot?.transportMetrics?.repairCount || 0).toLocaleString()}
+                  </div>
+                </div>
+              </div>
 
-                {/* Invariance Indicator & Point Diff */}
-                <div className="flex items-center justify-between text-[9px] bg-black/30 px-1.5 py-1 rounded">
-                  <span className="text-gray-300">Invariance Match:</span>
-                  {diagSnapshot?.canonicalMetrics && diagSnapshot.canonicalMetrics.lastCanonicalPoints > 0 ? (
-                    diagSnapshot.canonicalMetrics.lastCanonicalPoints === diagSnapshot.canonicalMetrics.lastNetworkPoints ? (
-                      <span className="text-emerald-400 font-bold flex items-center gap-0.5">
-                        ✓ MATCH (Diff: 0)
-                      </span>
-                    ) : (
-                      <span className="text-rose-400 font-bold">
-                        ✗ Diff: {Math.abs(diagSnapshot.canonicalMetrics.lastCanonicalPoints - diagSnapshot.canonicalMetrics.lastNetworkPoints)}
-                      </span>
-                    )
+              {/* Commit Verification */}
+              <div className="bg-black/40 p-1.5 rounded text-[9px] space-y-0.5">
+                <div className="text-gray-400 font-semibold">Commit Verification</div>
+                {diagSnapshot?.transportMetrics && diagSnapshot.transportMetrics.lastCommitMatch !== null ? (
+                  diagSnapshot.transportMetrics.lastCommitMatch ? (
+                    <div className="text-emerald-400 font-bold flex items-center gap-1">
+                      ✓ Decoded ({diagSnapshot.transportMetrics.decodedPointCount}) == Server ({diagSnapshot.transportMetrics.serverPointCount})
+                    </div>
                   ) : (
-                    <span className="text-gray-400">No stroke</span>
-                  )}
-                </div>
-
-                {/* Total Bytes */}
-                <div className="flex items-center justify-between text-[9px] px-0.5 text-gray-300">
-                  <span>Total Bytes:</span>
-                  <span className="text-emerald-400 font-bold">
-                    {((diagSnapshot?.drawMove.bytes || 0) + (diagSnapshot?.drawStroke.bytes || 0) + (diagSnapshot?.drawStart.bytes || 0) + (diagSnapshot?.drawEnd.bytes || 0))} B
-                  </span>
-                </div>
-                {diagSnapshot?.canonicalMetrics && diagSnapshot.canonicalMetrics.strokesCount > 0 && (
-                  <div className="space-y-0.5 text-[9px] border-t border-white/5 pt-1 text-gray-300">
-                    <div className="flex justify-between">
-                      <span>Can / Net Ratio:</span>
-                      <span className="font-bold text-white">
-                        {(diagSnapshot.canonicalMetrics.totalCanonicalPoints / Math.max(1, diagSnapshot.canonicalMetrics.totalNetworkPoints)).toFixed(2)}x
-                      </span>
+                    <div className="text-rose-400 font-bold flex items-center gap-1">
+                      ✗ Mismatch ({diagSnapshot.transportMetrics.decodedPointCount} vs {diagSnapshot.transportMetrics.serverPointCount})
                     </div>
-                    <div className="flex justify-between">
-                      <span>Can / Dense Ratio:</span>
-                      <span className="font-bold text-white">
-                        {(diagSnapshot.canonicalMetrics.totalCanonicalPoints / Math.max(1, diagSnapshot.canonicalMetrics.totalDensePoints)).toFixed(2)}x
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-amber-200/90">
-                      <span>Simulated 30m:</span>
-                      <span className="font-bold text-emerald-300">
-                        {((diagSnapshot.canonicalMetrics.totalCanonicalPoints / Math.max(1, diagSnapshot.canonicalMetrics.totalNetworkPoints)) * 173.88).toFixed(1)} KB
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 🧪 Lossless Codec Diagnostic Card (Delta + VarInt on Canonical Stream) */}
-              <div className="bg-white/5 p-1.5 rounded border border-purple-500/30 space-y-1 text-[9.5px]">
-                <div className="font-bold text-purple-300 flex items-center justify-between">
-                  <span>🧪 Lossless Codec (Delta + VarInt)</span>
-                  <span className="text-[8px] bg-purple-900/60 text-purple-200 px-1 py-0.5 rounded border border-purple-400/30">
-                    Real Codec
-                  </span>
-                </div>
-
-                {diagSnapshot?.canonicalMetrics?.shadow && diagSnapshot.canonicalMetrics.shadow.lastPoints > 0 ? (
-                  <div className="space-y-1.5 pt-0.5">
-                    {/* Round-Trip Integrity Badge */}
-                    <div className="flex items-center justify-between bg-black/40 px-1.5 py-1 rounded text-[9px]">
-                      <span className="text-gray-300">Round-Trip:</span>
-                      {diagSnapshot.canonicalMetrics.shadow.lastRoundTripPass ? (
-                        <span className="text-emerald-400 font-bold flex items-center gap-0.5">
-                          ✓ PASS (100% Lossless)
-                        </span>
-                      ) : (
-                        <span className="text-rose-400 font-bold">
-                          ✗ FAIL (Mismatch)
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Last Stroke */}
-                    <div className="bg-black/30 p-1.5 rounded border border-white/5 space-y-0.5">
-                      <div className="font-bold text-amber-200/90 text-[9px] flex justify-between">
-                        <span>Last Stroke:</span>
-                        <span className="text-white font-mono">
-                          {diagSnapshot.canonicalMetrics.shadow.lastPoints} pts (dec: {diagSnapshot.canonicalMetrics.shadow.lastDecodedPoints})
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[9px]">
-                        <span className="text-gray-400">Current Wire:</span>
-                        <span className="text-sky-300 font-mono font-bold">
-                          {diagSnapshot.canonicalMetrics.shadow.lastWireBytes.toLocaleString()} B
-                          <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.lastWireBpt.toFixed(1)} B/pt)</span>
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[9px]">
-                        <span className="text-gray-400">Actual Encoded:</span>
-                        <span className="text-purple-300 font-mono font-bold">
-                          {diagSnapshot.canonicalMetrics.shadow.lastActualEncodedBytes.toLocaleString()} B
-                          <span className="text-emerald-300/80 font-normal ml-1">(Diff: {diagSnapshot.canonicalMetrics.shadow.lastCodecDiff} B)</span>
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[9px]">
-                        <span className="text-gray-400">Total + Headers:</span>
-                        <span className="text-purple-200 font-mono font-bold">
-                          {diagSnapshot.canonicalMetrics.shadow.lastShadowBytes.toLocaleString()} B
-                          <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.lastShadowBpt.toFixed(1)} B/pt)</span>
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[9px] border-t border-white/10 pt-0.5">
-                        <span className="text-gray-300 font-semibold">Saved:</span>
-                        <span className="text-emerald-400 font-mono font-bold">
-                          {diagSnapshot.canonicalMetrics.shadow.lastSavedBytes.toLocaleString()} B
-                          <span className="ml-1 text-emerald-300 font-normal">({diagSnapshot.canonicalMetrics.shadow.lastCompressionPercent.toFixed(1)}%)</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Cumulative (All Strokes) */}
-                    <div className="bg-black/30 p-1.5 rounded border border-white/5 space-y-0.5">
-                      <div className="font-bold text-amber-200/90 text-[9px] flex justify-between">
-                        <span>Cumulative ({diagSnapshot.canonicalMetrics.strokesCount} {diagSnapshot.canonicalMetrics.strokesCount === 1 ? 'stroke' : 'strokes'}):</span>
-                        <span className="text-white font-mono">{diagSnapshot.canonicalMetrics.shadow.totalPoints.toLocaleString()} pts</span>
-                      </div>
-                      <div className="flex justify-between text-[9px]">
-                        <span className="text-gray-400">Current Wire:</span>
-                        <span className="text-sky-300 font-mono font-bold">
-                          {diagSnapshot.canonicalMetrics.shadow.totalWireBytes.toLocaleString()} B
-                          <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.totalWireBpt.toFixed(1)} B/pt)</span>
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[9px]">
-                        <span className="text-gray-400">Actual Encoded:</span>
-                        <span className="text-purple-300 font-mono font-bold">
-                          {diagSnapshot.canonicalMetrics.shadow.totalActualEncodedBytes.toLocaleString()} B
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[9px]">
-                        <span className="text-gray-400">Total + Headers:</span>
-                        <span className="text-purple-200 font-mono font-bold">
-                          {diagSnapshot.canonicalMetrics.shadow.totalShadowBytes.toLocaleString()} B
-                          <span className="text-gray-400 font-normal ml-1">({diagSnapshot.canonicalMetrics.shadow.totalShadowBpt.toFixed(1)} B/pt)</span>
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-[9px] border-t border-white/10 pt-0.5">
-                        <span className="text-gray-300 font-semibold">Total Saved:</span>
-                        <span className="text-emerald-400 font-mono font-bold">
-                          {diagSnapshot.canonicalMetrics.shadow.totalSavedBytes.toLocaleString()} B
-                          <span className="ml-1 text-emerald-300 font-normal">({diagSnapshot.canonicalMetrics.shadow.totalCompressionPercent.toFixed(1)}%)</span>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  )
                 ) : (
-                  <div className="text-[8.5px] text-gray-400 italic text-center py-1">
-                    Draw a stroke to view lossless codec validation
-                  </div>
+                  <div className="text-gray-400 italic">No commit yet</div>
                 )}
               </div>
-
-              {/* ⚡ Real Compressed Transport (Type 13) Card */}
-              <div className="bg-white/5 p-1.5 rounded border border-purple-500/30 space-y-1 text-[9.5px]">
-                <div className="font-bold text-purple-300 flex items-center justify-between">
-                  <span>⚡ Compressed Transport (Type 13)</span>
-                  <span className="text-[8px] px-1 py-0.5 rounded border bg-purple-900/60 text-purple-200 border-purple-400/40 font-bold">
-                    Active (Type 13)
-                  </span>
-                </div>
-
-                <div className="bg-black/30 p-1.5 rounded border border-white/5 space-y-0.5">
-                  <div className="flex justify-between text-[9px]">
-                    <span className="text-gray-400">Current Wire (Type 2):</span>
-                    <span className="text-sky-300 font-mono font-bold">
-                      {(diagSnapshot?.transportMetrics?.baselineWireBytes || 0).toLocaleString()} B
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[9px]">
-                    <span className="text-gray-400">Compressed Wire (Type 13):</span>
-                    <span className="text-purple-300 font-mono font-bold">
-                      {(diagSnapshot?.transportMetrics?.compressedWireBytes || 0).toLocaleString()} B
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-[9px] border-t border-white/10 pt-0.5">
-                    <span className="text-gray-300 font-semibold">Saved:</span>
-                    <span className="text-emerald-400 font-mono font-bold">
-                      {(diagSnapshot?.transportMetrics?.savedBytes || 0).toLocaleString()} B
-                      <span className="ml-1 text-emerald-300 font-normal">
-                        ({(diagSnapshot?.transportMetrics?.compressionPercent || 0).toFixed(1)}%)
-                      </span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-1 text-[8.5px] bg-black/20 p-1 rounded">
-                  <div>
-                    <span className="text-gray-400">Sent Points: </span>
-                    <span className="text-white font-mono font-bold">{diagSnapshot?.transportMetrics?.sentPoints || 0}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Recv Points: </span>
-                    <span className="text-white font-mono font-bold">{diagSnapshot?.transportMetrics?.receivedPoints || 0}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Type 2 Fallback: </span>
-                    <span className="text-amber-300 font-mono font-bold">{diagSnapshot?.transportMetrics?.fallbackPackets || 0}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Decode Errors: </span>
-                    <span className="text-emerald-400 font-mono font-bold">{diagSnapshot?.transportMetrics?.decodeErrors || 0}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Rejected Pkts: </span>
-                    <span className="text-rose-400 font-mono font-bold">{diagSnapshot?.transportMetrics?.rejectedPackets || 0}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400">Repair Count: </span>
-                    <span className="text-white font-mono font-bold">{diagSnapshot?.transportMetrics?.repairCount || 0}</span>
-                  </div>
-                </div>
-
-                {/* Commit Point Count Match */}
-                <div className="flex items-center justify-between text-[9px] bg-black/30 px-1.5 py-1 rounded">
-                  <span className="text-gray-300">Commit Verification:</span>
-                  {diagSnapshot?.transportMetrics && diagSnapshot.transportMetrics.lastCommitMatch !== null ? (
-                    diagSnapshot.transportMetrics.lastCommitMatch ? (
-                      <span className="text-emerald-400 font-bold flex items-center gap-0.5">
-                        ✓ Decoded ({diagSnapshot.transportMetrics.decodedPointCount}) == Server ({diagSnapshot.transportMetrics.serverPointCount})
-                      </span>
-                    ) : (
-                      <span className="text-rose-400 font-bold">
-                        ✗ Mismatch ({diagSnapshot.transportMetrics.decodedPointCount} vs {diagSnapshot.transportMetrics.serverPointCount})
-                      </span>
-                    )
-                  ) : (
-                    <span className="text-gray-400">No commit yet</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-white/5 p-1.5 rounded border border-white/5">
-                <div className="font-bold text-sky-300">draw_move:</div>
-                <div>events = <span className="text-white font-bold">{diagSnapshot?.drawMove.count || 0}</span></div>
-                <div>points = <span className="text-white font-bold">{diagSnapshot?.drawMove.points || 0}</span> (avg {(diagSnapshot?.drawMove.points / (diagSnapshot?.drawMove.count || 1)).toFixed(1)}/evt)</div>
-                <div>bytes = <span className="text-emerald-400 font-bold">{diagSnapshot?.drawMove.bytes || 0} B</span> (avg {(diagSnapshot?.drawMove.bytes / (diagSnapshot?.drawMove.count || 1)).toFixed(1)} B/evt)</div>
-              </div>
-
-              <div className="bg-white/5 p-1.5 rounded border border-white/5">
-                <div className="font-bold text-purple-300">draw_stroke:</div>
-                <div>count = <span className="text-white font-bold">{diagSnapshot?.drawStroke.count || 0}</span></div>
-                <div>points = <span className="text-white font-bold">{diagSnapshot?.drawStroke.points || 0}</span> (avg {(diagSnapshot?.drawStroke.points / (diagSnapshot?.drawStroke.count || 1)).toFixed(1)}/evt)</div>
-                <div>bytes = <span className="text-emerald-400 font-bold">{diagSnapshot?.drawStroke.bytes || 0} B</span> (avg {(diagSnapshot?.drawStroke.bytes / (diagSnapshot?.drawStroke.count || 1)).toFixed(1)} B/evt)</div>
-              </div>
-
-              <div className="bg-white/5 p-1.5 rounded border border-white/5 grid grid-cols-2 gap-1 text-[9.5px]">
-                <div>
-                  <div className="font-bold text-blue-300">draw_start:</div>
-                  <div>count = {diagSnapshot?.drawStart.count || 0}</div>
-                  <div>bytes = {diagSnapshot?.drawStart.bytes || 0} B</div>
-                </div>
-                <div>
-                  <div className="font-bold text-pink-300">draw_end:</div>
-                  <div>count = {diagSnapshot?.drawEnd.count || 0}</div>
-                  <div>bytes = {diagSnapshot?.drawEnd.bytes || 0} B</div>
-                </div>
-              </div>
-
-              {(() => {
-                const totalBytes =
-                  (diagSnapshot?.drawMove.bytes || 0) +
-                  (diagSnapshot?.drawMoveCompressed?.bytes || 0) +
-                  (diagSnapshot?.drawStroke.bytes || 0) +
-                  (diagSnapshot?.drawStart.bytes || 0) +
-                  (diagSnapshot?.drawEnd.bytes || 0);
-                const totalEvents =
-                  (diagSnapshot?.drawMove.count || 0) +
-                  (diagSnapshot?.drawMoveCompressed?.count || 0) +
-                  (diagSnapshot?.drawStroke.count || 0) +
-                  (diagSnapshot?.drawStart.count || 0) +
-                  (diagSnapshot?.drawEnd.count || 0);
-                return (
-                  <div className="bg-emerald-950/60 border border-emerald-500/30 p-1.5 rounded text-[10px]">
-                    <div className="text-emerald-300 font-bold">TOTAL APP BYTES:</div>
-                    <div className="text-base font-black text-emerald-400">
-                      {(totalBytes / 1024).toFixed(2)} KB <span className="text-xs font-normal text-emerald-300">({totalBytes.toLocaleString()} B)</span>
-                    </div>
-                    <div className="text-emerald-200/70 text-[9px] mt-0.5">
-                      Total Events: {totalEvents}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <button
-                onClick={resetDiagnosticStats}
-                className="w-full mt-1.5 py-1 bg-red-600/80 hover:bg-red-500 text-white rounded font-bold text-center active:scale-95 transition-transform cursor-pointer"
-              >
-                Reset Stats
-              </button>
             </div>
+
+            <button
+              onClick={resetDiagnosticStats}
+              className="w-full mt-2 py-1 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white/80 hover:text-white rounded text-[9.5px] font-bold text-center transition-colors cursor-pointer"
+            >
+              Reset
+            </button>
           </div>
         )
       )}
