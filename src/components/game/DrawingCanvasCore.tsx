@@ -439,6 +439,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     networkPointCount?: number;
     rawPoints?: { x: number; y: number }[];
     pendingQueue?: { x: number; y: number }[];
+    repairPending?: boolean;
   }>>({});
   const spectatorPlaybackRafRef = useRef<number | null>(null);
 
@@ -2524,6 +2525,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (!ctx || !tempCtx) return;
 
       if (event === 'draw_stroke') {
+        const session = activeSessionsRef.current[data.instanceId];
+        const isRepairPending = Boolean(
+          session &&
+          session.repairPending &&
+          (data.strokeId === undefined || session.strokeId === data.strokeId)
+        );
+
         const isShape = remoteTool !== 'pencil' && remoteTool !== 'eraser';
         const scaledPoints = (data.points || []).map((pt: any) => ({
           x: pt.x * LOGICAL_WIDTH,
@@ -2538,24 +2546,54 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           } else {
             drawEntirePath(ctx, scaledPoints, remoteTool, remoteColor, remoteWidth, remoteOpacity);
           }
-          // Solidify the line and wipe the temporary transient trace to prevent artifacts
-          delete activeSessionsRef.current[data.instanceId];
-          drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
-          redrawTempLayer();
 
-          prevCommandsCountRef.current = localCommandsRef.current.length;
-          localCommandsRef.current.push({
-            event: 'draw_binary',
-            data: raw,
-            instanceId: data.instanceId,
-            strokeId: data.strokeId
-          });
-          advanceCheckpointIncremental();
-          if (!propsRef.current.isFreeDraw) {
-            localRedoStackRef.current = [];
+          if (isRepairPending) {
+            // 🎯 Repair Resolution Path (Seamless authoritative hand-off without visual gap)
+            // 1. Authoritative canonical stroke has just been drawn directly onto ctx above.
+            // 2. Remove the temporary session only after permanent ctx draw succeeds.
+            delete activeSessionsRef.current[data.instanceId];
+            // 3. Remove any drainingStrokesRef for this instanceId and strokeId.
+            drainingStrokesRef.current = drainingStrokesRef.current.filter(
+              s => !(s.instanceId === data.instanceId && (data.strokeId === undefined || s.strokeId === data.strokeId))
+            );
+            // 4. Record Type 9 into localCommandsRef history for deterministic undo/redo
+            prevCommandsCountRef.current = localCommandsRef.current.length;
+            localCommandsRef.current.push({
+              event: 'draw_binary',
+              data: raw,
+              instanceId: data.instanceId,
+              strokeId: data.strokeId
+            });
+            // 5. Update Undo/Redo/checkpoint/historical bookkeeping identically to normal path
+            advanceCheckpointIncremental();
+            if (!propsRef.current.isFreeDraw) {
+              localRedoStackRef.current = [];
+            }
+            saveSnapshot();
+            syncHistoryButtons();
+            // 6. Redraw temp layer ONLY after transient state has been removed
+            executeRedrawTempLayer();
+            redrawTempLayer();
+          } else {
+            // Normal Type 9 reception path (unaltered)
+            delete activeSessionsRef.current[data.instanceId];
+            drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
+            redrawTempLayer();
+
+            prevCommandsCountRef.current = localCommandsRef.current.length;
+            localCommandsRef.current.push({
+              event: 'draw_binary',
+              data: raw,
+              instanceId: data.instanceId,
+              strokeId: data.strokeId
+            });
+            advanceCheckpointIncremental();
+            if (!propsRef.current.isFreeDraw) {
+              localRedoStackRef.current = [];
+            }
+            saveSnapshot();
+            syncHistoryButtons();
           }
-          saveSnapshot();
-          syncHistoryButtons();
         }
       } else if (event === 'draw_start') {
         const rx = data.x * LOGICAL_WIDTH;
@@ -2569,7 +2607,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           strokeId: data.strokeId || 0,
           networkPointCount: 1, // Includes p0
           rawPoints: [{ x: data.x, y: data.y }],
-          pendingQueue: []
+          pendingQueue: [],
+          repairPending: false
         };
         redrawTempLayer();
       } else if (event === 'draw_move') {
@@ -2583,8 +2622,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             session.networkPointCount = (session.networkPointCount || 0) + 1;
 
             if (isContinuousStream) {
-              if (!session.pendingQueue) session.pendingQueue = [];
-              session.pendingQueue.push({ x: mx, y: my });
+              if (session.repairPending) {
+                // If repair is pending, append directly to visible path so spectator immediately sees any late points
+                session.path.push({ x: mx, y: my });
+              } else {
+                if (!session.pendingQueue) session.pendingQueue = [];
+                session.pendingQueue.push({ x: mx, y: my });
+              }
             } else {
               session.path.push({ x: mx, y: my });
             }
@@ -2616,7 +2660,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             }
           }
 
-          if (isContinuousStream) {
+          if (isContinuousStream && !session.repairPending) {
             triggerSpectatorPlayback();
           } else {
             redrawTempLayer();
@@ -2696,13 +2740,33 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             }
           } else {
             // Count mismatch! Volatile packet loss occurred: request targeted canonical repair
-            console.warn(`[DrawingCanvasCore] Packet mismatch for stroke ${strokeId}: localCount=${localCount} vs serverCount=${serverPointCount}. Requesting canonical repair...`);
+            // Avoid duplicate repair requests if already pending for this stroke
+            if (session.repairPending && session.strokeId === strokeId) {
+              return;
+            }
+
             if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
               drawingDiagRef.current.transportMetrics.repairCount++;
             }
-            delete activeSessionsRef.current[data.instanceId];
-            drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
+
+            // Mark session as repair pending
+            session.repairPending = true;
+            session.strokeId = strokeId;
+
+            // Immediately flush any remaining points in pendingQueue into session.path
+            // so spectator is viewing the fullest available trace while awaiting repair
+            if (session.pendingQueue && session.pendingQueue.length > 0) {
+              while (session.pendingQueue.length > 0) {
+                session.path.push(session.pendingQueue.shift()!);
+              }
+            }
+
+            // CRITICAL: DO NOT DELETE activeSessionsRef.current[data.instanceId]
+            // DO NOT clear drainingStrokesRef
+            // Keep current visible path intact on temp canvas
             redrawTempLayer();
+
+            // Request targeted canonical repair once
             socket.emit('draw_repair_req', { instId: data.instanceId, strokeId });
           }
         }
@@ -2803,7 +2867,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           drainingStrokesRef.current = drainingStrokesRef.current.filter(
             s => !(s.instanceId === targetInst && s.strokeId === targetStrId)
           );
-          if (drainingStrokesRef.current.length !== beforeDrainingCount) {
+          let sessionDeleted = false;
+          if (activeSessionsRef.current[targetInst] && activeSessionsRef.current[targetInst].strokeId === targetStrId) {
+            delete activeSessionsRef.current[targetInst];
+            sessionDeleted = true;
+          }
+          if (drainingStrokesRef.current.length !== beforeDrainingCount || sessionDeleted) {
             redrawTempLayer();
           }
 
