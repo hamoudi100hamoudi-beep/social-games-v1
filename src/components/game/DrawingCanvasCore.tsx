@@ -3038,18 +3038,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncHistoryButtons();
       } else if (event === 'draw_action') {
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          const drainingBefore = drainingStrokesRef.current.length;
-          const historyBefore = localCommandsRef.current.length;
-          const activeUncommitted = Object.keys(activeSessionsRef.current).length;
-
           // 🛡️ Remote Raster/History Transaction Barrier:
           // Synchronize committed draining strokes to ctx & localCommandsRef BEFORE Bucket
-          let drainingFlushed = 0;
           if (propsRef.current.isFreeDraw) {
-            drainingFlushed = flushCommittedDrainingStrokesBarrier();
+            flushCommittedDrainingStrokesBarrier();
           }
-
-          const historyAfterBarrier = localCommandsRef.current.length;
 
           // 1. Capture direct undo cache (guaranteed to include all preceding committed strokes on ctx)
           captureDirectFreeDrawUndoCache(data.instanceId, data.strokeId);
