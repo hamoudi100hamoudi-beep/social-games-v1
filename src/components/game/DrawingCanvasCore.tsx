@@ -309,50 +309,6 @@ export interface DrawingCanvasCoreRef {
 // Turn angle threshold for cusp clamping (~60 degrees) in Hybrid Spline Renderer
 export const SPLINE_CUSP_COS = 0.5;
 
-// 📊 TEMPORARY RUNTIME DIAGNOSTICS (Free Draw Application Drawing Payload)
-// Set to false to disable overlay and measurement completely without affecting runtime drawing
-export const ENABLE_FREE_DRAW_DIAGNOSTICS = true;
-
-export interface TransportMetrics {
-  sentBatches: number;
-  sentPoints: number;
-  compressedWireBytes: number;
-  baselineWireBytes: number;
-  savedBytes: number;
-  compressionPercent: number;
-  receivedBatches: number;
-  receivedPoints: number;
-  decodeErrors: number;
-  rejectedPackets: number;
-  fallbackPackets: number;
-  repairCount: number;
-  serverPointCount: number;
-  decodedPointCount: number;
-  lastCommitMatch: boolean | null;
-}
-
-const createInitialTransportMetrics = (): TransportMetrics => ({
-  sentBatches: 0,
-  sentPoints: 0,
-  compressedWireBytes: 0,
-  baselineWireBytes: 0,
-  savedBytes: 0,
-  compressionPercent: 0,
-  receivedBatches: 0,
-  receivedPoints: 0,
-  decodeErrors: 0,
-  rejectedPackets: 0,
-  fallbackPackets: 0,
-  repairCount: 0,
-  serverPointCount: 0,
-  decodedPointCount: 0,
-  lastCommitMatch: null
-});
-
-interface DrawingDiagnosticStats {
-  transportMetrics: TransportMetrics;
-}
-
 interface DrawingCanvasCoreProps {
   readOnly?: boolean;
   tool: ToolType;
@@ -484,40 +440,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const throttleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const bucketTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const preventBucketRef = useRef(false);
-
-  // 📊 Local Diagnostic Counters (Zero network, zero state updates per event)
-  const drawingDiagRef = useRef<DrawingDiagnosticStats>({
-    transportMetrics: createInitialTransportMetrics()
-  });
-  const [diagSnapshot, setDiagSnapshot] = useState<DrawingDiagnosticStats | null>(null);
-  const [isDiagnosticsVisible, setIsDiagnosticsVisible] = useState(false);
-  // 📊 Lazy Diagnostics: Only active and polling when explicitly opened by user
-  useEffect(() => {
-    if (!ENABLE_FREE_DRAW_DIAGNOSTICS || (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) || !isDiagnosticsVisible) {
-      return;
-    }
-
-    // Capture initial snapshot immediately on open
-    setDiagSnapshot({
-      transportMetrics: { ...drawingDiagRef.current.transportMetrics }
-    });
-
-    const interval = setInterval(() => {
-      setDiagSnapshot({
-        transportMetrics: { ...drawingDiagRef.current.transportMetrics }
-      });
-    }, 600);
-    return () => clearInterval(interval);
-  }, [isDiagnosticsVisible]);
-
-  const resetDiagnosticStats = () => {
-    drawingDiagRef.current = {
-      transportMetrics: createInitialTransportMetrics()
-    };
-    setDiagSnapshot({
-      transportMetrics: createInitialTransportMetrics()
-    });
-  };
 
   useEffect(() => {
     return () => {
@@ -1414,22 +1336,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const emitDrawCommand = (event: string, payload: any) => {
     if (socket?.connected) {
       const msg = encodeBinaryDrawMessage(event, { ...payload, instanceId });
-
-      // 📊 Runtime Diagnostic: capture exact encoded ArrayBuffer byteLength locally
-      if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental) && msg) {
-        const byteLen = msg.byteLength;
-        if (event === 'draw_move_compressed') {
-          const pts = Array.isArray(payload.moves) ? payload.moves.length : 1;
-          const baselineBytes = 10 + pts * 4;
-          const tm = drawingDiagRef.current.transportMetrics;
-          tm.sentBatches++;
-          tm.sentPoints += pts;
-          tm.compressedWireBytes += byteLen;
-          tm.baselineWireBytes += baselineBytes;
-          tm.savedBytes = Math.max(0, tm.baselineWireBytes - tm.compressedWireBytes);
-          tm.compressionPercent = tm.baselineWireBytes > 0 ? (tm.savedBytes / tm.baselineWireBytes) * 100 : 0;
-        }
-      }
 
       if ((event === 'draw_move' || event === 'draw_move_compressed') && socket.volatile) {
         socket.volatile.emit('draw_binary', msg);
@@ -2808,14 +2714,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         flushPendingReset();
       }
       const decoded = decodeBinaryDrawMessage(raw);
-      if (!decoded) {
-        if (raw && (raw[0] === 13 || (raw instanceof ArrayBuffer && new Uint8Array(raw)[0] === 13))) {
-          if (drawingDiagRef.current.transportMetrics) {
-            drawingDiagRef.current.transportMetrics.decodeErrors++;
-          }
-        }
-        return;
-      }
+      if (!decoded) return;
       const { event, data } = decoded;
       if (!data) return;
 
@@ -2833,26 +2732,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (!ctx || !tempCtx) return;
 
       if (event === 'draw_stroke') {
-        if (data.instanceId !== instanceId) {
-          const last5 = localCommandsRef.current.slice(-5).map((c: any) => ({
-            instanceId: c.instanceId,
-            strokeId: c.strokeId,
-            event: c.event
-          }));
-          console.log('[DIAG_TRACE] draw_stroke', JSON.stringify({
-            time: performance.now(),
-            isFreeDraw: Boolean(propsRef.current.isFreeDraw),
-            isExperimental: Boolean(propsRef.current.isExperimental),
-            instanceId: data.instanceId,
-            strokeId: data.strokeId,
-            tool: remoteTool,
-            pointsCount: (data.points || []).length,
-            hasActiveSession: Boolean(activeSessionsRef.current[data.instanceId]),
-            drainingCount: drainingStrokesRef.current.length,
-            last5History: last5
-          }));
-        }
-
         const session = activeSessionsRef.current[data.instanceId];
         const isRepairPending = Boolean(
           session &&
@@ -3001,26 +2880,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             data.moves.forEach((m: any) => {
               handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT, m.x, m.y);
             });
-            if (drawingDiagRef.current.transportMetrics) {
-              const tm = drawingDiagRef.current.transportMetrics;
-              if (data.isCompressed) {
-                tm.receivedBatches++;
-                tm.receivedPoints += data.moves.length;
-              } else if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
-                tm.fallbackPackets++;
-              }
-            }
           } else if (data.x !== undefined && data.y !== undefined) {
             handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, data.x, data.y);
-            if (drawingDiagRef.current.transportMetrics) {
-              const tm = drawingDiagRef.current.transportMetrics;
-              if (data.isCompressed) {
-                tm.receivedBatches++;
-                tm.receivedPoints += 1;
-              } else if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
-                tm.fallbackPackets++;
-              }
-            }
           }
 
           if (isContinuousStream && !session.repairPending) {
@@ -3033,14 +2894,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const session = activeSessionsRef.current[data.instanceId];
         const serverPointCount = data.pointCount !== undefined ? data.pointCount : 0;
         const strokeId = data.strokeId !== undefined ? data.strokeId : 0;
-
-        if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
-          const tm = drawingDiagRef.current.transportMetrics;
-          const localCount = session ? (session.networkPointCount || 0) : 0;
-          tm.serverPointCount = serverPointCount;
-          tm.decodedPointCount = localCount;
-          tm.lastCommitMatch = localCount === serverPointCount;
-        }
 
         // If this commit belongs to the DRAWER themselves:
         if (data.instanceId === instanceId) {
@@ -3098,10 +2951,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               return;
             }
 
-            if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
-              drawingDiagRef.current.transportMetrics.repairCount++;
-            }
-
             // Mark session as repair pending
             session.repairPending = true;
             session.strokeId = strokeId;
@@ -3124,9 +2973,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
       } else if (event === 'draw_abort') {
-        if (ENABLE_FREE_DRAW_DIAGNOSTICS && (propsRef.current.isFreeDraw || propsRef.current.isExperimental)) {
-          drawingDiagRef.current.transportMetrics.rejectedPackets++;
-        }
         delete activeSessionsRef.current[data.instanceId];
         drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
         executeRedrawTempLayer();
@@ -3228,38 +3074,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
           // 4. Ensure temp layer is clean and properly rebuilt for any remaining uncommitted active sessions
           executeRedrawTempLayer();
-
-          const bucketHistoryIndex = localCommandsRef.current.length - 1;
-
-          if (data.instanceId !== instanceId) {
-            console.log(`[BucketBarrier] mode=${propsRef.current.isFreeDraw ? 'FreeDraw' : 'Other'} bucketStrokeId=${data.strokeId} drainingBefore=${drainingBefore} drainingFlushed=${drainingFlushed} activeUncommitted=${activeUncommitted} historyBefore=${historyBefore} historyAfterBarrier=${historyAfterBarrier} bucketHistoryIndex=${bucketHistoryIndex} fastPathRelevantCacheMetadata=${JSON.stringify(freeDrawUndoCacheMetaRef.current)}`);
-          }
         }
       } else if (event === 'draw_undo') {
         if ((propsRef.current.isFreeDraw || propsRef.current.isExperimental) && data.strokeId !== undefined && data.instanceId) {
           const targetInst = data.instanceId;
           const targetStrId = data.strokeId;
-
-          if (data.instanceId !== instanceId) {
-            const list = localCommandsRef.current;
-            const targetIdx = list.findIndex((cmd: any) => {
-              if (!cmd) return false;
-              const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
-              return cmdInstId === targetInst && cmd.strokeId === targetStrId;
-            });
-            console.log('[DIAG_TRACE] undo_before', JSON.stringify({
-              time: performance.now(),
-              targetInst,
-              targetStrId,
-              historyLength: list.length,
-              findIndex: targetIdx,
-              last8History: list.slice(-8).map((c: any) => ({ instanceId: c.instanceId, strokeId: c.strokeId, event: c.event })),
-              inActiveSessions: Boolean(activeSessionsRef.current[targetInst]),
-              inDraining: drainingStrokesRef.current.some(s => s.instanceId === targetInst && s.strokeId === targetStrId),
-              checkpointIndex: checkpointIndexRef.current,
-              undoCacheMeta: freeDrawUndoCacheMetaRef.current
-            }));
-          }
 
           // 1. Safe Filter of Spectator Playback Queue:
           // Filter OUT only the stroke matching (targetInst + targetStrId).
@@ -3296,19 +3115,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               hasFreeDrawRedoCacheRef.current = false;
               freeDrawUndoCacheMetaRef.current = null;
               replayFreeDrawHistorySafely(list);
-            }
-
-            if (data.instanceId !== instanceId) {
-              const targetStillInHistory = list.some((c: any) => c.instanceId === targetInst && c.strokeId === targetStrId);
-              console.log('[DIAG_TRACE] undo_after', JSON.stringify({
-                time: performance.now(),
-                fastPathSucceeded,
-                targetDeleted: !targetStillInHistory,
-                historyLengthAfter: list.length,
-                last8HistoryAfter: list.slice(-8).map((c: any) => ({ instanceId: c.instanceId, strokeId: c.strokeId, event: c.event })),
-                tempCanvasHasActiveOrDraining: Object.keys(activeSessionsRef.current).length > 0 || drainingStrokesRef.current.length > 0,
-                didRedrawTemp: sessionDeleted || (beforeDrainingCount !== drainingStrokesRef.current.length)
-              }));
             }
           }
         } else {
@@ -4530,140 +4336,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }}
         />
       </div>
-
-      {/* 📊 Temporary Free Draw / Experimental Runtime Diagnostic Overlay (Local only & Opt-in) */}
-      {ENABLE_FREE_DRAW_DIAGNOSTICS && (isFreeDraw || isExperimental) && !readOnly && (
-        !isDiagnosticsVisible ? (
-          <button
-            onClick={() => setIsDiagnosticsVisible(true)}
-            className="absolute top-2 left-2 z-40 bg-black/40 hover:bg-black/80 text-white/60 hover:text-white text-[10px] font-mono px-2 py-1 rounded-md border border-white/10 backdrop-blur-sm transition-all pointer-events-auto select-none flex items-center gap-1 shadow"
-            title="Open Drawing Diagnostics"
-          >
-            <span>📊</span>
-            <span className="hidden sm:inline">Stats</span>
-          </button>
-        ) : (
-          <div
-            className="absolute top-2 left-2 z-50 bg-[#120f2e]/95 text-white font-mono text-[10px] sm:text-[11px] p-2.5 rounded-xl border border-white/20 shadow-2xl backdrop-blur-md w-[265px] max-h-[48vh] overflow-y-auto pointer-events-auto select-none"
-            dir="ltr"
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between gap-1 border-b border-white/10 pb-1.5 mb-2">
-              <div className="flex items-center gap-1.5 truncate">
-                <span className="font-bold text-amber-400 text-[10px]">📊 Drawing Diagnostics</span>
-                <span className="text-[8px] bg-purple-900/60 text-purple-200 border border-purple-400/30 px-1 py-0.5 rounded font-bold shrink-0">
-                  Canonical + Type 13
-                </span>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={resetDiagnosticStats}
-                  className="text-white/60 hover:text-white text-[9px] px-1.5 py-0.5 bg-white/10 hover:bg-white/20 rounded cursor-pointer"
-                  title="Reset counters"
-                >
-                  Reset
-                </button>
-                <button
-                  onClick={() => setIsDiagnosticsVisible(false)}
-                  className="text-white/60 hover:text-rose-400 text-[11px] px-1.5 py-0.5 bg-white/10 hover:bg-white/20 rounded cursor-pointer font-bold leading-none"
-                  title="Close Diagnostics"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Network & Transport Stats Card */}
-            <div className="bg-white/5 p-2 rounded-lg border border-white/10 space-y-2 text-[9.5px]">
-              <div className="font-bold text-sky-300 text-[10px] border-b border-white/10 pb-1">
-                Network &amp; Transport Stats
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 text-[9px]">
-                <div className="bg-black/30 p-1.5 rounded">
-                  <div className="text-gray-400">Sent Points</div>
-                  <div className="text-white font-mono font-bold text-[10px]">
-                    {(diagSnapshot?.transportMetrics?.sentPoints || 0).toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-black/30 p-1.5 rounded">
-                  <div className="text-gray-400">Compressed</div>
-                  <div className="text-purple-300 font-mono font-bold text-[10px]">
-                    {(diagSnapshot?.transportMetrics?.compressedWireBytes || 0).toLocaleString()} B
-                  </div>
-                </div>
-                <div className="bg-black/30 p-1.5 rounded">
-                  <div className="text-gray-400">Baseline</div>
-                  <div className="text-sky-300 font-mono font-bold text-[10px]">
-                    {(diagSnapshot?.transportMetrics?.baselineWireBytes || 0).toLocaleString()} B
-                  </div>
-                </div>
-                <div className="bg-black/30 p-1.5 rounded">
-                  <div className="text-gray-400">Saved</div>
-                  <div className="text-emerald-400 font-mono font-bold text-[10px]">
-                    {(diagSnapshot?.transportMetrics?.savedBytes || 0).toLocaleString()} B
-                    <span className="text-[8px] font-normal text-emerald-300 ml-0.5">
-                      ({(diagSnapshot?.transportMetrics?.compressionPercent || 0).toFixed(1)}%)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 text-[9px]">
-                <div className="bg-black/20 p-1.5 rounded">
-                  <div className="text-gray-400">Type 2 Fallback</div>
-                  <div className="text-amber-300 font-mono font-bold text-[10px]">
-                    {(diagSnapshot?.transportMetrics?.fallbackPackets || 0).toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-black/20 p-1.5 rounded">
-                  <div className="text-gray-400">Decode Errors</div>
-                  <div className="text-emerald-400 font-mono font-bold text-[10px]">
-                    {(diagSnapshot?.transportMetrics?.decodeErrors || 0).toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-black/20 p-1.5 rounded">
-                  <div className="text-gray-400">Rejected Pkts</div>
-                  <div className="text-rose-400 font-mono font-bold text-[10px]">
-                    {(diagSnapshot?.transportMetrics?.rejectedPackets || 0).toLocaleString()}
-                  </div>
-                </div>
-                <div className="bg-black/20 p-1.5 rounded">
-                  <div className="text-gray-400">Repairs</div>
-                  <div className="text-white font-mono font-bold text-[10px]">
-                    {(diagSnapshot?.transportMetrics?.repairCount || 0).toLocaleString()}
-                  </div>
-                </div>
-              </div>
-
-              {/* Commit Verification */}
-              <div className="bg-black/40 p-1.5 rounded text-[9px] space-y-0.5">
-                <div className="text-gray-400 font-semibold">Commit Verification</div>
-                {diagSnapshot?.transportMetrics && diagSnapshot.transportMetrics.lastCommitMatch !== null ? (
-                  diagSnapshot.transportMetrics.lastCommitMatch ? (
-                    <div className="text-emerald-400 font-bold flex items-center gap-1">
-                      ✓ Decoded ({diagSnapshot.transportMetrics.decodedPointCount}) == Server ({diagSnapshot.transportMetrics.serverPointCount})
-                    </div>
-                  ) : (
-                    <div className="text-rose-400 font-bold flex items-center gap-1">
-                      ✗ Mismatch ({diagSnapshot.transportMetrics.decodedPointCount} vs {diagSnapshot.transportMetrics.serverPointCount})
-                    </div>
-                  )
-                ) : (
-                  <div className="text-gray-400 italic">No commit yet</div>
-                )}
-              </div>
-            </div>
-
-            <button
-              onClick={resetDiagnosticStats}
-              className="w-full mt-2 py-1 bg-white/10 hover:bg-white/20 active:bg-white/30 text-white/80 hover:text-white rounded text-[9.5px] font-bold text-center transition-colors cursor-pointer"
-            >
-              Reset
-            </button>
-          </div>
-        )
-      )}
 
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
