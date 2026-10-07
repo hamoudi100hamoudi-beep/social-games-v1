@@ -2757,6 +2757,26 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (!ctx || !tempCtx) return;
 
       if (event === 'draw_stroke') {
+        if (data.instanceId !== instanceId) {
+          const last5 = localCommandsRef.current.slice(-5).map((c: any) => ({
+            instanceId: c.instanceId,
+            strokeId: c.strokeId,
+            event: c.event
+          }));
+          console.log('[DIAG_TRACE] draw_stroke', JSON.stringify({
+            time: performance.now(),
+            isFreeDraw: Boolean(propsRef.current.isFreeDraw),
+            isExperimental: Boolean(propsRef.current.isExperimental),
+            instanceId: data.instanceId,
+            strokeId: data.strokeId,
+            tool: remoteTool,
+            pointsCount: (data.points || []).length,
+            hasActiveSession: Boolean(activeSessionsRef.current[data.instanceId]),
+            drainingCount: drainingStrokesRef.current.length,
+            last5History: last5
+          }));
+        }
+
         const session = activeSessionsRef.current[data.instanceId];
         const isRepairPending = Boolean(
           session &&
@@ -3096,8 +3116,44 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncHistoryButtons();
       } else if (event === 'draw_action') {
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
+          if (data.instanceId !== instanceId) {
+            const last5Before = localCommandsRef.current.slice(-5).map((c: any) => ({
+              instanceId: c.instanceId,
+              strokeId: c.strokeId,
+              event: c.event
+            }));
+            const existsInHistory = localCommandsRef.current.some((c: any) => c.instanceId === data.instanceId && c.strokeId === data.strokeId);
+            const lastCmd = localCommandsRef.current.length > 0 ? localCommandsRef.current[localCommandsRef.current.length - 1] : null;
+            const sameDrawerAsLast = lastCmd ? (lastCmd.instanceId === data.instanceId) : false;
+            console.log('[DIAG_TRACE] bucket_before', JSON.stringify({
+              time: performance.now(),
+              instanceId: data.instanceId,
+              strokeId: data.strokeId,
+              historyLength: localCommandsRef.current.length,
+              last5History: last5Before,
+              drainingCount: drainingStrokesRef.current.length,
+              drainingStrokeIds: drainingStrokesRef.current.map(s => `${s.instanceId}_${s.strokeId}`),
+              hasActiveSession: Boolean(activeSessionsRef.current[data.instanceId]),
+              undoCacheMeta: freeDrawUndoCacheMetaRef.current,
+              targetExistsInHistory: existsInHistory,
+              sameDrawerAsLast: sameDrawerAsLast
+            }));
+          }
+
+          const t0 = performance.now();
           captureDirectFreeDrawUndoCache(data.instanceId, data.strokeId);
-          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
+          const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
+          const t1 = performance.now();
+
+          if (data.instanceId !== instanceId) {
+            console.log('[DIAG_TRACE] bucket_floodfill_result', JSON.stringify({
+              time: t1,
+              durationMs: t1 - t0,
+              fillResult: fillRes ? 'TargetRGBA' : 'null',
+              sampledRGBA: fillRes
+            }));
+          }
+
           prevCommandsCountRef.current = localCommandsRef.current.length;
           localCommandsRef.current.push({
             event: 'draw_binary',
@@ -3111,11 +3167,47 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
           saveSnapshot();
           syncHistoryButtons();
+
+          if (data.instanceId !== instanceId) {
+            const bucketIdx = localCommandsRef.current.length - 1;
+            const prevItem = bucketIdx > 0 ? localCommandsRef.current[bucketIdx - 1] : null;
+            console.log('[DIAG_TRACE] bucket_after_history', JSON.stringify({
+              time: performance.now(),
+              bucketIndex: bucketIdx,
+              last5History: localCommandsRef.current.slice(-5).map((c: any) => ({
+                instanceId: c.instanceId,
+                strokeId: c.strokeId,
+                event: c.event
+              })),
+              prevItem: prevItem ? { instanceId: prevItem.instanceId, strokeId: prevItem.strokeId } : null
+            }));
+          }
         }
       } else if (event === 'draw_undo') {
         if ((propsRef.current.isFreeDraw || propsRef.current.isExperimental) && data.strokeId !== undefined && data.instanceId) {
           const targetInst = data.instanceId;
           const targetStrId = data.strokeId;
+
+          if (data.instanceId !== instanceId) {
+            const list = localCommandsRef.current;
+            const targetIdx = list.findIndex((cmd: any) => {
+              if (!cmd) return false;
+              const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
+              return cmdInstId === targetInst && cmd.strokeId === targetStrId;
+            });
+            console.log('[DIAG_TRACE] undo_before', JSON.stringify({
+              time: performance.now(),
+              targetInst,
+              targetStrId,
+              historyLength: list.length,
+              findIndex: targetIdx,
+              last8History: list.slice(-8).map((c: any) => ({ instanceId: c.instanceId, strokeId: c.strokeId, event: c.event })),
+              inActiveSessions: Boolean(activeSessionsRef.current[targetInst]),
+              inDraining: drainingStrokesRef.current.some(s => s.instanceId === targetInst && s.strokeId === targetStrId),
+              checkpointIndex: checkpointIndexRef.current,
+              undoCacheMeta: freeDrawUndoCacheMetaRef.current
+            }));
+          }
 
           // 1. Safe Filter of Spectator Playback Queue:
           // Filter OUT only the stroke matching (targetInst + targetStrId).
@@ -3152,6 +3244,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               hasFreeDrawRedoCacheRef.current = false;
               freeDrawUndoCacheMetaRef.current = null;
               replayFreeDrawHistorySafely(list);
+            }
+
+            if (data.instanceId !== instanceId) {
+              const targetStillInHistory = list.some((c: any) => c.instanceId === targetInst && c.strokeId === targetStrId);
+              console.log('[DIAG_TRACE] undo_after', JSON.stringify({
+                time: performance.now(),
+                fastPathSucceeded,
+                targetDeleted: !targetStillInHistory,
+                historyLengthAfter: list.length,
+                last8HistoryAfter: list.slice(-8).map((c: any) => ({ instanceId: c.instanceId, strokeId: c.strokeId, event: c.event })),
+                tempCanvasHasActiveOrDraining: Object.keys(activeSessionsRef.current).length > 0 || drainingStrokesRef.current.length > 0,
+                didRedrawTemp: sessionDeleted || (beforeDrainingCount !== drainingStrokesRef.current.length)
+              }));
             }
           }
         } else {
