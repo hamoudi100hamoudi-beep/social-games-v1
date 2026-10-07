@@ -14,6 +14,21 @@ const getJsonSafeHistory = (history: any[]): any[] => {
   const safeList: any[] = [];
   let inDrawingMode = false;
 
+  const toSafeEntry = (cmd: any, event: string, safeData: any) => {
+    const entry: any = { event, data: safeData };
+    const instId = cmd.instId !== undefined && cmd.instId !== null && cmd.instId !== ''
+      ? cmd.instId
+      : (cmd.instanceId !== undefined && cmd.instanceId !== null && cmd.instanceId !== '' ? cmd.instanceId : undefined);
+
+    if (instId !== undefined) {
+      entry.instanceId = instId;
+    }
+    if (cmd.strokeId !== undefined && cmd.strokeId !== null) {
+      entry.strokeId = cmd.strokeId;
+    }
+    return entry;
+  };
+
   for (const cmd of history) {
     if (!cmd) continue;
 
@@ -35,35 +50,35 @@ const getJsonSafeHistory = (history: any[]): any[] => {
     if (isBinary) {
       if (binaryType === 1) { // draw_start
         inDrawingMode = true;
-        safeList.push({ event, data: safeData });
+        safeList.push(toSafeEntry(cmd, event, safeData));
       } else if (binaryType === 2) { // draw_move
         if (inDrawingMode) {
-          safeList.push({ event, data: safeData });
+          safeList.push(toSafeEntry(cmd, event, safeData));
         } else {
           console.log(`[Sanitizer] Filtered out orphaned move packet (type 2) on transport sync`);
         }
       } else if (binaryType === 3 || binaryType === 6) { // draw_end / draw_cancel
         if (inDrawingMode) {
-          safeList.push({ event, data: safeData });
+          safeList.push(toSafeEntry(cmd, event, safeData));
           inDrawingMode = false;
         } else {
           console.log(`[Sanitizer] Filtered out orphaned end/cancel packet (type 3/6) on transport sync`);
         }
       } else if (binaryType === 4 || binaryType === 5 || binaryType === 10) {
         inDrawingMode = false;
-        safeList.push({ event, data: safeData });
+        safeList.push(toSafeEntry(cmd, event, safeData));
       } else {
-        safeList.push({ event, data: safeData });
+        safeList.push(toSafeEntry(cmd, event, safeData));
       }
     } else {
       if (event === "draw_start") {
         inDrawingMode = true;
-        safeList.push({ event, data: safeData });
+        safeList.push(toSafeEntry(cmd, event, safeData));
       } else if (event === "draw_action" || event === "draw_clear") {
         inDrawingMode = false; // تصفير نمط الرسم عند الأدوات المكتملة ذاتياً
-        safeList.push({ event, data: safeData });
+        safeList.push(toSafeEntry(cmd, event, safeData));
       } else {
-        safeList.push({ event, data: safeData });
+        safeList.push(toSafeEntry(cmd, event, safeData));
       }
     }
   }
