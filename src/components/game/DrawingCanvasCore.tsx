@@ -1905,6 +1905,82 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
+  // 🛡️ Remote Bucket Raster/History Transaction Barrier (Free Draw only)
+  // Flushes only already-committed strokes currently residing in drainingStrokesRef,
+  // ensuring primary ctx and localCommandsRef are 100% causal and synchronized BEFORE Bucket captures cache or runs floodFill.
+  // Strictly DOES NOT touch or prematurely commit uncommitted activeSessionsRef.
+  const flushCommittedDrainingStrokesBarrier = (): number => {
+    const ctx = ctxRef.current;
+    if (!ctx || drainingStrokesRef.current.length === 0) {
+      return 0;
+    }
+
+    const strokesToFlush = [...drainingStrokesRef.current];
+    drainingStrokesRef.current = [];
+    let flushedCount = 0;
+
+    for (let i = 0; i < strokesToFlush.length; i++) {
+      const stroke = strokesToFlush[i];
+      if (stroke.pendingQueue && stroke.pendingQueue.length > 0) {
+        while (stroke.pendingQueue.length > 0) {
+          stroke.path.push(stroke.pendingQueue.shift()!);
+        }
+      }
+
+      if (stroke.path.length > 0) {
+        const alreadyInHistory = localCommandsRef.current.some(
+          (cmd: any) => cmd && cmd.instanceId === stroke.instanceId && cmd.strokeId === stroke.strokeId
+        );
+
+        if (!alreadyInHistory) {
+          captureDirectFreeDrawUndoCache(stroke.instanceId, stroke.strokeId);
+          drawEntirePath(ctx, stroke.path, stroke.tool, stroke.color, stroke.width, stroke.opacity);
+
+          const canonicalStrokeMsg = encodeBinaryDrawMessage('draw_stroke', {
+            instanceId: stroke.instanceId,
+            tool: stroke.tool,
+            color: stroke.color,
+            width: stroke.width,
+            opacity: stroke.opacity,
+            points: stroke.rawPoints || []
+          });
+
+          prevCommandsCountRef.current = localCommandsRef.current.length;
+          localCommandsRef.current.push({
+            event: 'draw_binary',
+            data: canonicalStrokeMsg,
+            instanceId: stroke.instanceId,
+            strokeId: stroke.strokeId
+          });
+          advanceCheckpointIncremental();
+          if (!propsRef.current.isFreeDraw) {
+            localRedoStackRef.current = [];
+          }
+          saveSnapshot();
+          syncHistoryButtons();
+          flushedCount++;
+        }
+      }
+
+      if (activeSessionsRef.current[stroke.instanceId] && activeSessionsRef.current[stroke.instanceId].strokeId === stroke.strokeId) {
+        delete activeSessionsRef.current[stroke.instanceId];
+      }
+    }
+
+    executeRedrawTempLayer();
+
+    if (spectatorPlaybackRafRef.current !== null && drainingStrokesRef.current.length === 0) {
+      const sessions = activeSessionsRef.current;
+      const hasUncommittedPending = Object.keys(sessions).some(k => sessions[k]?.pendingQueue?.length > 0);
+      if (!hasUncommittedPending) {
+        cancelAnimationFrame(spectatorPlaybackRafRef.current);
+        spectatorPlaybackRafRef.current = null;
+      }
+    }
+
+    return flushedCount;
+  };
+
   const drawShape = (
     activeCtx: CanvasRenderingContext2D,
     x0: number, y0: number,
@@ -3116,44 +3192,26 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncHistoryButtons();
       } else if (event === 'draw_action') {
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          if (data.instanceId !== instanceId) {
-            const last5Before = localCommandsRef.current.slice(-5).map((c: any) => ({
-              instanceId: c.instanceId,
-              strokeId: c.strokeId,
-              event: c.event
-            }));
-            const existsInHistory = localCommandsRef.current.some((c: any) => c.instanceId === data.instanceId && c.strokeId === data.strokeId);
-            const lastCmd = localCommandsRef.current.length > 0 ? localCommandsRef.current[localCommandsRef.current.length - 1] : null;
-            const sameDrawerAsLast = lastCmd ? (lastCmd.instanceId === data.instanceId) : false;
-            console.log('[DIAG_TRACE] bucket_before', JSON.stringify({
-              time: performance.now(),
-              instanceId: data.instanceId,
-              strokeId: data.strokeId,
-              historyLength: localCommandsRef.current.length,
-              last5History: last5Before,
-              drainingCount: drainingStrokesRef.current.length,
-              drainingStrokeIds: drainingStrokesRef.current.map(s => `${s.instanceId}_${s.strokeId}`),
-              hasActiveSession: Boolean(activeSessionsRef.current[data.instanceId]),
-              undoCacheMeta: freeDrawUndoCacheMetaRef.current,
-              targetExistsInHistory: existsInHistory,
-              sameDrawerAsLast: sameDrawerAsLast
-            }));
+          const drainingBefore = drainingStrokesRef.current.length;
+          const historyBefore = localCommandsRef.current.length;
+          const activeUncommitted = Object.keys(activeSessionsRef.current).length;
+
+          // 🛡️ Remote Raster/History Transaction Barrier:
+          // Synchronize committed draining strokes to ctx & localCommandsRef BEFORE Bucket
+          let drainingFlushed = 0;
+          if (propsRef.current.isFreeDraw) {
+            drainingFlushed = flushCommittedDrainingStrokesBarrier();
           }
 
-          const t0 = performance.now();
+          const historyAfterBarrier = localCommandsRef.current.length;
+
+          // 1. Capture direct undo cache (guaranteed to include all preceding committed strokes on ctx)
           captureDirectFreeDrawUndoCache(data.instanceId, data.strokeId);
+
+          // 2. Perform authoritative flood fill on ctx
           const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
-          const t1 = performance.now();
 
-          if (data.instanceId !== instanceId) {
-            console.log('[DIAG_TRACE] bucket_floodfill_result', JSON.stringify({
-              time: t1,
-              durationMs: t1 - t0,
-              fillResult: fillRes ? 'TargetRGBA' : 'null',
-              sampledRGBA: fillRes
-            }));
-          }
-
+          // 3. Append Bucket command to localCommandsRef
           prevCommandsCountRef.current = localCommandsRef.current.length;
           localCommandsRef.current.push({
             event: 'draw_binary',
@@ -3168,19 +3226,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           saveSnapshot();
           syncHistoryButtons();
 
+          // 4. Ensure temp layer is clean and properly rebuilt for any remaining uncommitted active sessions
+          executeRedrawTempLayer();
+
+          const bucketHistoryIndex = localCommandsRef.current.length - 1;
+
           if (data.instanceId !== instanceId) {
-            const bucketIdx = localCommandsRef.current.length - 1;
-            const prevItem = bucketIdx > 0 ? localCommandsRef.current[bucketIdx - 1] : null;
-            console.log('[DIAG_TRACE] bucket_after_history', JSON.stringify({
-              time: performance.now(),
-              bucketIndex: bucketIdx,
-              last5History: localCommandsRef.current.slice(-5).map((c: any) => ({
-                instanceId: c.instanceId,
-                strokeId: c.strokeId,
-                event: c.event
-              })),
-              prevItem: prevItem ? { instanceId: prevItem.instanceId, strokeId: prevItem.strokeId } : null
-            }));
+            console.log(`[BucketBarrier] mode=${propsRef.current.isFreeDraw ? 'FreeDraw' : 'Other'} bucketStrokeId=${data.strokeId} drainingBefore=${drainingBefore} drainingFlushed=${drainingFlushed} activeUncommitted=${activeUncommitted} historyBefore=${historyBefore} historyAfterBarrier=${historyAfterBarrier} bucketHistoryIndex=${bucketHistoryIndex} fastPathRelevantCacheMetadata=${JSON.stringify(freeDrawUndoCacheMetaRef.current)}`);
           }
         }
       } else if (event === 'draw_undo') {
