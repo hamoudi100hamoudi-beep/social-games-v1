@@ -28,6 +28,7 @@ export const CANVAS_HEIGHT = 344;
 export const FREE_DRAW_LOGICAL_WIDTH = 680;
 export const FREE_DRAW_LOGICAL_HEIGHT = 396;
 export const FREE_DRAW_TAIL_SIZE = 40;
+export const FREE_DRAW_BUCKET_TAIL_THRESHOLD = 3;
 
 const DEFAULT_LOGICAL_WIDTH = CANVAS_WIDTH;
 const DEFAULT_LOGICAL_HEIGHT = CANVAS_HEIGHT;
@@ -637,14 +638,47 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
+  const isCommandHeavy = (cmd: any): boolean => {
+    if (!cmd || !cmd.data) return false;
+    if (cmd.data instanceof ArrayBuffer) {
+      const byte0 = new Uint8Array(cmd.data)[0];
+      return byte0 === 4 || byte0 === 5;
+    }
+    if (ArrayBuffer.isView(cmd.data)) {
+      const byte0 = (cmd.data as Uint8Array)[0];
+      return byte0 === 4 || byte0 === 5;
+    }
+    return false;
+  };
+
   const advanceCheckpointIncremental = () => {
     if (!propsRef.current.isFreeDraw) return;
     const list = localCommandsRef.current;
     const N = list.length;
-    if (N - checkpointIndexRef.current < FREE_DRAW_TAIL_SIZE * 2) return;
-
-    const targetIndex = N - FREE_DRAW_TAIL_SIZE;
     const fromIndex = checkpointIndexRef.current;
+    if (N <= fromIndex) return;
+
+    let targetIndex = -1;
+
+    // Fast check: Standard length-based advancement for pencil / shape batches
+    if (N - fromIndex >= FREE_DRAW_TAIL_SIZE * 2) {
+      targetIndex = N - FREE_DRAW_TAIL_SIZE;
+    } else {
+      // 🛡️ Bucket-Aware Heavy Density Check:
+      // If 3 or more heavy raster operations (Bucket / Clear) have accumulated unbaked,
+      // advance checkpoint up to N - 1 so subsequent undos only ever replay at most 1 heavy command.
+      let heavyCount = 0;
+      for (let i = fromIndex; i < N; i++) {
+        if (isCommandHeavy(list[i])) {
+          heavyCount++;
+          if (heavyCount >= FREE_DRAW_BUCKET_TAIL_THRESHOLD) break;
+        }
+      }
+      if (heavyCount >= FREE_DRAW_BUCKET_TAIL_THRESHOLD) {
+        targetIndex = N - 1;
+      }
+    }
+
     if (targetIndex <= fromIndex) return;
 
     const canvas = ensureCheckpointCanvas();
