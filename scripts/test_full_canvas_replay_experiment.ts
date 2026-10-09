@@ -196,7 +196,7 @@ function replayCommand(ctx: MockCanvasContext, cmdObj: any) {
 }
 
 describe('Full-Canvas Replay Optimization Test Suite', () => {
-  const createBucketCmd = (sId: number, color: string, opacity = 1, x = 0.5, y = 0.5) => {
+  const createBucketCmd = (sId: number, color: string, opacity = 1, x = 0.5, y = 0.5): any => {
     const raw = encodeBinaryDrawMessage('draw_action', {
       tool: 'bucket',
       color,

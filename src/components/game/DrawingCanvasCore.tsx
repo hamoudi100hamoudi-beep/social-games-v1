@@ -127,7 +127,7 @@ const floodFill = (
   logicalWidth: number = DEFAULT_LOGICAL_WIDTH,
   logicalHeight: number = DEFAULT_LOGICAL_HEIGHT,
   expectedTarget?: TargetRGBA
-): TargetRGBA | null => {
+): (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean }) | null => {
   const canvas = ctx.canvas;
   const cw = canvas.width;
   const ch = canvas.height;
@@ -208,7 +208,7 @@ const floodFill = (
   const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
 
   if (ta >= 240 && fillOpacity >= 0.95 && Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5) {
-    return { r: tr, g: tg, b: tb, a: ta };
+    return { r: tr, g: tg, b: tb, a: ta, isNoOp: true };
   }
 
   const visited = new Uint8Array(cw * ch);
@@ -663,8 +663,32 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!propsRef.current.isFreeDraw) return;
     const list = localCommandsRef.current;
     const N = list.length;
-    const fromIndex = checkpointIndexRef.current;
+    let fromIndex = checkpointIndexRef.current;
     if (N <= fromIndex) return;
+
+    // 🛡️ Clear Replay Barrier: Bypass all commands preceding the latest draw_clear
+    let lastClearIndex = -1;
+    for (let i = N - 1; i >= fromIndex; i--) {
+      const c = list[i];
+      if (c) {
+        if (c.event === 'draw_clear') {
+          lastClearIndex = i;
+          break;
+        }
+        if (c.event === 'draw_binary' && c.data) {
+          const byte0 = c.data instanceof ArrayBuffer 
+            ? new Uint8Array(c.data)[0] 
+            : (ArrayBuffer.isView(c.data) ? (c.data as Uint8Array)[0] : 0);
+          if (byte0 === 5) {
+            lastClearIndex = i;
+            break;
+          }
+        }
+      }
+    }
+    if (lastClearIndex >= fromIndex) {
+      fromIndex = lastClearIndex + 1;
+    }
 
     let targetIndex = -1;
 
@@ -693,7 +717,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const cCtx = canvas.getContext('2d');
     if (!cCtx) return;
 
-    if (fromIndex === 0) {
+    if (fromIndex === 0 || lastClearIndex >= 0) {
       cCtx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
@@ -2320,6 +2344,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           if (removedCmd) {
             localRedoStackRef.current.push(removedCmd);
           }
+          // 🛡️ Guard Hint validity on Mid-History Undo:
+          // Invalidate hints of subsequent commands whose historical predecessor canvas has mutated
+          if (targetIndex < list.length) {
+            for (let i = targetIndex; i < list.length; i++) {
+              if (list[i]?._replayHint) {
+                delete list[i]._replayHint;
+                delete list[i]._replayColor;
+                delete list[i]._replayOpacity;
+              }
+            }
+          }
           hasFreeDrawUndoCacheRef.current = false;
           hasFreeDrawRedoCacheRef.current = false;
           freeDrawUndoCacheMetaRef.current = null;
@@ -2605,12 +2640,62 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             ctx.fillStyle = fillHex;
             ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.restore();
+          } else if (cmdObj && cmdObj._replayHint === 'noop') {
+            // 🛡️ Verified No-Op check: test 1x1 candidate seed pixel
+            let isVerifiedNoOp = false;
+            try {
+              const cw = ctx.canvas.width;
+              const ch = ctx.canvas.height;
+              const sx = Math.floor(data.x * cw);
+              const sy = Math.floor(data.y * ch);
+              if (sx >= 0 && sx < cw && sy >= 0 && sy < ch) {
+                const p = ctx.getImageData(sx, sy, 1, 1).data;
+                let fillHex = cmdColor;
+                if (fillHex.length === 4) {
+                  fillHex = '#' + fillHex[1] + fillHex[1] + fillHex[2] + fillHex[2] + fillHex[3] + fillHex[3];
+                }
+                const fr = parseInt(fillHex.slice(1, 3), 16) || 0;
+                const fg = parseInt(fillHex.slice(3, 5), 16) || 0;
+                const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
+                if (p[3] >= 240 && (cmdOpacity === undefined || cmdOpacity >= 0.95) &&
+                    Math.abs(p[0] - fr) <= 5 && Math.abs(p[1] - fg) <= 5 && Math.abs(p[2] - fb) <= 5) {
+                  isVerifiedNoOp = true;
+                }
+              }
+            } catch (pErr) {
+              isVerifiedNoOp = false;
+            }
+
+            if (!isVerifiedNoOp) {
+              const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
+              if (cmdObj) {
+                if (fillRes?.isFullCanvasOpaque) {
+                  cmdObj._replayHint = 'full_canvas_opaque';
+                  cmdObj._replayColor = fillRes.fillHex || cmdColor;
+                  cmdObj._replayOpacity = cmdOpacity;
+                } else if (fillRes?.isNoOp) {
+                  cmdObj._replayHint = 'noop';
+                } else {
+                  delete cmdObj._replayHint;
+                  delete cmdObj._replayColor;
+                  delete cmdObj._replayOpacity;
+                }
+              }
+            }
           } else {
             const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
-            if (cmdObj && fillRes?.isFullCanvasOpaque) {
-              cmdObj._replayHint = 'full_canvas_opaque';
-              cmdObj._replayColor = fillRes.fillHex || cmdColor;
-              cmdObj._replayOpacity = cmdOpacity;
+            if (cmdObj) {
+              if (fillRes?.isFullCanvasOpaque) {
+                cmdObj._replayHint = 'full_canvas_opaque';
+                cmdObj._replayColor = fillRes.fillHex || cmdColor;
+                cmdObj._replayOpacity = cmdOpacity;
+              } else if (fillRes?.isNoOp) {
+                cmdObj._replayHint = 'noop';
+              } else {
+                delete cmdObj._replayHint;
+                delete cmdObj._replayColor;
+                delete cmdObj._replayOpacity;
+              }
             }
           }
           saveSnapshot();
@@ -2700,11 +2785,33 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const N = commands.length;
       let startIndex = 0;
 
+      // 🛡️ Clear Replay Barrier: find latest draw_clear in active history
+      let lastClearIndex = -1;
+      for (let i = N - 1; i >= 0; i--) {
+        const c = commands[i];
+        if (c) {
+          if (c.event === 'draw_clear') {
+            lastClearIndex = i;
+            break;
+          }
+          if (c.event === 'draw_binary' && c.data) {
+            const byte0 = c.data instanceof ArrayBuffer 
+              ? new Uint8Array(c.data)[0] 
+              : (ArrayBuffer.isView(c.data) ? (c.data as Uint8Array)[0] : 0);
+            if (byte0 === 5) {
+              lastClearIndex = i;
+              break;
+            }
+          }
+        }
+      }
+
       const isCheckpointValid =
         Boolean(propsRef.current.isFreeDraw) &&
         checkpointCanvasRef.current !== null &&
         checkpointIndexRef.current > 0 &&
         checkpointIndexRef.current <= N &&
+        checkpointIndexRef.current > lastClearIndex &&
         getCommandSignature(commands[checkpointIndexRef.current - 1]) === checkpointAnchorSignatureRef.current;
 
       if (isCheckpointValid && checkpointCanvasRef.current) {
@@ -2717,10 +2824,28 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         ctx.restore();
         startIndex = checkpointIndexRef.current;
       } else {
-        // Fallback: Full Replay from 0
+        // Fallback: Safe Clear-Barrier replay (starts AFTER latest Clear, or from 0)
         invalidateCheckpoint();
         ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-        startIndex = 0;
+        startIndex = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+      }
+
+      // 🛡️ Inline Checkpoint Recovery: Calculate candidate checkpoint index to capture DURING replay loop
+      let candidateCheckpointIndex = -1;
+      if (propsRef.current.isFreeDraw && N >= 2) {
+        if (N - startIndex >= FREE_DRAW_TAIL_SIZE * 2) {
+          candidateCheckpointIndex = N - FREE_DRAW_TAIL_SIZE;
+        } else {
+          let heavyCount = 0;
+          for (let i = startIndex; i < N; i++) {
+            if (isCommandHeavy(commands[i])) {
+              heavyCount++;
+            }
+          }
+          if (heavyCount >= FREE_DRAW_BUCKET_TAIL_THRESHOLD) {
+            candidateCheckpointIndex = N - 1;
+          }
+        }
       }
 
       // 2. Replay all remaining committed commands
@@ -2729,6 +2854,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
       for (let i = startIndex; i < N; i++) {
+        if (i === candidateCheckpointIndex && !isCheckpointValid) {
+          // 🎯 Inline Checkpoint Capture: ctx currently holds exact raster result of commands 0..i-1!
+          const chkCanvas = ensureCheckpointCanvas();
+          const chkCtx = chkCanvas.getContext('2d');
+          if (chkCtx) {
+            chkCtx.clearRect(0, 0, chkCanvas.width, chkCanvas.height);
+            chkCtx.save();
+            chkCtx.setTransform(1, 0, 0, 1, 0, 0);
+            chkCtx.drawImage(ctx.canvas, 0, 0);
+            chkCtx.restore();
+            checkpointIndexRef.current = candidateCheckpointIndex;
+            checkpointAnchorSignatureRef.current = getCommandSignature(commands[candidateCheckpointIndex - 1]);
+          }
+        }
         applyReplayCommand(ctx, commands[i], replayPaths, replaySessions);
       }
 
@@ -2751,11 +2890,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           // Ignore
         }
       });
-
-      // If we performed a full replay and have enough commands, immediately bake a checkpoint
-      if (!isCheckpointValid && Boolean(propsRef.current.isFreeDraw) && N >= FREE_DRAW_TAIL_SIZE * 2) {
-        advanceCheckpointIncremental();
-      }
     } catch (err) {
       console.error("[DrawingCanvasCore] Error in replayFreeDrawHistorySafely: ", err);
     } finally {
@@ -4010,11 +4144,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         captureDirectFreeDrawUndoCache(instanceId, thisBucketStrokeId);
         const sampledTarget = floodFill(ctx, x, y, activeColor, activeOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
-        lastBucketHintRef.current = sampledTarget?.isFullCanvasOpaque ? {
-          hint: 'full_canvas_opaque',
-          color: sampledTarget.fillHex || activeColor,
-          opacity: activeOpacity
-        } : null;
+        if (sampledTarget?.isNoOp) {
+          lastBucketHintRef.current = {
+            hint: 'noop',
+            color: activeColor,
+            opacity: activeOpacity
+          };
+        } else if (sampledTarget?.isFullCanvasOpaque) {
+          lastBucketHintRef.current = {
+            hint: 'full_canvas_opaque',
+            color: sampledTarget.fillHex || activeColor,
+            opacity: activeOpacity
+          };
+        } else {
+          lastBucketHintRef.current = null;
+        }
 
         if (localRedoStackRef.current.length > 0) {
           localRedoStackRef.current = [];
