@@ -104,6 +104,8 @@ interface TargetRGBA {
   g: number;
   b: number;
   a: number;
+  isFullCanvasOpaque?: boolean;
+  fillHex?: string;
 }
 
 // Bounded seed recovery search offsets within Euclidean distance <= 2.0 physical pixels, ordered by distance
@@ -213,6 +215,7 @@ const floodFill = (
   const queueX: number[] = [sx];
   const queueY: number[] = [sy];
   let head = 0;
+  let filledPixelCount = 0;
 
   while (head < queueX.length) {
     const cx = queueX[head];
@@ -241,6 +244,7 @@ const floodFill = (
 
     while (xCurr < cw && !visited[pixelIdx] && matchColor(data, idx, tr, tg, tb, ta)) {
       visited[pixelIdx] = 1;
+      filledPixelCount++;
 
       const destA = data[idx + 3] / 255;
 
@@ -295,7 +299,8 @@ const floodFill = (
   }
 
   ctx.putImageData(imageData, 0, 0);
-  return { r: tr, g: tg, b: tb, a: ta };
+  const isFullCanvasOpaque = (filledPixelCount === cw * ch) && (fillOpacity >= 0.95);
+  return { r: tr, g: tg, b: tb, a: ta, isFullCanvasOpaque, fillHex };
 };
 
 export interface DrawingCanvasCoreRef {
@@ -481,6 +486,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     prevAnchorSignature: string | null;
   }
   const freeDrawUndoCacheMetaRef = useRef<FreeDrawUndoCacheMeta | null>(null);
+
+  // ⚡ Local hint tracking for Full-Canvas Opaque Bucket fast replay
+  const lastBucketHintRef = useRef<{ hint: string; color: string; opacity: number } | null>(null);
 
   // Free Draw Cache Lifecycle Helpers
   const ensureCacheCanvas = (cacheRef: React.MutableRefObject<HTMLCanvasElement | null>, targetCanvas: HTMLCanvasElement) => {
@@ -1380,12 +1388,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // Record local durable drawing history for deterministic undo / redo
       if (event === 'draw_stroke' || event === 'draw_clear' || (event === 'draw_action' && payload.tool === 'bucket')) {
         prevCommandsCountRef.current = localCommandsRef.current.length;
-        localCommandsRef.current.push({
+        const cmdRecord: any = {
           event: 'draw_binary',
           data: msg,
           instanceId,
           strokeId: payload.strokeId || currentLocalStrokeIdRef.current
-        });
+        };
+        if (event === 'draw_action' && payload.tool === 'bucket' && lastBucketHintRef.current) {
+          cmdRecord._replayHint = lastBucketHintRef.current.hint;
+          cmdRecord._replayColor = lastBucketHintRef.current.color;
+          cmdRecord._replayOpacity = lastBucketHintRef.current.opacity;
+          lastBucketHintRef.current = null;
+        }
+        localCommandsRef.current.push(cmdRecord);
         advanceCheckpointIncremental();
         localRedoStackRef.current = []; // Wipe redo stack on new action
         syncHistoryButtons();
@@ -2583,7 +2598,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         saveSnapshot();
       } else if (event === 'draw_action') {
         if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
+          if (cmdObj && cmdObj._replayHint === 'full_canvas_opaque' && (cmdOpacity === undefined || cmdOpacity >= 0.95)) {
+            const fillHex = cmdObj._replayColor || cmdColor;
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.fillStyle = fillHex;
+            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.restore();
+          } else {
+            const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
+            if (cmdObj && fillRes?.isFullCanvasOpaque) {
+              cmdObj._replayHint = 'full_canvas_opaque';
+              cmdObj._replayColor = fillRes.fillHex || cmdColor;
+              cmdObj._replayOpacity = cmdOpacity;
+            }
+          }
           saveSnapshot();
         }
       } else if (event === 'draw_undo') {
@@ -3086,12 +3115,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
           // 3. Append Bucket command to localCommandsRef
           prevCommandsCountRef.current = localCommandsRef.current.length;
-          localCommandsRef.current.push({
+          const remoteCmdRecord: any = {
             event: 'draw_binary',
             data: raw,
             instanceId: data.instanceId,
             strokeId: data.strokeId
-          });
+          };
+          if (fillRes?.isFullCanvasOpaque) {
+            remoteCmdRecord._replayHint = 'full_canvas_opaque';
+            remoteCmdRecord._replayColor = fillRes.fillHex || remoteColor;
+            remoteCmdRecord._replayOpacity = remoteOpacity;
+          }
+          localCommandsRef.current.push(remoteCmdRecord);
           advanceCheckpointIncremental();
           if (!propsRef.current.isFreeDraw) {
             localRedoStackRef.current = [];
@@ -3975,6 +4010,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         captureDirectFreeDrawUndoCache(instanceId, thisBucketStrokeId);
         const sampledTarget = floodFill(ctx, x, y, activeColor, activeOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+        lastBucketHintRef.current = sampledTarget?.isFullCanvasOpaque ? {
+          hint: 'full_canvas_opaque',
+          color: sampledTarget.fillHex || activeColor,
+          opacity: activeOpacity
+        } : null;
 
         if (localRedoStackRef.current.length > 0) {
           localRedoStackRef.current = [];
