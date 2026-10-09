@@ -2711,9 +2711,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           saveSnapshot();
         }
       } else if (event === 'draw_undo') {
-        executeUndo(false);
+        if (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) {
+          executeUndo(false);
+        }
       } else if (event === 'draw_redo') {
-        executeRedo(false);
+        if (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) {
+          executeRedo(false);
+        }
       }
     } catch (itemErr) {
       console.error("[DrawingCanvasCore] Ref using error under sync command loop: ", itemErr);
@@ -3282,7 +3286,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           executeRedrawTempLayer();
         }
       } else if (event === 'draw_undo') {
-        if ((propsRef.current.isFreeDraw || propsRef.current.isExperimental) && data.strokeId !== undefined && data.instanceId) {
+        const isFreeDraw = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
+        if (isFreeDraw) {
+          // A. Local undo confirmation / ACK from server:
+          if (data.instanceId === instanceId) {
+            // Already applied optimistically and locally by executeUndo().
+            // Strictly NO-OP: do NOT call executeUndo(false), do NOT modify history or redo stack.
+            return;
+          }
+
+          // B. Remote undo from another player (data.instanceId !== instanceId):
+          // If command identity (instanceId or strokeId) is missing, safely ignore (NO-OP).
+          // NEVER fallback to undoing the last local command.
+          if (!data.instanceId || data.strokeId === undefined) {
+            return;
+          }
+
           const targetInst = data.instanceId;
           const targetStrId = data.strokeId;
 
@@ -3302,27 +3321,64 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             redrawTempLayer();
           }
 
-          // 2. Safe Mid-History Undo on Committed Commands:
+          // 2. Safe Targeted Undo on Committed Commands:
           const list = localCommandsRef.current;
           const index = list.findIndex(cmd => {
             if (!cmd) return false;
-            const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
-            return cmdInstId === targetInst && cmd.strokeId === targetStrId;
+            let cmdInst = cmd.instanceId;
+            let cmdStr = cmd.strokeId;
+            if ((cmdInst === undefined || cmdStr === undefined) && cmd.data) {
+              if (typeof cmd.data === 'object' && !(cmd.data instanceof ArrayBuffer)) {
+                cmdInst = cmdInst ?? cmd.data.instanceId;
+                cmdStr = cmdStr ?? cmd.data.strokeId;
+              } else {
+                const dec = decodeBinaryDrawMessage(cmd.data);
+                if (dec?.data) {
+                  cmdInst = cmdInst ?? dec.data.instanceId;
+                  cmdStr = cmdStr ?? dec.data.strokeId;
+                }
+              }
+            }
+            return cmdInst === targetInst && cmdStr === targetStrId;
           });
 
-          if (index !== -1) {
-            const fastPathSucceeded = tryFastPathUndo(targetInst, targetStrId, index, list);
-            if (!fastPathSucceeded) {
-              if (index < checkpointIndexRef.current) {
-                invalidateCheckpoint();
+          // C. Duplicate Prevention / Missing Target:
+          // If no matching command found (already removed, duplicate message, or never arrived), safely ignore.
+          if (index === -1) {
+            return;
+          }
+
+          // 3. Invalidate Checkpoint only if target was before the checkpoint boundary:
+          if (index < checkpointIndexRef.current) {
+            invalidateCheckpoint();
+          }
+
+          // 4. Remove ONLY the matching remote command from history.
+          // Strictly DO NOT add another player's command to localRedoStackRef!
+          list.splice(index, 1);
+
+          // 5. Invalidate replay hints for subsequent commands whose historical predecessor context has changed:
+          if (index < list.length) {
+            for (let i = index; i < list.length; i++) {
+              if (list[i]?._replayHint) {
+                delete list[i]._replayHint;
+                delete list[i]._replayColor;
+                delete list[i]._replayOpacity;
               }
-              list.splice(index, 1);
-              hasFreeDrawUndoCacheRef.current = false;
-              hasFreeDrawRedoCacheRef.current = false;
-              freeDrawUndoCacheMetaRef.current = null;
-              replayFreeDrawHistorySafely(list);
             }
           }
+
+          // 6. Invalidate single-step undo/redo caches:
+          hasFreeDrawUndoCacheRef.current = false;
+          hasFreeDrawRedoCacheRef.current = false;
+          hasFreeDrawPendingUndoCacheRef.current = false;
+          freeDrawUndoCacheMetaRef.current = null;
+
+          // 7. Safely reconstruct canvas from history:
+          replayFreeDrawHistorySafely(list);
+
+          // 8. Re-synchronize history buttons:
+          syncHistoryButtons();
         } else {
           // Normal Rooms: retain original behavior
           fastForwardFlushSpectatorQueue();
