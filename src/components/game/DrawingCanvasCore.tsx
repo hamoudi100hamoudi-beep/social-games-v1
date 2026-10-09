@@ -2216,7 +2216,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       return false;
     }
 
-    // 3. Fast-Path is 100% VALID:
+    // 3. Pre-flight Cache Restoration (Non-destructive check & restore):
+    // MUST succeed before mutating list or redo stack to prevent double-removal on failure
+    const restored = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
+    if (!restored) {
+      return false;
+    }
+
+    // 4. Fast-Path is 100% VALID: Commit state modifications only AFTER restoration succeeds
     // Invalidate checkpoint only if target was strictly before the checkpoint boundary
     if (targetIndex < checkpointIndexRef.current) {
       invalidateCheckpoint();
@@ -2226,12 +2233,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const [removedCmd] = list.splice(targetIndex, 1);
     if (removedCmd && targetInst === instanceId) {
       localRedoStackRef.current.push(removedCmd);
-    }
-
-    // 4. Restore pre-target bitmap directly (1:1 pixel exact)
-    const restored = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
-    if (!restored) {
-      return false;
     }
 
     if (tempCtxRef.current) {
@@ -2333,32 +2334,41 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
 
         // 2. Try Fast-Path Bitmap Undo:
+        const listLengthBefore = list.length;
         const fastPathSucceeded = tryFastPathUndo(instanceId, targetStrokeId, targetIndex, list);
 
         if (!fastPathSucceeded) {
-          // Fallback: Safe Mid-History Replay
-          if (targetIndex < checkpointIndexRef.current) {
-            invalidateCheckpoint();
-          }
-          const [removedCmd] = list.splice(targetIndex, 1);
-          if (removedCmd) {
-            localRedoStackRef.current.push(removedCmd);
-          }
-          // 🛡️ Guard Hint validity on Mid-History Undo:
-          // Invalidate hints of subsequent commands whose historical predecessor canvas has mutated
-          if (targetIndex < list.length) {
-            for (let i = targetIndex; i < list.length; i++) {
-              if (list[i]?._replayHint) {
-                delete list[i]._replayHint;
-                delete list[i]._replayColor;
-                delete list[i]._replayOpacity;
+          // 🛡️ Double-Removal Guard: If list length changed unexpectedly, do not splice again
+          if (list.length !== listLengthBefore) {
+            hasFreeDrawUndoCacheRef.current = false;
+            hasFreeDrawRedoCacheRef.current = false;
+            freeDrawUndoCacheMetaRef.current = null;
+            replayFreeDrawHistorySafely(list);
+          } else {
+            // Fallback: Safe Mid-History Replay
+            if (targetIndex < checkpointIndexRef.current) {
+              invalidateCheckpoint();
+            }
+            const [removedCmd] = list.splice(targetIndex, 1);
+            if (removedCmd) {
+              localRedoStackRef.current.push(removedCmd);
+            }
+            // 🛡️ Guard Hint validity on Mid-History Undo:
+            // Invalidate hints of subsequent commands whose historical predecessor canvas has mutated
+            if (targetIndex < list.length) {
+              for (let i = targetIndex; i < list.length; i++) {
+                if (list[i]?._replayHint) {
+                  delete list[i]._replayHint;
+                  delete list[i]._replayColor;
+                  delete list[i]._replayOpacity;
+                }
               }
             }
+            hasFreeDrawUndoCacheRef.current = false;
+            hasFreeDrawRedoCacheRef.current = false;
+            freeDrawUndoCacheMetaRef.current = null;
+            replayFreeDrawHistorySafely(list);
           }
-          hasFreeDrawUndoCacheRef.current = false;
-          hasFreeDrawRedoCacheRef.current = false;
-          freeDrawUndoCacheMetaRef.current = null;
-          replayFreeDrawHistorySafely(list);
         }
 
         // 3. Send authoritative draw_undo to server for room broadcast:
