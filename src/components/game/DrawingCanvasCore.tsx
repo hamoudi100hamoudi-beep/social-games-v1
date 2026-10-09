@@ -601,10 +601,27 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     freeDrawUndoCacheMetaRef.current = null;
   };
 
-  // 🛡️ Free Draw Sliding Checkpoint Refs & Helpers (Strategy C: Incremental Forward Baking)
-  const checkpointCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const checkpointIndexRef = useRef<number>(0);
-  const checkpointAnchorSignatureRef = useRef<string | null>(null);
+  // 🛡️ Free Draw Dual Bounded Checkpoint Structure & Helpers (Base & Tail Snapshots)
+  interface FreeDrawCheckpoint {
+    canvas: HTMLCanvasElement | null;
+    index: number; // Snapshot at index k represents canvas state after commands 0..k-1 (before command k)
+    anchorSignature: string | null;
+    lastClearIndex: number;
+  }
+
+  const baseCheckpointRef = useRef<FreeDrawCheckpoint>({
+    canvas: null,
+    index: 0,
+    anchorSignature: null,
+    lastClearIndex: -1
+  });
+
+  const tailCheckpointRef = useRef<FreeDrawCheckpoint>({
+    canvas: null,
+    index: 0,
+    anchorSignature: null,
+    lastClearIndex: -1
+  });
 
   const getCommandSignature = (cmd: any): string => {
     if (!cmd) return "";
@@ -613,18 +630,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     return `${instId}_${sId}`;
   };
 
-  const ensureCheckpointCanvas = () => {
-    if (!checkpointCanvasRef.current) {
-      checkpointCanvasRef.current = document.createElement('canvas');
+  const ensureCheckpointCanvas = (slot: 'base' | 'tail'): HTMLCanvasElement => {
+    const cpRef = slot === 'base' ? baseCheckpointRef : tailCheckpointRef;
+    if (!cpRef.current.canvas) {
+      cpRef.current.canvas = document.createElement('canvas');
     }
+    const canvas = cpRef.current.canvas;
     const effectiveDPR = (propsRef.current.isFreeDraw || propsRef.current.isExperimental || enableFixedDPR) ? 1.0 : DPR;
     const targetW = Math.round(LOGICAL_WIDTH * effectiveDPR);
     const targetH = Math.round(LOGICAL_HEIGHT * effectiveDPR);
-    if (checkpointCanvasRef.current.width !== targetW || checkpointCanvasRef.current.height !== targetH) {
-      checkpointCanvasRef.current.width = targetW;
-      checkpointCanvasRef.current.height = targetH;
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
     }
-    const cCtx = checkpointCanvasRef.current.getContext('2d');
+    const cCtx = canvas.getContext('2d');
     if (cCtx) {
       cCtx.setTransform(effectiveDPR, 0, 0, effectiveDPR, 0, 0);
       cCtx.lineCap = 'round';
@@ -632,17 +651,104 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       cCtx.imageSmoothingEnabled = true;
       cCtx.imageSmoothingQuality = 'high';
     }
-    return checkpointCanvasRef.current;
+    return canvas;
   };
 
-  const invalidateCheckpoint = () => {
-    checkpointIndexRef.current = 0;
-    checkpointAnchorSignatureRef.current = null;
-    if (checkpointCanvasRef.current) {
-      const cCtx = checkpointCanvasRef.current.getContext('2d');
-      if (cCtx) {
-        cCtx.clearRect(0, 0, checkpointCanvasRef.current.width, checkpointCanvasRef.current.height);
+  const invalidateCheckpoint = (slot: 'base' | 'tail' | 'all' = 'all') => {
+    if (slot === 'base' || slot === 'all') {
+      baseCheckpointRef.current.index = 0;
+      baseCheckpointRef.current.anchorSignature = null;
+      baseCheckpointRef.current.lastClearIndex = -1;
+      if (baseCheckpointRef.current.canvas) {
+        const cCtx = baseCheckpointRef.current.canvas.getContext('2d');
+        if (cCtx) {
+          cCtx.clearRect(0, 0, baseCheckpointRef.current.canvas.width, baseCheckpointRef.current.canvas.height);
+        }
       }
+    }
+    if (slot === 'tail' || slot === 'all') {
+      tailCheckpointRef.current.index = 0;
+      tailCheckpointRef.current.anchorSignature = null;
+      tailCheckpointRef.current.lastClearIndex = -1;
+      if (tailCheckpointRef.current.canvas) {
+        const cCtx = tailCheckpointRef.current.canvas.getContext('2d');
+        if (cCtx) {
+          cCtx.clearRect(0, 0, tailCheckpointRef.current.canvas.width, tailCheckpointRef.current.canvas.height);
+        }
+      }
+    }
+  };
+
+  const findLatestClearIndex = (commands: any[], upToIndex?: number): number => {
+    const end = upToIndex !== undefined ? Math.min(commands.length - 1, upToIndex) : commands.length - 1;
+    for (let i = end; i >= 0; i--) {
+      const c = commands[i];
+      if (c) {
+        if (c.event === 'draw_clear') return i;
+        if (c.event === 'draw_binary' && c.data) {
+          const byte0 = c.data instanceof ArrayBuffer 
+            ? new Uint8Array(c.data)[0] 
+            : (ArrayBuffer.isView(c.data) ? (c.data as Uint8Array)[0] : 0);
+          if (byte0 === 5) return i;
+        }
+      }
+    }
+    return -1;
+  };
+
+  const isCheckpointValid = (
+    cp: FreeDrawCheckpoint,
+    commands: any[],
+    targetIndex?: number
+  ): boolean => {
+    if (!propsRef.current.isFreeDraw) return false;
+    if (!cp.canvas || cp.index <= 0) return false;
+    const N = commands.length;
+    if (cp.index > N) return false;
+    if (targetIndex !== undefined && cp.index > targetIndex) return false;
+
+    const effectiveDPR = (propsRef.current.isFreeDraw || propsRef.current.isExperimental || enableFixedDPR) ? 1.0 : DPR;
+    const targetW = Math.round(LOGICAL_WIDTH * effectiveDPR);
+    const targetH = Math.round(LOGICAL_HEIGHT * effectiveDPR);
+    if (cp.canvas.width !== targetW || cp.canvas.height !== targetH) return false;
+
+    const currentClearIndex = findLatestClearIndex(commands);
+    if (cp.index <= currentClearIndex) return false;
+    if (cp.lastClearIndex !== currentClearIndex) return false;
+
+    const sig = getCommandSignature(commands[cp.index - 1]);
+    if (!cp.anchorSignature || sig !== cp.anchorSignature) return false;
+
+    return true;
+  };
+
+  const getBestCheckpoint = (
+    commands: any[],
+    targetIndex?: number
+  ): { slot: 'base' | 'tail'; index: number; canvas: HTMLCanvasElement } | null => {
+    const tailValid = isCheckpointValid(tailCheckpointRef.current, commands, targetIndex);
+    const baseValid = isCheckpointValid(baseCheckpointRef.current, commands, targetIndex);
+
+    if (tailValid && baseValid) {
+      if (tailCheckpointRef.current.index >= baseCheckpointRef.current.index) {
+        return { slot: 'tail', index: tailCheckpointRef.current.index, canvas: tailCheckpointRef.current.canvas! };
+      } else {
+        return { slot: 'base', index: baseCheckpointRef.current.index, canvas: baseCheckpointRef.current.canvas! };
+      }
+    } else if (tailValid) {
+      return { slot: 'tail', index: tailCheckpointRef.current.index, canvas: tailCheckpointRef.current.canvas! };
+    } else if (baseValid) {
+      return { slot: 'base', index: baseCheckpointRef.current.index, canvas: baseCheckpointRef.current.canvas! };
+    }
+    return null;
+  };
+
+  const invalidateCheckpointsAfterIndex = (targetIndex: number) => {
+    if (tailCheckpointRef.current.index > targetIndex) {
+      invalidateCheckpoint('tail');
+    }
+    if (baseCheckpointRef.current.index > targetIndex) {
+      invalidateCheckpoint('base');
     }
   };
 
@@ -663,90 +769,110 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!propsRef.current.isFreeDraw) return;
     const list = localCommandsRef.current;
     const N = list.length;
-    let fromIndex = checkpointIndexRef.current;
-    if (N <= fromIndex) return;
+    if (N < 2) return;
 
-    // 🛡️ Clear Replay Barrier: Bypass all commands preceding the latest draw_clear
-    let lastClearIndex = -1;
-    for (let i = N - 1; i >= fromIndex; i--) {
-      const c = list[i];
-      if (c) {
-        if (c.event === 'draw_clear') {
-          lastClearIndex = i;
-          break;
-        }
-        if (c.event === 'draw_binary' && c.data) {
-          const byte0 = c.data instanceof ArrayBuffer 
-            ? new Uint8Array(c.data)[0] 
-            : (ArrayBuffer.isView(c.data) ? (c.data as Uint8Array)[0] : 0);
-          if (byte0 === 5) {
-            lastClearIndex = i;
-            break;
+    const lastClearIndex = findLatestClearIndex(list);
+    const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+    const M = N - activeStart;
+    if (M < 4) return;
+
+    let heavyCount = 0;
+    for (let i = activeStart; i < N; i++) {
+      if (isCommandHeavy(list[i])) heavyCount++;
+    }
+
+    if (M < 8 && heavyCount < 2) return;
+
+    // Ideal indices: Base at ~38% of active segment, Tail at ~78% of active segment
+    const targetBaseIndex = activeStart + Math.max(2, Math.floor(M * 0.38));
+    const targetTailIndex = activeStart + Math.max(targetBaseIndex + 2, Math.floor(M * 0.78));
+
+    const baseValid = isCheckpointValid(baseCheckpointRef.current, list);
+    const tailValid = isCheckpointValid(tailCheckpointRef.current, list);
+
+    if (!baseValid) {
+      const bCanvas = ensureCheckpointCanvas('base');
+      const bCtx = bCanvas.getContext('2d');
+      if (!bCtx) return;
+      bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+
+      const replayPaths: Record<string, { x: number; y: number }[]> = {};
+      const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
+      for (let i = activeStart; i < targetBaseIndex; i++) {
+        applyReplayCommand(bCtx, list[i], replayPaths, replaySessions);
+      }
+      Object.keys(replaySessions).forEach((instId) => {
+        try {
+          const session = replaySessions[instId];
+          const path = replayPaths[instId];
+          if (session && path && path.length > 0) {
+            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+            if (isShape) {
+              const startPt = path[0];
+              const lastPt = path[path.length - 1];
+              drawShape(bCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+            } else {
+              drawEntirePath(bCtx, path, session.tool, session.color, session.width, session.opacity);
+            }
           }
-        }
+        } catch (err) {}
+      });
+
+      baseCheckpointRef.current = {
+        canvas: bCanvas,
+        index: targetBaseIndex,
+        anchorSignature: getCommandSignature(list[targetBaseIndex - 1]),
+        lastClearIndex
+      };
+    }
+
+    const currentTailIdx = tailCheckpointRef.current.index;
+    if (!tailValid || (targetTailIndex - currentTailIdx >= 4)) {
+      const tCanvas = ensureCheckpointCanvas('tail');
+      const tCtx = tCanvas.getContext('2d');
+      if (!tCtx) return;
+
+      let fromIdx = activeStart;
+      if (isCheckpointValid(baseCheckpointRef.current, list) && baseCheckpointRef.current.index <= targetTailIndex) {
+        fromIdx = baseCheckpointRef.current.index;
+        tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+        tCtx.save();
+        tCtx.setTransform(1, 0, 0, 1, 0, 0);
+        tCtx.drawImage(baseCheckpointRef.current.canvas!, 0, 0);
+        tCtx.restore();
+      } else {
+        tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
       }
-    }
-    if (lastClearIndex >= fromIndex) {
-      fromIndex = lastClearIndex + 1;
-    }
 
-    let targetIndex = -1;
-
-    // Fast check: Standard length-based advancement for pencil / shape batches
-    if (N - fromIndex >= FREE_DRAW_TAIL_SIZE * 2) {
-      targetIndex = N - FREE_DRAW_TAIL_SIZE;
-    } else {
-      // 🛡️ Bucket-Aware Heavy Density Check:
-      // If 3 or more heavy raster operations (Bucket / Clear) have accumulated unbaked,
-      // advance checkpoint up to N - 1 so subsequent undos only ever replay at most 1 heavy command.
-      let heavyCount = 0;
-      for (let i = fromIndex; i < N; i++) {
-        if (isCommandHeavy(list[i])) {
-          heavyCount++;
-          if (heavyCount >= FREE_DRAW_BUCKET_TAIL_THRESHOLD) break;
-        }
+      const replayPaths: Record<string, { x: number; y: number }[]> = {};
+      const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
+      for (let i = fromIdx; i < targetTailIndex; i++) {
+        applyReplayCommand(tCtx, list[i], replayPaths, replaySessions);
       }
-      if (heavyCount >= FREE_DRAW_BUCKET_TAIL_THRESHOLD) {
-        targetIndex = N - 1;
-      }
-    }
-
-    if (targetIndex <= fromIndex) return;
-
-    const canvas = ensureCheckpointCanvas();
-    const cCtx = canvas.getContext('2d');
-    if (!cCtx) return;
-
-    if (fromIndex === 0 || lastClearIndex >= 0) {
-      cCtx.clearRect(0, 0, canvas.width, canvas.height);
-    }
-
-    const replayPaths: Record<string, { x: number; y: number }[]> = {};
-    const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
-
-    for (let i = fromIndex; i < targetIndex; i++) {
-      applyReplayCommand(cCtx, list[i], replayPaths, replaySessions);
-    }
-
-    Object.keys(replaySessions).forEach((instId) => {
-      try {
-        const session = replaySessions[instId];
-        const path = replayPaths[instId];
-        if (session && path && path.length > 0) {
-          const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-          if (isShape) {
-            const startPt = path[0];
-            const lastPt = path[path.length - 1];
-            drawShape(cCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
-          } else {
-            drawEntirePath(cCtx, path, session.tool, session.color, session.width, session.opacity);
+      Object.keys(replaySessions).forEach((instId) => {
+        try {
+          const session = replaySessions[instId];
+          const path = replayPaths[instId];
+          if (session && path && path.length > 0) {
+            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+            if (isShape) {
+              const startPt = path[0];
+              const lastPt = path[path.length - 1];
+              drawShape(tCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+            } else {
+              drawEntirePath(tCtx, path, session.tool, session.color, session.width, session.opacity);
+            }
           }
-        }
-      } catch (err) {}
-    });
+        } catch (err) {}
+      });
 
-    checkpointIndexRef.current = targetIndex;
-    checkpointAnchorSignatureRef.current = getCommandSignature(list[targetIndex - 1]);
+      tailCheckpointRef.current = {
+        canvas: tCanvas,
+        index: targetTailIndex,
+        anchorSignature: getCommandSignature(list[targetTailIndex - 1]),
+        lastClearIndex
+      };
+    }
   };
 
   // Buffering history syncing before ref ready
@@ -2224,10 +2350,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     // 4. Fast-Path is 100% VALID: Commit state modifications only AFTER restoration succeeds
-    // Invalidate checkpoint only if target was strictly before the checkpoint boundary
-    if (targetIndex < checkpointIndexRef.current) {
-      invalidateCheckpoint();
-    }
+    invalidateCheckpointsAfterIndex(targetIndex);
 
     // Remove target command from list
     const [removedCmd] = list.splice(targetIndex, 1);
@@ -2346,9 +2469,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             replayFreeDrawHistorySafely(list);
           } else {
             // Fallback: Safe Mid-History Replay
-            if (targetIndex < checkpointIndexRef.current) {
-              invalidateCheckpoint();
-            }
+            invalidateCheckpointsAfterIndex(targetIndex);
             const [removedCmd] = list.splice(targetIndex, 1);
             if (removedCmd) {
               localRedoStackRef.current.push(removedCmd);
@@ -2733,7 +2854,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       console.log("[DrawingCanvasCore] Instantly rebuilding room drawing history...", commands.length);
 
-      invalidateCheckpoint();
+      invalidateCheckpoint('all');
 
       // Initial clear
       resetCanvasBackingStores(ctx, tempCtx);
@@ -2782,7 +2903,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       isReplayingRef.current = false;
       saveSnapshot();
       syncHistoryButtons();
-      if (propsRef.current.isFreeDraw && commands.length >= FREE_DRAW_TAIL_SIZE * 2) {
+      if (propsRef.current.isFreeDraw) {
         advanceCheckpointIncremental();
       }
     }
@@ -2798,67 +2919,43 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       const N = commands.length;
       let startIndex = 0;
+      const lastClearIndex = findLatestClearIndex(commands);
 
-      // 🛡️ Clear Replay Barrier: find latest draw_clear in active history
-      let lastClearIndex = -1;
-      for (let i = N - 1; i >= 0; i--) {
-        const c = commands[i];
-        if (c) {
-          if (c.event === 'draw_clear') {
-            lastClearIndex = i;
-            break;
-          }
-          if (c.event === 'draw_binary' && c.data) {
-            const byte0 = c.data instanceof ArrayBuffer 
-              ? new Uint8Array(c.data)[0] 
-              : (ArrayBuffer.isView(c.data) ? (c.data as Uint8Array)[0] : 0);
-            if (byte0 === 5) {
-              lastClearIndex = i;
-              break;
-            }
-          }
-        }
-      }
+      // Best valid checkpoint strictly <= N
+      const bestCp = getBestCheckpoint(commands, N);
 
-      const isCheckpointValid =
-        Boolean(propsRef.current.isFreeDraw) &&
-        checkpointCanvasRef.current !== null &&
-        checkpointIndexRef.current > 0 &&
-        checkpointIndexRef.current <= N &&
-        checkpointIndexRef.current > lastClearIndex &&
-        getCommandSignature(commands[checkpointIndexRef.current - 1]) === checkpointAnchorSignatureRef.current;
-
-      if (isCheckpointValid && checkpointCanvasRef.current) {
+      if (bestCp && bestCp.index > lastClearIndex) {
         // 1. Clear ONLY the permanent base canvas
         ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         // 2. Blit baked checkpoint canvas instantly (1:1 pixel exact copy)
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.drawImage(checkpointCanvasRef.current, 0, 0);
+        ctx.drawImage(bestCp.canvas, 0, 0);
         ctx.restore();
-        startIndex = checkpointIndexRef.current;
+        startIndex = bestCp.index;
       } else {
-        // Fallback: Safe Clear-Barrier replay (starts AFTER latest Clear, or from 0)
-        invalidateCheckpoint();
+        // Fallback: Safe Clear-Barrier replay
+        invalidateCheckpoint('all');
         ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         startIndex = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
       }
 
-      // 🛡️ Inline Checkpoint Recovery: Calculate candidate checkpoint index to capture DURING replay loop
-      let candidateCheckpointIndex = -1;
-      if (propsRef.current.isFreeDraw && N >= 2) {
-        if (N - startIndex >= FREE_DRAW_TAIL_SIZE * 2) {
-          candidateCheckpointIndex = N - FREE_DRAW_TAIL_SIZE;
-        } else {
-          let heavyCount = 0;
-          for (let i = startIndex; i < N; i++) {
-            if (isCommandHeavy(commands[i])) {
-              heavyCount++;
-            }
-          }
-          if (heavyCount >= FREE_DRAW_BUCKET_TAIL_THRESHOLD) {
-            candidateCheckpointIndex = N - 1;
-          }
+      // 🛡️ Inline Checkpoint Recovery for Dual Checkpoints:
+      const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+      const M = N - activeStart;
+      let candidateBaseIndex = -1;
+      let candidateTailIndex = -1;
+
+      let heavyCount = 0;
+      for (let i = activeStart; i < N; i++) {
+        if (isCommandHeavy(commands[i])) heavyCount++;
+      }
+
+      if (propsRef.current.isFreeDraw && M >= 4 && (heavyCount >= 2 || M >= 8)) {
+        candidateBaseIndex = activeStart + Math.max(2, Math.floor(M * 0.38));
+        candidateTailIndex = activeStart + Math.max(candidateBaseIndex + 2, Math.floor(M * 0.78));
+        if (candidateTailIndex >= N) {
+          candidateTailIndex = N > candidateBaseIndex ? N - 1 : -1;
         }
       }
 
@@ -2868,20 +2965,42 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
       for (let i = startIndex; i < N; i++) {
-        if (i === candidateCheckpointIndex && !isCheckpointValid) {
-          // 🎯 Inline Checkpoint Capture: ctx currently holds exact raster result of commands 0..i-1!
-          const chkCanvas = ensureCheckpointCanvas();
-          const chkCtx = chkCanvas.getContext('2d');
-          if (chkCtx) {
-            chkCtx.clearRect(0, 0, chkCanvas.width, chkCanvas.height);
-            chkCtx.save();
-            chkCtx.setTransform(1, 0, 0, 1, 0, 0);
-            chkCtx.drawImage(ctx.canvas, 0, 0);
-            chkCtx.restore();
-            checkpointIndexRef.current = candidateCheckpointIndex;
-            checkpointAnchorSignatureRef.current = getCommandSignature(commands[candidateCheckpointIndex - 1]);
+        if (i === candidateBaseIndex && !isCheckpointValid(baseCheckpointRef.current, commands)) {
+          const bCanvas = ensureCheckpointCanvas('base');
+          const bCtx = bCanvas.getContext('2d');
+          if (bCtx) {
+            bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+            bCtx.save();
+            bCtx.setTransform(1, 0, 0, 1, 0, 0);
+            bCtx.drawImage(ctx.canvas, 0, 0);
+            bCtx.restore();
+            baseCheckpointRef.current = {
+              canvas: bCanvas,
+              index: candidateBaseIndex,
+              anchorSignature: getCommandSignature(commands[candidateBaseIndex - 1]),
+              lastClearIndex
+            };
           }
         }
+
+        if (i === candidateTailIndex && !isCheckpointValid(tailCheckpointRef.current, commands)) {
+          const tCanvas = ensureCheckpointCanvas('tail');
+          const tCtx = tCanvas.getContext('2d');
+          if (tCtx) {
+            tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+            tCtx.save();
+            tCtx.setTransform(1, 0, 0, 1, 0, 0);
+            tCtx.drawImage(ctx.canvas, 0, 0);
+            tCtx.restore();
+            tailCheckpointRef.current = {
+              canvas: tCanvas,
+              index: candidateTailIndex,
+              anchorSignature: getCommandSignature(commands[candidateTailIndex - 1]),
+              lastClearIndex
+            };
+          }
+        }
+
         applyReplayCommand(ctx, commands[i], replayPaths, replaySessions);
       }
 
@@ -3348,10 +3467,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             return;
           }
 
-          // 3. Invalidate Checkpoint only if target was before the checkpoint boundary:
-          if (index < checkpointIndexRef.current) {
-            invalidateCheckpoint();
-          }
+          // 3. Invalidate Checkpoints after the target index:
+          invalidateCheckpointsAfterIndex(index);
 
           // 4. Remove ONLY the matching remote command from history.
           // Strictly DO NOT add another player's command to localRedoStackRef!
@@ -3405,7 +3522,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         console.log("[DrawingCanvasCore] Starting Deferred Queue & Forced Multi-Snapshots chunking...", commands.length);
 
-        invalidateCheckpoint();
+        invalidateCheckpoint('all');
 
         resetCanvasBackingStores(ctx, tempCtx);
 
@@ -3464,7 +3581,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               clearTimeout(syncTimeoutRef.current);
               syncTimeoutRef.current = null;
             }
-            if (propsRef.current.isFreeDraw && commands.length >= FREE_DRAW_TAIL_SIZE * 2) {
+            if (propsRef.current.isFreeDraw) {
               advanceCheckpointIncremental();
             }
             console.log("[DrawingCanvasCore] Deferred queue fully rendered.");
