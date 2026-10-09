@@ -683,22 +683,13 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
 }
 
 function SubToolBtn({ icon, active, onClick, className = '', disabled = false }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string, disabled?: boolean }) {
-  const lastPointerTimeRef = useRef(0);
-
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (disabled || e.button !== 0) return;
-    lastPointerTimeRef.current = Date.now();
     e.stopPropagation();
-    onClick();
   };
 
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (disabled) return;
     e.stopPropagation();
-    if (Date.now() - lastPointerTimeRef.current < 400) {
-      e.preventDefault();
-      return;
-    }
     onClick();
   };
 
