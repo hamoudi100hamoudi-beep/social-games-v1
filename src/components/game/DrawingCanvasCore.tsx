@@ -768,19 +768,57 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const advanceCheckpointIncremental = () => {
     if (!propsRef.current.isFreeDraw) return;
     const list = localCommandsRef.current;
-    if (list.length < 2) return;
+    const N = list.length;
+    if (N < 8) return;
 
-    // 🛡️ Performance Fix: Eliminate synchronous historical replay during normal checkpoint maintenance.
-    // Checkpoint maintenance during drawing must not synchronously call applyReplayCommand or floodFill on previously committed commands.
-    // Checkpoints are populated during full sequential history replay and validated here.
+    const ctx = ctxRef.current;
+    if (!ctx || !ctx.canvas) return;
+
+    const lastClearIndex = findLatestClearIndex(list);
+    const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+    const M = N - activeStart;
+    if (M < 8) return;
+
+    const targetBaseIndex = activeStart + Math.max(2, Math.floor(M * 0.38));
+    const targetTailIndex = activeStart + Math.max(targetBaseIndex + 2, Math.floor(M * 0.78));
+
     const baseValid = isCheckpointValid(baseCheckpointRef.current, list);
     const tailValid = isCheckpointValid(tailCheckpointRef.current, list);
 
-    if (!baseValid && baseCheckpointRef.current.canvas) {
-      // Defer reconstruction without synchronous replay
+    if (!baseValid && N === targetBaseIndex) {
+      const bCanvas = ensureCheckpointCanvas('base');
+      const bCtx = bCanvas.getContext('2d');
+      if (bCtx) {
+        bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+        bCtx.save();
+        bCtx.setTransform(1, 0, 0, 1, 0, 0);
+        bCtx.drawImage(ctx.canvas, 0, 0);
+        bCtx.restore();
+        baseCheckpointRef.current = {
+          canvas: bCanvas,
+          index: targetBaseIndex,
+          anchorSignature: getCommandSignature(list[targetBaseIndex - 1]),
+          lastClearIndex
+        };
+      }
     }
-    if (!tailValid && tailCheckpointRef.current.canvas) {
-      // Defer reconstruction without synchronous replay
+
+    if (!tailValid && N === targetTailIndex) {
+      const tCanvas = ensureCheckpointCanvas('tail');
+      const tCtx = tCanvas.getContext('2d');
+      if (tCtx) {
+        tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+        tCtx.save();
+        tCtx.setTransform(1, 0, 0, 1, 0, 0);
+        tCtx.drawImage(ctx.canvas, 0, 0);
+        tCtx.restore();
+        tailCheckpointRef.current = {
+          canvas: tCanvas,
+          index: targetTailIndex,
+          anchorSignature: getCommandSignature(list[targetTailIndex - 1]),
+          lastClearIndex
+        };
+      }
     }
   };
 
@@ -2516,18 +2554,49 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       if (newMsg) {
         prevCommandsCountRef.current = localCommandsRef.current.length;
-        localCommandsRef.current.push({
+
+        // 1. Capture single-step Undo bitmap cache before applying the redone command
+        captureDirectFreeDrawUndoCache(instanceId, newStrokeId);
+
+        const newCmdRecord = {
           event: 'draw_binary',
           data: newMsg,
           instanceId,
           strokeId: newStrokeId
-        });
+        };
+        localCommandsRef.current.push(newCmdRecord);
 
-        hasFreeDrawUndoCacheRef.current = false;
+        // 2. Apply ONLY the redone command incrementally without full history rebuild
+        const ctx = ctxRef.current;
+        if (ctx) {
+          isReplayingRef.current = true;
+          const replayPaths: Record<string, { x: number; y: number }[]> = {};
+          const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
+          applyReplayCommand(ctx, newCmdRecord, replayPaths, replaySessions);
+          Object.keys(replaySessions).forEach((instId) => {
+            try {
+              const session = replaySessions[instId];
+              const path = replayPaths[instId];
+              if (session && path && path.length > 0) {
+                const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+                if (isShape) {
+                  const startPt = path[0];
+                  const lastPt = path[path.length - 1];
+                  drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+                } else {
+                  drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
+                }
+              }
+            } catch (err) {}
+          });
+          isReplayingRef.current = false;
+        }
+
+        hasFreeDrawUndoCacheRef.current = true;
         hasFreeDrawRedoCacheRef.current = false;
-        replayFreeDrawHistorySafely(localCommandsRef.current);
         advanceCheckpointIncremental();
         syncHistoryButtons();
+        saveSnapshot();
 
         if (emit && socket?.connected) {
           socket.emit('draw_binary', newMsg);
