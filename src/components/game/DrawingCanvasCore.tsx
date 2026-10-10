@@ -768,110 +768,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const advanceCheckpointIncremental = () => {
     if (!propsRef.current.isFreeDraw) return;
     const list = localCommandsRef.current;
-    const N = list.length;
-    if (N < 2) return;
+    if (list.length < 2) return;
 
-    const lastClearIndex = findLatestClearIndex(list);
-    const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
-    const M = N - activeStart;
-    if (M < 4) return;
-
-    let heavyCount = 0;
-    for (let i = activeStart; i < N; i++) {
-      if (isCommandHeavy(list[i])) heavyCount++;
-    }
-
-    if (M < 8 && heavyCount < 2) return;
-
-    // Ideal indices: Base at ~38% of active segment, Tail at ~78% of active segment
-    const targetBaseIndex = activeStart + Math.max(2, Math.floor(M * 0.38));
-    const targetTailIndex = activeStart + Math.max(targetBaseIndex + 2, Math.floor(M * 0.78));
-
+    // 🛡️ Performance Fix: Eliminate synchronous historical replay during normal checkpoint maintenance.
+    // Checkpoint maintenance during drawing must not synchronously call applyReplayCommand or floodFill on previously committed commands.
+    // Checkpoints are populated during full sequential history replay and validated here.
     const baseValid = isCheckpointValid(baseCheckpointRef.current, list);
     const tailValid = isCheckpointValid(tailCheckpointRef.current, list);
 
-    if (!baseValid) {
-      const bCanvas = ensureCheckpointCanvas('base');
-      const bCtx = bCanvas.getContext('2d');
-      if (!bCtx) return;
-      bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
-
-      const replayPaths: Record<string, { x: number; y: number }[]> = {};
-      const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
-      for (let i = activeStart; i < targetBaseIndex; i++) {
-        applyReplayCommand(bCtx, list[i], replayPaths, replaySessions);
-      }
-      Object.keys(replaySessions).forEach((instId) => {
-        try {
-          const session = replaySessions[instId];
-          const path = replayPaths[instId];
-          if (session && path && path.length > 0) {
-            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-            if (isShape) {
-              const startPt = path[0];
-              const lastPt = path[path.length - 1];
-              drawShape(bCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
-            } else {
-              drawEntirePath(bCtx, path, session.tool, session.color, session.width, session.opacity);
-            }
-          }
-        } catch (err) {}
-      });
-
-      baseCheckpointRef.current = {
-        canvas: bCanvas,
-        index: targetBaseIndex,
-        anchorSignature: getCommandSignature(list[targetBaseIndex - 1]),
-        lastClearIndex
-      };
+    if (!baseValid && baseCheckpointRef.current.canvas) {
+      // Defer reconstruction without synchronous replay
     }
-
-    const currentTailIdx = tailCheckpointRef.current.index;
-    if (!tailValid || (targetTailIndex - currentTailIdx >= 4)) {
-      const tCanvas = ensureCheckpointCanvas('tail');
-      const tCtx = tCanvas.getContext('2d');
-      if (!tCtx) return;
-
-      let fromIdx = activeStart;
-      if (isCheckpointValid(baseCheckpointRef.current, list) && baseCheckpointRef.current.index <= targetTailIndex) {
-        fromIdx = baseCheckpointRef.current.index;
-        tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
-        tCtx.save();
-        tCtx.setTransform(1, 0, 0, 1, 0, 0);
-        tCtx.drawImage(baseCheckpointRef.current.canvas!, 0, 0);
-        tCtx.restore();
-      } else {
-        tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
-      }
-
-      const replayPaths: Record<string, { x: number; y: number }[]> = {};
-      const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
-      for (let i = fromIdx; i < targetTailIndex; i++) {
-        applyReplayCommand(tCtx, list[i], replayPaths, replaySessions);
-      }
-      Object.keys(replaySessions).forEach((instId) => {
-        try {
-          const session = replaySessions[instId];
-          const path = replayPaths[instId];
-          if (session && path && path.length > 0) {
-            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-            if (isShape) {
-              const startPt = path[0];
-              const lastPt = path[path.length - 1];
-              drawShape(tCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
-            } else {
-              drawEntirePath(tCtx, path, session.tool, session.color, session.width, session.opacity);
-            }
-          }
-        } catch (err) {}
-      });
-
-      tailCheckpointRef.current = {
-        canvas: tCanvas,
-        index: targetTailIndex,
-        anchorSignature: getCommandSignature(list[targetTailIndex - 1]),
-        lastClearIndex
-      };
+    if (!tailValid && tailCheckpointRef.current.canvas) {
+      // Defer reconstruction without synchronous replay
     }
   };
 
