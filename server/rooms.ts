@@ -1492,7 +1492,7 @@ const words = word.split(" ").filter(w => w.length > 0);
   public registerDrawingIdentity(socketId: string, instanceId: string) {
     if (!instanceId || typeof instanceId !== 'string') return;
     const trimmedId = instanceId.trim();
-    if (trimmedId.length === 0 || trimmedId.length > 128 || !/^[a-zA-Z0-9_\-]+$/.test(trimmedId)) {
+    if (trimmedId.length === 0 || trimmedId.length > 7 || !/^[a-z0-9]+$/i.test(trimmedId)) {
       return;
     }
 
@@ -1534,6 +1534,9 @@ const words = word.split(" ").filter(w => w.length > 0);
   public unregisterDrawingIdentity(socketId: string, instanceId: string) {
     if (!instanceId || typeof instanceId !== 'string') return;
     const trimmedId = instanceId.trim();
+    if (trimmedId.length === 0 || trimmedId.length > 7 || !/^[a-z0-9]+$/i.test(trimmedId)) {
+      return;
+    }
 
     const player = this.getPlayer(socketId);
     let targetRoom: Room | undefined = undefined;
