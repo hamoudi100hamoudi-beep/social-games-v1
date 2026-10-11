@@ -470,6 +470,26 @@ async function startServer() {
       }
     });
 
+    socket.on('register_drawing_identity', ({ instanceId }) => {
+      try {
+        if (instanceId && typeof instanceId === 'string') {
+          roomManager.registerDrawingIdentity(socket.id, instanceId);
+        }
+      } catch (err) {
+        console.error("Error registering drawing identity:", err);
+      }
+    });
+
+    socket.on('unregister_drawing_identity', ({ instanceId }) => {
+      try {
+        if (instanceId && typeof instanceId === 'string') {
+          roomManager.unregisterDrawingIdentity(socket.id, instanceId);
+        }
+      } catch (err) {
+        console.error("Error unregistering drawing identity:", err);
+      }
+    });
+
     socket.on('stop_free_draw', () => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {

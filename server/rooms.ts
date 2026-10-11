@@ -1476,11 +1476,64 @@ const words = word.split(" ").filter(w => w.length > 0);
   }
 
   public abortAllActiveFreeDrawStrokesForSocket(socketId: string) {
+    this.cleanupDrawingIdentitiesForSocket(socketId);
     for (const room of this.rooms.values()) {
       if ((room.isFreeDraw || room.isExperimental) && room.freeDrawStrokes) {
         for (const [key, stroke] of room.freeDrawStrokes.entries()) {
           if (stroke.socketId === socketId) {
             this.abortFreeDrawStroke(room.id, socketId, stroke.instId);
+          }
+        }
+      }
+    }
+  }
+
+  public registerDrawingIdentity(socketId: string, instanceId: string) {
+    const player = this.getPlayer(socketId);
+    let targetRoom: Room | undefined = undefined;
+    if (player && player.roomId) {
+      targetRoom = this.rooms.get(player.roomId);
+    }
+    if (!targetRoom) {
+      for (const room of this.rooms.values()) {
+        if (room.players.some(p => p.id === socketId)) {
+          targetRoom = room;
+          break;
+        }
+      }
+    }
+    if (targetRoom && targetRoom.isFreeDraw) {
+      targetRoom.drawingIdentities = targetRoom.drawingIdentities || {};
+      const playerName = player ? player.name : 'لاعب';
+      targetRoom.drawingIdentities[instanceId] = { socketId, playerName };
+    }
+  }
+
+  public unregisterDrawingIdentity(socketId: string, instanceId: string) {
+    const player = this.getPlayer(socketId);
+    let targetRoom: Room | undefined = undefined;
+    if (player && player.roomId) {
+      targetRoom = this.rooms.get(player.roomId);
+    }
+    if (!targetRoom) {
+      for (const room of this.rooms.values()) {
+        if (room.players.some(p => p.id === socketId)) {
+          targetRoom = room;
+          break;
+        }
+      }
+    }
+    if (targetRoom && targetRoom.drawingIdentities) {
+      delete targetRoom.drawingIdentities[instanceId];
+    }
+  }
+
+  public cleanupDrawingIdentitiesForSocket(socketId: string) {
+    for (const room of this.rooms.values()) {
+      if (room.drawingIdentities) {
+        for (const [instId, info] of Object.entries(room.drawingIdentities)) {
+          if (info.socketId === socketId) {
+            delete room.drawingIdentities[instId];
           }
         }
       }
@@ -1822,6 +1875,7 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   removePlayerFromRoom(roomId: string, socketId: string): Room | undefined {
     try {
+      this.cleanupDrawingIdentitiesForSocket(socketId);
       const room = this.rooms.get(roomId);
       if (room) {
         const player = this.players.get(socketId);

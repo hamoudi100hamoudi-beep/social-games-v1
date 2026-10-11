@@ -53,6 +53,7 @@ export interface Room {
   activeDrawers?: string[];
   freeDrawStrokes?: Map<string, any>;
   freeDrawCanonicalCache?: Map<string, { buffer: Buffer; createdAt: number }>;
+  drawingIdentities?: Record<string, { socketId: string; playerName: string }>;
 }
 
 export interface RoomConfig {

@@ -3697,6 +3697,27 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
   }, [socket, instanceId]);
 
+  // --- Free Draw Drawing Identity Registration (Phase 1) ---
+  useEffect(() => {
+    if (!isFreeDraw || !socket || !instanceId) return;
+
+    const registerIdentity = () => {
+      if (socket.connected) {
+        socket.emit('register_drawing_identity', { instanceId });
+      }
+    };
+
+    registerIdentity();
+    socket.on('connect', registerIdentity);
+
+    return () => {
+      socket.off('connect', registerIdentity);
+      if (socket.connected) {
+        socket.emit('unregister_drawing_identity', { instanceId });
+      }
+    };
+  }, [isFreeDraw, socket, instanceId]);
+
   const startSyncFlow = () => {
     const now = Date.now();
     if (now - lastSyncRequestTimeRef.current < 1000) {
