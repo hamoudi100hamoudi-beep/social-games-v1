@@ -1040,6 +1040,7 @@ const words = word.split(" ").filter(w => w.length > 0);
         votekicks: room.votekicks || {},
         isFreeDraw: !!room.isFreeDraw,
         activeDrawers: room.activeDrawers || [],
+        drawingIdentities: room.drawingIdentities || {},
         hasDrawHistory: hasHistory,
         gameState: {
           ...publicGameState,
@@ -1489,6 +1490,12 @@ const words = word.split(" ").filter(w => w.length > 0);
   }
 
   public registerDrawingIdentity(socketId: string, instanceId: string) {
+    if (!instanceId || typeof instanceId !== 'string') return;
+    const trimmedId = instanceId.trim();
+    if (trimmedId.length === 0 || trimmedId.length > 128 || !/^[a-zA-Z0-9_\-]+$/.test(trimmedId)) {
+      return;
+    }
+
     const player = this.getPlayer(socketId);
     let targetRoom: Room | undefined = undefined;
     if (player && player.roomId) {
@@ -1502,14 +1509,32 @@ const words = word.split(" ").filter(w => w.length > 0);
         }
       }
     }
-    if (targetRoom && targetRoom.isFreeDraw) {
-      targetRoom.drawingIdentities = targetRoom.drawingIdentities || {};
-      const playerName = player ? player.name : 'لاعب';
-      targetRoom.drawingIdentities[instanceId] = { socketId, playerName };
+
+    if (!targetRoom || !targetRoom.isFreeDraw) return;
+    if (!targetRoom.players.some(p => p.id === socketId)) return;
+
+    targetRoom.drawingIdentities = targetRoom.drawingIdentities || {};
+    const existing = targetRoom.drawingIdentities[trimmedId];
+    if (existing && existing.socketId !== socketId) {
+      const otherSocketActive = this.io?.sockets.sockets.has(existing.socketId) &&
+        targetRoom.players.some(p => p.id === existing.socketId);
+      if (otherSocketActive) {
+        return; // Prevent stealing active mapping
+      }
+    }
+
+    const playerName = player ? (player.name || 'لاعب') : 'لاعب';
+    targetRoom.drawingIdentities[trimmedId] = { socketId, playerName };
+
+    if (this.io) {
+      this.io.to(targetRoom.id).emit('drawing_identities_update', targetRoom.drawingIdentities);
     }
   }
 
   public unregisterDrawingIdentity(socketId: string, instanceId: string) {
+    if (!instanceId || typeof instanceId !== 'string') return;
+    const trimmedId = instanceId.trim();
+
     const player = this.getPlayer(socketId);
     let targetRoom: Room | undefined = undefined;
     if (player && player.roomId) {
@@ -1523,18 +1548,30 @@ const words = word.split(" ").filter(w => w.length > 0);
         }
       }
     }
-    if (targetRoom && targetRoom.drawingIdentities) {
-      delete targetRoom.drawingIdentities[instanceId];
+
+    if (targetRoom && targetRoom.drawingIdentities && targetRoom.drawingIdentities[trimmedId]) {
+      const mapping = targetRoom.drawingIdentities[trimmedId];
+      if (mapping.socketId === socketId) {
+        delete targetRoom.drawingIdentities[trimmedId];
+        if (this.io) {
+          this.io.to(targetRoom.id).emit('drawing_identities_update', targetRoom.drawingIdentities);
+        }
+      }
     }
   }
 
   public cleanupDrawingIdentitiesForSocket(socketId: string) {
     for (const room of this.rooms.values()) {
       if (room.drawingIdentities) {
+        let changed = false;
         for (const [instId, info] of Object.entries(room.drawingIdentities)) {
           if (info.socketId === socketId) {
             delete room.drawingIdentities[instId];
+            changed = true;
           }
+        }
+        if (changed && this.io) {
+          this.io.to(room.id).emit('drawing_identities_update', room.drawingIdentities);
         }
       }
     }
