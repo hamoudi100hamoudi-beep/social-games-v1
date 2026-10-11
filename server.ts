@@ -378,7 +378,11 @@ async function startServer() {
           const isContinuousTool = toolName === 'pencil' || toolName === 'eraser';
 
           if (type === 5) { // draw_clear
-            roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+            if (isFreeDraw || isExperimental) {
+              roomManager.handleFreeDrawClear(roomId, buf);
+            } else {
+              roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+            }
             socket.broadcast.to(roomId).emit('draw_binary', buf);
           } else if (type === 7) { // draw_undo
             if ((isFreeDraw || isExperimental) && buf.length >= 10) {

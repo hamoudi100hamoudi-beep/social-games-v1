@@ -679,19 +679,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
+  const isClearCommand = (c: any): boolean => {
+    if (!c) return false;
+    if (c.event === 'draw_clear') return true;
+    if (c.event === 'draw_binary' && c.data) {
+      const byte0 = c.data instanceof ArrayBuffer 
+        ? new Uint8Array(c.data)[0] 
+        : (ArrayBuffer.isView(c.data) ? (c.data as Uint8Array)[0] : (Array.isArray(c.data) ? c.data[0] : 0));
+      return byte0 === 5;
+    }
+    return false;
+  };
+
   const findLatestClearIndex = (commands: any[], upToIndex?: number): number => {
     const end = upToIndex !== undefined ? Math.min(commands.length - 1, upToIndex) : commands.length - 1;
     for (let i = end; i >= 0; i--) {
-      const c = commands[i];
-      if (c) {
-        if (c.event === 'draw_clear') return i;
-        if (c.event === 'draw_binary' && c.data) {
-          const byte0 = c.data instanceof ArrayBuffer 
-            ? new Uint8Array(c.data)[0] 
-            : (ArrayBuffer.isView(c.data) ? (c.data as Uint8Array)[0] : 0);
-          if (byte0 === 5) return i;
-        }
-      }
+      if (isClearCommand(commands[i])) return i;
     }
     return -1;
   };
@@ -1483,7 +1486,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
 
       // Record local durable drawing history for deterministic undo / redo
-      if (event === 'draw_stroke' || event === 'draw_clear' || (event === 'draw_action' && payload.tool === 'bucket')) {
+      if (event === 'draw_stroke' || (event === 'draw_action' && payload.tool === 'bucket')) {
         prevCommandsCountRef.current = localCommandsRef.current.length;
         const cmdRecord: any = {
           event: 'draw_binary',
@@ -2213,22 +2216,72 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
   }, []);
 
+  const applyClearEpoch = (rawBuf?: any) => {
+    const ctx = ctxRef.current;
+    const tempCtx = tempCtxRef.current;
+
+    // 1. Invalidate Base & Tail checkpoints and all Undo/Redo caches
+    invalidateCheckpoint('all');
+    invalidateFreeDrawCaches();
+
+    // 2. Discard and cancel any pending in-flight drawing sessions & spectator animations
+    if (spectatorPlaybackRafRef.current !== null) {
+      cancelAnimationFrame(spectatorPlaybackRafRef.current);
+      spectatorPlaybackRafRef.current = null;
+    }
+    drainingStrokesRef.current = [];
+    activeSessionsRef.current = {};
+
+    isDrawingRef.current = false;
+    currentPathRef.current = [];
+    moveBatchRef.current = [];
+    networkStrokePointsRef.current = [];
+    activePointerIdRef.current = null;
+    exitedOutsideWhilePointerDownRef.current = false;
+    lastOutsidePointerRef.current = null;
+
+    if (throttleTimeoutRef.current) {
+      clearTimeout(throttleTimeoutRef.current);
+      throttleTimeoutRef.current = null;
+    }
+    if (bucketTimeoutRef.current) {
+      clearTimeout(bucketTimeoutRef.current);
+      bucketTimeoutRef.current = null;
+    }
+    preventBucketRef.current = false;
+
+    // 3. Reset canvas backing stores (physical framebuffers)
+    if (ctx && tempCtx) {
+      resetCanvasBackingStores(ctx, tempCtx);
+    }
+
+    // 4. Reset history to retain at most one non-undoable Clear marker without synthetic strokeId
+    const clearData = rawBuf || encodeBinaryDrawMessage('draw_clear', {});
+    localCommandsRef.current = [{
+      event: 'draw_binary',
+      data: clearData
+    }];
+    localRedoStackRef.current = [];
+    prevCommandsCountRef.current = 0;
+
+    // 5. Update history buttons
+    syncHistoryButtons();
+  };
+
   const executeClear = (emit: boolean = true) => {
     if (isResetPendingRef.current) {
       flushPendingReset();
     }
-    const ctx = ctxRef.current;
-    const tempCtx = tempCtxRef.current;
-    if (!ctx || !tempCtx) return;
 
-    invalidateCheckpoint();
-    captureDirectFreeDrawUndoCache();
-
-    resetCanvasBackingStores(ctx, tempCtx);
-
+    let msg: ArrayBuffer | null = null;
     if (emit) {
-      emitDrawCommand('draw_clear', {});
+      msg = encodeBinaryDrawMessage('draw_clear', {});
+      if (socket?.connected && msg) {
+        socket.emit('draw_binary', msg);
+      }
     }
+
+    applyClearEpoch(msg || undefined);
     saveSnapshot();
   };
 
@@ -2237,12 +2290,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     let canUndo = false;
     if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
       canUndo = list.some(cmd => {
-        if (!cmd) return false;
+        if (!cmd || isClearCommand(cmd)) return false;
         const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
         return cmdInstId === instanceId && cmd.strokeId !== undefined;
       });
     } else {
-      canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
+      const lastCmd = list.length > 0 ? list[list.length - 1] : null;
+      canUndo = list.length > 0 && !isClearCommand(lastCmd) && localRedoStackRef.current.length === 0;
     }
     const canRedo = localRedoStackRef.current.length > 0;
     const index = canUndo ? 1 : 0;
@@ -2372,7 +2426,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         for (let i = list.length - 1; i >= 0; i--) {
           const cmd = list[i];
-          if (cmd) {
+          if (cmd && !isClearCommand(cmd)) {
             const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
             if (cmdInstId === instanceId && cmd.strokeId !== undefined) {
               targetIndex = i;
@@ -2447,7 +2501,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
 
       // Normal / Competitive Rooms: Keep existing global undo behavior intact
-      const canUndo = list.length > 0 && localRedoStackRef.current.length === 0;
+      const lastCmd = list.length > 0 ? list[list.length - 1] : null;
+      const canUndo = list.length > 0 && !isClearCommand(lastCmd) && localRedoStackRef.current.length === 0;
       if (!canUndo) return;
 
       if (isDrawingRef.current) {
@@ -3333,17 +3388,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
         executeRedrawTempLayer();
       } else if (event === 'draw_clear') {
-        invalidateCheckpoint();
-        fastForwardFlushSpectatorQueue();
-        drainingStrokesRef.current = [];
-        activeSessionsRef.current = {};
-        redrawTempLayer();
-        captureDirectFreeDrawUndoCache();
-        prevCommandsCountRef.current = localCommandsRef.current.length;
-        localCommandsRef.current.push({ event: 'draw_binary', data: raw });
-        localRedoStackRef.current = [];
-        executeClear(false);
-        syncHistoryButtons();
+        applyClearEpoch(raw);
+        saveSnapshot();
       } else if (event === 'draw_action') {
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
           // 🛡️ Remote Raster/History Transaction Barrier:

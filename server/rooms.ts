@@ -1497,6 +1497,20 @@ const words = word.split(" ").filter(w => w.length > 0);
     }
   }
 
+  public handleFreeDrawClear(roomId: string, buf: Buffer) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    this.abortAllActiveFreeDrawStrokesForRoom(roomId);
+    if (room.freeDrawCanonicalCache) {
+      room.freeDrawCanonicalCache.clear();
+    }
+    room.gameState.drawHistory = [];
+    //@ts-ignore
+    room.gameState.redoStack = [];
+    room.gameState.isDrawingActive = false;
+    this.recordDrawCommand(roomId, 'draw_binary', buf);
+  }
+
   public getCanonicalFreeDrawStroke(roomId: string, instId: string, strokeId: number): Buffer | null {
     const room = this.rooms.get(roomId);
     if (!room || (!room.isFreeDraw && !room.isExperimental) || !room.freeDrawCanonicalCache) return null;
