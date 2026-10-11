@@ -704,7 +704,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     commands: any[],
     targetIndex?: number
   ): boolean => {
-    if (!propsRef.current.isFreeDraw) return false;
+    if (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) return false;
     if (!cp.canvas || cp.index <= 0) return false;
     const N = commands.length;
     if (cp.index > N) return false;
@@ -769,7 +769,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const advanceCheckpointIncremental = () => {
-    if (!propsRef.current.isFreeDraw) return;
+    if (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) return;
     const list = localCommandsRef.current;
     const N = list.length;
     const STRIDE = 8;
@@ -2977,7 +2977,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       isReplayingRef.current = false;
       saveSnapshot();
       syncHistoryButtons();
-      if (propsRef.current.isFreeDraw) {
+      if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
         advanceCheckpointIncremental();
       }
     }
@@ -3022,7 +3022,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       const STRIDE = 8;
       const numCheckpoints = Math.floor(M / STRIDE);
-      if (propsRef.current.isFreeDraw && numCheckpoints >= 1) {
+      if ((propsRef.current.isFreeDraw || propsRef.current.isExperimental) && numCheckpoints >= 1) {
         if (numCheckpoints >= 2) {
           candidateBaseIndex = activeStart + (numCheckpoints - 1) * STRIDE;
           candidateTailIndex = activeStart + numCheckpoints * STRIDE;
@@ -3647,7 +3647,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               clearTimeout(syncTimeoutRef.current);
               syncTimeoutRef.current = null;
             }
-            if (propsRef.current.isFreeDraw) {
+            if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
               advanceCheckpointIncremental();
             }
             console.log("[DrawingCanvasCore] Deferred queue fully rendered.");
