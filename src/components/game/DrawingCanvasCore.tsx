@@ -3697,9 +3697,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
   }, [socket, instanceId]);
 
-  // --- Free Draw Drawing Identity Registration (Phase 1) ---
+  // --- Free Draw Drawing Identity Registry & Subscription (Phase 1 & 1B.1) ---
+  const drawingIdentitiesRef = useRef<Record<string, { socketId: string; playerName: string }>>({});
+
   useEffect(() => {
     if (!isFreeDraw || !socket || !instanceId) return;
+
+    const onIdentitiesUpdate = (identities: Record<string, { socketId: string; playerName: string }> | any) => {
+      if (identities && typeof identities === 'object') {
+        drawingIdentitiesRef.current = identities;
+      }
+    };
+
+    const onRoomStateUpdate = (state: any) => {
+      if (state && state.drawingIdentities && typeof state.drawingIdentities === 'object') {
+        drawingIdentitiesRef.current = state.drawingIdentities;
+      }
+    };
 
     const registerIdentity = () => {
       if (socket.connected) {
@@ -3707,10 +3721,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
     };
 
-    registerIdentity();
+    // Attach listeners before registering to ensure no early updates are missed
+    socket.on('drawing_identities_update', onIdentitiesUpdate);
+    socket.on('room_state_update', onRoomStateUpdate);
     socket.on('connect', registerIdentity);
 
+    registerIdentity();
+
     return () => {
+      socket.off('drawing_identities_update', onIdentitiesUpdate);
+      socket.off('room_state_update', onRoomStateUpdate);
       socket.off('connect', registerIdentity);
       if (socket.connected) {
         socket.emit('unregister_drawing_identity', { instanceId });
