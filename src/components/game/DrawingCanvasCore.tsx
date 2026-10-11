@@ -772,7 +772,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!propsRef.current.isFreeDraw) return;
     const list = localCommandsRef.current;
     const N = list.length;
-    if (N < 8) return;
+    const STRIDE = 8;
 
     const ctx = ctxRef.current;
     if (!ctx || !ctx.canvas) return;
@@ -780,15 +780,24 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const lastClearIndex = findLatestClearIndex(list);
     const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
     const M = N - activeStart;
-    if (M < 8) return;
-
-    const targetBaseIndex = activeStart + Math.max(2, Math.floor(M * 0.38));
-    const targetTailIndex = activeStart + Math.max(targetBaseIndex + 2, Math.floor(M * 0.78));
+    if (M < STRIDE) return;
+    if (M % STRIDE !== 0) return;
 
     const baseValid = isCheckpointValid(baseCheckpointRef.current, list);
     const tailValid = isCheckpointValid(tailCheckpointRef.current, list);
 
-    if (!baseValid && N === targetBaseIndex) {
+    if (tailValid && tailCheckpointRef.current.index === N) return;
+    if (baseValid && baseCheckpointRef.current.index === N) return;
+
+    // Normalize order: Base should hold earlier index, Tail later index
+    if (baseValid && tailValid && baseCheckpointRef.current.index > tailCheckpointRef.current.index) {
+      const temp = baseCheckpointRef.current;
+      baseCheckpointRef.current = tailCheckpointRef.current;
+      tailCheckpointRef.current = temp;
+    }
+
+    if (!baseValid) {
+      // Slot 1: Base is empty or invalidated, capture into Base
       const bCanvas = ensureCheckpointCanvas('base');
       const bCtx = bCanvas.getContext('2d');
       if (bCtx) {
@@ -799,14 +808,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         bCtx.restore();
         baseCheckpointRef.current = {
           canvas: bCanvas,
-          index: targetBaseIndex,
-          anchorSignature: getCommandSignature(list[targetBaseIndex - 1]),
+          index: N,
+          anchorSignature: getCommandSignature(list[N - 1]),
           lastClearIndex
         };
       }
-    }
-
-    if (!tailValid && N === targetTailIndex) {
+      if (tailValid && baseCheckpointRef.current.index > tailCheckpointRef.current.index) {
+        const temp = baseCheckpointRef.current;
+        baseCheckpointRef.current = tailCheckpointRef.current;
+        tailCheckpointRef.current = temp;
+      }
+    } else if (!tailValid) {
+      // Slot 2: Base is valid, Tail is empty or invalidated, capture into Tail
       const tCanvas = ensureCheckpointCanvas('tail');
       const tCtx = tCanvas.getContext('2d');
       if (tCtx) {
@@ -817,8 +830,36 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         tCtx.restore();
         tailCheckpointRef.current = {
           canvas: tCanvas,
-          index: targetTailIndex,
-          anchorSignature: getCommandSignature(list[targetTailIndex - 1]),
+          index: N,
+          anchorSignature: getCommandSignature(list[N - 1]),
+          lastClearIndex
+        };
+      }
+    } else {
+      // Both Base and Tail are valid: rotate snapshots
+      // Recycle the older Base canvas for the new head checkpoint at index N
+      const recycledCanvas = ensureCheckpointCanvas('base');
+      const rCtx = recycledCanvas.getContext('2d');
+      if (rCtx) {
+        rCtx.clearRect(0, 0, recycledCanvas.width, recycledCanvas.height);
+        rCtx.save();
+        rCtx.setTransform(1, 0, 0, 1, 0, 0);
+        rCtx.drawImage(ctx.canvas, 0, 0);
+        rCtx.restore();
+
+        // Previous Tail becomes the older checkpoint (Base)
+        baseCheckpointRef.current = {
+          canvas: tailCheckpointRef.current.canvas,
+          index: tailCheckpointRef.current.index,
+          anchorSignature: tailCheckpointRef.current.anchorSignature,
+          lastClearIndex: tailCheckpointRef.current.lastClearIndex
+        };
+
+        // Recycled canvas becomes the newer checkpoint (Tail)
+        tailCheckpointRef.current = {
+          canvas: recycledCanvas,
+          index: N,
+          anchorSignature: getCommandSignature(list[N - 1]),
           lastClearIndex
         };
       }
@@ -2973,23 +3014,24 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         startIndex = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
       }
 
-      // 🛡️ Inline Checkpoint Recovery for Dual Checkpoints:
+      // 🛡️ Inline Checkpoint Recovery for Dual Checkpoints on the fixed stride grid:
       const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
       const M = N - activeStart;
       let candidateBaseIndex = -1;
       let candidateTailIndex = -1;
 
-      let heavyCount = 0;
-      for (let i = activeStart; i < N; i++) {
-        if (isCommandHeavy(commands[i])) heavyCount++;
-      }
-
-      if (propsRef.current.isFreeDraw && M >= 4 && (heavyCount >= 2 || M >= 8)) {
-        candidateBaseIndex = activeStart + Math.max(2, Math.floor(M * 0.38));
-        candidateTailIndex = activeStart + Math.max(candidateBaseIndex + 2, Math.floor(M * 0.78));
-        if (candidateTailIndex >= N) {
-          candidateTailIndex = N > candidateBaseIndex ? N - 1 : -1;
+      const STRIDE = 8;
+      const numCheckpoints = Math.floor(M / STRIDE);
+      if (propsRef.current.isFreeDraw && numCheckpoints >= 1) {
+        if (numCheckpoints >= 2) {
+          candidateBaseIndex = activeStart + (numCheckpoints - 1) * STRIDE;
+          candidateTailIndex = activeStart + numCheckpoints * STRIDE;
+        } else {
+          candidateBaseIndex = activeStart + STRIDE;
+          candidateTailIndex = -1;
         }
+        if (candidateTailIndex >= N) candidateTailIndex = -1;
+        if (candidateBaseIndex >= N) candidateBaseIndex = -1;
       }
 
       // 2. Replay all remaining committed commands
