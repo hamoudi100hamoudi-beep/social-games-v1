@@ -425,6 +425,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // --- Floating Drawing Names Layer Refs & Helpers (Free Draw Only - Phase 2) ---
   const floatingLabelsLayerRef = useRef<HTMLDivElement>(null);
   const floatingLabelElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const requestedIdentitiesRef = useRef<Set<string>>(new Set());
 
   const clearFloatingLabels = () => {
     if (floatingLabelElementsRef.current.size > 0) {
@@ -473,8 +474,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       // 4. Resolve player display name from drawing identities registry
       const identity = identities[instId];
-      const playerName = identity?.playerName?.trim();
-      if (!playerName) continue;
+      let playerName = identity?.playerName?.trim();
+      if (!playerName) {
+        if (socket?.connected && !requestedIdentitiesRef.current.has(instId)) {
+          requestedIdentitiesRef.current.add(instId);
+          socket.emit('request_drawing_identities');
+        }
+        continue;
+      }
 
       activeKeys.add(instId);
 
@@ -1036,11 +1043,24 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (transformWrapperRef.current) {
       if (propsRef.current.readOnly) {
         transformWrapperRef.current.style.transform = 'none';
+        if (floatingLabelsLayerRef.current) {
+          const currentBaseScale = overrideBaseScale !== undefined ? overrideBaseScale : baseScaleRef.current;
+          const { x, y } = transformRef.current;
+          floatingLabelsLayerRef.current.style.left = `${x}px`;
+          floatingLabelsLayerRef.current.style.top = `${y}px`;
+          floatingLabelsLayerRef.current.style.transform = `scale(${currentBaseScale})`;
+          floatingLabelsLayerRef.current.style.transformOrigin = '0 0';
+        }
         return;
       }
       const { x, y, scale } = transformRef.current;
       const currentBaseScale = overrideBaseScale !== undefined ? overrideBaseScale : baseScaleRef.current;
       transformWrapperRef.current.style.transform = `translate(${x}px, ${y}px) scale(${currentBaseScale * scale})`;
+      if (floatingLabelsLayerRef.current) {
+        floatingLabelsLayerRef.current.style.left = '0px';
+        floatingLabelsLayerRef.current.style.top = '0px';
+        floatingLabelsLayerRef.current.style.transform = 'none';
+      }
     }
   };
   const applyTransform = (overrideBaseScale?: number) => applyTransformRef.current(overrideBaseScale);
@@ -3813,6 +3833,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const onIdentitiesUpdate = (identities: Record<string, { socketId: string; playerName: string }> | any) => {
       if (identities && typeof identities === 'object') {
         drawingIdentitiesRef.current = identities;
+        requestedIdentitiesRef.current.clear();
         updateFloatingLabels();
       }
     };
@@ -3820,7 +3841,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const onRoomStateUpdate = (state: any) => {
       if (state && state.drawingIdentities && typeof state.drawingIdentities === 'object') {
         drawingIdentitiesRef.current = state.drawingIdentities;
+        requestedIdentitiesRef.current.clear();
         updateFloatingLabels();
+      }
+      // If our own instanceId is not yet registered in room identities, retry registering now that room state is active
+      if (!drawingIdentitiesRef.current[instanceId]) {
+        registerIdentity();
       }
     };
 
@@ -3837,7 +3863,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     registerIdentity();
 
+    // Redundant retry timeouts to eliminate any race condition with parent join_room
+    const t1 = setTimeout(registerIdentity, 300);
+    const t2 = setTimeout(registerIdentity, 1000);
+
     return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
       clearFloatingLabels();
       socket.off('drawing_identities_update', onIdentitiesUpdate);
       socket.off('room_state_update', onRoomStateUpdate);
@@ -4957,7 +4989,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         {isFreeDraw && (
           <div
             ref={floatingLabelsLayerRef}
-            className="absolute inset-0 pointer-events-none select-none z-30 overflow-hidden"
+            className="absolute left-0 top-0 pointer-events-none select-none z-30 overflow-visible"
             style={{
               width: LOGICAL_WIDTH,
               height: LOGICAL_HEIGHT

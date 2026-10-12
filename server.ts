@@ -490,6 +490,20 @@ async function startServer() {
       }
     });
 
+    socket.on('request_drawing_identities', () => {
+      try {
+        const player = roomManager.getPlayer(socket.id);
+        if (player && player.roomId) {
+          const identities = roomManager.getDrawingIdentitiesForRoom(player.roomId);
+          if (identities) {
+            socket.emit('drawing_identities_update', identities);
+          }
+        }
+      } catch (err) {
+        console.error("Error handling request_drawing_identities:", err);
+      }
+    });
+
     socket.on('stop_free_draw', () => {
       const player = roomManager.getPlayer(socket.id);
       if (player && player.roomId) {

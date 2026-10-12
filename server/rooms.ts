@@ -263,6 +263,7 @@ export class RoomManager {
   private io: Server | null = null;
   private tickInterval: NodeJS.Timeout | null = null;
   private clientCapabilities: Map<string, { supportsType13?: boolean }> = new Map();
+  private pendingDrawingIdentities: Map<string, string> = new Map();
 
   public setClientCapabilities(socketId: string, caps: { supportsType13?: boolean }) {
     const existing = this.clientCapabilities.get(socketId) || {};
@@ -1510,8 +1511,16 @@ const words = word.split(" ").filter(w => w.length > 0);
       }
     }
 
-    if (!targetRoom || !targetRoom.isFreeDraw) return;
-    if (!targetRoom.players.some(p => p.id === socketId)) return;
+    if (!targetRoom || !targetRoom.isFreeDraw) {
+      this.pendingDrawingIdentities.set(socketId, trimmedId);
+      return;
+    }
+    if (!targetRoom.players.some(p => p.id === socketId)) {
+      this.pendingDrawingIdentities.set(socketId, trimmedId);
+      return;
+    }
+
+    this.pendingDrawingIdentities.delete(socketId);
 
     targetRoom.drawingIdentities = targetRoom.drawingIdentities || {};
     const existing = targetRoom.drawingIdentities[trimmedId];
@@ -1529,6 +1538,10 @@ const words = word.split(" ").filter(w => w.length > 0);
     if (this.io) {
       this.io.to(targetRoom.id).emit('drawing_identities_update', targetRoom.drawingIdentities);
     }
+  }
+
+  public getDrawingIdentitiesForRoom(roomId: string): Record<string, { socketId: string; playerName: string }> | undefined {
+    return this.rooms.get(roomId)?.drawingIdentities;
   }
 
   public unregisterDrawingIdentity(socketId: string, instanceId: string) {
@@ -1909,6 +1922,14 @@ const words = word.split(" ").filter(w => w.length > 0);
       }
     }
 
+    const pendingInstId = this.pendingDrawingIdentities.get(player.id);
+    if (pendingInstId && room.isFreeDraw) {
+      this.pendingDrawingIdentities.delete(player.id);
+      this.registerDrawingIdentity(player.id, pendingInstId);
+    } else if (room.isFreeDraw && room.drawingIdentities && this.io) {
+      this.io.to(player.id).emit('drawing_identities_update', room.drawingIdentities);
+    }
+
     this.broadcastState(room);
     return room;
   }
@@ -2071,6 +2092,14 @@ const words = word.split(" ").filter(w => w.length > 0);
       }
     }
 
+    const pendingInstId = this.pendingDrawingIdentities.get(newSocketId);
+    if (pendingInstId && room.isFreeDraw) {
+      this.pendingDrawingIdentities.delete(newSocketId);
+      this.registerDrawingIdentity(newSocketId, pendingInstId);
+    } else if (room.isFreeDraw && room.drawingIdentities && this.io) {
+      this.io.to(newSocketId).emit('drawing_identities_update', room.drawingIdentities);
+    }
+
     this.broadcastState(room);
     return room;
   }
@@ -2081,6 +2110,7 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   public handleDisconnect(socketId: string) {
     this.removeClientCapabilities(socketId);
+    this.pendingDrawingIdentities.delete(socketId);
     try {
       const player = this.players.get(socketId);
 
