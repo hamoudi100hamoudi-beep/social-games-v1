@@ -505,18 +505,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         el = document.createElement('div');
         el.setAttribute('data-inst-id', instId);
         // Minimal design: Name text only. No avatar, badge, background, card, border container.
-        // Clean stroke & drop-shadow with paint-order stroke fill to eliminate ghosting & distortion.
-        // Full overflow visibility and natural line-height to eliminate any clipping of Arabic dots and descenders.
+        // Pure white text with crisp 1.5px 4-corner black outline (100% compatible with Android 7+ and modern browsers).
+        // No drop-shadow filter. Full overflow visibility and natural line-height to prevent letter clipping.
         el.className = "absolute pointer-events-none select-none whitespace-nowrap text-white font-bold text-xs tracking-wide z-30";
         el.style.color = "#ffffff";
         el.style.fontWeight = "700";
-        (el.style as any).webkitTextStroke = "1.5px #000000";
-        (el.style as any).paintOrder = "stroke fill";
-        el.style.filter = "drop-shadow(0px 2px 3px rgba(0,0,0,0.7))";
+        el.style.textShadow = "-1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000";
         el.style.lineHeight = "normal";
         el.style.padding = "4px";
         el.style.overflow = "visible";
-        el.style.textShadow = "none";
         el.style.transform = "translate(-50%, -100%) translateY(-6px)";
         el.style.willChange = "left, top";
         el.style.maxWidth = "200px";
