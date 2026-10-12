@@ -419,6 +419,109 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }
   const drainingStrokesRef = useRef<DrainingStroke[]>([]);
 
+  // --- Free Draw Drawing Identity Registry Ref (Phase 1 & 1B) ---
+  const drawingIdentitiesRef = useRef<Record<string, { socketId: string; playerName: string }>>({});
+
+  // --- Floating Drawing Names Layer Refs & Helpers (Free Draw Only - Phase 2) ---
+  const floatingLabelsLayerRef = useRef<HTMLDivElement>(null);
+  const floatingLabelElementsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const clearFloatingLabels = () => {
+    if (floatingLabelElementsRef.current.size > 0) {
+      floatingLabelElementsRef.current.forEach((el) => {
+        try {
+          el.remove();
+        } catch (e) {}
+      });
+      floatingLabelElementsRef.current.clear();
+    }
+    if (floatingLabelsLayerRef.current) {
+      floatingLabelsLayerRef.current.innerHTML = '';
+    }
+  };
+
+  const updateFloatingLabels = () => {
+    // 🛡️ Floating drawing names are strictly isolated to Free Draw only
+    if (!propsRef.current.isFreeDraw) {
+      clearFloatingLabels();
+      return;
+    }
+
+    const layer = floatingLabelsLayerRef.current;
+    if (!layer) return;
+
+    const currentElements = floatingLabelElementsRef.current;
+    const activeKeys = new Set<string>();
+
+    const sessions = activeSessionsRef.current;
+    const identities = drawingIdentitiesRef.current;
+    const localInstanceId = instanceId;
+
+    for (const instId in sessions) {
+      // 1. Never show over local drawer's own stroke or cursor
+      if (instId === localInstanceId) continue;
+
+      const session = sessions[instId];
+      if (!session) continue;
+
+      // 2. Only show for Pencil or Eraser tools (exclude shapes, bucket, etc.)
+      if (session.tool !== 'pencil' && session.tool !== 'eraser') continue;
+
+      // 3. Must have points in the active live path
+      const path = session.path;
+      if (!path || path.length === 0) continue;
+
+      // 4. Resolve player display name from drawing identities registry
+      const identity = identities[instId];
+      const playerName = identity?.playerName?.trim();
+      if (!playerName) continue;
+
+      activeKeys.add(instId);
+
+      // Latest point of the live stroke
+      const tip = path[path.length - 1];
+
+      // Keep within logical canvas bounds so name text is always fully visible
+      const clampedX = Math.max(30, Math.min(LOGICAL_WIDTH - 30, tip.x));
+      const clampedY = Math.max(20, Math.min(LOGICAL_HEIGHT - 6, tip.y));
+
+      let el = currentElements.get(instId);
+      if (!el) {
+        el = document.createElement('div');
+        // Minimal design: Name text only. No avatar, badge, background, card, border container.
+        // White, bold text with thin black outline. Pointer-events-none & user-select-none.
+        el.className = "absolute pointer-events-none select-none whitespace-nowrap text-white font-bold text-xs tracking-wide leading-none z-30";
+        el.style.textShadow = "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 1px 2px rgba(0,0,0,0.85)";
+        el.style.transform = "translate(-50%, -100%) translateY(-6px)";
+        el.style.willChange = "left, top";
+        el.style.maxWidth = "150px";
+        el.style.overflow = "hidden";
+        el.style.textOverflow = "ellipsis";
+        el.style.direction = "auto";
+        el.textContent = playerName;
+        layer.appendChild(el);
+        currentElements.set(instId, el);
+      } else {
+        if (el.textContent !== playerName) {
+          el.textContent = playerName;
+        }
+      }
+
+      el.style.left = `${clampedX}px`;
+      el.style.top = `${clampedY}px`;
+    }
+
+    // Clean up obsolete labels for sessions that ended (draw_commit, draw_end, draw_abort, draw_cancel, etc.)
+    currentElements.forEach((el, instId) => {
+      if (!activeKeys.has(instId)) {
+        try {
+          el.remove();
+        } catch (e) {}
+        currentElements.delete(instId);
+      }
+    });
+  };
+
   // 🎯 Visual Ownership Invariant: Pending commits queue & last committed tracking
   interface PendingRemoteCommit {
     instanceId: string;
@@ -1761,6 +1864,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         drawEntirePath(tempCtx, stroke.path, stroke.tool, stroke.color, stroke.width, stroke.opacity);
       }
     });
+
+    // 🌟 Update minimal floating drawing names in Free Draw
+    updateFloatingLabels();
   };
 
   const redrawTempLayer = () => {
@@ -2188,6 +2294,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     lastOutsidePointerRef.current = null;
     currentPathRef.current = [];
     activeSessionsRef.current = {};
+    clearFloatingLabels();
     moveBatchRef.current = [];
     networkStrokePointsRef.current = [];
     lastNetworkPointRef.current = null;
@@ -2272,6 +2379,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
     drainingStrokesRef.current = [];
     activeSessionsRef.current = {};
+    clearFloatingLabels();
 
     isDrawingRef.current = false;
     currentPathRef.current = [];
@@ -2970,6 +3078,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       // Clean up local temp active sessions cache to clear residual lines
       activeSessionsRef.current = {};
+      clearFloatingLabels();
     } catch (totalSyncErr) {
       console.error("[DrawingCanvasCore] Failed to reconstruct whole history accurately: ", totalSyncErr);
     } finally {
@@ -3698,20 +3807,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [socket, instanceId]);
 
   // --- Free Draw Drawing Identity Registry & Subscription (Phase 1 & 1B.1) ---
-  const drawingIdentitiesRef = useRef<Record<string, { socketId: string; playerName: string }>>({});
-
   useEffect(() => {
     if (!isFreeDraw || !socket || !instanceId) return;
 
     const onIdentitiesUpdate = (identities: Record<string, { socketId: string; playerName: string }> | any) => {
       if (identities && typeof identities === 'object') {
         drawingIdentitiesRef.current = identities;
+        updateFloatingLabels();
       }
     };
 
     const onRoomStateUpdate = (state: any) => {
       if (state && state.drawingIdentities && typeof state.drawingIdentities === 'object') {
         drawingIdentitiesRef.current = state.drawingIdentities;
+        updateFloatingLabels();
       }
     };
 
@@ -3729,6 +3838,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     registerIdentity();
 
     return () => {
+      clearFloatingLabels();
       socket.off('drawing_identities_update', onIdentitiesUpdate);
       socket.off('room_state_update', onRoomStateUpdate);
       socket.off('connect', registerIdentity);
@@ -3737,6 +3847,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
     };
   }, [isFreeDraw, socket, instanceId]);
+
+  useEffect(() => {
+    return () => {
+      clearFloatingLabels();
+    };
+  }, []);
 
   const startSyncFlow = () => {
     const now = Date.now();
@@ -4836,6 +4952,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             zIndex: 20
           }}
         />
+
+        {/* 🌟 Minimal Floating Drawing Names Layer (Free Draw Only - Phase 2) */}
+        {isFreeDraw && (
+          <div
+            ref={floatingLabelsLayerRef}
+            className="absolute inset-0 pointer-events-none select-none z-30 overflow-hidden"
+            style={{
+              width: LOGICAL_WIDTH,
+              height: LOGICAL_HEIGHT
+            }}
+          />
+        )}
       </div>
 
       {typeof document !== 'undefined' && createPortal(
