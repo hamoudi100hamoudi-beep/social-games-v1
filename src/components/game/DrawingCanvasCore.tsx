@@ -504,29 +504,86 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         el = document.createElement('div');
         el.setAttribute('data-inst-id', instId);
-        // Minimal design: Name text only. No avatar, badge, background, card, border container.
-        // Clean stroke & drop-shadow with paint-order stroke fill to eliminate ghosting & distortion.
-        // Full overflow visibility and natural line-height to eliminate any clipping of Arabic dots and descenders.
-        el.className = "absolute pointer-events-none select-none whitespace-nowrap text-white font-bold text-xs tracking-wide z-30";
-        el.style.color = "#ffffff";
-        el.style.fontWeight = "700";
-        (el.style as any).webkitTextStroke = "1.5px #000000";
-        (el.style as any).paintOrder = "stroke fill";
-        el.style.filter = "drop-shadow(0px 2px 3px rgba(0,0,0,0.7))";
-        el.style.lineHeight = "normal";
+        // Phase 2.4 — Two-layer text outline structure:
+        // Outer container: sizes and positions based on the foreground text in flow, with overflow: visible and normal line-height.
+        el.className = "absolute pointer-events-none select-none whitespace-nowrap font-bold text-xs tracking-wide z-30";
         el.style.padding = "4px";
         el.style.overflow = "visible";
+        el.style.lineHeight = "normal";
         el.style.textShadow = "none";
+        el.style.filter = "none";
         el.style.transform = "translate(-50%, -100%) translateY(-6px)";
         el.style.willChange = "left, top";
         el.style.maxWidth = "200px";
         el.style.direction = "auto";
-        el.textContent = playerName;
+
+        // Inner positioned wrapper: wraps both identical layers to guarantee 1:1 baseline and geometry matching
+        const inner = document.createElement('div');
+        inner.className = "relative inline-block overflow-visible";
+        inner.style.position = "relative";
+        inner.style.display = "inline-block";
+        inner.style.overflow = "visible";
+        inner.style.lineHeight = "normal";
+
+        // Layer 1: Background stroke layer (solid #000000 with 1.5px outline, zero drop-shadow/text-shadow)
+        const strokeSpan = document.createElement('span');
+        strokeSpan.className = "floating-name-stroke absolute select-none whitespace-nowrap";
+        strokeSpan.style.position = "absolute";
+        strokeSpan.style.top = "0";
+        strokeSpan.style.left = "0";
+        strokeSpan.style.right = "0";
+        strokeSpan.style.bottom = "0";
+        strokeSpan.style.color = "#000000";
+        (strokeSpan.style as any).webkitTextStroke = "1.5px #000000";
+        strokeSpan.style.fontFamily = "inherit";
+        strokeSpan.style.fontSize = "inherit";
+        strokeSpan.style.fontWeight = "inherit";
+        strokeSpan.style.lineHeight = "inherit";
+        strokeSpan.style.letterSpacing = "inherit";
+        strokeSpan.style.direction = "inherit";
+        strokeSpan.style.overflow = "visible";
+        strokeSpan.style.textShadow = "none";
+        strokeSpan.style.filter = "none";
+        strokeSpan.style.zIndex = "1";
+        strokeSpan.textContent = playerName;
+
+        // Layer 2: Foreground fill layer (solid #ffffff, stroke explicitly 0, zero drop-shadow/text-shadow)
+        // Kept in document flow so container dimensions naturally derive from this white text
+        const fillSpan = document.createElement('span');
+        fillSpan.className = "floating-name-fill relative inline-block select-none whitespace-nowrap";
+        fillSpan.style.position = "relative";
+        fillSpan.style.display = "inline-block";
+        fillSpan.style.color = "#ffffff";
+        (fillSpan.style as any).webkitTextStroke = "0px transparent";
+        fillSpan.style.fontFamily = "inherit";
+        fillSpan.style.fontSize = "inherit";
+        fillSpan.style.fontWeight = "inherit";
+        fillSpan.style.lineHeight = "inherit";
+        fillSpan.style.letterSpacing = "inherit";
+        fillSpan.style.direction = "inherit";
+        fillSpan.style.overflow = "visible";
+        fillSpan.style.textShadow = "none";
+        fillSpan.style.filter = "none";
+        fillSpan.style.zIndex = "2";
+        fillSpan.textContent = playerName;
+
+        inner.appendChild(strokeSpan);
+        inner.appendChild(fillSpan);
+        el.appendChild(inner);
+
+        (el as any)._strokeSpan = strokeSpan;
+        (el as any)._fillSpan = fillSpan;
+
         layer.appendChild(el);
         currentElements.set(instId, el);
       } else {
-        if (el.textContent !== playerName) {
-          el.textContent = playerName;
+        const fillSpan = (el as any)._fillSpan || el.querySelector('.floating-name-fill');
+        const strokeSpan = (el as any)._strokeSpan || el.querySelector('.floating-name-stroke');
+        if (fillSpan && fillSpan.textContent !== playerName) {
+          fillSpan.textContent = playerName;
+        }
+        if (strokeSpan && strokeSpan.textContent !== playerName) {
+          strokeSpan.textContent = playerName;
         }
       }
 
