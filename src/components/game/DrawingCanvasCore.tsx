@@ -493,17 +493,33 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const clampedY = Math.max(20, Math.min(LOGICAL_HEIGHT - 6, tip.y));
 
       let el = currentElements.get(instId);
-      if (!el) {
+      if (!el || !layer.contains(el)) {
+        if (el) {
+          try { el.remove(); } catch (e) {}
+        }
+        const existingInDom = layer.querySelector(`[data-inst-id="${instId}"]`);
+        if (existingInDom) {
+          try { existingInDom.remove(); } catch (e) {}
+        }
+
         el = document.createElement('div');
+        el.setAttribute('data-inst-id', instId);
         // Minimal design: Name text only. No avatar, badge, background, card, border container.
-        // White, bold text with thin black outline. Pointer-events-none & user-select-none.
-        el.className = "absolute pointer-events-none select-none whitespace-nowrap text-white font-bold text-xs tracking-wide leading-none z-30";
-        el.style.textShadow = "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 1px 2px rgba(0,0,0,0.85)";
+        // Clean stroke & drop-shadow with paint-order stroke fill to eliminate ghosting & distortion.
+        // Full overflow visibility and natural line-height to eliminate any clipping of Arabic dots and descenders.
+        el.className = "absolute pointer-events-none select-none whitespace-nowrap text-white font-bold text-xs tracking-wide z-30";
+        el.style.color = "#ffffff";
+        el.style.fontWeight = "700";
+        (el.style as any).webkitTextStroke = "1.5px #000000";
+        (el.style as any).paintOrder = "stroke fill";
+        el.style.filter = "drop-shadow(0px 2px 3px rgba(0,0,0,0.7))";
+        el.style.lineHeight = "normal";
+        el.style.padding = "4px";
+        el.style.overflow = "visible";
+        el.style.textShadow = "none";
         el.style.transform = "translate(-50%, -100%) translateY(-6px)";
         el.style.willChange = "left, top";
-        el.style.maxWidth = "150px";
-        el.style.overflow = "hidden";
-        el.style.textOverflow = "ellipsis";
+        el.style.maxWidth = "200px";
         el.style.direction = "auto";
         el.textContent = playerName;
         layer.appendChild(el);
