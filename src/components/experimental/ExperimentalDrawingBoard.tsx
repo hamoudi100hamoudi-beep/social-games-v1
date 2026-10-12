@@ -8,7 +8,7 @@ import React, { useEffect, useRef, useState, useTransition } from 'react';
 import { 
   Pencil, Eraser, Undo2, Redo2, FileX, RefreshCcw, 
   Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2, ZoomIn,
-  ArrowLeft
+  ArrowLeft, Eye, EyeOff
 } from 'lucide-react';
 import { ToolType } from '../../types/draw';
 import {
@@ -148,6 +148,16 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
   const [bucketOpacity, setBucketOpacity] = useState(1);
   const [historyState, setHistoryState] = useState({ index: 0, length: 0 });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Floating Names Preference (Free Draw only - default true)
+  const [showFloatingNames, setShowFloatingNames] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = safeLocalStorage.getItem('gartic_show_floating_names');
+      if (stored !== null) return stored === 'true';
+    }
+    return true;
+  });
+  const [showFloatingNamesConfirm, setShowFloatingNamesConfirm] = useState(false);
 
   // Turn tracking guards
   const prevReadOnlyRef = useRef(true);
@@ -319,6 +329,19 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
     setShowClearConfirm(true);
   };
 
+  const handleToggleFloatingNames = () => {
+    setShowFloatingNamesConfirm(true);
+  };
+
+  const confirmToggleFloatingNames = () => {
+    const nextVal = !showFloatingNames;
+    setShowFloatingNames(nextVal);
+    if (typeof window !== 'undefined') {
+      safeLocalStorage.setItem('gartic_show_floating_names', nextVal ? 'true' : 'false');
+    }
+    setShowFloatingNamesConfirm(false);
+  };
+
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-white touch-none select-none" dir="rtl">
       
@@ -357,6 +380,51 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
         </p>
       </CinematicModal>
 
+      {/* Floating Drawing Names Confirm Modal (Free Draw Only) */}
+      {isFreeDraw && (
+        <CinematicModal
+          isOpen={showFloatingNamesConfirm}
+          onClose={() => setShowFloatingNamesConfirm(false)}
+          titleType="report"
+          titleText="NAMES"
+          buttons={[
+            {
+              id: "names-confirm-no-btn",
+              text: <span className="text-white font-black">NO</span>,
+              onClick: () => setShowFloatingNamesConfirm(false),
+              variant: "primary",
+            },
+            {
+              id: "names-confirm-yes-btn",
+              text: <span className="text-white font-black">YES</span>,
+              onClick: confirmToggleFloatingNames,
+              variant: showFloatingNames ? "danger" : "primary",
+            },
+          ]}
+        >
+          <div className="w-20 h-20 sm:w-26 sm:h-26 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative shrink-0">
+            <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center shadow-inner border-2 ${
+              showFloatingNames 
+                ? 'bg-[#EF4444]/12 border-[#EF4444]/30 text-[#EF4444]' 
+                : 'bg-[#3B82F6]/12 border-[#3B82F6]/30 text-[#3B82F6]'
+            }`}>
+              {showFloatingNames ? (
+                <EyeOff className="w-8 h-8 sm:w-10 sm:h-10 drop-shadow-sm" strokeWidth={2.5} />
+              ) : (
+                <Eye className="w-8 h-8 sm:w-10 sm:h-10 drop-shadow-sm" strokeWidth={2.5} />
+              )}
+            </div>
+          </div>
+
+          <h3 id="names-confirm-desc" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
+            {showFloatingNames ? "Do you want to hide player names?" : "Do you want to show player names?"}
+          </h3>
+          <p id="names-confirm-desc-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
+            {showFloatingNames ? "هل تريد إخفاء أسماء اللاعبين أثناء الرسم؟" : "هل تريد إظهار أسماء اللاعبين أثناء الرسم؟"}
+          </p>
+        </CinematicModal>
+      )}
+
       {/* Canvas Container Area */}
       <div ref={containerRef} dir="ltr" className="flex-1 relative bg-gray-300 overflow-hidden w-full h-full cursor-crosshair">
         
@@ -373,6 +441,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           isZoomEnabled={zoomEnabled}
           isFreeDraw={isFreeDraw}
           isExperimental={isExperimental}
+          showFloatingNames={isFreeDraw ? showFloatingNames : false}
           enableInputOptimizations={Boolean(isExperimental && EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST)}
           enableBitmapUndoCache={Boolean(isExperimental && EXPERIMENTAL_BITMAP_UNDO_TEST)}
           enableFixedDPR={Boolean(isExperimental && EXPERIMENTAL_DPR_1_TEST)}
@@ -436,7 +505,18 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
             <SubToolBtn icon={<PaintBucket />} active={tool==='bucket'} onClick={() => changeTool('bucket')} />
             <SubToolBtn icon={<Minus />} active={tool==='line'} onClick={() => changeTool('line')} />
             <SubToolBtn icon={<Pipette />} active={tool==='pipette'} onClick={() => changeTool('pipette')} />
-            <SubToolBtn icon={<FileX />} onClick={requestClearCanvas} className="text-white !bg-[#FB923C]/90 hover:!bg-[#FB923C] !border-orange-500" />
+            <SubToolBtn icon={<FileX />} onClick={requestClearCanvas} className="text-white !bg-[#FB923C]/90 hover:!bg-[#FB923C] !border-orange-500" title="مسح اللوحة" />
+            
+            {isFreeDraw && (
+              <SubToolBtn 
+                icon={showFloatingNames ? <EyeOff /> : <Eye />} 
+                onClick={handleToggleFloatingNames}
+                active={showFloatingNames}
+                title={showFloatingNames ? "إخفاء أسماء اللاعبين أثناء الرسم" : "إظهار أسماء اللاعبين أثناء الرسم"}
+                ariaLabel={showFloatingNames ? "إخفاء أسماء اللاعبين" : "إظهار أسماء اللاعبين"}
+                className={showFloatingNames ? "!bg-blue-600/80 !border-blue-400 text-white" : "!bg-white/10 text-white hover:!bg-white/20"}
+              />
+            )}
             
             <div className="col-span-2 h-[1px] bg-white/10 my-1 rounded-full"></div>
             
@@ -682,7 +762,7 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
   );
 }
 
-function SubToolBtn({ icon, active, onClick, className = '', disabled = false }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string, disabled?: boolean }) {
+function SubToolBtn({ icon, active, onClick, className = '', disabled = false, title, ariaLabel }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string, disabled?: boolean, title?: string, ariaLabel?: string }) {
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.stopPropagation();
   };
@@ -699,6 +779,8 @@ function SubToolBtn({ icon, active, onClick, className = '', disabled = false }:
       onPointerDown={handlePointerDown}
       onClick={handleClick}
       disabled={disabled}
+      title={title}
+      aria-label={ariaLabel || title}
       className={`w-11 h-11 flex items-center justify-center rounded-lg border transition-all touch-manipulation
         ${disabled ? 'opacity-30 pointer-events-none' : ''}
         ${active 

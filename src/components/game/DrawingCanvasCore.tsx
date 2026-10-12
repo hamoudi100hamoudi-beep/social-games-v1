@@ -330,6 +330,7 @@ interface DrawingCanvasCoreProps {
   deferredReset?: boolean;
   isFreeDraw?: boolean;
   isExperimental?: boolean;
+  showFloatingNames?: boolean;
   enableInputOptimizations?: boolean;
   enableBitmapUndoCache?: boolean;
   enableFixedDPR?: boolean;
@@ -353,6 +354,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     deferredReset = false,
     isFreeDraw = false,
     isExperimental = false,
+    showFloatingNames = true,
     enableInputOptimizations = false,
     enableBitmapUndoCache = false,
     enableFixedDPR = false,
@@ -441,9 +443,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
+  useEffect(() => {
+    if (!propsRef.current.isFreeDraw) return;
+    if (showFloatingNames) {
+      updateFloatingLabels();
+    } else {
+      clearFloatingLabels();
+    }
+  }, [showFloatingNames]);
+
   const updateFloatingLabels = () => {
-    // 🛡️ Floating drawing names are strictly isolated to Free Draw only
-    if (!propsRef.current.isFreeDraw) {
+    // 🛡️ Floating drawing names are strictly isolated to Free Draw only and enabled preference
+    if (!propsRef.current.isFreeDraw || propsRef.current.showFloatingNames === false) {
       clearFloatingLabels();
       return;
     }
@@ -1105,11 +1116,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -5115,6 +5126,7 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.isZoomEnabled === nextProps.isZoomEnabled &&
     prevProps.isFreeDraw === nextProps.isFreeDraw &&
     prevProps.isExperimental === nextProps.isExperimental &&
+    prevProps.showFloatingNames === nextProps.showFloatingNames &&
     prevProps.enableInputOptimizations === nextProps.enableInputOptimizations &&
     prevProps.enableBitmapUndoCache === nextProps.enableBitmapUndoCache &&
     prevProps.enableFixedDPR === nextProps.enableFixedDPR &&
