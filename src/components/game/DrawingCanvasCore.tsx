@@ -81,6 +81,54 @@ const getAdaptiveDPR = () => {
 
 const DPR = typeof window !== 'undefined' ? getAdaptiveDPR() : 2;
 
+interface UndoDiagnostics {
+  opId: string;
+  type: 'local_undo' | 'remote_undo';
+  historyLengthBefore: number;
+  targetInstanceId: string;
+  targetStrokeId: number;
+  targetIndex: number;
+  targetDistanceFromEnd: number;
+  fastPath: 'hit' | 'miss' | 'na';
+  fastPathMissReason: string | null;
+  baseIndexBefore: number;
+  tailIndexBefore: number;
+  baseValidBefore: boolean;
+  tailValidBefore: boolean;
+  baseIndexAfter: number;
+  tailIndexAfter: number;
+  baseValidAfter: boolean;
+  tailValidAfter: boolean;
+  replayStartIndex: number;
+  commandsReplayed: number;
+  bucketCommandsEncountered: number;
+  floodFillExecutions: number;
+  cumulativeFillDurationMs: number;
+  maxFillDurationMs: number;
+  totalSyncDurationMs: number;
+  hints: {
+    existedBefore: number;
+    discarded: number;
+    usedShortcut: number;
+    forcedFill: number;
+  };
+  checkpointFacts: {
+    stride: number;
+    retainedCanvases: number;
+    invalidationReason: string | null;
+    bucketThresholdActive: boolean;
+  };
+}
+
+const isDiagEnabled = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem('freedraw_bucket_undo_diag') === '1';
+  } catch (e) {
+    return false;
+  }
+};
+
 // --- Built-in Flood Fill (Aided for performance and safety) ---
 const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b: number, a: number) => {
   if (a <= 10) {
@@ -2588,36 +2636,48 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     targetInst: string,
     targetStrId: number,
     targetIndex: number,
-    list: any[]
+    list: any[],
+    diag?: UndoDiagnostics | null
   ): boolean => {
     const canvas = canvasRef.current;
     const ctx = ctxRef.current;
-    if (!canvas || !ctx) return false;
+    if (!canvas || !ctx) {
+      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'missing_canvas_or_context'; }
+      return false;
+    }
 
     // 1. Verify single-step cache exists
     if (!hasFreeDrawUndoCacheRef.current || !freeDrawUndoCacheCanvasRef.current) {
+      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'missing_cache'; }
       return false;
     }
     const meta = freeDrawUndoCacheMetaRef.current;
-    if (!meta) return false;
+    if (!meta) {
+      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'missing_metadata'; }
+      return false;
+    }
 
     // 2. Strict Metadata & Chain Integrity Verification:
     // Ensure the cache was captured specifically for this target command at its exact historical offset
     if (meta.targetInstanceId !== targetInst || meta.targetStrokeId !== targetStrId) {
+      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'target_mismatch'; }
       return false;
     }
     if (meta.baseHistoryLength !== targetIndex) {
+      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'base_history_length_mismatch'; }
       return false;
     }
 
     if (targetIndex > 0) {
       const prevCmd = list[targetIndex - 1];
       if (getCommandSignature(prevCmd) !== meta.prevAnchorSignature) {
+        if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'anchor_mismatch'; }
         return false;
       }
     }
     const targetCmd = list[targetIndex];
     if (getCommandSignature(targetCmd) !== `${targetInst}_${targetStrId}`) {
+      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'command_signature_mismatch'; }
       return false;
     }
 
@@ -2625,11 +2685,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     // MUST succeed before mutating list or redo stack to prevent double-removal on failure
     const restored = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
     if (!restored) {
+      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'bitmap_restoration_failure'; }
       return false;
     }
 
     // 4. Fast-Path is 100% VALID: Commit state modifications only AFTER restoration succeeds
+    if (diag) { diag.fastPath = 'hit'; }
     invalidateCheckpointsAfterIndex(targetIndex);
+
+    if (diag) {
+      diag.baseIndexAfter = baseCheckpointRef.current.index;
+      diag.tailIndexAfter = tailCheckpointRef.current.index;
+      diag.baseValidAfter = isCheckpointValid(baseCheckpointRef.current, list);
+      diag.tailValidAfter = isCheckpointValid(tailCheckpointRef.current, list);
+    }
 
     // Remove target command from list
     const [removedCmd] = list.splice(targetIndex, 1);
@@ -2647,8 +2716,25 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const replayPaths: Record<string, { x: number; y: number }[]> = {};
       const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
+      if (diag) {
+        diag.replayStartIndex = targetIndex;
+      }
+
       for (let i = targetIndex; i < list.length; i++) {
-        applyReplayCommand(ctx, list[i], replayPaths, replaySessions);
+        if (diag) {
+          diag.commandsReplayed++;
+          const cmd = list[i];
+          if (isCommandHeavy(cmd) || (cmd && cmd.data)) {
+            const dec = decodeBinaryDrawMessage(cmd.data);
+            if (dec && dec.event === 'draw_action' && dec.data?.tool === 'bucket') {
+              diag.bucketCommandsEncountered++;
+            }
+          }
+          if (list[i]?._replayHint) {
+            diag.hints.existedBefore++;
+          }
+        }
+        applyReplayCommand(ctx, list[i], replayPaths, replaySessions, diag);
       }
 
       Object.keys(replaySessions).forEach((instId) => {
@@ -2737,7 +2823,39 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         // 2. Try Fast-Path Bitmap Undo:
         const listLengthBefore = list.length;
-        const fastPathSucceeded = tryFastPathUndo(instanceId, targetStrokeId, targetIndex, list);
+        const opId = Math.random().toString(36).substring(2, 9);
+        const startTime = isDiagEnabled() ? performance.now() : 0;
+
+        const diag: UndoDiagnostics | null = isDiagEnabled() ? {
+          opId,
+          type: 'local_undo',
+          historyLengthBefore: listLengthBefore,
+          targetInstanceId: instanceId,
+          targetStrokeId: targetStrokeId,
+          targetIndex,
+          targetDistanceFromEnd: listLengthBefore - 1 - targetIndex,
+          fastPath: 'na',
+          fastPathMissReason: null,
+          baseIndexBefore: baseCheckpointRef.current.index,
+          tailIndexBefore: tailCheckpointRef.current.index,
+          baseValidBefore: isCheckpointValid(baseCheckpointRef.current, list),
+          tailValidBefore: isCheckpointValid(tailCheckpointRef.current, list),
+          baseIndexAfter: 0,
+          tailIndexAfter: 0,
+          baseValidAfter: false,
+          tailValidAfter: false,
+          replayStartIndex: 0,
+          commandsReplayed: 0,
+          bucketCommandsEncountered: 0,
+          floodFillExecutions: 0,
+          cumulativeFillDurationMs: 0,
+          maxFillDurationMs: 0,
+          totalSyncDurationMs: 0,
+          hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
+          checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
+        } : null;
+
+        const fastPathSucceeded = tryFastPathUndo(instanceId, targetStrokeId, targetIndex, list, diag);
 
         if (!fastPathSucceeded) {
           // 🛡️ Double-Removal Guard: If list length changed unexpectedly, do not splice again
@@ -2745,7 +2863,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             hasFreeDrawUndoCacheRef.current = false;
             hasFreeDrawRedoCacheRef.current = false;
             freeDrawUndoCacheMetaRef.current = null;
-            replayFreeDrawHistorySafely(list);
+            replayFreeDrawHistorySafely(list, diag);
           } else {
             // Fallback: Safe Mid-History Replay
             invalidateCheckpointsAfterIndex(targetIndex);
@@ -2767,8 +2885,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             hasFreeDrawUndoCacheRef.current = false;
             hasFreeDrawRedoCacheRef.current = false;
             freeDrawUndoCacheMetaRef.current = null;
-            replayFreeDrawHistorySafely(list);
+            replayFreeDrawHistorySafely(list, diag);
           }
+        }
+
+        if (diag) {
+          diag.totalSyncDurationMs = performance.now() - startTime;
+          console.log("[FREE_DRAW_UNDO_DIAG]", JSON.stringify(diag));
         }
 
         // 3. Send authoritative draw_undo to server for room broadcast:
@@ -2983,7 +3106,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     ctx: CanvasRenderingContext2D,
     cmdObj: any,
     replayPaths: Record<string, { x: number; y: number }[]>,
-    replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }>
+    replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }>,
+    diag?: UndoDiagnostics | null
   ) => {
     try {
       const decoded = decodeBinaryDrawMessage(cmdObj.data);
@@ -3076,6 +3200,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else if (event === 'draw_action') {
         if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
           if (cmdObj && cmdObj._replayHint === 'full_canvas_opaque' && (cmdOpacity === undefined || cmdOpacity >= 0.95)) {
+            if (diag) diag.hints.usedShortcut++;
             const fillHex = cmdObj._replayColor || cmdColor;
             ctx.save();
             ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -3083,6 +3208,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.restore();
           } else if (cmdObj && cmdObj._replayHint === 'noop') {
+            if (diag) diag.hints.usedShortcut++;
             // 🛡️ Verified No-Op check: test 1x1 candidate seed pixel
             let isVerifiedNoOp = false;
             try {
@@ -3109,7 +3235,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             }
 
             if (!isVerifiedNoOp) {
+              if (diag) {
+                diag.hints.forcedFill++;
+                if (cmdObj?._replayHint) diag.hints.discarded++;
+              }
+              const fillStart = diag ? performance.now() : 0;
               const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
+              if (diag) {
+                diag.floodFillExecutions++;
+                const dur = performance.now() - fillStart;
+                diag.cumulativeFillDurationMs += dur;
+                if (dur > diag.maxFillDurationMs) diag.maxFillDurationMs = dur;
+              }
               if (cmdObj) {
                 if (fillRes?.isFullCanvasOpaque) {
                   cmdObj._replayHint = 'full_canvas_opaque';
@@ -3125,7 +3262,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               }
             }
           } else {
+            if (diag) {
+              diag.hints.forcedFill++;
+              if (cmdObj?._replayHint) diag.hints.discarded++;
+            }
+            const fillStart = diag ? performance.now() : 0;
             const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
+            if (diag) {
+              diag.floodFillExecutions++;
+              const dur = performance.now() - fillStart;
+              diag.cumulativeFillDurationMs += dur;
+              if (dur > diag.maxFillDurationMs) diag.maxFillDurationMs = dur;
+            }
             if (cmdObj) {
               if (fillRes?.isFullCanvasOpaque) {
                 cmdObj._replayHint = 'full_canvas_opaque';
@@ -3224,7 +3372,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // 🛡️ Safe Mid-History Replay for Free Draw Per-User Undo:
   // Clears and reconstructs ONLY the committed base canvas (ctx).
   // Strictly PRESERVES tempCtx, activeSessionsRef, and drainingStrokesRef so ongoing live drawing is never interrupted.
-  const replayFreeDrawHistorySafely = (commands: any[]) => {
+  const replayFreeDrawHistorySafely = (commands: any[], diag?: UndoDiagnostics | null) => {
+    const startTime = diag ? performance.now() : 0;
     try {
       const ctx = ctxRef.current;
       if (!ctx) return;
@@ -3232,6 +3381,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const N = commands.length;
       let startIndex = 0;
       const lastClearIndex = findLatestClearIndex(commands);
+
+      if (diag) {
+        diag.baseIndexBefore = baseCheckpointRef.current.index;
+        diag.tailIndexBefore = tailCheckpointRef.current.index;
+        diag.baseValidBefore = isCheckpointValid(baseCheckpointRef.current, commands);
+        diag.tailValidBefore = isCheckpointValid(tailCheckpointRef.current, commands);
+      }
 
       // Best valid checkpoint strictly <= N
       const bestCp = getBestCheckpoint(commands, N);
@@ -3250,6 +3406,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         invalidateCheckpoint('all');
         ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         startIndex = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+      }
+
+      if (diag) {
+        diag.replayStartIndex = startIndex;
       }
 
       // 🛡️ Inline Checkpoint Recovery for Dual Checkpoints on the fixed stride grid:
@@ -3278,6 +3438,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
       for (let i = startIndex; i < N; i++) {
+        if (diag) {
+          diag.commandsReplayed++;
+          const cmd = commands[i];
+          if (isCommandHeavy(cmd) || (cmd && cmd.data)) {
+            const dec = decodeBinaryDrawMessage(cmd.data);
+            if (dec && dec.event === 'draw_action' && dec.data?.tool === 'bucket') {
+              diag.bucketCommandsEncountered++;
+            }
+          }
+          if (commands[i]?._replayHint) {
+            diag.hints.existedBefore++;
+          }
+        }
+
         if (i === candidateBaseIndex && !isCheckpointValid(baseCheckpointRef.current, commands)) {
           const bCanvas = ensureCheckpointCanvas('base');
           const bCtx = bCanvas.getContext('2d');
@@ -3314,7 +3488,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
 
-        applyReplayCommand(ctx, commands[i], replayPaths, replaySessions);
+        applyReplayCommand(ctx, commands[i], replayPaths, replaySessions, diag);
       }
 
       // Render any leftover committed strokes
@@ -3336,12 +3510,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           // Ignore
         }
       });
+
+      if (diag) {
+        diag.baseIndexAfter = baseCheckpointRef.current.index;
+        diag.tailIndexAfter = tailCheckpointRef.current.index;
+        diag.baseValidAfter = isCheckpointValid(baseCheckpointRef.current, commands);
+        diag.tailValidAfter = isCheckpointValid(tailCheckpointRef.current, commands);
+      }
     } catch (err) {
       console.error("[DrawingCanvasCore] Error in replayFreeDrawHistorySafely: ", err);
     } finally {
       isReplayingRef.current = false;
       saveSnapshot();
       syncHistoryButtons();
+      if (diag) {
+        diag.totalSyncDurationMs = performance.now() - startTime;
+        console.log("[FREE_DRAW_UNDO_DIAG]", JSON.stringify(diag));
+      }
     }
   };
 
@@ -3787,6 +3972,38 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
           // 4. Remove ONLY the matching remote command from history.
           // Strictly DO NOT add another player's command to localRedoStackRef!
+          const historyLengthBefore = list.length;
+          const remoteOpId = Math.random().toString(36).substring(2, 9);
+
+          const remoteDiag: UndoDiagnostics | null = isDiagEnabled() ? {
+            opId: remoteOpId,
+            type: 'remote_undo',
+            historyLengthBefore,
+            targetInstanceId: targetInst,
+            targetStrokeId: targetStrId,
+            targetIndex: index,
+            targetDistanceFromEnd: historyLengthBefore - 1 - index,
+            fastPath: 'na',
+            fastPathMissReason: 'remote_replay',
+            baseIndexBefore: baseCheckpointRef.current.index,
+            tailIndexBefore: tailCheckpointRef.current.index,
+            baseValidBefore: isCheckpointValid(baseCheckpointRef.current, list),
+            tailValidBefore: isCheckpointValid(tailCheckpointRef.current, list),
+            baseIndexAfter: 0,
+            tailIndexAfter: 0,
+            baseValidAfter: false,
+            tailValidAfter: false,
+            replayStartIndex: 0,
+            commandsReplayed: 0,
+            bucketCommandsEncountered: 0,
+            floodFillExecutions: 0,
+            cumulativeFillDurationMs: 0,
+            maxFillDurationMs: 0,
+            totalSyncDurationMs: 0,
+            hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
+            checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
+          } : null;
+
           list.splice(index, 1);
 
           // 5. Invalidate replay hints for subsequent commands whose historical predecessor context has changed:
@@ -3807,7 +4024,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           freeDrawUndoCacheMetaRef.current = null;
 
           // 7. Safely reconstruct canvas from history:
-          replayFreeDrawHistorySafely(list);
+          replayFreeDrawHistorySafely(list, remoteDiag);
 
           // 8. Re-synchronize history buttons:
           syncHistoryButtons();
