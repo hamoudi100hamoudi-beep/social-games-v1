@@ -430,6 +430,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     rawPoints?: { x: number; y: number }[];
   }
   const drainingStrokesRef = useRef<DrainingStroke[]>([]);
+  const pendingBinaryQueueRef = useRef<any[]>([]);
+  const onDrawBinaryRef = useRef<((raw: any) => void) | null>(null);
 
   // --- Free Draw Drawing Identity Registry Ref (Phase 1 & 1B) ---
   const drawingIdentitiesRef = useRef<Record<string, { socketId: string; playerName: string }>>({});
@@ -3370,7 +3372,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       const ctx = ctxRef.current;
       const tempCtx = tempCtxRef.current;
-      if (!ctx || !tempCtx) return;
+      if (!ctx || !tempCtx) {
+        if (pendingBinaryQueueRef.current.length < 500) {
+          pendingBinaryQueueRef.current.push(raw);
+        }
+        return;
+      }
 
       if (event === 'draw_stroke') {
         const session = activeSessionsRef.current[data.instanceId];
@@ -3612,6 +3619,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             // Request targeted canonical repair once
             socket.emit('draw_repair_req', { instId: data.instanceId, strokeId });
           }
+        } else {
+          // If session is missing for a spectator when draw_commit arrives in Free Draw / Experimental,
+          // request targeted canonical repair so this completed stroke is not lost
+          if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
+            socket.emit('draw_repair_req', { instId: data.instanceId, strokeId });
+          }
         }
       } else if (event === 'draw_abort') {
         delete activeSessionsRef.current[data.instanceId];
@@ -3839,10 +3852,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           spectatorPlaybackRafRef.current = null;
         }
         drainingStrokesRef.current = [];
-        activeSessionsRef.current = {};
+        if (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) {
+          activeSessionsRef.current = {};
+        }
         clearFloatingLabels();
 
         resetCanvasBackingStores(ctx, tempCtx);
+        if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
+          executeRedrawTempLayer();
+        }
 
         hasFreeDrawUndoCacheRef.current = false;
         hasFreeDrawRedoCacheRef.current = false;
@@ -3870,6 +3888,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
           if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
             advanceCheckpointIncremental();
+            executeRedrawTempLayer();
           }
           console.log("[DrawingCanvasCore] Empty history sync completed.");
           return;
@@ -3933,6 +3952,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             }
             if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
               advanceCheckpointIncremental();
+              executeRedrawTempLayer();
             }
             console.log("[DrawingCanvasCore] Deferred queue fully rendered.");
           }
@@ -3966,6 +3986,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             const cmds = pendingHistorySyncRef.current;
             pendingHistorySyncRef.current = null;
             processIncomingHistorySync(cmds);
+            if (pendingBinaryQueueRef.current.length > 0) {
+              const queued = pendingBinaryQueueRef.current;
+              pendingBinaryQueueRef.current = [];
+              for (let i = 0; i < queued.length; i++) {
+                onDrawBinaryRef.current?.(queued[i]);
+              }
+            }
           }
         }, 50);
         return;
@@ -3986,6 +4013,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
 
     processIncomingHistorySyncRef.current = processIncomingHistorySync;
+    onDrawBinaryRef.current = onDrawBinary;
 
     socket.on('draw_binary', onDrawBinary);
     socket.on('draw_history_sync', onDrawHistorySync);
@@ -3993,6 +4021,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     return () => {
       processIncomingHistorySyncRef.current = null;
+      onDrawBinaryRef.current = null;
       socket.off('draw_binary', onDrawBinary);
       socket.off('draw_history_sync', onDrawHistorySync);
       socket.off('draw_redo_sync', onDrawRedoSync);
@@ -4095,7 +4124,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncRetryTimerRef.current = null;
       }
       processIncomingHistorySyncRef.current?.(cmds);
+      if (pendingBinaryQueueRef.current.length > 0) {
+        const queued = pendingBinaryQueueRef.current;
+        pendingBinaryQueueRef.current = [];
+        for (let i = 0; i < queued.length; i++) {
+          onDrawBinaryRef.current?.(queued[i]);
+        }
+      }
       return;
+    }
+
+    if (pendingBinaryQueueRef.current.length > 0 && isCanvasReady) {
+      const queued = pendingBinaryQueueRef.current;
+      pendingBinaryQueueRef.current = [];
+      for (let i = 0; i < queued.length; i++) {
+        onDrawBinaryRef.current?.(queued[i]);
+      }
     }
 
     if (socket?.connected && isJoined && isCanvasReady && !hasSyncedOnceRef.current) {

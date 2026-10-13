@@ -138,6 +138,31 @@ export function createType2Buffer(instId: string, points: { x: number; y: number
   return buf;
 }
 
+export function createType1Buffer(
+  instId: string,
+  tool: number,
+  r: number,
+  g: number,
+  b: number,
+  width: number,
+  opacity: number,
+  p0_x: number,
+  p0_y: number
+): Buffer {
+  const buf = Buffer.alloc(18);
+  buf.writeUInt8(1, 0); // MSG_DRAW_START = 1
+  buf.write((instId || '').padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
+  buf.writeUInt8(tool & 0xFF, 8);
+  buf.writeUInt8(r & 0xFF, 9);
+  buf.writeUInt8(g & 0xFF, 10);
+  buf.writeUInt8(b & 0xFF, 11);
+  buf.writeUInt8(width & 0xFF, 12);
+  buf.writeUInt8(opacity & 0xFF, 13);
+  buf.writeInt16LE(p0_x, 14);
+  buf.writeInt16LE(p0_y, 16);
+  return buf;
+}
+
 export function normalizeArabic(str: string): string {
   return str
     .replace(/[أإآٱ]/g, "ا")
@@ -1202,6 +1227,47 @@ const words = word.split(" ").filter(w => w.length > 0);
       room.freeDrawStrokes = new Map();
     }
     return room.freeDrawStrokes;
+  }
+
+  public syncActiveFreeDrawStrokesToSocket(room: Room, targetSocket: any) {
+    if (!room || (!room.isFreeDraw && !room.isExperimental)) return;
+    if (!room.freeDrawStrokes || room.freeDrawStrokes.size === 0) return;
+    if (!targetSocket || !targetSocket.emit) return;
+
+    for (const stroke of room.freeDrawStrokes.values()) {
+      if (!stroke || stroke.status !== 'ACTIVE') continue;
+      if (!stroke.points || stroke.points.length === 0) continue;
+      // Do not send catch-up of an active stroke to the drawer themselves
+      if (targetSocket.id && stroke.socketId === targetSocket.id) continue;
+
+      const pts = stroke.points;
+      const p0 = pts[0];
+
+      // 1. Synthetic Type 1 (MSG_DRAW_START) packet
+      const startBuf = createType1Buffer(
+        stroke.instId,
+        stroke.tool,
+        stroke.r,
+        stroke.g,
+        stroke.b,
+        stroke.width,
+        stroke.opacity,
+        p0.x,
+        p0.y
+      );
+      targetSocket.emit('draw_binary', startBuf);
+
+      // 2. Type 2 (MSG_DRAW_MOVE) packets for remaining accepted points
+      if (pts.length > 1) {
+        const remaining = pts.slice(1);
+        const CHUNK_SIZE = 250;
+        for (let i = 0; i < remaining.length; i += CHUNK_SIZE) {
+          const chunk = remaining.slice(i, i + CHUNK_SIZE);
+          const moveBuf = createType2Buffer(stroke.instId, chunk);
+          targetSocket.emit('draw_binary', moveBuf);
+        }
+      }
+    }
   }
 
   public getOrCreateFreeDrawCanonicalCache(room: Room): Map<string, { buffer: Buffer; createdAt: number }> {
