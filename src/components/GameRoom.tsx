@@ -313,6 +313,7 @@ export default function GameRoom({
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const hasEmittedJoin = React.useRef(false);
+  const [isRoomJoined, setIsRoomJoined] = useState(false);
 
   const [isAfkPopupOpen, setIsAfkPopupOpen] = useState(false);
   const [showReportConfirm, setShowReportConfirm] = useState(false);
@@ -825,6 +826,7 @@ export default function GameRoom({
           if (res && res.success) {
             console.log("[GameRoom] Successfully joined/reconnected room.");
             hasEmittedJoin.current = true;
+            setIsRoomJoined(true);
           } else if (
             res &&
             (res.error === "session_expired" ||
@@ -933,6 +935,7 @@ export default function GameRoom({
       gameState: any;
       hasDrawHistory?: boolean;
     }) => {
+      setIsRoomJoined(true);
       if (typeof state.isFreeDraw !== "undefined") {
         setIsFreeDrawRoom(Boolean(state.isFreeDraw));
       }
@@ -1186,7 +1189,14 @@ export default function GameRoom({
     socket.on("draw_binary", onDrawBinary);
     socket.on("draw_history_sync", onDrawHistorySync);
 
+    const onDisconnect = () => {
+      setIsRoomJoined(false);
+    };
+
+    socket.on("disconnect", onDisconnect);
+
     return () => {
+      socket.off("disconnect", onDisconnect);
       socket.off("room_state_update", onRoomStateUpdate);
       socket.off("receive_message", onReceiveMessage);
       socket.off("receive_guess", onReceiveGuess);
@@ -1757,6 +1767,7 @@ export default function GameRoom({
                 onSyncStateChangeAction={handleSyncStateChangeAction}
                 onHistoryLengthChangeAction={handleHistoryLengthChangeAction}
                 drawerTimerSlotRef={handleDrawerSlotRef}
+                isRoomJoined={isRoomJoined}
               />
 
               {/* Hit Notifications Overlay (Active only when drawing in fullscreen mode) */}

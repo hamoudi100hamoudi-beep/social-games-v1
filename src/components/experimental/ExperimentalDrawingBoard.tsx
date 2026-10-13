@@ -111,6 +111,7 @@ export interface ExperimentalDrawingBoardProps {
   onHistoryLengthChange?: (hasStrokes: boolean) => void;
   amIDrawer?: boolean;
   onExitFreeDraw?: () => void;
+  isRoomJoined?: boolean;
 }
 
 export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> = ({
@@ -127,6 +128,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
   onHistoryLengthChange,
   amIDrawer = false,
   onExitFreeDraw,
+  isRoomJoined,
 }) => {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -441,6 +443,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           isZoomEnabled={zoomEnabled}
           isFreeDraw={isFreeDraw}
           isExperimental={isExperimental}
+          isRoomJoined={isRoomJoined}
           showFloatingNames={isFreeDraw ? showFloatingNames : false}
           enableInputOptimizations={Boolean(isExperimental && EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST)}
           enableBitmapUndoCache={Boolean(isExperimental && EXPERIMENTAL_BITMAP_UNDO_TEST)}

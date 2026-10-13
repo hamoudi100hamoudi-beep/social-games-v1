@@ -18,6 +18,7 @@ export interface IsolatedDrawingLayerProps {
   onSyncStateChangeAction?: (syncing: boolean) => void;
   onHistoryLengthChangeAction?: (hasStrokes: boolean) => void;
   drawerTimerSlotRef?: (node: HTMLDivElement | null) => void;
+  isRoomJoined?: boolean;
 }
 
 /**
@@ -45,6 +46,7 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
   onSyncStateChangeAction,
   onHistoryLengthChangeAction,
   drawerTimerSlotRef,
+  isRoomJoined,
 }) => {
   // Stable timerBarNode container with invariant reference
   const stableTimerBarNode = useMemo(() => {
@@ -84,6 +86,7 @@ const IsolatedDrawingLayerComponent: React.FC<IsolatedDrawingLayerProps> = ({
         onRequestHint={handleRequestHint}
         timerBarNode={stableTimerBarNode}
         hintsRemaining={hintsRemaining}
+        isRoomJoined={isRoomJoined}
       />
     </div>
   );
@@ -110,7 +113,8 @@ function areDrawingPropsEqual(
     prev.onExitFreeDrawAction === next.onExitFreeDrawAction &&
     prev.onSyncStateChangeAction === next.onSyncStateChangeAction &&
     prev.onHistoryLengthChangeAction === next.onHistoryLengthChangeAction &&
-    prev.drawerTimerSlotRef === next.drawerTimerSlotRef
+    prev.drawerTimerSlotRef === next.drawerTimerSlotRef &&
+    prev.isRoomJoined === next.isRoomJoined
   );
 }
 

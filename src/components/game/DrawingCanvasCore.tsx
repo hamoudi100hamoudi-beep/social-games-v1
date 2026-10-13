@@ -336,6 +336,7 @@ interface DrawingCanvasCoreProps {
   enableFixedDPR?: boolean;
   enableCanvasAlpha?: boolean;
   enableDestinationOutEraser?: boolean;
+  isRoomJoined?: boolean;
 }
 
 const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProps>((
@@ -359,7 +360,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     enableBitmapUndoCache = false,
     enableFixedDPR = false,
     enableCanvasAlpha = false,
-    enableDestinationOutEraser = false
+    enableDestinationOutEraser = false,
+    isRoomJoined = false
   },
   ref
 ) => {
@@ -381,7 +383,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // States
   const [isSyncing, setIsSyncing] = useState(true);
   const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
+  const hasSyncedOnceRef = useRef(false);
+  const isServerRoomJoinedRef = useRef(false);
+  const pendingHistorySyncRef = useRef<any[] | null>(null);
+  const syncRetryTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const historySyncGenerationRef = useRef(0);
+  const syncChunkRafRef = useRef<number | null>(null);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const checkAndTriggerInitialSyncRef = useRef<(() => void) | null>(null);
+  const processIncomingHistorySyncRef = useRef<((commands: any[]) => void) | null>(null);
 
   // Local drawing track refs
   const isDrawingRef = useRef(false);
@@ -649,6 +659,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (spectatorPlaybackRafRef.current !== null) {
         cancelAnimationFrame(spectatorPlaybackRafRef.current);
         spectatorPlaybackRafRef.current = null;
+      }
+      if (syncChunkRafRef.current !== null) {
+        cancelAnimationFrame(syncChunkRafRef.current);
+        syncChunkRafRef.current = null;
+      }
+      if (syncRetryTimerRef.current) {
+        clearTimeout(syncRetryTimerRef.current);
+        syncRetryTimerRef.current = null;
+      }
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = null;
       }
       drainingStrokesRef.current = [];
     };
@@ -1177,6 +1199,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       
       // Signal that the DOM is fully laid out and physical scale is evaluated
       isCanvasResizeObserverReadyRef.current = true;
+      checkAndTriggerInitialSyncRef.current?.();
     };
 
     // Immediate check: if container already has non-zero layout dimensions, center and ready up instantly
@@ -3801,7 +3824,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         console.log("[DrawingCanvasCore] Starting Deferred Queue & Forced Multi-Snapshots chunking...", commands.length);
 
+        // Cancel any pending chunk processing loop and advance generation ID
+        if (syncChunkRafRef.current !== null) {
+          cancelAnimationFrame(syncChunkRafRef.current);
+          syncChunkRafRef.current = null;
+        }
+        const currentSyncGen = ++historySyncGenerationRef.current;
+
         invalidateCheckpoint('all');
+
+        // Cancel in-flight spectator playback from previous state
+        if (spectatorPlaybackRafRef.current !== null) {
+          cancelAnimationFrame(spectatorPlaybackRafRef.current);
+          spectatorPlaybackRafRef.current = null;
+        }
+        drainingStrokesRef.current = [];
+        activeSessionsRef.current = {};
+        clearFloatingLabels();
 
         resetCanvasBackingStores(ctx, tempCtx);
 
@@ -3817,10 +3856,34 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const replayPaths: Record<string, { x: number; y: number }[]> = {};
         const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
+        // Fast path for empty history
+        if (commands.length === 0) {
+          isReplayingRef.current = false;
+          saveSnapshot();
+          syncHistoryButtons();
+          setIsSyncing(false);
+          setHasSyncedOnce(true);
+          hasSyncedOnceRef.current = true;
+          if (syncTimeoutRef.current) {
+            clearTimeout(syncTimeoutRef.current);
+            syncTimeoutRef.current = null;
+          }
+          if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
+            advanceCheckpointIncremental();
+          }
+          console.log("[DrawingCanvasCore] Empty history sync completed.");
+          return;
+        }
+
         let currentIndex = 0;
         const CHUNK_SIZE = 50; 
 
         const processChunk = () => {
+          // If a newer sync has started, abort this chunk loop immediately
+          if (historySyncGenerationRef.current !== currentSyncGen) {
+            return;
+          }
+
           const endIndex = Math.min(currentIndex + CHUNK_SIZE, commands.length);
           
           for (let i = currentIndex; i < endIndex; i++) {
@@ -3830,8 +3893,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           currentIndex = endIndex;
 
           if (currentIndex < commands.length) {
-            requestAnimationFrame(processChunk);
+            syncChunkRafRef.current = requestAnimationFrame(processChunk);
           } else {
+            syncChunkRafRef.current = null;
+
+            if (historySyncGenerationRef.current !== currentSyncGen) {
+              return;
+            }
+
             Object.keys(replaySessions).forEach((instId) => {
               try {
                 const session = replaySessions[instId];
@@ -3850,12 +3919,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               } catch (err) {}
             });
 
-            activeSessionsRef.current = {};
+            // IMPORTANT: DO NOT wipe activeSessionsRef.current = {} here!
+            // Live drawing sessions by other users that arrived while chunks were rendering are preserved.
             isReplayingRef.current = false;
             saveSnapshot();
             syncHistoryButtons();
             setIsSyncing(false);
             setHasSyncedOnce(true);
+            hasSyncedOnceRef.current = true;
             if (syncTimeoutRef.current) {
               clearTimeout(syncTimeoutRef.current);
               syncTimeoutRef.current = null;
@@ -3867,7 +3938,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         };
 
-        requestAnimationFrame(processChunk);
+        syncChunkRafRef.current = requestAnimationFrame(processChunk);
 
       } catch (err) {
         console.error("[DrawingCanvasCore] Sync Chunk Error:", err);
@@ -3879,18 +3950,33 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (isResetPendingRef.current) {
         flushPendingReset();
       }
-      console.log("[DrawingCanvasCore] Received draw_history_sync event, payload length:", commands?.length);
+      const safeCommands = Array.isArray(commands) ? commands : [];
+      console.log("[DrawingCanvasCore] Received draw_history_sync event, payload length:", safeCommands.length);
       
-      const attemptSync = () => {
-        if (!isCanvasResizeObserverReadyRef.current || !ctxRef.current || !tempCtxRef.current) {
-          console.log("[DrawingCanvasCore] Canvas or ResizeObserver not ready. Deferring history sync (Pending Queue)...");
-          setTimeout(attemptSync, 50);
-          return;
+      const isCanvasReady = Boolean(isCanvasResizeObserverReadyRef.current && ctxRef.current && tempCtxRef.current);
+      if (!isCanvasReady) {
+        console.log("[DrawingCanvasCore] Canvas or ResizeObserver not ready. Buffering history sync...");
+        pendingHistorySyncRef.current = safeCommands;
+        if (syncRetryTimerRef.current) {
+          clearTimeout(syncRetryTimerRef.current);
         }
-        processIncomingHistorySync(commands);
-      };
+        syncRetryTimerRef.current = setTimeout(() => {
+          syncRetryTimerRef.current = null;
+          if (pendingHistorySyncRef.current !== null && isCanvasResizeObserverReadyRef.current && ctxRef.current && tempCtxRef.current) {
+            const cmds = pendingHistorySyncRef.current;
+            pendingHistorySyncRef.current = null;
+            processIncomingHistorySync(cmds);
+          }
+        }, 50);
+        return;
+      }
 
-      attemptSync();
+      pendingHistorySyncRef.current = null;
+      if (syncRetryTimerRef.current) {
+        clearTimeout(syncRetryTimerRef.current);
+        syncRetryTimerRef.current = null;
+      }
+      processIncomingHistorySync(safeCommands);
     };
 
     const onDrawRedoSync = (commands: any[]) => {
@@ -3899,11 +3985,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       syncHistoryButtons();
     };
 
+    processIncomingHistorySyncRef.current = processIncomingHistorySync;
+
     socket.on('draw_binary', onDrawBinary);
     socket.on('draw_history_sync', onDrawHistorySync);
     socket.on('draw_redo_sync', onDrawRedoSync);
 
     return () => {
+      processIncomingHistorySyncRef.current = null;
       socket.off('draw_binary', onDrawBinary);
       socket.off('draw_history_sync', onDrawHistorySync);
       socket.off('draw_redo_sync', onDrawRedoSync);
@@ -3988,48 +4077,72 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       console.log("[DrawingCanvasCore] Sync safety timeout reached (4s). Overriding loading screen.");
       setIsSyncing(false);
       setHasSyncedOnce(true);
+      hasSyncedOnceRef.current = true;
     }, 4000);
 
     socket?.emit('request_round_sync');
   };
+
+  const checkAndTriggerInitialSync = () => {
+    const isJoined = Boolean(isRoomJoined || isServerRoomJoinedRef.current);
+    const isCanvasReady = Boolean(isCanvasResizeObserverReadyRef.current && ctxRef.current && tempCtxRef.current);
+
+    if (pendingHistorySyncRef.current !== null && isCanvasReady) {
+      const cmds = pendingHistorySyncRef.current;
+      pendingHistorySyncRef.current = null;
+      if (syncRetryTimerRef.current) {
+        clearTimeout(syncRetryTimerRef.current);
+        syncRetryTimerRef.current = null;
+      }
+      processIncomingHistorySyncRef.current?.(cmds);
+      return;
+    }
+
+    if (socket?.connected && isJoined && isCanvasReady && !hasSyncedOnceRef.current) {
+      startSyncFlow();
+    }
+  };
+
+  checkAndTriggerInitialSyncRef.current = checkAndTriggerInitialSync;
+
+  // Universal Room State Tracker: guarantees room membership recognition
+  useEffect(() => {
+    if (!socket) return;
+    const onRoomState = () => {
+      isServerRoomJoinedRef.current = true;
+      checkAndTriggerInitialSync();
+    };
+    socket.on('room_state_update', onRoomState);
+    return () => {
+      socket.off('room_state_update', onRoomState);
+    };
+  }, [socket]);
+
+  // Readiness effect: triggers initial history fetch once room and canvas are confirmed ready
+  useEffect(() => {
+    checkAndTriggerInitialSync();
+  }, [socket, isConnected, isRoomJoined]);
 
   // --- Network Connection Recovery Engine ---
   useEffect(() => {
     if (!socket) return;
 
     const handleConnect = () => {
-      console.log("[DrawingCanvasCore] System connection established. Loader active until drawing sync finishes.");
+      console.log("[DrawingCanvasCore] System connection established.");
       socket.emit('client_capabilities', { supportsType13: true });
-      setIsSyncing(true);
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current);
-      }
-      syncTimeoutRef.current = setTimeout(() => {
-        console.log("[DrawingCanvasCore] Reconnect sync safety timeout reached. Overriding loading screen.");
-        setIsSyncing(false);
-        setHasSyncedOnce(true);
-      }, 4000);
+      hasSyncedOnceRef.current = false;
+      setHasSyncedOnce(false);
+      checkAndTriggerInitialSync();
     };
 
     const handleDisconnect = () => {
       console.log("[DrawingCanvasCore] System connection lost.");
+      isServerRoomJoinedRef.current = false;
       setIsSyncing(true);
     };
 
     socket.on('connect', handleConnect);
     socket.on('disconnect', handleDisconnect);
-    
-    // Initial mount safety loader
-    if (socket.connected && !hasSyncedOnce) {
-      setIsSyncing(true);
-      if (!syncTimeoutRef.current) {
-        syncTimeoutRef.current = setTimeout(() => {
-          console.log("[DrawingCanvasCore] Initial sync safety timeout. Overriding loading screen.");
-          setIsSyncing(false);
-          setHasSyncedOnce(true);
-        }, 4000);
-      }
-    }
 
     return () => {
       socket.off('connect', handleConnect);
@@ -4039,7 +4152,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncTimeoutRef.current = null;
       }
     };
-  }, [socket, hasSyncedOnce, readOnly]);
+  }, [socket]);
 
   // Automated Clean Reset State on turn / drawer change
   const previousStateRef = useRef({ currentDrawerId, status });
@@ -4127,6 +4240,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         applySyncedHistory(bufferedSyncRef.current);
         bufferedSyncRef.current = null;
       }
+
+      checkAndTriggerInitialSyncRef.current?.();
     }
 
     const handleOrientationOrResize = () => {
