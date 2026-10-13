@@ -1478,7 +1478,8 @@ const words = word.split(" ").filter(w => w.length > 0);
     // 13: opacity (1B)
     // 14..15: pointsLength (2B Uint16LE)
     // 16..: Int16LE pairs (each 4B)
-    const type9Buf = Buffer.alloc(16 + pointsLength * 4);
+    // 16 + pointsLength * 4..: strokeId (2B Uint16LE)
+    const type9Buf = Buffer.alloc(16 + pointsLength * 4 + 2);
     type9Buf.writeUInt8(9, 0); // MSG_DRAW_STROKE = 9
     type9Buf.write(instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
     type9Buf.writeUInt8(stroke.tool, 8);
@@ -1494,6 +1495,7 @@ const words = word.split(" ").filter(w => w.length > 0);
       type9Buf.writeInt16LE(p.x, 16 + i * 4);
       type9Buf.writeInt16LE(p.y, 18 + i * 4);
     }
+    type9Buf.writeUInt16LE((strokeId || 0) & 0xFFFF, 16 + pointsLength * 4);
 
     // Record canonical stroke into standard drawHistory through existing protected path
     this.recordDrawCommand(roomId, 'draw_binary', type9Buf, instId, strokeId);
