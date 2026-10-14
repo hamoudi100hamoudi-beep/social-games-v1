@@ -37,6 +37,7 @@ import { safeLocalStorage } from "../utils/storage";
 import { soundManager } from "../utils/soundManager";
 import { useRoomEventGate } from "../hooks/useRoomEventGate";
 import { getRoomConfig } from "../types/game";
+import { FreeDrawMobileDebug } from "./game/FreeDrawMobileDebug";
 
 // 🧪 DIAGNOSTIC TEST: FREE DRAW ISOLATION TEST
 // Isolates Free Draw drawing completely from non-essential Room Shell DOM, background panels, modals, and unneeded re-renders.
@@ -2866,6 +2867,9 @@ export default function GameRoom({
           هذه الغرفة ممتلئة بالكامل
         </p>
       </CinematicModal>
+
+      {/* 🛠️ Free Draw Mobile Debug Console & Diagnostics Controller */}
+      {isFreeDraw && <FreeDrawMobileDebug />}
     </>
   );
 }
