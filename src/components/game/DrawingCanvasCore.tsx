@@ -117,6 +117,9 @@ interface UndoDiagnostics {
     retainedCanvases: number;
     invalidationReason: string | null;
     bucketThresholdActive: boolean;
+    adaptiveCheckpointExp?: boolean;
+    bestCheckpointSlot?: 'base' | 'tail' | 'none';
+    bestCheckpointIndex?: number;
   };
 }
 
@@ -124,6 +127,15 @@ const isDiagEnabled = (): boolean => {
   if (typeof window === 'undefined') return false;
   try {
     return localStorage.getItem('freedraw_bucket_undo_diag') === '1';
+  } catch (e) {
+    return false;
+  }
+};
+
+const isBucketCheckpointExpEnabled = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem('freedraw_bucket_checkpoint_exp') === '1';
   } catch (e) {
     return false;
   }
@@ -1034,6 +1046,132 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     return false;
   };
 
+  const isBucketCommand = (cmd: any): boolean => {
+    if (!cmd) return false;
+    if (cmd.event === 'draw_action' && (cmd.tool === 'bucket' || cmd.data?.tool === 'bucket')) return true;
+    if (cmd.data) {
+      let byte0 = 0;
+      if (cmd.data instanceof ArrayBuffer) {
+        byte0 = new Uint8Array(cmd.data)[0];
+      } else if (ArrayBuffer.isView(cmd.data)) {
+        byte0 = (cmd.data as Uint8Array)[0];
+      } else if (Array.isArray(cmd.data)) {
+        byte0 = cmd.data[0];
+      }
+      if (byte0 === 4) return true;
+    }
+    return false;
+  };
+
+  const countBucketsBeforeIndex = (commands: any[], k: number, lastClearIndex: number): number => {
+    const start = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+    const end = Math.min(k, commands.length);
+    let count = 0;
+    for (let i = start; i < end; i++) {
+      if (isBucketCommand(commands[i])) {
+        count++;
+      }
+    }
+    return count;
+  };
+
+  // 🛡️ Adaptive Checkpoint Pre-Bucket Capture (Free Draw Exp):
+  // Captures the exact bitmap state of ctx BEFORE floodFill executes, at index `targetIndex`.
+  const capturePreBucketCheckpoint = (targetIndex: number) => {
+    if (!propsRef.current.isFreeDraw || !isBucketCheckpointExpEnabled()) return;
+    const ctx = ctxRef.current;
+    if (!ctx || !ctx.canvas) return;
+
+    const list = localCommandsRef.current;
+    const lastClearIndex = findLatestClearIndex(list);
+    if (targetIndex <= lastClearIndex) return;
+
+    const priorBucketCount = countBucketsBeforeIndex(list, targetIndex, lastClearIndex);
+    const baseValid = isCheckpointValid(baseCheckpointRef.current, list);
+
+    // If there is no prior bucket since clear, base can hold the pre-bucket state at targetIndex.
+    // If base is already holding an older bucket checkpoint, we do not overwrite base to preserve the older bucket.
+    if (!baseValid || priorBucketCount === 0) {
+      const bCanvas = ensureCheckpointCanvas('base');
+      const bCtx = bCanvas.getContext('2d');
+      if (bCtx) {
+        bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+        bCtx.save();
+        bCtx.setTransform(1, 0, 0, 1, 0, 0);
+        bCtx.drawImage(ctx.canvas, 0, 0);
+        bCtx.restore();
+        baseCheckpointRef.current = {
+          canvas: bCanvas,
+          index: targetIndex,
+          anchorSignature: targetIndex > 0 ? getCommandSignature(list[targetIndex - 1]) : "",
+          lastClearIndex
+        };
+      }
+    }
+  };
+
+  // 🛡️ Adaptive Checkpoint Post-Bucket Capture (Free Draw Exp):
+  // Captures the exact bitmap state of ctx AFTER floodFill executes and the bucket command is pushed, at index `postIndex`.
+  const advanceCheckpointBucketPost = (postIndex: number) => {
+    if (!propsRef.current.isFreeDraw || !isBucketCheckpointExpEnabled()) {
+      advanceCheckpointIncremental();
+      return;
+    }
+
+    const ctx = ctxRef.current;
+    if (!ctx || !ctx.canvas) return;
+
+    const list = localCommandsRef.current;
+    const lastClearIndex = findLatestClearIndex(list);
+    if (postIndex <= lastClearIndex) return;
+
+    const priorBucketCount = countBucketsBeforeIndex(list, postIndex - 1, lastClearIndex);
+    const tailValid = isCheckpointValid(tailCheckpointRef.current, list);
+
+    if (priorBucketCount > 0 && tailValid && tailCheckpointRef.current.index < postIndex) {
+      // Rotate tail to base so base protects the previous bucket
+      const bCanvas = ensureCheckpointCanvas('base');
+      const bCtx = bCanvas.getContext('2d');
+      if (bCtx && tailCheckpointRef.current.canvas) {
+        bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+        bCtx.save();
+        bCtx.setTransform(1, 0, 0, 1, 0, 0);
+        bCtx.drawImage(tailCheckpointRef.current.canvas, 0, 0);
+        bCtx.restore();
+        baseCheckpointRef.current = {
+          canvas: bCanvas,
+          index: tailCheckpointRef.current.index,
+          anchorSignature: tailCheckpointRef.current.anchorSignature,
+          lastClearIndex: tailCheckpointRef.current.lastClearIndex
+        };
+      }
+    }
+
+    // Capture post-bucket into tail at postIndex
+    const tCanvas = ensureCheckpointCanvas('tail');
+    const tCtx = tCanvas.getContext('2d');
+    if (tCtx) {
+      tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+      tCtx.save();
+      tCtx.setTransform(1, 0, 0, 1, 0, 0);
+      tCtx.drawImage(ctx.canvas, 0, 0);
+      tCtx.restore();
+      tailCheckpointRef.current = {
+        canvas: tCanvas,
+        index: postIndex,
+        anchorSignature: getCommandSignature(list[postIndex - 1]),
+        lastClearIndex
+      };
+    }
+
+    const baseValid = isCheckpointValid(baseCheckpointRef.current, list);
+    if (baseValid && baseCheckpointRef.current.index > tailCheckpointRef.current.index) {
+      const temp = baseCheckpointRef.current;
+      baseCheckpointRef.current = tailCheckpointRef.current;
+      tailCheckpointRef.current = temp;
+    }
+  };
+
   const advanceCheckpointIncremental = () => {
     if (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) return;
     const list = localCommandsRef.current;
@@ -1045,6 +1183,67 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const lastClearIndex = findLatestClearIndex(list);
     const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+
+    // 🛡️ Adaptive Checkpoint Stride Adjustment (when experimental flag is enabled in Free Draw)
+    if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+      let latestBucketIdx = -1;
+      for (let i = N - 1; i >= activeStart; i--) {
+        if (isBucketCommand(list[i])) {
+          latestBucketIdx = i;
+          break;
+        }
+      }
+
+      if (latestBucketIdx >= 0) {
+        const postBucketIdx = latestBucketIdx + 1;
+        const delta = N - postBucketIdx;
+        if (delta < STRIDE || delta % STRIDE !== 0) return;
+
+        const baseValid = isCheckpointValid(baseCheckpointRef.current, list);
+        const tailValid = isCheckpointValid(tailCheckpointRef.current, list);
+
+        if (tailValid && tailCheckpointRef.current.index === N) return;
+        if (baseValid && baseCheckpointRef.current.index === N) return;
+
+        // If tail is currently holding the postBucket checkpoint, promote it to base to preserve bucket protection:
+        if (tailValid && tailCheckpointRef.current.index === postBucketIdx) {
+          const bCanvas = ensureCheckpointCanvas('base');
+          const bCtx = bCanvas.getContext('2d');
+          if (bCtx && tailCheckpointRef.current.canvas) {
+            bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+            bCtx.save();
+            bCtx.setTransform(1, 0, 0, 1, 0, 0);
+            bCtx.drawImage(tailCheckpointRef.current.canvas, 0, 0);
+            bCtx.restore();
+            baseCheckpointRef.current = {
+              canvas: bCanvas,
+              index: tailCheckpointRef.current.index,
+              anchorSignature: tailCheckpointRef.current.anchorSignature,
+              lastClearIndex: tailCheckpointRef.current.lastClearIndex
+            };
+          }
+        }
+
+        // Capture new stride snapshot into tail at N:
+        const tCanvas = ensureCheckpointCanvas('tail');
+        const tCtx = tCanvas.getContext('2d');
+        if (tCtx) {
+          tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+          tCtx.save();
+          tCtx.setTransform(1, 0, 0, 1, 0, 0);
+          tCtx.drawImage(ctx.canvas, 0, 0);
+          tCtx.restore();
+          tailCheckpointRef.current = {
+            canvas: tCanvas,
+            index: N,
+            anchorSignature: getCommandSignature(list[N - 1]),
+            lastClearIndex
+          };
+        }
+        return;
+      }
+    }
+
     const M = N - activeStart;
     if (M < STRIDE) return;
     if (M % STRIDE !== 0) return;
@@ -1822,7 +2021,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           lastBucketHintRef.current = null;
         }
         localCommandsRef.current.push(cmdRecord);
-        advanceCheckpointIncremental();
+        if (event === 'draw_action' && payload.tool === 'bucket' && isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+          advanceCheckpointBucketPost(localCommandsRef.current.length);
+        } else {
+          advanceCheckpointIncremental();
+        }
         localRedoStackRef.current = []; // Wipe redo stack on new action
         syncHistoryButtons();
       }
@@ -3392,6 +3595,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // Best valid checkpoint strictly <= N
       const bestCp = getBestCheckpoint(commands, N);
 
+      if (diag) {
+        diag.checkpointFacts.bucketThresholdActive = isBucketCheckpointExpEnabled();
+        diag.checkpointFacts.adaptiveCheckpointExp = isBucketCheckpointExpEnabled();
+        diag.checkpointFacts.bestCheckpointSlot = bestCp ? bestCp.slot : 'none';
+        diag.checkpointFacts.bestCheckpointIndex = bestCp ? bestCp.index : -1;
+      }
+
       if (bestCp && bestCp.index > lastClearIndex) {
         // 1. Clear ONLY the permanent base canvas
         ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
@@ -3412,24 +3622,70 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         diag.replayStartIndex = startIndex;
       }
 
-      // 🛡️ Inline Checkpoint Recovery for Dual Checkpoints on the fixed stride grid:
+      // 🛡️ Inline Checkpoint Recovery for Dual Checkpoints:
       const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
       const M = N - activeStart;
       let candidateBaseIndex = -1;
       let candidateTailIndex = -1;
 
       const STRIDE = 8;
-      const numCheckpoints = Math.floor(M / STRIDE);
-      if ((propsRef.current.isFreeDraw || propsRef.current.isExperimental) && numCheckpoints >= 1) {
-        if (numCheckpoints >= 2) {
-          candidateBaseIndex = activeStart + (numCheckpoints - 1) * STRIDE;
-          candidateTailIndex = activeStart + numCheckpoints * STRIDE;
-        } else {
-          candidateBaseIndex = activeStart + STRIDE;
-          candidateTailIndex = -1;
+      const isExp = isBucketCheckpointExpEnabled() && (propsRef.current.isFreeDraw || propsRef.current.isExperimental);
+
+      if (isExp) {
+        // Adaptive Checkpoint Recovery:
+        // Find buckets in replayed commands:
+        const bucketIndices: number[] = [];
+        for (let i = activeStart; i < N; i++) {
+          if (isBucketCommand(commands[i])) {
+            bucketIndices.push(i);
+          }
         }
-        if (candidateTailIndex >= N) candidateTailIndex = -1;
-        if (candidateBaseIndex >= N) candidateBaseIndex = -1;
+
+        if (bucketIndices.length > 0) {
+          const lastB = bucketIndices[bucketIndices.length - 1];
+          if (bucketIndices.length >= 2) {
+            const secondLastB = bucketIndices[bucketIndices.length - 2];
+            candidateBaseIndex = secondLastB + 1;
+            candidateTailIndex = lastB + 1;
+          } else {
+            if (lastB > activeStart) {
+              candidateBaseIndex = lastB;
+              candidateTailIndex = lastB + 1;
+            } else {
+              candidateBaseIndex = lastB + 1;
+              const afterCount = N - (lastB + 1);
+              candidateTailIndex = afterCount >= STRIDE ? lastB + 1 + STRIDE : -1;
+            }
+          }
+          if (candidateTailIndex >= N) candidateTailIndex = -1;
+          if (candidateBaseIndex >= N) candidateBaseIndex = -1;
+        } else {
+          const numCheckpoints = Math.floor(M / STRIDE);
+          if (numCheckpoints >= 1) {
+            if (numCheckpoints >= 2) {
+              candidateBaseIndex = activeStart + (numCheckpoints - 1) * STRIDE;
+              candidateTailIndex = activeStart + numCheckpoints * STRIDE;
+            } else {
+              candidateBaseIndex = activeStart + STRIDE;
+              candidateTailIndex = -1;
+            }
+            if (candidateTailIndex >= N) candidateTailIndex = -1;
+            if (candidateBaseIndex >= N) candidateBaseIndex = -1;
+          }
+        }
+      } else {
+        const numCheckpoints = Math.floor(M / STRIDE);
+        if ((propsRef.current.isFreeDraw || propsRef.current.isExperimental) && numCheckpoints >= 1) {
+          if (numCheckpoints >= 2) {
+            candidateBaseIndex = activeStart + (numCheckpoints - 1) * STRIDE;
+            candidateTailIndex = activeStart + numCheckpoints * STRIDE;
+          } else {
+            candidateBaseIndex = activeStart + STRIDE;
+            candidateTailIndex = -1;
+          }
+          if (candidateTailIndex >= N) candidateTailIndex = -1;
+          if (candidateBaseIndex >= N) candidateBaseIndex = -1;
+        }
       }
 
       // 2. Replay all remaining committed commands
@@ -3877,6 +4133,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           // 1. Capture direct undo cache (guaranteed to include all preceding committed strokes on ctx)
           captureDirectFreeDrawUndoCache(data.instanceId, data.strokeId);
 
+          // 🛡️ Adaptive Checkpoint Pre-Bucket Capture (Free Draw Exp):
+          capturePreBucketCheckpoint(localCommandsRef.current.length);
+
           // 2. Perform authoritative flood fill on ctx
           const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, remoteColor, remoteOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
 
@@ -3894,7 +4153,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             remoteCmdRecord._replayOpacity = remoteOpacity;
           }
           localCommandsRef.current.push(remoteCmdRecord);
-          advanceCheckpointIncremental();
+          if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+            advanceCheckpointBucketPost(localCommandsRef.current.length);
+          } else {
+            advanceCheckpointIncremental();
+          }
           if (!propsRef.current.isFreeDraw) {
             localRedoStackRef.current = [];
           }
@@ -5041,6 +5304,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const thisBucketStrokeId = currentLocalStrokeIdRef.current;
 
         captureDirectFreeDrawUndoCache(instanceId, thisBucketStrokeId);
+        // 🛡️ Adaptive Checkpoint Pre-Bucket Capture (Free Draw Exp):
+        capturePreBucketCheckpoint(localCommandsRef.current.length);
         const sampledTarget = floodFill(ctx, x, y, activeColor, activeOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT);
         if (sampledTarget?.isNoOp) {
           lastBucketHintRef.current = {
