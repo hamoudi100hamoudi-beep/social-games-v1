@@ -23,10 +23,11 @@ async function main() {
     localStorage.setItem('freedraw_bucket_checkpoint_exp', '1');
   });
 
-  await page.goto('http://localhost:3000', { waitUntil: 'networkidle' });
+  await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(2500);
   console.log('Loaded home page.');
 
-  // Fill in nickname
+  // Fill in nickname directly without waitFor
   const nameInput = page.locator('input[name="nickname_input_random_name"]');
   await nameInput.fill('TesterA');
   console.log('Filled nickname.');
@@ -67,7 +68,6 @@ async function main() {
 
   console.log('Game Room State:', state);
 
-  // If start button is present, click it
   if (state.hasStartBtn) {
     const startBtnLocator = page.locator('button:has-text("ابدأ الرسم"), button:has-text("انضم للرسم")');
     await startBtnLocator.first().click();
@@ -77,7 +77,6 @@ async function main() {
 
   const drawingState = await page.evaluate(() => {
     const primaryCanvas = document.getElementById('drawing-board-layer-primary') as HTMLCanvasElement | null;
-    const toolsPopup = document.querySelector('.grid-cols-2');
     return {
       hasPrimaryCanvas: !!primaryCanvas,
       canvasWidth: primaryCanvas?.width,
