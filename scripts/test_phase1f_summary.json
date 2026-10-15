@@ -1,0 +1,52 @@
+[
+  {
+    "mode": "Checkpoint_Exp_1",
+    "totalDurationMs": 0,
+    "provenLinesA": 0,
+    "provenFillsA": 0,
+    "provenLinesB": 0,
+    "provenFillsB": 0,
+    "totalCommands": 0,
+    "undoDurationMsA": [],
+    "undoDurationMsB": [],
+    "redoDurationMsA": [],
+    "commandsReplayedA": [],
+    "floodFillExecutionsUndoA": [],
+    "pixelDiffs": {
+      "initialSyncAB": -1,
+      "afterUndoAB": -1,
+      "afterRedoAB": -1,
+      "observerCvsA": -1
+    },
+    "oraclePassed": false,
+    "checkpointsActivated": false,
+    "directLiveFloodFillCounter": "error",
+    "diagLogs": [],
+    "error": "Account A redo must succeed"
+  },
+  {
+    "mode": "Checkpoint_Exp_0",
+    "totalDurationMs": 0,
+    "provenLinesA": 0,
+    "provenFillsA": 0,
+    "provenLinesB": 0,
+    "provenFillsB": 0,
+    "totalCommands": 0,
+    "undoDurationMsA": [],
+    "undoDurationMsB": [],
+    "redoDurationMsA": [],
+    "commandsReplayedA": [],
+    "floodFillExecutionsUndoA": [],
+    "pixelDiffs": {
+      "initialSyncAB": -1,
+      "afterUndoAB": -1,
+      "afterRedoAB": -1,
+      "observerCvsA": -1
+    },
+    "oraclePassed": false,
+    "checkpointsActivated": false,
+    "directLiveFloodFillCounter": "error",
+    "diagLogs": [],
+    "error": "Account A redo must succeed"
+  }
+]
