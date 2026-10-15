@@ -1,13 +1,19 @@
 {
-  "benchmarkTimestamp": "2026-10-15T10:29:34.324Z",
+  "benchmarkTimestamp": "2026-10-15T10:41:18.762Z",
+  "globalCap": "300s",
+  "setupCapPerMode": "90s",
+  "scenarioCapPerMode": "45s",
   "runs": [
     {
       "mode": "ON",
-      "completed": false,
+      "setupCompleted": true,
+      "setupDurationMs": 12383,
+      "scenarioCompleted": false,
+      "scenarioDurationMs": 48479,
       "timeoutOccurred": true,
-      "timeoutStage": "TIMEOUT_ABORT",
-      "provenDraws": 0,
-      "provenFills": 0,
+      "timeoutStage": "SCENARIO_BUCKET_A",
+      "provenDraws": 1,
+      "provenFills": 2,
       "undoSuccess": false,
       "redoSuccess": false,
       "diffInitial": -1,
@@ -16,15 +22,17 @@
       "diffObserverC": -1,
       "undoDurationMs": 0,
       "redoDurationMs": 0,
-      "totalDurationMs": 45000,
       "diagLogsCount": 0,
-      "errorMessage": "HARD_TIMEOUT_45S exceeded"
+      "errorMessage": "SCENARIO_TIMEOUT_45S at SCENARIO_BUCKET_A"
     },
     {
       "mode": "OFF",
-      "completed": false,
+      "setupCompleted": true,
+      "setupDurationMs": 10379,
+      "scenarioCompleted": false,
+      "scenarioDurationMs": 45044,
       "timeoutOccurred": true,
-      "timeoutStage": "TIMEOUT_ABORT",
+      "timeoutStage": "SCENARIO_BUCKET_A",
       "provenDraws": 0,
       "provenFills": 0,
       "undoSuccess": false,
@@ -35,9 +43,8 @@
       "diffObserverC": -1,
       "undoDurationMs": 0,
       "redoDurationMs": 0,
-      "totalDurationMs": 45000,
       "diagLogsCount": 0,
-      "errorMessage": "HARD_TIMEOUT_45S exceeded"
+      "errorMessage": "SCENARIO_TIMEOUT_45S at SCENARIO_BUCKET_A"
     }
   ]
 }
