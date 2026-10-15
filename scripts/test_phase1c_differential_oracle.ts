@@ -11,9 +11,9 @@ async function joinRoom(page: Page, nickname: string, checkpointExp: string) {
     localStorage.setItem('freedraw_bucket_checkpoint_exp', exp);
   }, checkpointExp);
 
-  await page.goto('http://localhost:3000', { waitUntil: 'networkidle' });
+  await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded' });
   await delay(2000);
-  await page.locator('input[name="nickname_input_random_name"]').fill(nickname);
+  await page.locator('textarea[name="nickname_input_random_name"]').fill(nickname);
   await page.locator('button:has-text("ROOMS")').click();
   
   const freeDrawBtn = page.locator('button:has-text("Free Draw")');

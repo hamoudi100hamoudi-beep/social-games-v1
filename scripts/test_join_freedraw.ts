@@ -28,7 +28,7 @@ async function main() {
   console.log('Loaded home page.');
 
   // Fill in nickname directly without waitFor
-  const nameInput = page.locator('input[name="nickname_input_random_name"]');
+  const nameInput = page.locator('textarea[name="nickname_input_random_name"]');
   await nameInput.fill('TesterA');
   console.log('Filled nickname.');
 
