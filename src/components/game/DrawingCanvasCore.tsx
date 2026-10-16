@@ -14,6 +14,7 @@ import {
   encodeBinaryDrawMessage,
   decodeBinaryDrawMessage
 } from '../../utils/drawBinaryHelper';
+import { selectEvictionIndexMinimax } from '../../utils/bucketCheckpointPolicy';
 
 // --- Constants ---
 /* 
@@ -998,25 +999,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (historyCheckpointsRef.current.length >= MAX_HISTORY_CHECKPOINTS) {
       const cps = historyCheckpointsRef.current;
-      // Protect cps[0] (oldest anchor) AND the last 3 recent checkpoints at the tail.
-      // Evictable candidates are indices from 1 up to cps.length - 4.
-      const minEvictIndex = 1;
-      const maxEvictIndex = Math.max(1, cps.length - 4);
-      let minMergedSpan = Infinity;
-      let evictIdx = 1;
-
-      for (let i = minEvictIndex; i <= maxEvictIndex; i++) {
-        const leftBuckets = countBucketsBeforeIndex(list, cps[i - 1].index, lastClearIndex);
-        const rightBuckets = countBucketsBeforeIndex(list, cps[i + 1].index, lastClearIndex);
-        const mergedSpan = rightBuckets - leftBuckets;
-        if (mergedSpan < minMergedSpan) {
-          minMergedSpan = mergedSpan;
-          evictIdx = i;
+      const evictIdx = selectEvictionIndexMinimax(cps, list, lastClearIndex, MAX_HISTORY_CHECKPOINTS);
+      if (evictIdx >= 0 && evictIdx < cps.length) {
+        const [evicted] = cps.splice(evictIdx, 1);
+        if (evicted?.canvas) {
+          releaseCheckpointCanvas(evicted.canvas);
         }
-      }
-      const [evicted] = cps.splice(evictIdx, 1);
-      if (evicted?.canvas) {
-        releaseCheckpointCanvas(evicted.canvas);
       }
     }
 

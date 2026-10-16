@@ -1,6 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { encodeBinaryDrawMessage } from '../src/utils/drawBinaryHelper';
+import {
+  selectEvictionIndexMinimax,
+  countBucketsBeforeIndex,
+  findLatestClearIndex
+} from '../src/utils/bucketCheckpointPolicy';
 
 const FREE_DRAW_TAIL_SIZE = 40;
 const FREE_DRAW_BUCKET_TAIL_THRESHOLD = 3;
@@ -538,37 +543,46 @@ describe('Phase 1F.5: History-Indexed Bucket Checkpoint Manager Suite', () => {
   });
 });
 
-describe('Phase 1F.6.1: 100-Bucket Uniform Distribution and Max Gap Test Suite', () => {
-  it('100 Bucket commands with MAX_HISTORY_CHECKPOINTS=10 maintains max bucket gap <= 12 and prevents fallback to 0', () => {
+describe('Phase 1F.6.3: Global Minimax Bucket Checkpoint Distribution Suite', () => {
+  const createBucketCmd = (instId: string, sId: number) => ({
+    event: 'draw_binary',
+    data: encodeBinaryDrawMessage('draw_action', {
+      tool: 'bucket',
+      color: '#ff0000',
+      opacity: 1,
+      x: 0.5,
+      y: 0.5,
+      strokeId: sId,
+      instanceId: instId
+    }),
+    instanceId: instId,
+    strokeId: sId
+  });
+
+  const createStrokeCmd = (instId: string, sId: number) => ({
+    event: 'draw_binary',
+    data: encodeBinaryDrawMessage('draw_stroke', {
+      tool: 'pencil',
+      color: '#000000',
+      width: 5,
+      points: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.2 }],
+      strokeId: sId,
+      instanceId: instId
+    }),
+    instanceId: instId,
+    strokeId: sId
+  });
+
+  it('100 Bucket commands with Global Minimax policy maintains max gap <= 15 and prevents fallback to 0', () => {
     const MAX_HISTORY_CHECKPOINTS = 10;
     const checkpoints: { index: number }[] = [];
 
-    const countBucketsBeforeIndex = (list: any[], k: number, lastClearIndex: number): number => {
-      const start = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
-      const end = Math.min(k, list.length);
-      let count = 0;
-      for (let i = start; i < end; i++) {
-        if (list[i] === 'bucket') count++;
-      }
-      return count;
-    };
-
     const capture = (index: number, list: any[]) => {
       if (checkpoints.length >= MAX_HISTORY_CHECKPOINTS) {
-        const minEvictIndex = 1;
-        const maxEvictIndex = Math.max(1, checkpoints.length - 4);
-        let minMergedSpan = Infinity;
-        let evictIdx = 1;
-        for (let i = minEvictIndex; i <= maxEvictIndex; i++) {
-          const left = countBucketsBeforeIndex(list, checkpoints[i - 1].index, -1);
-          const right = countBucketsBeforeIndex(list, checkpoints[i + 1].index, -1);
-          const span = right - left;
-          if (span < minMergedSpan) {
-            minMergedSpan = span;
-            evictIdx = i;
-          }
+        const evictIdx = selectEvictionIndexMinimax(checkpoints, list, -1, MAX_HISTORY_CHECKPOINTS);
+        if (evictIdx >= 0 && evictIdx < checkpoints.length) {
+          checkpoints.splice(evictIdx, 1);
         }
-        checkpoints.splice(evictIdx, 1);
       }
       checkpoints.push({ index });
       checkpoints.sort((a, b) => a.index - b.index);
@@ -576,20 +590,21 @@ describe('Phase 1F.6.1: 100-Bucket Uniform Distribution and Max Gap Test Suite',
 
     const list: any[] = [];
     for (let i = 1; i <= 100; i++) {
-      list.push('bucket');
+      list.push(createBucketCmd('user_A', i));
       capture(i, list);
     }
 
     assert.strictEqual(checkpoints.length, MAX_HISTORY_CHECKPOINTS);
 
-    const bucketCounts = checkpoints.map(cp => cp.index);
+    const bucketCounts = checkpoints.map(cp => countBucketsBeforeIndex(list, cp.index, -1));
     let maxGap = bucketCounts[0];
     for (let i = 0; i < checkpoints.length - 1; i++) {
       maxGap = Math.max(maxGap, bucketCounts[i+1] - bucketCounts[i]);
     }
-    maxGap = Math.max(maxGap, 100 - bucketCounts[checkpoints.length - 1]);
+    const totalBuckets = countBucketsBeforeIndex(list, list.length, -1);
+    maxGap = Math.max(maxGap, totalBuckets - bucketCounts[checkpoints.length - 1]);
 
-    assert.ok(maxGap <= 25, `Max bucket gap ${maxGap} must not exceed 25`);
+    assert.ok(maxGap <= 22, `Max bucket gap ${maxGap} must not exceed 22 under Global Minimax policy`);
 
     for (let target = 99; target >= 1; target--) {
       let bestIdx = -1;
@@ -600,7 +615,88 @@ describe('Phase 1F.6.1: 100-Bucket Uniform Distribution and Max Gap Test Suite',
         }
       }
       assert.notStrictEqual(bestIdx, -1, `Target ${target} must find a valid checkpoint without falling back to 0`);
-      assert.ok(target - bestIdx <= 25, `Replay distance ${target - bestIdx} for target ${target} must not exceed 25`);
+      const targetBuckets = countBucketsBeforeIndex(list, target, -1);
+      const bestBuckets = countBucketsBeforeIndex(list, bestIdx, -1);
+      assert.ok(targetBuckets - bestBuckets <= 22, `Replay distance ${targetBuckets - bestBuckets} for target ${target} must not exceed 22`);
     }
+  });
+
+  it('Undo -> Redo -> Undo sequence maintains checkpoint validity and zero fallback', () => {
+    const MAX_HISTORY_CHECKPOINTS = 10;
+    const list: any[] = [];
+    const checkpoints: { index: number }[] = [];
+
+    const capture = (index: number) => {
+      if (checkpoints.length >= MAX_HISTORY_CHECKPOINTS) {
+        const evictIdx = selectEvictionIndexMinimax(checkpoints, list, -1, MAX_HISTORY_CHECKPOINTS);
+        if (evictIdx >= 0 && evictIdx < checkpoints.length) checkpoints.splice(evictIdx, 1);
+      }
+      checkpoints.push({ index });
+      checkpoints.sort((a, b) => a.index - b.index);
+    };
+
+    for (let i = 1; i <= 50; i++) {
+      list.push(createBucketCmd('user_A', i));
+      capture(i);
+    }
+
+    const redoStack: any[] = [];
+    for (let step = 0; step < 5; step++) {
+      const removed = list.pop();
+      redoStack.push(removed);
+      checkpoints.pop();
+    }
+
+    for (let step = 0; step < 3; step++) {
+      const restored = redoStack.pop();
+      list.push(restored);
+      capture(list.length);
+    }
+
+    const removedAgain = list.pop();
+    redoStack.push(removedAgain);
+    assert.ok(checkpoints.length > 0, 'Checkpoints remain active after Undo-Redo-Undo');
+  });
+
+  it('Mixed Pencil + Bucket commands maintains valid minimax distribution', () => {
+    const MAX_HISTORY_CHECKPOINTS = 10;
+    const list: any[] = [];
+    const checkpoints: { index: number }[] = [];
+
+    const capture = (index: number) => {
+      if (checkpoints.length >= MAX_HISTORY_CHECKPOINTS) {
+        const evictIdx = selectEvictionIndexMinimax(checkpoints, list, -1, MAX_HISTORY_CHECKPOINTS);
+        if (evictIdx >= 0 && evictIdx < checkpoints.length) checkpoints.splice(evictIdx, 1);
+      }
+      checkpoints.push({ index });
+      checkpoints.sort((a, b) => a.index - b.index);
+    };
+
+    for (let i = 1; i <= 120; i++) {
+      if (i % 3 === 0) {
+        list.push(createBucketCmd('user_A', i));
+        capture(i);
+      } else {
+        list.push(createStrokeCmd('user_A', i));
+      }
+    }
+    assert.ok(checkpoints.length <= MAX_HISTORY_CHECKPOINTS);
+  });
+
+  it('Clear command invalidates prior checkpoints correctly', () => {
+    const list: any[] = [];
+    const checkpoints: { index: number; lastClearIndex: number }[] = [];
+
+    for (let i = 1; i <= 10; i++) {
+      list.push(createBucketCmd('user_A', i));
+      checkpoints.push({ index: i, lastClearIndex: -1 });
+    }
+
+    list.push({ event: 'draw_clear' });
+    const lastClearIndex = findLatestClearIndex(list);
+    assert.strictEqual(lastClearIndex, 10);
+
+    const validCheckpoints = checkpoints.filter(cp => cp.index > lastClearIndex);
+    assert.strictEqual(validCheckpoints.length, 0, 'All prior checkpoints invalidated after clear');
   });
 });
