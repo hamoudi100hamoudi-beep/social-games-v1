@@ -3423,7 +3423,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         hasFreeDrawRedoCacheRef.current = false;
 
         if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
-          captureHistoryCheckpoint(localCommandsRef.current.length);
+          if (decoded.event === 'draw_action') {
+            advanceCheckpointBucketPost(localCommandsRef.current.length);
+          } else {
+            advanceCheckpointIncremental();
+          }
         } else {
           advanceCheckpointIncremental();
         }
