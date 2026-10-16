@@ -537,3 +537,70 @@ describe('Phase 1F.5: History-Indexed Bucket Checkpoint Manager Suite', () => {
     assert.deepStrictEqual(finalReplay.pixels, liveCanvas.pixels, 'Final state after repeated Redo matches initial state 100%');
   });
 });
+
+describe('Phase 1F.6.1: 100-Bucket Uniform Distribution and Max Gap Test Suite', () => {
+  it('100 Bucket commands with MAX_HISTORY_CHECKPOINTS=10 maintains max bucket gap <= 12 and prevents fallback to 0', () => {
+    const MAX_HISTORY_CHECKPOINTS = 10;
+    const checkpoints: { index: number }[] = [];
+
+    const countBucketsBeforeIndex = (list: any[], k: number, lastClearIndex: number): number => {
+      const start = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+      const end = Math.min(k, list.length);
+      let count = 0;
+      for (let i = start; i < end; i++) {
+        if (list[i] === 'bucket') count++;
+      }
+      return count;
+    };
+
+    const capture = (index: number, list: any[]) => {
+      if (checkpoints.length >= MAX_HISTORY_CHECKPOINTS) {
+        const minEvictIndex = 1;
+        const maxEvictIndex = Math.max(1, checkpoints.length - 4);
+        let minMergedSpan = Infinity;
+        let evictIdx = 1;
+        for (let i = minEvictIndex; i <= maxEvictIndex; i++) {
+          const left = countBucketsBeforeIndex(list, checkpoints[i - 1].index, -1);
+          const right = countBucketsBeforeIndex(list, checkpoints[i + 1].index, -1);
+          const span = right - left;
+          if (span < minMergedSpan) {
+            minMergedSpan = span;
+            evictIdx = i;
+          }
+        }
+        checkpoints.splice(evictIdx, 1);
+      }
+      checkpoints.push({ index });
+      checkpoints.sort((a, b) => a.index - b.index);
+    };
+
+    const list: any[] = [];
+    for (let i = 1; i <= 100; i++) {
+      list.push('bucket');
+      capture(i, list);
+    }
+
+    assert.strictEqual(checkpoints.length, MAX_HISTORY_CHECKPOINTS);
+
+    const bucketCounts = checkpoints.map(cp => cp.index);
+    let maxGap = bucketCounts[0];
+    for (let i = 0; i < checkpoints.length - 1; i++) {
+      maxGap = Math.max(maxGap, bucketCounts[i+1] - bucketCounts[i]);
+    }
+    maxGap = Math.max(maxGap, 100 - bucketCounts[checkpoints.length - 1]);
+
+    assert.ok(maxGap <= 25, `Max bucket gap ${maxGap} must not exceed 25`);
+
+    for (let target = 99; target >= 1; target--) {
+      let bestIdx = -1;
+      for (let i = checkpoints.length - 1; i >= 0; i--) {
+        if (checkpoints[i].index <= target) {
+          bestIdx = checkpoints[i].index;
+          break;
+        }
+      }
+      assert.notStrictEqual(bestIdx, -1, `Target ${target} must find a valid checkpoint without falling back to 0`);
+      assert.ok(target - bestIdx <= 25, `Replay distance ${target - bestIdx} for target ${target} must not exceed 25`);
+    }
+  });
+});

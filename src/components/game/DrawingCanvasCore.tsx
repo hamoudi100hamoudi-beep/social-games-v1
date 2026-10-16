@@ -122,6 +122,9 @@ interface UndoDiagnostics {
     bestCheckpointIndex?: number;
     checkpointCount?: number;
     approximateRetainedMemoryMB?: number;
+    checkpointIndices?: number[];
+    checkpointBucketCounts?: number[];
+    maxBucketGap?: number;
   };
 }
 
@@ -994,17 +997,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     if (historyCheckpointsRef.current.length >= MAX_HISTORY_CHECKPOINTS) {
-      let minBucketGap = Infinity;
-      let evictIdx = 1;
       const cps = historyCheckpointsRef.current;
-      // Protect the last 3 recent checkpoints and the first anchor
+      // Protect cps[0] (oldest anchor) AND the last 3 recent checkpoints at the tail.
+      // Evictable candidates are indices from 1 up to cps.length - 4.
+      const minEvictIndex = 1;
       const maxEvictIndex = Math.max(1, cps.length - 4);
-      for (let i = 1; i <= maxEvictIndex; i++) {
-        const bucketsPrev = countBucketsBeforeIndex(list, cps[i].index, lastClearIndex);
-        const bucketsNext = countBucketsBeforeIndex(list, cps[i + 1].index, lastClearIndex);
-        const bucketGap = bucketsNext - bucketsPrev;
-        if (bucketGap < minBucketGap) {
-          minBucketGap = bucketGap;
+      let minMergedSpan = Infinity;
+      let evictIdx = 1;
+
+      for (let i = minEvictIndex; i <= maxEvictIndex; i++) {
+        const leftBuckets = countBucketsBeforeIndex(list, cps[i - 1].index, lastClearIndex);
+        const rightBuckets = countBucketsBeforeIndex(list, cps[i + 1].index, lastClearIndex);
+        const mergedSpan = rightBuckets - leftBuckets;
+        if (mergedSpan < minMergedSpan) {
+          minMergedSpan = mergedSpan;
           evictIdx = i;
         }
       }
@@ -3803,6 +3809,30 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         diag.checkpointFacts.retainedCanvases = retainedCount;
         diag.checkpointFacts.checkpointCount = retainedCount;
         diag.checkpointFacts.approximateRetainedMemoryMB = Math.round(memMB * 100) / 100;
+
+        if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+          const cps = historyCheckpointsRef.current;
+          const indices = cps.map(cp => cp.index);
+          const bucketCounts = cps.map(cp => countBucketsBeforeIndex(commands, cp.index, lastClearIndex));
+          
+          let maxGap = 0;
+          const startBuckets = 0;
+          const endBuckets = countBucketsBeforeIndex(commands, commands.length, lastClearIndex);
+          
+          if (cps.length > 0) {
+            maxGap = Math.max(maxGap, bucketCounts[0] - startBuckets);
+            for (let i = 0; i < cps.length - 1; i++) {
+              maxGap = Math.max(maxGap, bucketCounts[i+1] - bucketCounts[i]);
+            }
+            maxGap = Math.max(maxGap, endBuckets - bucketCounts[cps.length - 1]);
+          } else {
+            maxGap = endBuckets - startBuckets;
+          }
+
+          diag.checkpointFacts.checkpointIndices = indices;
+          diag.checkpointFacts.checkpointBucketCounts = bucketCounts;
+          diag.checkpointFacts.maxBucketGap = maxGap;
+        }
       }
 
       if (bestCp && bestCp.index > lastClearIndex) {
