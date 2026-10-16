@@ -53,39 +53,43 @@ export interface CheckpointInfo {
 }
 
 /**
- * Global Minimax Eviction Policy:
- * Evaluates all removable candidates (protecting index 0 anchor and the last 3 tail checkpoints),
- * and picks the candidate eviction that minimizes the maximum bucket gap across the entire array
- * (including start/clear boundary and end boundary).
+ * Prospective-Checkpoint-Aware Global Minimax Eviction Policy:
+ * Evaluates all removable candidates (protecting index 0 anchor and ensuring 3 tail checkpoints
+ * in the prospective final set including the incoming new checkpoint index),
+ * and picks the candidate eviction that minimizes the maximum bucket gap across the entire prospective final array.
  */
 export const selectEvictionIndexMinimax = (
   checkpoints: CheckpointInfo[],
   commands: any[],
   lastClearIndex: number,
+  newIndex: number,
   maxCapacity: number = 10
 ): number => {
   if (checkpoints.length < maxCapacity) return -1;
 
   const totalBuckets = countBucketsBeforeIndex(commands, commands.length, lastClearIndex);
   const minEvictIndex = 1;
-  const maxEvictIndex = Math.max(1, checkpoints.length - 4);
+  const maxEvictIndex = Math.max(1, checkpoints.length - 3);
 
   let bestEvictIdx = minEvictIndex;
   let lowestMaxGap = Infinity;
 
   for (let i = minEvictIndex; i <= maxEvictIndex; i++) {
     const reduced = checkpoints.filter((_, idx) => idx !== i);
+    const prospective = [...reduced, { index: newIndex }];
+    prospective.sort((a, b) => a.index - b.index);
+
     let maxG = 0;
-    const bCounts = reduced.map(cp => countBucketsBeforeIndex(commands, cp.index, lastClearIndex));
+    const bCounts = prospective.map(cp => countBucketsBeforeIndex(commands, cp.index, lastClearIndex));
     const startB = 0;
     const endB = totalBuckets;
 
-    if (reduced.length > 0) {
+    if (prospective.length > 0) {
       maxG = Math.max(maxG, bCounts[0] - startB);
-      for (let j = 0; j < reduced.length - 1; j++) {
+      for (let j = 0; j < prospective.length - 1; j++) {
         maxG = Math.max(maxG, bCounts[j + 1] - bCounts[j]);
       }
-      maxG = Math.max(maxG, endB - bCounts[reduced.length - 1]);
+      maxG = Math.max(maxG, endB - bCounts[prospective.length - 1]);
     } else {
       maxG = endB - startB;
     }

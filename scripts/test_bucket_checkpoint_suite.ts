@@ -573,13 +573,13 @@ describe('Phase 1F.6.3: Global Minimax Bucket Checkpoint Distribution Suite', ()
     strokeId: sId
   });
 
-  it('100 Bucket commands with Global Minimax policy maintains max gap <= 15 and prevents fallback to 0', () => {
+  it('100 Bucket commands with Prospective-Aware Minimax policy maintains max gap <= 15 and prevents fallback to 0', () => {
     const MAX_HISTORY_CHECKPOINTS = 10;
     const checkpoints: { index: number }[] = [];
 
     const capture = (index: number, list: any[]) => {
       if (checkpoints.length >= MAX_HISTORY_CHECKPOINTS) {
-        const evictIdx = selectEvictionIndexMinimax(checkpoints, list, -1, MAX_HISTORY_CHECKPOINTS);
+        const evictIdx = selectEvictionIndexMinimax(checkpoints, list, -1, index, MAX_HISTORY_CHECKPOINTS);
         if (evictIdx >= 0 && evictIdx < checkpoints.length) {
           checkpoints.splice(evictIdx, 1);
         }
@@ -604,7 +604,11 @@ describe('Phase 1F.6.3: Global Minimax Bucket Checkpoint Distribution Suite', ()
     const totalBuckets = countBucketsBeforeIndex(list, list.length, -1);
     maxGap = Math.max(maxGap, totalBuckets - bucketCounts[checkpoints.length - 1]);
 
-    assert.ok(maxGap <= 22, `Max bucket gap ${maxGap} must not exceed 22 under Global Minimax policy`);
+    console.log("[TEST 1F.6.4] Final Checkpoint Indices:", checkpoints.map(cp => cp.index));
+    console.log("[TEST 1F.6.4] Final Checkpoint Bucket Counts:", bucketCounts);
+    console.log("[TEST 1F.6.4] Max Bucket Gap:", maxGap);
+
+    assert.ok(maxGap <= 16, `Max bucket gap ${maxGap} must not exceed 16 under Prospective-Aware Minimax policy`);
 
     for (let target = 99; target >= 1; target--) {
       let bestIdx = -1;
@@ -617,7 +621,7 @@ describe('Phase 1F.6.3: Global Minimax Bucket Checkpoint Distribution Suite', ()
       assert.notStrictEqual(bestIdx, -1, `Target ${target} must find a valid checkpoint without falling back to 0`);
       const targetBuckets = countBucketsBeforeIndex(list, target, -1);
       const bestBuckets = countBucketsBeforeIndex(list, bestIdx, -1);
-      assert.ok(targetBuckets - bestBuckets <= 22, `Replay distance ${targetBuckets - bestBuckets} for target ${target} must not exceed 22`);
+      assert.ok(targetBuckets - bestBuckets <= 16, `Replay distance ${targetBuckets - bestBuckets} for target ${target} must not exceed 16`);
     }
   });
 

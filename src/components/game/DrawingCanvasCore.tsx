@@ -999,7 +999,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (historyCheckpointsRef.current.length >= MAX_HISTORY_CHECKPOINTS) {
       const cps = historyCheckpointsRef.current;
-      const evictIdx = selectEvictionIndexMinimax(cps, list, lastClearIndex, MAX_HISTORY_CHECKPOINTS);
+      const evictIdx = selectEvictionIndexMinimax(cps, list, lastClearIndex, index, MAX_HISTORY_CHECKPOINTS);
       if (evictIdx >= 0 && evictIdx < cps.length) {
         const [evicted] = cps.splice(evictIdx, 1);
         if (evicted?.canvas) {
