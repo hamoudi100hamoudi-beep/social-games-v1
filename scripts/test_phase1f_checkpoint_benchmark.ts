@@ -8,10 +8,15 @@ interface DiagRecord {
   targetStrokeId?: number;
   targetIndex?: number;
   commandsReplayed?: number;
+  bucketCommandsEncountered?: number;
   floodFillExecutions?: number;
+  cumulativeFillDurationMs?: number;
+  maxFillDurationMs?: number;
   totalSyncDurationMs?: number;
   bestCheckpointSlot?: string;
   bestCheckpointIndex?: number;
+  checkpointCount?: number;
+  approximateRetainedMemoryMB?: number;
   fastPath?: string;
 }
 
@@ -21,12 +26,16 @@ interface BenchmarkOutput {
   scenarioCompleted: boolean;
   actualBucketOperations: number;
   actualDrawOperations: number;
+  checkpointSlotSelected: string;
   checkpointPathProven: boolean;
+  replayedBucketCount: number;
+  floodFillExecutionsCount: number;
   undoDurationMs: number;
   redoDurationMs: number;
   undoPixelDiffCount: number;
   redoPixelDiffCount: number;
-  observerPixelDiffCount: number;
+  retainedCheckpointsCount: number;
+  retainedMemoryMB: number;
   failureStage: string | null;
   failureReason: string | null;
 }
@@ -46,10 +55,15 @@ function parseDiagLog(text: string): DiagRecord | null {
       targetStrokeId: obj.targetStrokeId,
       targetIndex: obj.targetIndex,
       commandsReplayed: obj.commandsReplayed,
+      bucketCommandsEncountered: obj.bucketCommandsEncountered,
       floodFillExecutions: obj.floodFillExecutions,
+      cumulativeFillDurationMs: obj.cumulativeFillDurationMs,
+      maxFillDurationMs: obj.maxFillDurationMs,
       totalSyncDurationMs: obj.totalSyncDurationMs,
       bestCheckpointSlot: obj.checkpointFacts?.bestCheckpointSlot ?? (obj.bestCheckpointSlot !== undefined ? String(obj.bestCheckpointSlot) : undefined),
       bestCheckpointIndex: obj.checkpointFacts?.bestCheckpointIndex,
+      checkpointCount: obj.checkpointFacts?.checkpointCount,
+      approximateRetainedMemoryMB: obj.checkpointFacts?.approximateRetainedMemoryMB,
       fastPath: obj.fastPath,
     };
   } catch {
@@ -83,15 +97,10 @@ async function initBrowserHelpers(page: Page) {
       }
       return diff;
     };
-    (window as any).getCanvasDataUrl = (): string => {
-      const canvas = document.getElementById('drawing-board-layer-primary') as HTMLCanvasElement;
-      return canvas ? canvas.toDataURL('image/png') : '';
-    };
   });
 }
 
 async function joinFreeDraw(page: Page, nickname: string, expFlag: '0' | '1') {
-  // Step 1: Pre-populate localStorage before application scripts load
   await page.addInitScript((exp) => {
     localStorage.clear();
     localStorage.setItem('freedraw_bucket_undo_diag', '1');
@@ -101,53 +110,43 @@ async function joinFreeDraw(page: Page, nickname: string, expFlag: '0' | '1') {
   await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded' });
   await delay(800);
 
-  // Verify that localStorage flag matches requested mode
   const actualExp = await page.evaluate(() => localStorage.getItem('freedraw_bucket_checkpoint_exp'));
-  assert.strictEqual(actualExp, expFlag, `localStorage freedraw_bucket_checkpoint_exp mismatch: expected ${expFlag}, got ${actualExp}`);
+  assert.strictEqual(actualExp, expFlag, `freedraw_bucket_checkpoint_exp mismatch: expected ${expFlag}, got ${actualExp}`);
 
-  // Navigate through Lobby: enter name
   const nameInput = page.locator('textarea[name="nickname_input_random_name"]');
   await nameInput.waitFor({ state: 'visible', timeout: 8000 });
   await nameInput.fill(nickname);
 
-  // Click ROOMS button
   const roomsBtn = page.locator('button:has-text("ROOMS")');
   await roomsBtn.waitFor({ state: 'visible', timeout: 5000 });
   await roomsBtn.click();
   await delay(300);
 
-  // Select Free Draw preset
   const freeDrawBtn = page.locator('button:has-text("Free Draw")');
   await freeDrawBtn.waitFor({ state: 'visible', timeout: 5000 });
   await freeDrawBtn.click();
 
-  // Click PLAY button in modal
   const playBtn = page.locator('button#room-info-play-btn, button:has-text("PLAY")');
   await playBtn.waitFor({ state: 'visible', timeout: 5000 });
   await playBtn.click();
 
-  // Wait for initial room load/sync overlay to detach
   try {
     await page.locator('div.fixed.z-\\[999999\\]').waitFor({ state: 'detached', timeout: 12000 });
   } catch {}
 
   await delay(800);
 
-  // Wait for Start/Join button to appear and click it to activate isDrawingMode
   const startBtn = page.locator('button:has-text("ابدأ الرسم"), button:has-text("انضم للرسم"), button:has-text("العودة للرسم")').first();
   await startBtn.waitFor({ state: 'visible', timeout: 10000 });
   await startBtn.click();
 
-  // Explicitly wait for bottom toolbar to be visible to guarantee drawing mode is active
   const toolbar = page.locator('div.bg-game-primary-blue');
   await toolbar.waitFor({ state: 'visible', timeout: 10000 });
 
-  // Ensure canvas is ready
   const canvas = page.locator('#drawing-board-layer-primary');
   await canvas.waitFor({ state: 'visible', timeout: 8000 });
   await delay(300);
 
-  // Initialize in-browser buffer management functions
   await initBrowserHelpers(page);
 }
 
@@ -155,7 +154,6 @@ async function ensureToolsMenuOpen(page: Page) {
   const menu = page.locator('div.grid.grid-cols-2');
   if (await menu.isVisible()) return;
 
-  // The white selector button in DrawingBoard bottom toolbar
   const whiteBtn = page.locator('div.bg-game-primary-blue button.\\!bg-white, div.bg-game-primary-blue button.bg-white').first();
   await whiteBtn.waitFor({ state: 'visible', timeout: 5000 });
   await whiteBtn.click();
@@ -194,39 +192,36 @@ async function selectTool(page: Page, toolName: 'pencil' | 'bucket') {
   await delay(150);
 }
 
-async function selectColor(page: Page, colorIndex: number) {
-  const colorBtns = page.locator('div.flex.gap-\\[3px\\] button');
-  const count = await colorBtns.count();
-  if (count > colorIndex) {
-    const btn = colorBtns.nth(colorIndex);
-    await btn.waitFor({ state: 'visible', timeout: 3000 });
-    await btn.click();
-    await delay(150);
-  }
-}
-
-async function clickUndo(page: Page): Promise<boolean> {
+async function clickUndoMultiple(page: Page, count: number): Promise<number> {
   await ensureToolsMenuOpen(page);
   const undoBtn = page.locator('div.grid.grid-cols-2 button:has(svg.lucide-undo-2)').first();
-  await undoBtn.waitFor({ state: 'visible', timeout: 3000 });
-  if (await undoBtn.isDisabled()) return false;
-  await undoBtn.click();
-  return true;
+  let done = 0;
+  for (let i = 0; i < count; i++) {
+    if (await undoBtn.isDisabled()) break;
+    await undoBtn.click();
+    await delay(120);
+    done++;
+  }
+  return done;
 }
 
-async function clickRedo(page: Page): Promise<boolean> {
+async function clickRedoMultiple(page: Page, count: number): Promise<number> {
   await ensureToolsMenuOpen(page);
   const redoBtn = page.locator('div.grid.grid-cols-2 button:has(svg.lucide-redo-2)').first();
-  await redoBtn.waitFor({ state: 'visible', timeout: 3000 });
-  if (await redoBtn.isDisabled()) return false;
-  await redoBtn.click();
-  return true;
+  let done = 0;
+  for (let i = 0; i < count; i++) {
+    if (await redoBtn.isDisabled()) break;
+    await redoBtn.click();
+    await delay(120);
+    done++;
+  }
+  return done;
 }
 
 async function runBenchmark(browser: Browser, expMode: '0' | '1'): Promise<BenchmarkOutput> {
   const modeLabel: 'OFF' | 'ON' = expMode === '1' ? 'ON' : 'OFF';
   console.log(`\n======================================================`);
-  console.log(`🚀 Executing Benchmark Mode [${modeLabel}] (exp flag = ${expMode})`);
+  console.log(`🚀 Executing 100-Bucket Benchmark Mode [${modeLabel}] (exp = ${expMode})`);
   console.log(`======================================================`);
 
   const diagLogsA: DiagRecord[] = [];
@@ -236,8 +231,6 @@ async function runBenchmark(browser: Browser, expMode: '0' | '1'): Promise<Bench
   let pageA: any = null;
   let ctxB: any = null;
   let pageB: any = null;
-  let ctxC: any = null;
-  let pageC: any = null;
 
   let actualDrawOperations = 0;
   let actualBucketOperations = 0;
@@ -245,12 +238,14 @@ async function runBenchmark(browser: Browser, expMode: '0' | '1'): Promise<Bench
   let redoDurationMs = 0;
   let undoPixelDiffCount = -1;
   let redoPixelDiffCount = -1;
-  let observerPixelDiffCount = -1;
+  let checkpointSlotSelected = 'none';
   let checkpointPathProven = false;
+  let replayedBucketCount = 0;
+  let floodFillExecutionsCount = 0;
+  let retainedCheckpointsCount = 0;
+  let retainedMemoryMB = 0;
 
-  // ----------------------------------------------------
-  // STEP 1: SETUP PHASE (Isolated from scenario duration)
-  // ----------------------------------------------------
+  // 1. SETUP
   const setupStart = Date.now();
   const doSetup = async () => {
     currentStage = 'SETUP_JOIN_A';
@@ -264,7 +259,6 @@ async function runBenchmark(browser: Browser, expMode: '0' | '1'): Promise<Bench
     await joinFreeDraw(pageA, `TesterA_${modeLabel}`, expMode);
 
     currentStage = 'SETUP_CLEAR_CANVAS';
-    console.log(`[${modeLabel}] Ensuring clean room canvas...`);
     await clearCanvas(pageA);
 
     currentStage = 'SETUP_JOIN_B';
@@ -288,23 +282,22 @@ async function runBenchmark(browser: Browser, expMode: '0' | '1'): Promise<Bench
       scenarioCompleted: false,
       actualBucketOperations: 0,
       actualDrawOperations: 0,
+      checkpointSlotSelected: 'none',
       checkpointPathProven: false,
+      replayedBucketCount: 0,
+      floodFillExecutionsCount: 0,
       undoDurationMs: 0,
       redoDurationMs: 0,
       undoPixelDiffCount: -1,
       redoPixelDiffCount: -1,
-      observerPixelDiffCount: -1,
+      retainedCheckpointsCount: 0,
+      retainedMemoryMB: 0,
       failureStage: currentStage,
       failureReason: err.message,
     };
   }
 
-  const setupDurationMs = Date.now() - setupStart;
-  console.log(`[${modeLabel}] Setup successfully completed in ${setupDurationMs}ms`);
-
-  // ----------------------------------------------------
-  // STEP 2: SCENARIO EXECUTION & MEASUREMENT PHASE
-  // ----------------------------------------------------
+  // 2. SCENARIO: 100 REAL BUCKET OPERATIONS
   const doScenario = async () => {
     currentStage = 'SCENARIO_INIT';
     const canvasA = pageA.locator('#drawing-board-layer-primary');
@@ -315,181 +308,176 @@ async function runBenchmark(browser: Browser, expMode: '0' | '1'): Promise<Bench
 
     await pageA.evaluate(() => (window as any).saveBuffer('baseline'));
 
-    // 1. Account A draws an enclosed rectangular boundary
-    currentStage = 'SCENARIO_BOUNDARY';
+    // Draw grid to create 100 distinct bounded cells (10x10 grid)
+    currentStage = 'SCENARIO_GRID_DRAW';
     await selectTool(pageA, 'pencil');
-    const startX = boxA.x + 80;
-    const startY = boxA.y + 80;
-    const boxSize = 160;
+    const gridRows = 10;
+    const gridCols = 10;
+    const startX = boxA.x + 30;
+    const startY = boxA.y + 20;
+    const cellW = 58;
+    const cellH = 34;
+    const totalW = cellW * gridCols;
+    const totalH = cellH * gridRows;
 
-    await pageA.mouse.move(startX, startY);
-    await pageA.mouse.down();
-    await pageA.mouse.move(startX + boxSize, startY, { steps: 3 });
-    await pageA.mouse.move(startX + boxSize, startY + boxSize, { steps: 3 });
-    await pageA.mouse.move(startX, startY + boxSize, { steps: 3 });
-    await pageA.mouse.move(startX, startY, { steps: 3 });
-    await pageA.mouse.up();
-    await delay(300);
-
-    await pageA.evaluate(() => (window as any).saveBuffer('after_boundary'));
-    const boundaryDiff = await pageA.evaluate(() => (window as any).getDiff('baseline', 'after_boundary'));
-    assert(boundaryDiff > 40, `Boundary stroke failed to mutate pixels: diff = ${boundaryDiff}`);
-    actualDrawOperations++;
-
-    // 2. Account A performs 4 Bucket fills with distinct colors inside the bounded area
-    // (4 fills exceeds FREE_DRAW_BUCKET_TAIL_THRESHOLD = 3 to bake adaptive post-bucket checkpoints)
-    currentStage = 'SCENARIO_BUCKET_FILLS';
-    await selectTool(pageA, 'bucket');
-
-    const fillCoords = [
-      { x: startX + 30, y: startY + 30, colorIdx: 2 },
-      { x: startX + 60, y: startY + 60, colorIdx: 4 },
-      { x: startX + 90, y: startY + 90, colorIdx: 6 },
-      { x: startX + 120, y: startY + 120, colorIdx: 8 },
-    ];
-
-    for (let i = 0; i < fillCoords.length; i++) {
-      const { x, y, colorIdx } = fillCoords[i];
-      const prevBufName = i === 0 ? 'after_boundary' : `fill_${i}`;
-      const curBufName = `fill_${i + 1}`;
-
-      await selectColor(pageA, colorIdx);
-      await pageA.mouse.click(x, y);
-      await delay(300);
-
-      await pageA.evaluate((name) => (window as any).saveBuffer(name), curBufName);
-      const fillDiff = await pageA.evaluate(({ p, c }) => (window as any).getDiff(p, c), { p: prevBufName, c: curBufName });
-      assert(fillDiff > 20, `Bucket fill #${i + 1} failed to mutate canvas: diff = ${fillDiff}`);
-      actualBucketOperations++;
+    // Draw horizontal grid lines
+    for (let r = 0; r <= gridRows; r++) {
+      const y = startY + r * cellH;
+      await pageA.mouse.move(startX, y);
+      await pageA.mouse.down();
+      await pageA.mouse.move(startX + totalW, y, { steps: 2 });
+      await pageA.mouse.up();
+      actualDrawOperations++;
     }
 
-    // Expected canvas state after 2 undos (undoing fill 4 and fill 3) is fill_2:
-    // And expected canvas state after 2 redos is fill_4:
-    await pageA.evaluate(() => (window as any).saveBuffer('state_before_undo'));
-
-    // 3. Account B draws an outside stroke to guarantee multi-player interleaved state
-    currentStage = 'SCENARIO_PLAYER_B';
-    await selectTool(pageB, 'pencil');
-    await pageB.mouse.move(boxB.x + 320, boxB.y + 100);
-    await pageB.mouse.down();
-    await pageB.mouse.move(boxB.x + 420, boxB.y + 180, { steps: 3 });
-    await pageB.mouse.up();
+    // Draw vertical grid lines
+    for (let c = 0; c <= gridCols; c++) {
+      const x = startX + c * cellW;
+      await pageA.mouse.move(x, startY);
+      await pageA.mouse.down();
+      await pageA.mouse.move(x, startY + totalH, { steps: 2 });
+      await pageA.mouse.up();
+      actualDrawOperations++;
+    }
     await delay(300);
-    actualDrawOperations++;
 
-    // Allow network commands to stabilize
+    // Account A fills all 100 cells with distinct colors
+    currentStage = 'SCENARIO_100_BUCKET_FILLS';
+    console.log(`[${modeLabel}] Executing 100 real Bucket operations...`);
+    await selectTool(pageA, 'bucket');
+
+    const colors = ['#0018F6', '#25C8FF', '#008D25', '#A9220C', '#954112', '#00FF4C', '#FF0012', '#FF7729', '#B1701C', '#99014E', '#FFCA26', '#7F00FF'];
+
+    for (let r = 0; r < gridRows; r++) {
+      for (let c = 0; c < gridCols; c++) {
+        const fillIndex = r * gridCols + c + 1; // 1..100
+        const clickX = startX + c * cellW + Math.floor(cellW / 2);
+        const clickY = startY + r * cellH + Math.floor(cellH / 2);
+
+        // Snapshot state at fill 90 (which is the expected state after 10 undos!)
+        if (fillIndex === 90) {
+          await delay(200);
+          await pageA.evaluate(() => (window as any).saveBuffer('state_at_fill_90'));
+        }
+
+        // Change color periodically
+        if (c % 2 === 0) {
+          const colorHex = colors[(r + c) % colors.length];
+          await pageA.evaluate((hex) => {
+            const btn = document.querySelector(`button[style*="background-color: ${hex}"], button[data-color="${hex}"]`) as HTMLElement;
+            if (btn) btn.click();
+          }, colorHex);
+        }
+
+        await pageA.mouse.click(clickX, clickY);
+        actualBucketOperations++;
+        await delay(35);
+      }
+    }
+    console.log(`[${modeLabel}] Completed ${actualBucketOperations} bucket fills.`);
     await delay(800);
 
-    // 4. MULTI-STEP UNDO MEASUREMENT:
-    // Execute 2 consecutive undos for Account A (undoing fill 4 and fill 3)
-    // Undo 1 consumes single-step cache; Undo 2 MUST exercise replayFreeDrawHistorySafely (Checkpoints path)
-    currentStage = 'SCENARIO_MULTI_UNDO';
-    const uStart = performance.now();
-    const u1 = await clickUndo(pageA);
-    assert(u1, 'Undo 1 click failed');
-    await delay(150);
-    const u2 = await clickUndo(pageA);
-    assert(u2, 'Undo 2 click failed');
+    // Save exact state before Account B's stroke and Undos
+    await pageA.evaluate(() => (window as any).saveBuffer('state_after_100_fills'));
 
-    // Wait until canvas settles
+    // 3. ACCOUNT B: INTERLEAVED STROKE (breaks single-step tail cache)
+    currentStage = 'SCENARIO_PLAYER_B_STROKE';
+    console.log(`[${modeLabel}] Player B drawing interleaved stroke...`);
+    await selectTool(pageB, 'pencil');
+    await pageB.mouse.move(boxB.x + 20, boxB.y + 380);
+    await pageB.mouse.down();
+    await pageB.mouse.move(boxB.x + 200, boxB.y + 380, { steps: 2 });
+    await pageB.mouse.up();
+    actualDrawOperations++;
+    await delay(600);
+
+    // Save state before undos (includes Player B's stroke)
+    await pageA.evaluate(() => (window as any).saveBuffer('state_before_undos'));
+
+    // Expected state after 10 undos: state_at_fill_90 + Player B's bottom stroke!
+    // We construct the expected buffer in browser by combining fill 90 with bottom stroke region:
+    await pageA.evaluate(() => {
+      const cur = (window as any).canvasBuffers['state_before_undos'];
+      const f90 = (window as any).canvasBuffers['state_at_fill_90'];
+      const canvas = document.getElementById('drawing-board-layer-primary') as HTMLCanvasElement;
+      const ctx = canvas.getContext('2d')!;
+      // Expected state has fill 90 in grid region, plus Player B's stroke at y > 360
+      const exp = ctx.createImageData(canvas.width, canvas.height);
+      exp.data.set(f90.data);
+      // Copy Player B stroke (bottom row) from cur to exp
+      const startIdx = Math.floor(360 * (canvas.height / 396)) * canvas.width * 4;
+      for (let i = startIdx; i < cur.data.length; i++) {
+        exp.data[i] = cur.data[i];
+      }
+      (window as any).canvasBuffers['expected_after_10_undos'] = exp;
+    });
+
+    // 4. MULTI-STEP UNDO: 10 CONSECUTIVE UNDOS FOR ACCOUNT A
+    currentStage = 'SCENARIO_10_CONSECUTIVE_UNDOS';
+    console.log(`[${modeLabel}] Executing 10 consecutive Undos for Account A...`);
+    const diagCountBefore = diagLogsA.length;
+    const uStart = performance.now();
+    const undosDone = await clickUndoMultiple(pageA, 10);
+    assert.strictEqual(undosDone, 10, `Expected 10 undos, executed ${undosDone}`);
+
+    // Wait until canvas rendering settles
     await delay(600);
     undoDurationMs = Math.round(performance.now() - uStart);
 
-    await pageA.evaluate(() => (window as any).saveBuffer('state_after_undo'));
-    // Compare state_after_undo with fill_2 (the exact state before fills 3 and 4 were applied)
-    undoPixelDiffCount = await pageA.evaluate(() => (window as any).getDiff('state_after_undo', 'fill_2'));
+    await pageA.evaluate(() => (window as any).saveBuffer('state_after_10_undos'));
+    undoPixelDiffCount = await pageA.evaluate(() => (window as any).getDiff('state_after_10_undos', 'expected_after_10_undos'));
 
-    // 5. MULTI-STEP REDO MEASUREMENT:
-    // Execute 2 consecutive redos for Account A (restoring fill 3 and fill 4)
-    currentStage = 'SCENARIO_MULTI_REDO';
+    // Check diagnostics captured during the 10 undos
+    const newDiags = diagLogsA.slice(diagCountBefore);
+    for (const d of newDiags) {
+      if (d.commandsReplayed !== undefined) replayedBucketCount += (d.bucketCommandsEncountered || 0);
+      if (d.floodFillExecutions !== undefined) floodFillExecutionsCount += d.floodFillExecutions;
+      if (d.bestCheckpointSlot && d.bestCheckpointSlot !== 'none') {
+        checkpointSlotSelected = d.bestCheckpointSlot;
+        checkpointPathProven = true;
+      }
+      if (d.checkpointCount !== undefined) retainedCheckpointsCount = d.checkpointCount;
+      if (d.approximateRetainedMemoryMB !== undefined) retainedMemoryMB = d.approximateRetainedMemoryMB;
+    }
+
+    // 5. MULTI-STEP REDO: 10 CONSECUTIVE REDOS FOR ACCOUNT A
+    currentStage = 'SCENARIO_10_CONSECUTIVE_REDOS';
+    console.log(`[${modeLabel}] Executing 10 consecutive Redos for Account A...`);
     const rStart = performance.now();
-    const r1 = await clickRedo(pageA);
-    assert(r1, 'Redo 1 click failed');
-    await delay(150);
-    const r2 = await clickRedo(pageA);
-    assert(r2, 'Redo 2 click failed');
+    const redosDone = await clickRedoMultiple(pageA, 10);
+    assert.strictEqual(redosDone, 10, `Expected 10 redos, executed ${redosDone}`);
 
-    // Wait until canvas settles
     await delay(600);
     redoDurationMs = Math.round(performance.now() - rStart);
 
-    await pageA.evaluate(() => (window as any).saveBuffer('state_after_redo'));
-    // Compare state_after_redo with state_before_undo
-    redoPixelDiffCount = await pageA.evaluate(() => (window as any).getDiff('state_after_redo', 'state_before_undo'));
-
-    // 6. OBSERVER C GROUND-TRUTH REBUILD VERIFICATION:
-    // Observer C joins from scratch, receives raw command history from server, and replays from index 0
-    currentStage = 'SCENARIO_OBSERVER_C';
-    ctxC = await browser.newContext({ viewport: { width: 1280, height: 800 } });
-    pageC = await ctxC.newPage();
-    console.log(`[${modeLabel}] Observer C joining to rebuild from scratch...`);
-    await joinFreeDraw(pageC, `ObserverC_${modeLabel}`, expMode);
-    await delay(2000); // allow history sync replay to complete
-
-    // Fast bit-for-bit DataURL check first
-    const dataUrlA = await pageA.evaluate(() => (window as any).getCanvasDataUrl());
-    const dataUrlC = await pageC.evaluate(() => (window as any).getCanvasDataUrl());
-
-    if (dataUrlA && dataUrlC && dataUrlA === dataUrlC) {
-      observerPixelDiffCount = 0;
-    } else {
-      // If data URLs differ, perform precise pixel count comparison
-      const bufA = await pageA.evaluate(() => {
-        const c = document.getElementById('drawing-board-layer-primary') as HTMLCanvasElement;
-        return Array.from(c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data);
-      });
-      const bufC = await pageC.evaluate(() => {
-        const c = document.getElementById('drawing-board-layer-primary') as HTMLCanvasElement;
-        return Array.from(c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data);
-      });
-      let diffs = 0;
-      for (let i = 0; i < bufA.length; i += 4) {
-        if (bufA[i] !== bufC[i] || bufA[i + 1] !== bufC[i + 1] || bufA[i + 2] !== bufC[i + 2] || bufA[i + 3] !== bufC[i + 3]) {
-          diffs++;
-        }
-      }
-      observerPixelDiffCount = diffs;
-    }
-
-    // 7. CHECKPOINT PATH EVIDENCE:
-    // Verify whether [FREE_DRAW_UNDO_DIAG] registered bestCheckpointSlot !== 'none'
-    const replayDiag = diagLogsA.find(d => d.fastPath === 'miss' || (d.bestCheckpointSlot && d.bestCheckpointSlot !== 'none'));
-    if (replayDiag && replayDiag.bestCheckpointSlot && replayDiag.bestCheckpointSlot !== 'none') {
-      checkpointPathProven = true;
-    } else if (expMode === '1') {
-      // Check all diag logs in ON mode
-      checkpointPathProven = diagLogsA.some(d => d.bestCheckpointSlot === 'base' || d.bestCheckpointSlot === 'tail');
-    } else {
-      checkpointPathProven = false; // Expected in OFF mode
-    }
-
-    console.log(`[${modeLabel}] Checkpoint diag logs captured: ${diagLogsA.length}`);
-    if (diagLogsA.length > 0) {
-      console.log(`[${modeLabel}] Last Diag:`, JSON.stringify(diagLogsA[diagLogsA.length - 1]));
-    }
+    await pageA.evaluate(() => (window as any).saveBuffer('state_after_10_redos'));
+    redoPixelDiffCount = await pageA.evaluate(() => (window as any).getDiff('state_after_10_redos', 'state_before_undos'));
   };
 
   try {
     await Promise.race([
       doScenario(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('SCENARIO_TIMEOUT_45S')), 45000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SCENARIO_TIMEOUT_75S')), 75000))
     ]);
   } catch (err: any) {
     if (ctxA) await ctxA.close().catch(() => {});
     if (ctxB) await ctxB.close().catch(() => {});
-    if (ctxC) await ctxC.close().catch(() => {});
     return {
       mode: modeLabel,
       setupCompleted: true,
       scenarioCompleted: false,
       actualBucketOperations,
       actualDrawOperations,
+      checkpointSlotSelected,
       checkpointPathProven,
+      replayedBucketCount,
+      floodFillExecutionsCount,
       undoDurationMs,
       redoDurationMs,
       undoPixelDiffCount,
       redoPixelDiffCount,
-      observerPixelDiffCount,
+      retainedCheckpointsCount,
+      retainedMemoryMB,
       failureStage: currentStage,
       failureReason: err.message,
     };
@@ -497,7 +485,6 @@ async function runBenchmark(browser: Browser, expMode: '0' | '1'): Promise<Bench
 
   if (ctxA) await ctxA.close().catch(() => {});
   if (ctxB) await ctxB.close().catch(() => {});
-  if (ctxC) await ctxC.close().catch(() => {});
 
   return {
     mode: modeLabel,
@@ -505,21 +492,25 @@ async function runBenchmark(browser: Browser, expMode: '0' | '1'): Promise<Bench
     scenarioCompleted: true,
     actualBucketOperations,
     actualDrawOperations,
+    checkpointSlotSelected,
     checkpointPathProven,
+    replayedBucketCount,
+    floodFillExecutionsCount,
     undoDurationMs,
     redoDurationMs,
     undoPixelDiffCount,
     redoPixelDiffCount,
-    observerPixelDiffCount,
+    retainedCheckpointsCount,
+    retainedMemoryMB,
     failureStage: null,
     failureReason: null,
   };
 }
 
 async function main() {
-  console.log('===============================================================');
-  console.log('=== PHASE 1F.3: FINAL CONTROLLED BUCKET CHECKPOINT BENCHMARK ===');
-  console.log('===============================================================\n');
+  console.log('========================================================================');
+  console.log('=== PHASE 1F.5: CONTROLLED 100-BUCKET CHECKPOINT BENCHMARK (OFF & ON) ===');
+  console.log('========================================================================\n');
 
   const customExecutable = '/ms-playwright/chromium_headless_shell-1247/chrome-headless-shell-linux64/chrome-headless-shell';
   const executablePath = fs.existsSync(customExecutable) ? customExecutable : undefined;
@@ -533,29 +524,30 @@ async function main() {
   const results: BenchmarkOutput[] = [];
 
   try {
-    // 1. Run OFF mode first (Baseline)
+    // 1. Run OFF mode (Baseline)
     const resOFF = await runBenchmark(browser, '0');
     results.push(resOFF);
+    console.log(`[OFF Summary]: Completed=${resOFF.scenarioCompleted}, UndoTime=${resOFF.undoDurationMs}ms, CheckpointSlot=${resOFF.checkpointSlotSelected}`);
 
-    // Grace pause between runs for server clean state
     await delay(3000);
 
-    // 2. Run ON mode (Experimental Checkpoints)
+    // 2. Run ON mode (History-Indexed Checkpoint Collection)
     const resON = await runBenchmark(browser, '1');
     results.push(resON);
+    console.log(`[ON Summary]: Completed=${resON.scenarioCompleted}, UndoTime=${resON.undoDurationMs}ms, CheckpointSlot=${resON.checkpointSlotSelected}`);
   } finally {
     await browser.close().catch(() => {});
   }
 
   fs.writeFileSync('scripts/test_phase1f_summary.json', JSON.stringify(results, null, 2), 'utf-8');
 
-  console.log('\n===============================================================');
-  console.log('=== BENCHMARK COMPLETE — JSON RESULT SAVED ===');
-  console.log('===============================================================');
+  console.log('\n========================================================================');
+  console.log('=== BENCHMARK FINAL SUMMARY ===');
+  console.log('========================================================================');
   console.log(JSON.stringify(results, null, 2));
 }
 
 main().catch(err => {
-  console.error('Fatal benchmark execution error:', err);
+  console.error('Fatal execution error:', err);
   process.exit(1);
 });

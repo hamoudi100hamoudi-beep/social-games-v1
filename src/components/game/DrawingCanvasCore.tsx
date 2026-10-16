@@ -118,8 +118,10 @@ interface UndoDiagnostics {
     invalidationReason: string | null;
     bucketThresholdActive: boolean;
     adaptiveCheckpointExp?: boolean;
-    bestCheckpointSlot?: 'base' | 'tail' | 'none';
+    bestCheckpointSlot?: 'base' | 'tail' | 'history' | 'none';
     bestCheckpointIndex?: number;
+    checkpointCount?: number;
+    approximateRetainedMemoryMB?: number;
   };
 }
 
@@ -901,10 +903,152 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     lastClearIndex: -1
   });
 
+  // 🛡️ History-Indexed Bucket Checkpoint Collection (Phase 1F.5)
+  // Maintains an ordered, history-indexed collection of global canvas snapshots,
+  // bounded by MAX_HISTORY_CHECKPOINTS to guarantee predictable RAM usage.
+  // Free Draw canvas: 680x396x4 bytes = ~1,077,120 bytes (~1.03 MB) per snapshot.
+  // 10 snapshots = ~10.3 MB maximum VRAM/RAM allocation.
+  const MAX_HISTORY_CHECKPOINTS = 10;
+
+  interface HistoryCheckpoint {
+    canvas: HTMLCanvasElement;
+    index: number; // Snapshot represents canvas state after commands 0..index-1 (before command index)
+    anchorSignature: string;
+    lastClearIndex: number;
+    timestamp: number;
+  }
+
+  const historyCheckpointsRef = useRef<HistoryCheckpoint[]>([]);
+  const checkpointCanvasPoolRef = useRef<HTMLCanvasElement[]>([]);
+
+  const acquireRecycledCheckpointCanvas = (): HTMLCanvasElement => {
+    const effectiveDPR = (propsRef.current.isFreeDraw || propsRef.current.isExperimental || enableFixedDPR) ? 1.0 : DPR;
+    const targetW = Math.round(LOGICAL_WIDTH * effectiveDPR);
+    const targetH = Math.round(LOGICAL_HEIGHT * effectiveDPR);
+
+    let canvas: HTMLCanvasElement;
+    if (checkpointCanvasPoolRef.current.length > 0) {
+      canvas = checkpointCanvasPoolRef.current.pop()!;
+    } else {
+      canvas = document.createElement('canvas');
+    }
+
+    if (canvas.width !== targetW || canvas.height !== targetH) {
+      canvas.width = targetW;
+      canvas.height = targetH;
+    }
+    const cCtx = canvas.getContext('2d');
+    if (cCtx) {
+      cCtx.setTransform(effectiveDPR, 0, 0, effectiveDPR, 0, 0);
+      cCtx.lineCap = 'round';
+      cCtx.lineJoin = 'round';
+      cCtx.imageSmoothingEnabled = true;
+      cCtx.imageSmoothingQuality = 'high';
+      cCtx.clearRect(0, 0, targetW, targetH);
+    }
+    return canvas;
+  };
+
+  const releaseCheckpointCanvas = (canvas: HTMLCanvasElement) => {
+    if (!canvas) return;
+    if (checkpointCanvasPoolRef.current.length < MAX_HISTORY_CHECKPOINTS + 4) {
+      const cCtx = canvas.getContext('2d');
+      if (cCtx) {
+        cCtx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      checkpointCanvasPoolRef.current.push(canvas);
+    }
+  };
+
+  const clearHistoryCheckpoints = () => {
+    for (const cp of historyCheckpointsRef.current) {
+      if (cp.canvas) releaseCheckpointCanvas(cp.canvas);
+    }
+    historyCheckpointsRef.current = [];
+  };
+
+  const captureHistoryCheckpoint = (index: number, commandList?: any[]) => {
+    if (!propsRef.current.isFreeDraw || !isBucketCheckpointExpEnabled()) return;
+    const ctx = ctxRef.current;
+    if (!ctx || !ctx.canvas) return;
+
+    const list = commandList || localCommandsRef.current;
+    const lastClearIndex = findLatestClearIndex(list);
+    if (index <= lastClearIndex) return;
+
+    const existingIdx = historyCheckpointsRef.current.findIndex(cp => cp.index === index);
+    if (existingIdx !== -1) {
+      const existing = historyCheckpointsRef.current[existingIdx];
+      const cCtx = existing.canvas.getContext('2d');
+      if (cCtx) {
+        cCtx.clearRect(0, 0, existing.canvas.width, existing.canvas.height);
+        cCtx.save();
+        cCtx.setTransform(1, 0, 0, 1, 0, 0);
+        cCtx.drawImage(ctx.canvas, 0, 0);
+        cCtx.restore();
+        existing.anchorSignature = index > 0 ? getCommandSignature(list[index - 1]) : "";
+        existing.lastClearIndex = lastClearIndex;
+        existing.timestamp = Date.now();
+      }
+      return;
+    }
+
+    if (historyCheckpointsRef.current.length >= MAX_HISTORY_CHECKPOINTS) {
+      let minGap = Infinity;
+      let evictIdx = 1;
+      const cps = historyCheckpointsRef.current;
+      for (let i = 1; i < cps.length - 2; i++) {
+        const gap = cps[i + 1].index - cps[i].index;
+        if (gap < minGap) {
+          minGap = gap;
+          evictIdx = i;
+        }
+      }
+      const [evicted] = cps.splice(evictIdx, 1);
+      if (evicted?.canvas) {
+        releaseCheckpointCanvas(evicted.canvas);
+      }
+    }
+
+    const cCanvas = acquireRecycledCheckpointCanvas();
+    const cCtx = cCanvas.getContext('2d');
+    if (cCtx) {
+      cCtx.save();
+      cCtx.setTransform(1, 0, 0, 1, 0, 0);
+      cCtx.drawImage(ctx.canvas, 0, 0);
+      cCtx.restore();
+
+      const cp: HistoryCheckpoint = {
+        canvas: cCanvas,
+        index,
+        anchorSignature: index > 0 ? getCommandSignature(list[index - 1]) : "",
+        lastClearIndex,
+        timestamp: Date.now()
+      };
+      historyCheckpointsRef.current.push(cp);
+      historyCheckpointsRef.current.sort((a, b) => a.index - b.index);
+    }
+  };
+
+  const invalidateHistoryCheckpointsAfter = (targetIndex: number) => {
+    const keep: HistoryCheckpoint[] = [];
+    for (const cp of historyCheckpointsRef.current) {
+      if (cp.index > targetIndex) {
+        releaseCheckpointCanvas(cp.canvas);
+      } else {
+        keep.push(cp);
+      }
+    }
+    historyCheckpointsRef.current = keep;
+  };
+
   const getCommandSignature = (cmd: any): string => {
     if (!cmd) return "";
-    const instId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : "");
-    const sId = cmd.strokeId !== undefined ? cmd.strokeId : -1;
+    const instId = cmd.instanceId || cmd.instId || (cmd.data && typeof cmd.data === 'object' ? (cmd.data.instanceId || cmd.data.instId) : "");
+    let sId = cmd.strokeId !== undefined ? cmd.strokeId : -1;
+    if (sId === -1 && cmd.data && typeof cmd.data === 'object' && cmd.data.strokeId !== undefined) {
+      sId = cmd.data.strokeId;
+    }
     return `${instId}_${sId}`;
   };
 
@@ -955,6 +1099,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }
     }
+    if (slot === 'all') {
+      clearHistoryCheckpoints();
+    }
   };
 
   const isClearCommand = (c: any): boolean => {
@@ -978,7 +1125,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const isCheckpointValid = (
-    cp: FreeDrawCheckpoint,
+    cp: FreeDrawCheckpoint | HistoryCheckpoint,
     commands: any[],
     targetIndex?: number
   ): boolean => {
@@ -1006,7 +1153,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const getBestCheckpoint = (
     commands: any[],
     targetIndex?: number
-  ): { slot: 'base' | 'tail'; index: number; canvas: HTMLCanvasElement } | null => {
+  ): { slot: 'base' | 'tail' | 'history'; index: number; canvas: HTMLCanvasElement } | null => {
+    // 🛡️ Phase 1F.5: Prioritize History-Indexed Checkpoint Collection when experimental flag is active
+    if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+      for (let i = historyCheckpointsRef.current.length - 1; i >= 0; i--) {
+        const cp = historyCheckpointsRef.current[i];
+        if (isCheckpointValid(cp, commands, targetIndex)) {
+          return { slot: 'history', index: cp.index, canvas: cp.canvas };
+        }
+      }
+    }
+
     const tailValid = isCheckpointValid(tailCheckpointRef.current, commands, targetIndex);
     const baseValid = isCheckpointValid(baseCheckpointRef.current, commands, targetIndex);
 
@@ -1025,6 +1182,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   const invalidateCheckpointsAfterIndex = (targetIndex: number) => {
+    if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+      invalidateHistoryCheckpointsAfter(targetIndex);
+    }
     if (tailCheckpointRef.current.index > targetIndex) {
       invalidateCheckpoint('tail');
     }
@@ -1082,6 +1242,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const ctx = ctxRef.current;
     if (!ctx || !ctx.canvas) return;
 
+    captureHistoryCheckpoint(targetIndex);
+
     const list = localCommandsRef.current;
     const lastClearIndex = findLatestClearIndex(list);
     if (targetIndex <= lastClearIndex) return;
@@ -1120,6 +1282,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const ctx = ctxRef.current;
     if (!ctx || !ctx.canvas) return;
+
+    captureHistoryCheckpoint(postIndex);
 
     const list = localCommandsRef.current;
     const lastClearIndex = findLatestClearIndex(list);
@@ -3217,6 +3381,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         // 1. Capture single-step Undo bitmap cache before applying the redone command
         captureDirectFreeDrawUndoCache(instanceId, newStrokeId);
 
+        if (decoded.event === 'draw_action' && isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+          captureHistoryCheckpoint(localCommandsRef.current.length);
+        }
+
         const newCmdRecord = {
           event: 'draw_binary',
           data: newMsg,
@@ -3253,7 +3421,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         hasFreeDrawUndoCacheRef.current = true;
         hasFreeDrawRedoCacheRef.current = false;
-        advanceCheckpointIncremental();
+
+        if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+          captureHistoryCheckpoint(localCommandsRef.current.length);
+        } else {
+          advanceCheckpointIncremental();
+        }
         syncHistoryButtons();
         saveSnapshot();
 
@@ -3600,6 +3773,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         diag.checkpointFacts.adaptiveCheckpointExp = isBucketCheckpointExpEnabled();
         diag.checkpointFacts.bestCheckpointSlot = bestCp ? bestCp.slot : 'none';
         diag.checkpointFacts.bestCheckpointIndex = bestCp ? bestCp.index : -1;
+
+        const retainedCount = (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw)
+          ? historyCheckpointsRef.current.length
+          : 2;
+        const effectiveDPR = (propsRef.current.isFreeDraw || propsRef.current.isExperimental || enableFixedDPR) ? 1.0 : DPR;
+        const memMB = (retainedCount * (Math.round(LOGICAL_WIDTH * effectiveDPR) * Math.round(LOGICAL_HEIGHT * effectiveDPR) * 4)) / (1024 * 1024);
+        diag.checkpointFacts.retainedCanvases = retainedCount;
+        diag.checkpointFacts.checkpointCount = retainedCount;
+        diag.checkpointFacts.approximateRetainedMemoryMB = Math.round(memMB * 100) / 100;
       }
 
       if (bestCp && bestCp.index > lastClearIndex) {
@@ -3745,6 +3927,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
 
         applyReplayCommand(ctx, commands[i], replayPaths, replaySessions, diag);
+        if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw && isBucketCommand(commands[i])) {
+          captureHistoryCheckpoint(i + 1, commands);
+        }
       }
 
       // Render any leftover committed strokes
@@ -4387,6 +4572,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           
           for (let i = currentIndex; i < endIndex; i++) {
             applyReplayCommand(ctx, commands[i], replayPaths, replaySessions);
+            if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw && isBucketCommand(commands[i])) {
+              captureHistoryCheckpoint(i + 1, commands);
+            }
           }
 
           currentIndex = endIndex;
