@@ -994,13 +994,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     if (historyCheckpointsRef.current.length >= MAX_HISTORY_CHECKPOINTS) {
-      let minGap = Infinity;
+      let minBucketGap = Infinity;
       let evictIdx = 1;
       const cps = historyCheckpointsRef.current;
-      for (let i = 1; i < cps.length - 2; i++) {
-        const gap = cps[i + 1].index - cps[i].index;
-        if (gap < minGap) {
-          minGap = gap;
+      // Protect the last 3 recent checkpoints and the first anchor
+      const maxEvictIndex = Math.max(1, cps.length - 4);
+      for (let i = 1; i <= maxEvictIndex; i++) {
+        const bucketsPrev = countBucketsBeforeIndex(list, cps[i].index, lastClearIndex);
+        const bucketsNext = countBucketsBeforeIndex(list, cps[i + 1].index, lastClearIndex);
+        const bucketGap = bucketsNext - bucketsPrev;
+        if (bucketGap < minBucketGap) {
+          minBucketGap = bucketGap;
           evictIdx = i;
         }
       }
@@ -3330,6 +3334,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // 🎯 Free Draw & Experimental Branch: Collaborative Redo
     if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
+      const redoStartTime = isDiagEnabled() ? performance.now() : 0;
       const cmdToRestore = localRedoStackRef.current.pop();
       if (!cmdToRestore) return;
 
@@ -3436,6 +3441,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         if (emit && socket?.connected) {
           socket.emit('draw_binary', newMsg);
+        }
+
+        if (isDiagEnabled()) {
+          const redoDuration = performance.now() - redoStartTime;
+          console.log("[FREE_DRAW_REDO_DIAG]", JSON.stringify({
+            opId: Math.random().toString(36).substring(2, 9),
+            type: 'local_redo',
+            historyLengthBefore: localCommandsRef.current.length - 1,
+            redoDurationMs: Math.round(redoDuration * 100) / 100,
+            checkpointCount: historyCheckpointsRef.current.length,
+            isBucket: decoded.event === 'draw_action'
+          }));
         }
       }
       return;
