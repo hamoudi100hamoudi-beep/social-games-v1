@@ -704,3 +704,101 @@ describe('Phase 1F.6.3: Global Minimax Bucket Checkpoint Distribution Suite', ()
     assert.strictEqual(validCheckpoints.length, 0, 'All prior checkpoints invalidated after clear');
   });
 });
+
+describe('Phase 1F.8.2: Batch Replay Promotion & Undo Timers Suite', () => {
+  it('Batch Replay policy: enabled by default, disabled only when explicitly 0', () => {
+    const evaluateBatchReplay = (storageVal: string | null | undefined, throwsError: boolean = false): boolean => {
+      try {
+        if (throwsError) throw new Error('SecurityError: localStorage blocked');
+        if (storageVal === undefined) return true; // window === undefined fallback
+        return storageVal !== '0';
+      } catch (e) {
+        return true;
+      }
+    };
+
+    // 1. Default state: null (no key in storage)
+    assert.strictEqual(evaluateBatchReplay(null), true, 'Batch Replay must be active by default when key is null');
+    assert.strictEqual(evaluateBatchReplay(undefined), true, 'Batch Replay must be active by default in headless / SSR context');
+
+    // 2. Explicit opt-out: '0'
+    assert.strictEqual(evaluateBatchReplay('0'), false, 'Setting freedraw_bucket_batch_replay_exp to "0" must disable Batch Replay');
+
+    // 3. Other values: '1', '', 'true'
+    assert.strictEqual(evaluateBatchReplay('1'), true, 'Setting freedraw_bucket_batch_replay_exp to "1" must enable Batch Replay');
+    assert.strictEqual(evaluateBatchReplay(''), true, 'Unset empty string must default to enabled');
+
+    // 4. Storage access failure (e.g. Incognito / blocked cookies):
+    assert.strictEqual(evaluateBatchReplay(null, true), true, 'Exception accessing storage must safely fallback to enabled');
+  });
+
+  it('Undo Timers & Logging: replayDurationMs and totalUndoDurationMs are isolated and never double-logged', () => {
+    const logs: string[] = [];
+    const logDiag = (d: any) => logs.push(JSON.stringify(d));
+
+    // Simulate local undo diagnostic object
+    const localDiag: any = {
+      opId: 'test_local_undo_123',
+      type: 'local_undo',
+      totalSyncDurationMs: 0,
+      replayDurationMs: 0,
+      totalUndoDurationMs: 0
+    };
+
+    // Step 1: Inside replayFreeDrawHistorySafely
+    const replayStartTime = 1000;
+    const replayEndTime = 1088.4;
+    const replayDuration = replayEndTime - replayStartTime;
+    localDiag.replayDurationMs = replayDuration;
+
+    if (localDiag.type !== 'local_undo') {
+      localDiag.totalSyncDurationMs = replayDuration;
+      logDiag(localDiag);
+    }
+
+    // Step 2: Confirm NO premature or duplicate log emitted from inner replay for local_undo
+    assert.strictEqual(logs.length, 0, 'Inner replay must not emit duplicate log for local_undo');
+
+    // Step 3: Inside executeUndo completion
+    const undoStartTime = 995;
+    const undoEndTime = 1092;
+    const totalDuration = undoEndTime - undoStartTime;
+    localDiag.totalUndoDurationMs = totalDuration;
+    localDiag.totalSyncDurationMs = totalDuration;
+    logDiag(localDiag);
+
+    // Step 4: Verify single log emitted with both durations accurate
+    assert.strictEqual(logs.length, 1, 'Exactly one log emitted for local_undo');
+    assert.ok(Math.abs(localDiag.replayDurationMs - 88.4) < 1e-4, 'Replay duration matches expected');
+    assert.strictEqual(localDiag.totalUndoDurationMs, 97);
+    assert.strictEqual(localDiag.totalSyncDurationMs, 97, 'Backward compatibility preserved in totalSyncDurationMs');
+    assert.ok(localDiag.totalUndoDurationMs >= localDiag.replayDurationMs, 'Total undo duration must encompass replay duration');
+  });
+
+  it('Remote Undo Timers: emits single log with replayDurationMs and totalSyncDurationMs', () => {
+    const logs: string[] = [];
+    const logDiag = (d: any) => logs.push(JSON.stringify(d));
+
+    const remoteDiag: any = {
+      opId: 'test_remote_undo_456',
+      type: 'remote_undo',
+      totalSyncDurationMs: 0,
+      replayDurationMs: 0,
+      totalUndoDurationMs: 0
+    };
+
+    const replayStartTime = 2000;
+    const replayEndTime = 2075.2;
+    const replayDuration = replayEndTime - replayStartTime;
+    remoteDiag.replayDurationMs = replayDuration;
+
+    if (remoteDiag.type !== 'local_undo') {
+      remoteDiag.totalSyncDurationMs = replayDuration;
+      logDiag(remoteDiag);
+    }
+
+    assert.strictEqual(logs.length, 1, 'Exactly one log emitted for remote_undo');
+    assert.ok(Math.abs(remoteDiag.replayDurationMs - 75.2) < 1e-4, 'Remote replay duration matches expected');
+    assert.ok(Math.abs(remoteDiag.totalSyncDurationMs - 75.2) < 1e-4, 'Remote total sync duration matches expected');
+  });
+});

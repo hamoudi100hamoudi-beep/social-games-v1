@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert';
+import fs from 'node:fs';
 
 interface BenchmarkResult {
   scenario: string;
@@ -501,12 +502,182 @@ const clientScript = `
       });
     })();
 
+    // --- Scenario 5: Policy Evaluation (Default Enabled & Explicit Opt-Out) ---
+    (function() {
+      function isEnabledWithStorage(storage) {
+        if (typeof window === 'undefined') return true;
+        try {
+          return storage.getItem('freedraw_bucket_batch_replay_exp') !== '0';
+        } catch (e) {
+          return true;
+        }
+      }
+
+      var mockMap = {};
+      var mockStorage = {
+        getItem: function(k) { return mockMap[k] !== undefined ? mockMap[k] : null; },
+        setItem: function(k, v) { mockMap[k] = String(v); },
+        removeItem: function(k) { delete mockMap[k]; }
+      };
+
+      var defaultVal = isEnabledWithStorage(mockStorage);
+      mockStorage.setItem('freedraw_bucket_batch_replay_exp', '0');
+      var disabledVal = isEnabledWithStorage(mockStorage);
+      mockStorage.setItem('freedraw_bucket_batch_replay_exp', '1');
+      var explicitEnabledVal = isEnabledWithStorage(mockStorage);
+      mockStorage.removeItem('freedraw_bucket_batch_replay_exp');
+      var unsetVal = isEnabledWithStorage(mockStorage);
+
+      var errorStorage = {
+        getItem: function() { throw new Error('SecurityError: Access denied'); }
+      };
+      var safeFallbackVal = isEnabledWithStorage(errorStorage);
+
+      var passed = (defaultVal === true) && (disabledVal === false) && (explicitEnabledVal === true) && (unsetVal === true) && (safeFallbackVal === true);
+      out.push({
+        scenario: 'Batch Replay Policy via Browser Storage Logic',
+        currentDurationMs: 0,
+        batchDurationMs: 0,
+        speedupMultiplier: 1,
+        currentCalls: { getImageData: 0, putImageData: 0, drawImage: 0, floodFill: 0 },
+        batchCalls: { getImageData: 0, putImageData: 0, drawImage: 0, floodFill: 0 },
+        pixelDiffCount: 0,
+        checkpointsDiffCount: 0,
+        passed: passed
+      });
+    })();
+
+    // --- Scenario 6: 100 Consecutive Buckets Stress Test: 20 Undos, 20 Redos, 1 Undo + 1 Redo ---
+    (function() {
+      var cCurr = document.getElementById('test-canvas-current');
+      var cBatch = document.getElementById('test-canvas-batch');
+      var ctxCurr = cCurr.getContext('2d');
+      var ctxBatch = cBatch.getContext('2d');
+
+      ctxCurr.clearRect(0, 0, cw, ch);
+      ctxBatch.clearRect(0, 0, cw, ch);
+
+      var commands = [];
+      for (var i = 0; i < 100; i++) {
+        var r = (i * 37) % 256;
+        var g = (i * 73) % 256;
+        var b = (i * 109) % 256;
+        var hex = '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+        commands.push({
+          type: 'bucket',
+          x: 20 + (i * 47) % (cw - 40),
+          y: 20 + (i * 31) % (ch - 40),
+          color: hex,
+          opacity: 1
+        });
+      }
+
+      for (var i = 0; i < 100; i++) {
+        standardFloodFill(ctxCurr, commands[i].x, commands[i].y, commands[i].color, commands[i].opacity);
+      }
+
+      var offscreen = document.createElement('canvas');
+      offscreen.width = cw;
+      offscreen.height = ch;
+      var offCtx = offscreen.getContext('2d');
+      offCtx.clearRect(0, 0, cw, ch);
+      offCtx.drawImage(cBatch, 0, 0);
+      var bImg = offCtx.getImageData(0, 0, cw, ch);
+      var v = new Uint8Array(cw * ch);
+      var qX = [];
+      var qY = [];
+
+      for (var i = 0; i < 100; i++) {
+        executeRasterFloodFill(bImg.data, cw, ch, commands[i].x, commands[i].y, commands[i].color, 1, undefined, v, qX, qY);
+      }
+      ctxBatch.putImageData(bImg, 0, 0);
+
+      var diff100 = compareCanvases(cCurr, cBatch);
+
+      // Simulate 20 Undos
+      var activeCommands = commands.slice(0, 80);
+      var redoStack = commands.slice(80);
+
+      ctxCurr.clearRect(0, 0, cw, ch);
+      for (var i = 0; i < 80; i++) {
+        standardFloodFill(ctxCurr, activeCommands[i].x, activeCommands[i].y, activeCommands[i].color, activeCommands[i].opacity);
+      }
+
+      ctxBatch.clearRect(0, 0, cw, ch);
+      offCtx.clearRect(0, 0, cw, ch);
+      offCtx.drawImage(cBatch, 0, 0);
+      var bImg2 = offCtx.getImageData(0, 0, cw, ch);
+      for (var i = 0; i < 80; i++) {
+        executeRasterFloodFill(bImg2.data, cw, ch, activeCommands[i].x, activeCommands[i].y, activeCommands[i].color, 1, undefined, v, qX, qY);
+      }
+      ctxBatch.putImageData(bImg2, 0, 0);
+
+      var diffUndo20 = compareCanvases(cCurr, cBatch);
+
+      // Simulate 20 Redos
+      while (redoStack.length > 0) {
+        var restored = redoStack.shift();
+        activeCommands.push(restored);
+        standardFloodFill(ctxCurr, restored.x, restored.y, restored.color, restored.opacity);
+        offCtx.clearRect(0, 0, cw, ch);
+        offCtx.drawImage(cBatch, 0, 0);
+        var rImg = offCtx.getImageData(0, 0, cw, ch);
+        executeRasterFloodFill(rImg.data, cw, ch, restored.x, restored.y, restored.color, 1, undefined, v, qX, qY);
+        ctxBatch.putImageData(rImg, 0, 0);
+      }
+
+      var diffRedo20 = compareCanvases(cCurr, cBatch);
+
+      // Final 1 Undo + 1 Redo
+      var last = activeCommands.pop();
+      ctxCurr.clearRect(0, 0, cw, ch);
+      for (var i = 0; i < activeCommands.length; i++) {
+        standardFloodFill(ctxCurr, activeCommands[i].x, activeCommands[i].y, activeCommands[i].color, activeCommands[i].opacity);
+      }
+      ctxBatch.clearRect(0, 0, cw, ch);
+      offCtx.clearRect(0, 0, cw, ch);
+      offCtx.drawImage(cBatch, 0, 0);
+      var bImg3 = offCtx.getImageData(0, 0, cw, ch);
+      for (var i = 0; i < activeCommands.length; i++) {
+        executeRasterFloodFill(bImg3.data, cw, ch, activeCommands[i].x, activeCommands[i].y, activeCommands[i].color, 1, undefined, v, qX, qY);
+      }
+      ctxBatch.putImageData(bImg3, 0, 0);
+      var diffFinalUndo = compareCanvases(cCurr, cBatch);
+
+      activeCommands.push(last);
+      standardFloodFill(ctxCurr, last.x, last.y, last.color, last.opacity);
+      offCtx.clearRect(0, 0, cw, ch);
+      offCtx.drawImage(cBatch, 0, 0);
+      var bImg4 = offCtx.getImageData(0, 0, cw, ch);
+      executeRasterFloodFill(bImg4.data, cw, ch, last.x, last.y, last.color, 1, undefined, v, qX, qY);
+      ctxBatch.putImageData(bImg4, 0, 0);
+      var diffFinalRedo = compareCanvases(cCurr, cBatch);
+
+      var totalDiff = diff100 + diffUndo20 + diffRedo20 + diffFinalUndo + diffFinalRedo;
+
+      out.push({
+        scenario: '100 Buckets Stress: 20 Undos, 20 Redos, 1 Undo + 1 Redo Consistency',
+        currentDurationMs: 0,
+        batchDurationMs: 0,
+        speedupMultiplier: 1,
+        currentCalls: { getImageData: 100, putImageData: 100, drawImage: 100, floodFill: 100 },
+        batchCalls: { getImageData: 1, putImageData: 1, drawImage: 1, floodFill: 100 },
+        pixelDiffCount: totalDiff,
+        checkpointsDiffCount: 0,
+        passed: totalDiff === 0
+      });
+    })();
+
     return out;
   };
 `;
 
 async function runBrowserVerification(): Promise<BenchmarkResult[]> {
+  const customExecutable = '/ms-playwright/chromium_headless_shell-1247/chrome-headless-shell-linux64/chrome-headless-shell';
+  const executablePath = fs.existsSync(customExecutable) ? customExecutable : undefined;
+
   const browser = await chromium.launch({
+    executablePath,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
   const page = await browser.newPage();

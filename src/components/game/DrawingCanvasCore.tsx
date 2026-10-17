@@ -107,6 +107,8 @@ interface UndoDiagnostics {
   cumulativeFillDurationMs: number;
   maxFillDurationMs: number;
   totalSyncDurationMs: number;
+  replayDurationMs?: number;
+  totalUndoDurationMs?: number;
   hints: {
     existedBefore: number;
     discarded: number;
@@ -148,11 +150,11 @@ const isBucketCheckpointExpEnabled = (): boolean => {
 };
 
 export const isBucketBatchReplayExpEnabled = (): boolean => {
-  if (typeof window === 'undefined') return false;
+  if (typeof window === 'undefined') return true;
   try {
-    return localStorage.getItem('freedraw_bucket_batch_replay_exp') === '1';
+    return localStorage.getItem('freedraw_bucket_batch_replay_exp') !== '0';
   } catch (e) {
-    return false;
+    return true;
   }
 };
 
@@ -3286,6 +3288,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           cumulativeFillDurationMs: 0,
           maxFillDurationMs: 0,
           totalSyncDurationMs: 0,
+          replayDurationMs: 0,
+          totalUndoDurationMs: 0,
           hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
           checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
         } : null;
@@ -3325,7 +3329,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
 
         if (diag) {
-          diag.totalSyncDurationMs = performance.now() - startTime;
+          const totalDuration = performance.now() - startTime;
+          diag.totalUndoDurationMs = totalDuration;
+          diag.totalSyncDurationMs = totalDuration;
           console.log("[FREE_DRAW_UNDO_DIAG]", JSON.stringify(diag));
         }
 
@@ -3834,7 +3840,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // Clears and reconstructs ONLY the committed base canvas (ctx).
   // Strictly PRESERVES tempCtx, activeSessionsRef, and drainingStrokesRef so ongoing live drawing is never interrupted.
   const replayFreeDrawHistorySafely = (commands: any[], diag?: UndoDiagnostics | null) => {
-    const startTime = diag ? performance.now() : 0;
+    const replayStartTime = diag ? performance.now() : 0;
     try {
       const ctx = ctxRef.current;
       if (!ctx) return;
@@ -4180,8 +4186,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       saveSnapshot();
       syncHistoryButtons();
       if (diag) {
-        diag.totalSyncDurationMs = performance.now() - startTime;
-        console.log("[FREE_DRAW_UNDO_DIAG]", JSON.stringify(diag));
+        const replayDuration = performance.now() - replayStartTime;
+        diag.replayDurationMs = replayDuration;
+        if (diag.type !== 'local_undo') {
+          diag.totalSyncDurationMs = replayDuration;
+          console.log("[FREE_DRAW_UNDO_DIAG]", JSON.stringify(diag));
+        }
       }
     }
   };
@@ -4663,6 +4673,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             cumulativeFillDurationMs: 0,
             maxFillDurationMs: 0,
             totalSyncDurationMs: 0,
+            replayDurationMs: 0,
+            totalUndoDurationMs: 0,
             hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
             checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
           } : null;
