@@ -147,6 +147,15 @@ const isBucketCheckpointExpEnabled = (): boolean => {
   }
 };
 
+export const isBucketBatchReplayExpEnabled = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem('freedraw_bucket_batch_replay_exp') === '1';
+  } catch (e) {
+    return false;
+  }
+};
+
 // --- Built-in Flood Fill (Aided for performance and safety) ---
 const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b: number, a: number) => {
   if (a <= 10) {
@@ -184,41 +193,21 @@ const RECOVERY_NEIGHBOR_OFFSETS = [
   [0, -2], [0, 2], [-2, 0], [2, 0]
 ];
 
-const floodFill = (
-  ctx: CanvasRenderingContext2D,
+const executeRasterFloodFill = (
+  data: Uint8ClampedArray,
+  cw: number,
+  ch: number,
   startX: number,
   startY: number,
   fillColorStr: string,
   fillOpacity: number = 1,
   logicalWidth: number = DEFAULT_LOGICAL_WIDTH,
   logicalHeight: number = DEFAULT_LOGICAL_HEIGHT,
-  expectedTarget?: TargetRGBA
+  expectedTarget?: TargetRGBA,
+  reusableVisited?: Uint8Array,
+  reusableQueueX?: number[],
+  reusableQueueY?: number[]
 ): (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean }) | null => {
-  const canvas = ctx.canvas;
-  const cw = canvas.width;
-  const ch = canvas.height;
-
-  if (!sharedOffscreenCanvas) {
-    sharedOffscreenCanvas = document.createElement('canvas');
-  }
-  if (sharedOffscreenCanvas.width !== cw || sharedOffscreenCanvas.height !== ch) {
-    sharedOffscreenCanvas.width = cw;
-    sharedOffscreenCanvas.height = ch;
-    sharedOffscreenCtx = null;
-  }
-  if (!sharedOffscreenCtx) {
-    sharedOffscreenCtx = sharedOffscreenCanvas.getContext('2d', { willReadFrequently: true });
-  }
-
-  const offscreenCtx = sharedOffscreenCtx;
-  if (!offscreenCtx) return null;
-
-  offscreenCtx.clearRect(0, 0, cw, ch);
-  offscreenCtx.drawImage(canvas, 0, 0);
-
-  const imageData = offscreenCtx.getImageData(0, 0, cw, ch);
-  const data = imageData.data;
-
   // Derive pixel seed coordinates directly from canvas physical backing store scale (cw / logicalWidth)
   const scaleX = cw / logicalWidth;
   const scaleY = ch / logicalHeight;
@@ -277,9 +266,28 @@ const floodFill = (
     return { r: tr, g: tg, b: tb, a: ta, isNoOp: true };
   }
 
-  const visited = new Uint8Array(cw * ch);
-  const queueX: number[] = [sx];
-  const queueY: number[] = [sy];
+  let visited: Uint8Array;
+  if (reusableVisited && reusableVisited.length >= cw * ch) {
+    visited = reusableVisited;
+    visited.fill(0);
+  } else {
+    visited = new Uint8Array(cw * ch);
+  }
+
+  let queueX: number[];
+  let queueY: number[];
+  if (reusableQueueX && reusableQueueY) {
+    queueX = reusableQueueX;
+    queueY = reusableQueueY;
+    queueX.length = 0;
+    queueY.length = 0;
+    queueX.push(sx);
+    queueY.push(sy);
+  } else {
+    queueX = [sx];
+    queueY = [sy];
+  }
+
   let head = 0;
   let filledPixelCount = 0;
 
@@ -364,9 +372,63 @@ const floodFill = (
     }
   }
 
-  ctx.putImageData(imageData, 0, 0);
   const isFullCanvasOpaque = (filledPixelCount === cw * ch) && (fillOpacity >= 0.95);
   return { r: tr, g: tg, b: tb, a: ta, isFullCanvasOpaque, fillHex };
+};
+
+const floodFill = (
+  ctx: CanvasRenderingContext2D,
+  startX: number,
+  startY: number,
+  fillColorStr: string,
+  fillOpacity: number = 1,
+  logicalWidth: number = DEFAULT_LOGICAL_WIDTH,
+  logicalHeight: number = DEFAULT_LOGICAL_HEIGHT,
+  expectedTarget?: TargetRGBA
+): (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean }) | null => {
+  const canvas = ctx.canvas;
+  const cw = canvas.width;
+  const ch = canvas.height;
+
+  if (!sharedOffscreenCanvas) {
+    sharedOffscreenCanvas = document.createElement('canvas');
+  }
+  if (sharedOffscreenCanvas.width !== cw || sharedOffscreenCanvas.height !== ch) {
+    sharedOffscreenCanvas.width = cw;
+    sharedOffscreenCanvas.height = ch;
+    sharedOffscreenCtx = null;
+  }
+  if (!sharedOffscreenCtx) {
+    sharedOffscreenCtx = sharedOffscreenCanvas.getContext('2d', { willReadFrequently: true });
+  }
+
+  const offscreenCtx = sharedOffscreenCtx;
+  if (!offscreenCtx) return null;
+
+  offscreenCtx.clearRect(0, 0, cw, ch);
+  offscreenCtx.drawImage(canvas, 0, 0);
+
+  const imageData = offscreenCtx.getImageData(0, 0, cw, ch);
+  const data = imageData.data;
+
+  const fillRes = executeRasterFloodFill(
+    data,
+    cw,
+    ch,
+    startX,
+    startY,
+    fillColorStr,
+    fillOpacity,
+    logicalWidth,
+    logicalHeight,
+    expectedTarget
+  );
+
+  if (fillRes && !fillRes.isNoOp) {
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  return fillRes;
 };
 
 export interface DrawingCanvasCoreRef {
@@ -971,7 +1033,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     historyCheckpointsRef.current = [];
   };
 
-  const captureHistoryCheckpoint = (index: number, commandList?: any[]) => {
+  const captureHistoryCheckpoint = (index: number, commandList?: any[], sourceImageData?: ImageData) => {
     if (!propsRef.current.isFreeDraw || !isBucketCheckpointExpEnabled()) return;
     const ctx = ctxRef.current;
     if (!ctx || !ctx.canvas) return;
@@ -985,11 +1047,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const existing = historyCheckpointsRef.current[existingIdx];
       const cCtx = existing.canvas.getContext('2d');
       if (cCtx) {
-        cCtx.clearRect(0, 0, existing.canvas.width, existing.canvas.height);
-        cCtx.save();
-        cCtx.setTransform(1, 0, 0, 1, 0, 0);
-        cCtx.drawImage(ctx.canvas, 0, 0);
-        cCtx.restore();
+        if (sourceImageData) {
+          cCtx.putImageData(sourceImageData, 0, 0);
+        } else {
+          cCtx.clearRect(0, 0, existing.canvas.width, existing.canvas.height);
+          cCtx.save();
+          cCtx.setTransform(1, 0, 0, 1, 0, 0);
+          cCtx.drawImage(ctx.canvas, 0, 0);
+          cCtx.restore();
+        }
         existing.anchorSignature = index > 0 ? getCommandSignature(list[index - 1]) : "";
         existing.lastClearIndex = lastClearIndex;
         existing.timestamp = Date.now();
@@ -1011,10 +1077,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const cCanvas = acquireRecycledCheckpointCanvas();
     const cCtx = cCanvas.getContext('2d');
     if (cCtx) {
-      cCtx.save();
-      cCtx.setTransform(1, 0, 0, 1, 0, 0);
-      cCtx.drawImage(ctx.canvas, 0, 0);
-      cCtx.restore();
+      if (sourceImageData) {
+        cCtx.putImageData(sourceImageData, 0, 0);
+      } else {
+        cCtx.save();
+        cCtx.setTransform(1, 0, 0, 1, 0, 0);
+        cCtx.drawImage(ctx.canvas, 0, 0);
+        cCtx.restore();
+      }
 
       const cp: HistoryCheckpoint = {
         canvas: cCanvas,
@@ -3914,6 +3984,24 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const replayPaths: Record<string, { x: number; y: number }[]> = {};
       const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
+      const useBatchReplay = isBucketBatchReplayExpEnabled() && propsRef.current.isFreeDraw;
+      let batchImageData: ImageData | null = null;
+      let batchData: Uint8ClampedArray | null = null;
+      const effectiveDPR = (propsRef.current.isFreeDraw || propsRef.current.isExperimental || enableFixedDPR) ? 1.0 : DPR;
+      const batchCw = Math.round(LOGICAL_WIDTH * effectiveDPR);
+      const batchCh = Math.round(LOGICAL_HEIGHT * effectiveDPR);
+      let batchVisited: Uint8Array | null = null;
+      let batchQueueX: number[] | null = null;
+      let batchQueueY: number[] | null = null;
+
+      const flushBatchBuffer = () => {
+        if (batchImageData && ctx) {
+          ctx.putImageData(batchImageData, 0, 0);
+          batchImageData = null;
+          batchData = null;
+        }
+      };
+
       for (let i = startIndex; i < N; i++) {
         if (diag) {
           diag.commandsReplayed++;
@@ -3930,6 +4018,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
 
         if (i === candidateBaseIndex && !isCheckpointValid(baseCheckpointRef.current, commands)) {
+          if (useBatchReplay) flushBatchBuffer();
           const bCanvas = ensureCheckpointCanvas('base');
           const bCtx = bCanvas.getContext('2d');
           if (bCtx) {
@@ -3948,6 +4037,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
 
         if (i === candidateTailIndex && !isCheckpointValid(tailCheckpointRef.current, commands)) {
+          if (useBatchReplay) flushBatchBuffer();
           const tCanvas = ensureCheckpointCanvas('tail');
           const tCtx = tCanvas.getContext('2d');
           if (tCtx) {
@@ -3965,10 +4055,96 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
 
-        applyReplayCommand(ctx, commands[i], replayPaths, replaySessions, diag);
-        if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw && isBucketCommand(commands[i])) {
-          captureHistoryCheckpoint(i + 1, commands);
+        if (useBatchReplay && isBucketCommand(commands[i])) {
+          // --- Batch Bucket Replay Path ---
+          if (!batchImageData) {
+            if (!sharedOffscreenCanvas) {
+              sharedOffscreenCanvas = document.createElement('canvas');
+            }
+            if (sharedOffscreenCanvas.width !== batchCw || sharedOffscreenCanvas.height !== batchCh) {
+              sharedOffscreenCanvas.width = batchCw;
+              sharedOffscreenCanvas.height = batchCh;
+              sharedOffscreenCtx = null;
+            }
+            if (!sharedOffscreenCtx) {
+              sharedOffscreenCtx = sharedOffscreenCanvas.getContext('2d', { willReadFrequently: true });
+            }
+            if (sharedOffscreenCtx) {
+              sharedOffscreenCtx.clearRect(0, 0, batchCw, batchCh);
+              sharedOffscreenCtx.drawImage(ctx.canvas, 0, 0);
+              batchImageData = sharedOffscreenCtx.getImageData(0, 0, batchCw, batchCh);
+              batchData = batchImageData.data;
+            }
+            if (!batchVisited) batchVisited = new Uint8Array(batchCw * batchCh);
+            if (!batchQueueX) batchQueueX = [];
+            if (!batchQueueY) batchQueueY = [];
+          }
+
+          const cmdObj = commands[i];
+          const decoded = decodeBinaryDrawMessage(cmdObj.data);
+          const data = decoded?.data || {};
+          const cmdColor = data.color || '#000000';
+          const cmdOpacity = data.opacity !== undefined ? data.opacity : 1;
+
+          if (batchData && batchVisited && batchQueueX && batchQueueY) {
+            if (diag) {
+              diag.hints.forcedFill++;
+              if (cmdObj?._replayHint) diag.hints.discarded++;
+            }
+            const fillStart = diag ? performance.now() : 0;
+            const fillRes = executeRasterFloodFill(
+              batchData,
+              batchCw,
+              batchCh,
+              data.x * LOGICAL_WIDTH,
+              data.y * LOGICAL_HEIGHT,
+              cmdColor,
+              cmdOpacity,
+              LOGICAL_WIDTH,
+              LOGICAL_HEIGHT,
+              data.targetRGBA,
+              batchVisited,
+              batchQueueX,
+              batchQueueY
+            );
+            if (diag) {
+              diag.floodFillExecutions++;
+              const dur = performance.now() - fillStart;
+              diag.cumulativeFillDurationMs += dur;
+              if (dur > diag.maxFillDurationMs) diag.maxFillDurationMs = dur;
+            }
+            if (cmdObj) {
+              if (fillRes?.isFullCanvasOpaque) {
+                cmdObj._replayHint = 'full_canvas_opaque';
+                cmdObj._replayColor = fillRes.fillHex || cmdColor;
+                cmdObj._replayOpacity = cmdOpacity;
+              } else if (fillRes?.isNoOp) {
+                cmdObj._replayHint = 'noop';
+              } else {
+                delete cmdObj._replayHint;
+                delete cmdObj._replayColor;
+                delete cmdObj._replayOpacity;
+              }
+            }
+          }
+
+          if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+            captureHistoryCheckpoint(i + 1, commands, batchImageData || undefined);
+          }
+        } else {
+          // --- Non-Bucket or Standard Path ---
+          if (useBatchReplay) {
+            flushBatchBuffer();
+          }
+          applyReplayCommand(ctx, commands[i], replayPaths, replaySessions, diag);
+          if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw && isBucketCommand(commands[i])) {
+            captureHistoryCheckpoint(i + 1, commands);
+          }
         }
+      }
+
+      if (useBatchReplay) {
+        flushBatchBuffer();
       }
 
       // Render any leftover committed strokes
