@@ -9,7 +9,8 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
-  ExternalLink
+  ExternalLink,
+  Layers
 } from 'lucide-react';
 import {
   isMobileDebugActive,
@@ -31,8 +32,13 @@ export const FreeDrawMobileDebug: React.FC = () => {
   });
 
   const [checkpointExpEnabled, setCheckpointExpEnabled] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem('freedraw_bucket_checkpoint_exp') === '1';
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('freedraw_bucket_checkpoint_exp') !== '0';
+  });
+
+  const [batchReplayEnabled, setBatchReplayEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return localStorage.getItem('freedraw_bucket_batch_replay_exp') !== '0';
   });
 
   // When active in Free Draw: initialize Eruda once dynamically in background
@@ -52,14 +58,15 @@ export const FreeDrawMobileDebug: React.FC = () => {
   const refreshStates = () => {
     if (typeof window === 'undefined') return;
     setUndoDiagEnabled(localStorage.getItem('freedraw_bucket_undo_diag') === '1');
-    setCheckpointExpEnabled(localStorage.getItem('freedraw_bucket_checkpoint_exp') === '1');
+    setCheckpointExpEnabled(localStorage.getItem('freedraw_bucket_checkpoint_exp') !== '0');
+    setBatchReplayEnabled(localStorage.getItem('freedraw_bucket_batch_replay_exp') !== '0');
   };
 
   if (!isActive) {
     return null;
   }
 
-  // Toggle Undo Diagnostics flag
+  // Toggle Undo Diagnostics flag (Default: OFF)
   const toggleUndoDiag = () => {
     const nextVal = !undoDiagEnabled;
     if (nextVal) {
@@ -70,15 +77,26 @@ export const FreeDrawMobileDebug: React.FC = () => {
     setUndoDiagEnabled(nextVal);
   };
 
-  // Toggle Adaptive Bucket Checkpoints Experiment flag
+  // Toggle Adaptive Bucket Checkpoints flag (Default: ON, explicit opt-out with '0')
   const toggleCheckpointExp = () => {
     const nextVal = !checkpointExpEnabled;
     if (nextVal) {
       localStorage.setItem('freedraw_bucket_checkpoint_exp', '1');
     } else {
-      localStorage.removeItem('freedraw_bucket_checkpoint_exp');
+      localStorage.setItem('freedraw_bucket_checkpoint_exp', '0');
     }
     setCheckpointExpEnabled(nextVal);
+  };
+
+  // Toggle Bucket Batch Replay flag (Default: ON, explicit opt-out with '0')
+  const toggleBatchReplay = () => {
+    const nextVal = !batchReplayEnabled;
+    if (nextVal) {
+      localStorage.setItem('freedraw_bucket_batch_replay_exp', '1');
+    } else {
+      localStorage.setItem('freedraw_bucket_batch_replay_exp', '0');
+    }
+    setBatchReplayEnabled(nextVal);
   };
 
   // Open Eruda console drawer
@@ -202,7 +220,7 @@ export const FreeDrawMobileDebug: React.FC = () => {
                 </div>
               </div>
 
-              {/* 2. Adaptive Bucket Checkpoints Experiment Toggle */}
+              {/* 2. Adaptive Bucket Checkpoints Toggle (Default: ON) */}
               <div 
                 onClick={toggleCheckpointExp}
                 className="flex items-center justify-between p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800/90 border border-slate-700/50 cursor-pointer transition-all active:scale-[0.99]"
@@ -213,10 +231,10 @@ export const FreeDrawMobileDebug: React.FC = () => {
                     <span>Adaptive Bucket Checkpoints</span>
                   </div>
                   <span className="text-[10px] sm:text-[11px] text-slate-400 leading-tight">
-                    التقاط نقاط استعادة قبل/بعد الدلو لتخطي إعادة الـ floodFill
+                    نقاط استعادة ذكية عند عمليات الدلو (افتراضي: مفعل)
                   </span>
                   <code className="text-[9px] text-slate-500 font-mono mt-0.5">
-                    freedraw_bucket_checkpoint_exp
+                    freedraw_bucket_checkpoint_exp (0 = تعطيل)
                   </code>
                 </div>
 
@@ -233,6 +251,42 @@ export const FreeDrawMobileDebug: React.FC = () => {
                   }`}>
                     <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
                       checkpointExpEnabled ? '-translate-x-5' : 'translate-x-0'
+                    }`} />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Bucket Batch Replay Toggle (Default: ON) */}
+              <div 
+                onClick={toggleBatchReplay}
+                className="flex items-center justify-between p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800/90 border border-slate-700/50 cursor-pointer transition-all active:scale-[0.99]"
+              >
+                <div className="flex flex-col gap-0.5 pr-1">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-100 text-xs sm:text-sm">
+                    <Layers size={14} className="text-purple-400 shrink-0" />
+                    <span>Bucket Batch Replay</span>
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 leading-tight">
+                    تجميع عمليات الدلو المتتالية لتسريع Replay (افتراضي: مفعل)
+                  </span>
+                  <code className="text-[9px] text-slate-500 font-mono mt-0.5">
+                    freedraw_bucket_batch_replay_exp (0 = تعطيل)
+                  </code>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 mr-2">
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                    batchReplayEnabled 
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' 
+                      : 'bg-slate-700/50 text-slate-400 border border-slate-600/30'
+                  }`}>
+                    {batchReplayEnabled ? 'ON' : 'OFF'}
+                  </span>
+                  <div className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
+                    batchReplayEnabled ? 'bg-emerald-600' : 'bg-slate-700'
+                  }`}>
+                    <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
+                      batchReplayEnabled ? '-translate-x-5' : 'translate-x-0'
                     }`} />
                   </div>
                 </div>

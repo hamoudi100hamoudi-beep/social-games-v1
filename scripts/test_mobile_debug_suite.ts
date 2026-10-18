@@ -97,4 +97,42 @@ describe('Free Draw Mobile Debug Suite', () => {
     assert.strictEqual(storage['freedraw_bucket_undo_diag'], undefined);
     assert.strictEqual(storage['freedraw_bucket_checkpoint_exp'], '1', 'chkptExp remains ON');
   });
+
+  it('Phase 1F.8.4 Mobile Debug Toggles: default ON states write "0" to disable and "1" to enable', () => {
+    const storage: Record<string, string> = {};
+
+    const readDefaultOn = (key: string) => storage[key] !== '0';
+    const toggleDefaultOn = (key: string, current: boolean) => {
+      const next = !current;
+      if (next) {
+        storage[key] = '1';
+      } else {
+        storage[key] = '0';
+      }
+      return next;
+    };
+
+    // Both start ON by default when storage is empty
+    let chkpt = readDefaultOn('freedraw_bucket_checkpoint_exp');
+    let batch = readDefaultOn('freedraw_bucket_batch_replay_exp');
+    assert.strictEqual(chkpt, true, 'Checkpoints active by default');
+    assert.strictEqual(batch, true, 'Batch replay active by default');
+
+    // Toggling OFF writes '0' to persist disable
+    chkpt = toggleDefaultOn('freedraw_bucket_checkpoint_exp', chkpt);
+    assert.strictEqual(chkpt, false);
+    assert.strictEqual(storage['freedraw_bucket_checkpoint_exp'], '0');
+    assert.strictEqual(readDefaultOn('freedraw_bucket_checkpoint_exp'), false);
+
+    batch = toggleDefaultOn('freedraw_bucket_batch_replay_exp', batch);
+    assert.strictEqual(batch, false);
+    assert.strictEqual(storage['freedraw_bucket_batch_replay_exp'], '0');
+    assert.strictEqual(readDefaultOn('freedraw_bucket_batch_replay_exp'), false);
+
+    // Toggling back ON writes '1'
+    chkpt = toggleDefaultOn('freedraw_bucket_checkpoint_exp', chkpt);
+    assert.strictEqual(chkpt, true);
+    assert.strictEqual(storage['freedraw_bucket_checkpoint_exp'], '1');
+    assert.strictEqual(readDefaultOn('freedraw_bucket_checkpoint_exp'), true);
+  });
 });

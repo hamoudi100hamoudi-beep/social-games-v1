@@ -366,10 +366,22 @@ describe('Phase 1F.5: History-Indexed Bucket Checkpoint Manager Suite', () => {
     }
   }
 
-  it('Default flag invariant: isBucketCheckpointExpEnabled is false by default', () => {
-    // When localStorage is empty or null, feature flag must be inactive
-    const isEnabled = false;
-    assert.strictEqual(isEnabled, false, 'Checkpoint experiment must be disabled by default');
+  it('Phase 1F.8.4 Promotion Invariant: isBucketCheckpointExpEnabled is true by default, opt-out with 0', () => {
+    const evaluateCheckpointExp = (storageVal: string | null | undefined, throwsError: boolean = false): boolean => {
+      try {
+        if (throwsError) throw new Error('SecurityError: localStorage blocked');
+        if (storageVal === undefined) return true;
+        return storageVal !== '0';
+      } catch (e) {
+        return true;
+      }
+    };
+
+    assert.strictEqual(evaluateCheckpointExp(null), true, 'Checkpoint optimization must be active by default when key is null');
+    assert.strictEqual(evaluateCheckpointExp(undefined), true, 'Checkpoint optimization must be active by default in headless / SSR context');
+    assert.strictEqual(evaluateCheckpointExp('0'), false, 'Setting freedraw_bucket_checkpoint_exp to "0" must disable checkpoint optimization');
+    assert.strictEqual(evaluateCheckpointExp('1'), true, 'Setting freedraw_bucket_checkpoint_exp to "1" must enable checkpoint optimization');
+    assert.strictEqual(evaluateCheckpointExp(null, true), true, 'Exception accessing storage must safely fallback to enabled');
   });
 
   it('Ordered, history-indexed retention and bounded capacity', () => {

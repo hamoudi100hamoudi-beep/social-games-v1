@@ -140,12 +140,12 @@ const isDiagEnabled = (): boolean => {
   }
 };
 
-const isBucketCheckpointExpEnabled = (): boolean => {
-  if (typeof window === 'undefined') return false;
+export const isBucketCheckpointExpEnabled = (): boolean => {
+  if (typeof window === 'undefined') return true;
   try {
-    return localStorage.getItem('freedraw_bucket_checkpoint_exp') === '1';
+    return localStorage.getItem('freedraw_bucket_checkpoint_exp') !== '0';
   } catch (e) {
-    return false;
+    return true;
   }
 };
 
