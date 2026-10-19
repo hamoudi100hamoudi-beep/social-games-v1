@@ -322,24 +322,31 @@ const executeRasterFloodFill = (
       visited[pixelIdx] = 1;
       filledPixelCount++;
 
-      const destA = data[idx + 3] / 255;
-
-      if (destA <= 0.04) {
+      if (fillOpacity === 1) {
         data[idx] = fr;
         data[idx + 1] = fg;
         data[idx + 2] = fb;
-        data[idx + 3] = Math.round(fillOpacity * 255);
+        data[idx + 3] = 255;
       } else {
-        const destR = data[idx];
-        const destG = data[idx + 1];
-        const destB = data[idx + 2];
-        const outA = fillOpacity + destA * (1 - fillOpacity);
-        const factorSrc = fillOpacity / outA;
-        const factorDest = (destA * (1 - fillOpacity)) / outA;
-        data[idx] = Math.round(fr * factorSrc + destR * factorDest);
-        data[idx + 1] = Math.round(fg * factorSrc + destG * factorDest);
-        data[idx + 2] = Math.round(fb * factorSrc + destB * factorDest);
-        data[idx + 3] = Math.round(outA * 255);
+        const destA = data[idx + 3] / 255;
+
+        if (destA <= 0.04) {
+          data[idx] = fr;
+          data[idx + 1] = fg;
+          data[idx + 2] = fb;
+          data[idx + 3] = Math.round(fillOpacity * 255);
+        } else {
+          const destR = data[idx];
+          const destG = data[idx + 1];
+          const destB = data[idx + 2];
+          const outA = fillOpacity + destA * (1 - fillOpacity);
+          const factorSrc = fillOpacity / outA;
+          const factorDest = (destA * (1 - fillOpacity)) / outA;
+          data[idx] = Math.round(fr * factorSrc + destR * factorDest);
+          data[idx + 1] = Math.round(fg * factorSrc + destG * factorDest);
+          data[idx + 2] = Math.round(fb * factorSrc + destB * factorDest);
+          data[idx + 3] = Math.round(outA * 255);
+        }
       }
 
       if (yCurr > 0) {
