@@ -1,16 +1,16 @@
-export type ToolType = 'pencil' | 'eraser' | 'bucket' | 'line' | 'strokeRect' | 'fillRect' | 'strokeCircle' | 'fillCircle' | 'pipette';
+export type ToolType =
+  | 'pencil'
+  | 'eraser'
+  | 'bucket'
+  | 'picker'
+  | 'pipette'
+  | 'line'
+  | 'strokeRect'
+  | 'fillRect'
+  | 'strokeCircle'
+  | 'fillCircle';
 
-export interface PooledPoint {
+export interface Point {
   x: number;
   y: number;
 }
-
-export interface StrokeObject {
-  instanceId: string;
-  tool: ToolType;
-  color: string;
-  width: number;
-  opacity: number;
-  points: PooledPoint[];
-}
-
