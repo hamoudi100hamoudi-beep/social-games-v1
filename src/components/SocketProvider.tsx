@@ -2,35 +2,37 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import customParser from 'socket.io-msgpack-parser';
 
-interface SocketContextType {
+interface SocketContextData {
   socket: Socket | null;
   isConnected: boolean;
   socketId: string | null;
 }
 
-const SocketContext = createContext<SocketContextType>({
+const SocketContext = createContext<SocketContextData>({
   socket: null,
   isConnected: false,
-  socketId: null
+  socketId: null,
 });
 
 export const useSocket = () => useContext(SocketContext);
 
-const socketInstance: Socket = io(typeof window !== 'undefined' ? window.location.origin : 'https://social-games-v1.onrender.com', {
+// Global Socket Instance Singleton outside the React rendering/lifecycle tree
+const socketInstance = io(typeof window !== 'undefined' ? window.location.origin : 'https://social-games-v1.onrender.com', {
   autoConnect: true,
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
   transports: ['websocket'],
   withCredentials: true,
-  parser: customParser
+  parser: customParser,
 });
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isConnected, setIsConnected] = useState(socketInstance.connected);
-  const [socketId, setSocketId] = useState(socketInstance.id || null);
+  const [socketId, setSocketId] = useState<string | null>(socketInstance.id || null);
 
   useEffect(() => {
+    // Sync initial state if already connected
     setIsConnected(socketInstance.connected);
     setSocketId(socketInstance.id || null);
 
@@ -48,7 +50,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const handleForceDisconnect = (data: any) => {
       console.warn('[Socket] Force disconnected by server:', data);
-      socketInstance.disconnect();
+      socketInstance.disconnect(); // prevent auto-reconnect
     };
 
     socketInstance.on('connect', handleConnect);
@@ -56,6 +58,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     socketInstance.on('force_disconnect', handleForceDisconnect);
 
     return () => {
+      // ONLY detach event listeners to prevent duplicate triggers; NEVER disconnect the global instance here
       socketInstance.off('connect', handleConnect);
       socketInstance.off('disconnect', handleDisconnect);
       socketInstance.off('force_disconnect', handleForceDisconnect);

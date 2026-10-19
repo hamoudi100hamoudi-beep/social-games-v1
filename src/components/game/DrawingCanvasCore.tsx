@@ -109,14 +109,6 @@ interface UndoDiagnostics {
   totalSyncDurationMs: number;
   replayDurationMs?: number;
   totalUndoDurationMs?: number;
-  checkpointSelectionDurationMs: number;
-  checkpointRestoreDurationMs: number;
-  batchSetupDurationMs: number;
-  checkpointCaptureDurationMs: number;
-  checkpointCaptureAttempts: number;
-  batchFlushDurationMs: number;
-  batchFlushCalls: number;
-  unclassifiedReplayDurationMs: number;
   hints: {
     existedBefore: number;
     discarded: number;
@@ -3305,14 +3297,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           totalSyncDurationMs: 0,
           replayDurationMs: 0,
           totalUndoDurationMs: 0,
-          checkpointSelectionDurationMs: 0,
-          checkpointRestoreDurationMs: 0,
-          batchSetupDurationMs: 0,
-          checkpointCaptureDurationMs: 0,
-          checkpointCaptureAttempts: 0,
-          batchFlushDurationMs: 0,
-          batchFlushCalls: 0,
-          unclassifiedReplayDurationMs: 0,
           hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
           checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
         } : null;
@@ -3859,8 +3843,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
+  // 🛡️ Safe Mid-History Replay for Free Draw Per-User Undo:
+  // Clears and reconstructs ONLY the committed base canvas (ctx).
+  // Strictly PRESERVES tempCtx, activeSessionsRef, and drainingStrokesRef so ongoing live drawing is never interrupted.
   const replayFreeDrawHistorySafely = (commands: any[], diag?: UndoDiagnostics | null) => {
-    const replayStartTime = diag && isDiagEnabled() ? performance.now() : 0;
+    const replayStartTime = diag ? performance.now() : 0;
     try {
       const ctx = ctxRef.current;
       if (!ctx) return;
@@ -3876,12 +3863,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         diag.tailValidBefore = isCheckpointValid(tailCheckpointRef.current, commands);
       }
 
-      // 1. Checkpoint Selection (Measurement 1)
-      const tSelStart = (diag && isDiagEnabled()) ? performance.now() : 0;
+      // Best valid checkpoint strictly <= N
       const bestCp = getBestCheckpoint(commands, N);
-      if (diag && isDiagEnabled()) {
-        diag.checkpointSelectionDurationMs = performance.now() - tSelStart;
-      }
 
       if (diag) {
         diag.checkpointFacts.bucketThresholdActive = isBucketCheckpointExpEnabled();
@@ -3923,8 +3906,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }
 
-      // 2. Checkpoint Restore (Measurement 2)
-      const tRestStart = (diag && isDiagEnabled()) ? performance.now() : 0;
       if (bestCp && bestCp.index > lastClearIndex) {
         // 1. Clear ONLY the permanent base canvas
         ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
@@ -3939,9 +3920,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         invalidateCheckpoint('all');
         ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         startIndex = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
-      }
-      if (diag && isDiagEnabled()) {
-        diag.checkpointRestoreDurationMs = performance.now() - tRestStart;
       }
 
       if (diag) {
@@ -4029,28 +4007,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       let batchQueueX: number[] | null = null;
       let batchQueueY: number[] | null = null;
 
-      // 5. Batch Flush (Measurement 5)
       const flushBatchBuffer = () => {
         if (batchImageData && ctx) {
-          const tFlushStart = (diag && isDiagEnabled()) ? performance.now() : 0;
           ctx.putImageData(batchImageData, 0, 0);
-          if (diag && isDiagEnabled()) {
-            diag.batchFlushDurationMs += (performance.now() - tFlushStart);
-            diag.batchFlushCalls++;
-          }
           batchImageData = null;
           batchData = null;
-        }
-      };
-
-      const timeCapture = (fn: () => void) => {
-        if (diag && isDiagEnabled()) {
-          diag.checkpointCaptureAttempts++;
-          const tCapStart = performance.now();
-          fn();
-          diag.checkpointCaptureDurationMs += (performance.now() - tCapStart);
-        } else {
-          fn();
         }
       };
 
@@ -4110,8 +4071,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (useBatchReplay && isBucketCommand(commands[i])) {
           // --- Batch Bucket Replay Path ---
           if (!batchImageData) {
-            // 3. Batch Setup (Measurement 3)
-            const tSetupStart = (diag && isDiagEnabled()) ? performance.now() : 0;
             if (!sharedOffscreenCanvas) {
               sharedOffscreenCanvas = document.createElement('canvas');
             }
@@ -4132,9 +4091,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (!batchVisited) batchVisited = new Uint8Array(batchCw * batchCh);
             if (!batchQueueX) batchQueueX = [];
             if (!batchQueueY) batchQueueY = [];
-            if (diag && isDiagEnabled()) {
-              diag.batchSetupDurationMs = performance.now() - tSetupStart;
-            }
           }
 
           const cmdObj = commands[i];
@@ -4148,7 +4104,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               diag.hints.forcedFill++;
               if (cmdObj?._replayHint) diag.hints.discarded++;
             }
-            const fillStart = diag && isDiagEnabled() ? performance.now() : 0;
+            const fillStart = diag ? performance.now() : 0;
             const fillRes = executeRasterFloodFill(
               batchData,
               batchCw,
@@ -4164,7 +4120,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               batchQueueX,
               batchQueueY
             );
-            if (diag && isDiagEnabled()) {
+            if (diag) {
               diag.floodFillExecutions++;
               const dur = performance.now() - fillStart;
               diag.cumulativeFillDurationMs += dur;
@@ -4185,9 +4141,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             }
           }
 
-          // 4. Checkpoint Capture (Measurement 4)
           if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
-            timeCapture(() => captureHistoryCheckpoint(i + 1, commands, batchImageData || undefined));
+            captureHistoryCheckpoint(i + 1, commands, batchImageData || undefined);
           }
         } else {
           // --- Non-Bucket or Standard Path ---
@@ -4196,7 +4151,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
           applyReplayCommand(ctx, commands[i], replayPaths, replaySessions, diag);
           if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw && isBucketCommand(commands[i])) {
-            timeCapture(() => captureHistoryCheckpoint(i + 1, commands));
+            captureHistoryCheckpoint(i + 1, commands);
           }
         }
       }
@@ -4238,17 +4193,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       saveSnapshot();
       syncHistoryButtons();
       if (diag) {
-        const replayDuration = (isDiagEnabled() ? performance.now() : 0) - replayStartTime;
+        const replayDuration = performance.now() - replayStartTime;
         diag.replayDurationMs = replayDuration;
-        // 6. Unclassified Replay Duration (Measurement 6)
-        const subSum = diag.checkpointSelectionDurationMs +
-                       diag.checkpointRestoreDurationMs +
-                       diag.batchSetupDurationMs +
-                       diag.checkpointCaptureDurationMs +
-                       diag.batchFlushDurationMs +
-                       diag.cumulativeFillDurationMs;
-        diag.unclassifiedReplayDurationMs = Math.max(0, replayDuration - subSum);
-
         if (diag.type !== 'local_undo') {
           diag.totalSyncDurationMs = replayDuration;
           console.log("[FREE_DRAW_UNDO_DIAG]", JSON.stringify(diag));
@@ -4736,14 +4682,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             totalSyncDurationMs: 0,
             replayDurationMs: 0,
             totalUndoDurationMs: 0,
-            checkpointSelectionDurationMs: 0,
-            checkpointRestoreDurationMs: 0,
-            batchSetupDurationMs: 0,
-            checkpointCaptureDurationMs: 0,
-            checkpointCaptureAttempts: 0,
-            batchFlushDurationMs: 0,
-            batchFlushCalls: 0,
-            unclassifiedReplayDurationMs: 0,
             hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
             checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
           } : null;

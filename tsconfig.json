@@ -1,23 +1,26 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
     "module": "ESNext",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
-    "resolveJsonModule": true,
     "isolatedModules": true,
-    "noEmit": true,
+    "moduleDetection": "force",
+    "allowJs": true,
     "jsx": "react-jsx",
-    "strict": false,
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true
-  },
-  "include": [
-    "src/components/game/DrawingCanvasCore.tsx",
-    "src/components/SocketProvider.tsx",
-    "src/types",
-    "src/utils"
-  ]
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  }
 }
