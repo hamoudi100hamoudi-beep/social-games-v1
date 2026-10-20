@@ -109,7 +109,6 @@ interface UndoDiagnostics {
   totalSyncDurationMs: number;
   replayDurationMs?: number;
   totalUndoDurationMs?: number;
-  checkpointSelectionDurationMs?: number;
   hints: {
     existedBefore: number;
     discarded: number;
@@ -323,31 +322,24 @@ const executeRasterFloodFill = (
       visited[pixelIdx] = 1;
       filledPixelCount++;
 
-      if (fillOpacity === 1) {
+      const destA = data[idx + 3] / 255;
+
+      if (destA <= 0.04) {
         data[idx] = fr;
         data[idx + 1] = fg;
         data[idx + 2] = fb;
-        data[idx + 3] = 255;
+        data[idx + 3] = Math.round(fillOpacity * 255);
       } else {
-        const destA = data[idx + 3] / 255;
-
-        if (destA <= 0.04) {
-          data[idx] = fr;
-          data[idx + 1] = fg;
-          data[idx + 2] = fb;
-          data[idx + 3] = Math.round(fillOpacity * 255);
-        } else {
-          const destR = data[idx];
-          const destG = data[idx + 1];
-          const destB = data[idx + 2];
-          const outA = fillOpacity + destA * (1 - fillOpacity);
-          const factorSrc = fillOpacity / outA;
-          const factorDest = (destA * (1 - fillOpacity)) / outA;
-          data[idx] = Math.round(fr * factorSrc + destR * factorDest);
-          data[idx + 1] = Math.round(fg * factorSrc + destG * factorDest);
-          data[idx + 2] = Math.round(fb * factorSrc + destB * factorDest);
-          data[idx + 3] = Math.round(outA * 255);
-        }
+        const destR = data[idx];
+        const destG = data[idx + 1];
+        const destB = data[idx + 2];
+        const outA = fillOpacity + destA * (1 - fillOpacity);
+        const factorSrc = fillOpacity / outA;
+        const factorDest = (destA * (1 - fillOpacity)) / outA;
+        data[idx] = Math.round(fr * factorSrc + destR * factorDest);
+        data[idx + 1] = Math.round(fg * factorSrc + destG * factorDest);
+        data[idx + 2] = Math.round(fb * factorSrc + destB * factorDest);
+        data[idx + 3] = Math.round(outA * 255);
       }
 
       if (yCurr > 0) {
@@ -3298,7 +3290,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           totalSyncDurationMs: 0,
           replayDurationMs: 0,
           totalUndoDurationMs: 0,
-          checkpointSelectionDurationMs: 0,
           hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
           checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
         } : null;
@@ -3866,14 +3857,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
 
       // Best valid checkpoint strictly <= N
-      let bestCp;
-      if (diag) {
-        const cpSelectionStart = performance.now();
-        bestCp = getBestCheckpoint(commands, N);
-        diag.checkpointSelectionDurationMs = (diag.checkpointSelectionDurationMs || 0) + (performance.now() - cpSelectionStart);
-      } else {
-        bestCp = getBestCheckpoint(commands, N);
-      }
+      const bestCp = getBestCheckpoint(commands, N);
 
       if (diag) {
         diag.checkpointFacts.bucketThresholdActive = isBucketCheckpointExpEnabled();
@@ -4691,7 +4675,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             totalSyncDurationMs: 0,
             replayDurationMs: 0,
             totalUndoDurationMs: 0,
-            checkpointSelectionDurationMs: 0,
             hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
             checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
           } : null;
