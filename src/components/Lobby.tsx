@@ -487,6 +487,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
             <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'space-y-3' : 'space-y-4'}`}>
               {/* Avatar Selector */}
               <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'gap-1.5' : 'gap-2'}`}>
+                <label className={`font-black text-[#8C8AA7] uppercase tracking-wider ${isKeyboardOpen ? 'text-[12px]' : 'text-sm'}`}>CHOOSE AVATAR</label>
+                
                 <div className="flex items-center justify-between w-full relative max-w-[280px] sm:max-w-[320px]">
                   <button 
                     onClick={handlePrevAvatar}
