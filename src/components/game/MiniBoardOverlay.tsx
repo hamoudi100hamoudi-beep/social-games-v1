@@ -109,7 +109,7 @@ export function MiniBoardOverlay({
                     className="px-6 py-2.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-95 text-white font-black text-sm sm:text-base shadow-lg transition-all border-2 border-white/60 flex items-center gap-2 cursor-pointer mx-auto"
                   >
                     <Pencil size={18} />
-                    <span>ابدأ الرسم</span>
+                    <span>ابدأ الرسم الآن 🎨</span>
                   </button>
                 </>
               ) : (
