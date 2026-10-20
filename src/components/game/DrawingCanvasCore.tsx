@@ -109,7 +109,6 @@ interface UndoDiagnostics {
   totalSyncDurationMs: number;
   replayDurationMs?: number;
   totalUndoDurationMs?: number;
-  checkpointSelectionDurationMs?: number;
   hints: {
     existedBefore: number;
     discarded: number;
@@ -3298,7 +3297,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           totalSyncDurationMs: 0,
           replayDurationMs: 0,
           totalUndoDurationMs: 0,
-          checkpointSelectionDurationMs: 0,
           hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
           checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
         } : null;
@@ -3866,14 +3864,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
 
       // Best valid checkpoint strictly <= N
-      let bestCp;
-      if (diag) {
-        const cpSelectionStart = performance.now();
-        bestCp = getBestCheckpoint(commands, N);
-        diag.checkpointSelectionDurationMs = (diag.checkpointSelectionDurationMs || 0) + (performance.now() - cpSelectionStart);
-      } else {
-        bestCp = getBestCheckpoint(commands, N);
-      }
+      const bestCp = getBestCheckpoint(commands, N);
 
       if (diag) {
         diag.checkpointFacts.bucketThresholdActive = isBucketCheckpointExpEnabled();
@@ -4691,7 +4682,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             totalSyncDurationMs: 0,
             replayDurationMs: 0,
             totalUndoDurationMs: 0,
-            checkpointSelectionDurationMs: 0,
             hints: { existedBefore: 0, discarded: 0, usedShortcut: 0, forcedFill: 0 },
             checkpointFacts: { stride: 8, retainedCanvases: 2, invalidationReason: null, bucketThresholdActive: false }
           } : null;

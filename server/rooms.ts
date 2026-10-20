@@ -1,3 +1,2323 @@
-var __defProp=Object.defineProperty;var __name=(target,value)=>__defProp(target,"name",{value,configurable:true});import{getRoomConfig}from"../src/types/game.js";function getLevenshteinDistance(a,b){const matrix=[];for(let i=0;i<=b.length;i++){matrix[i]=[i]}for(let j=0;j<=a.length;j++){matrix[0][j]=j}for(let i=1;i<=b.length;i++){for(let j=1;j<=a.length;j++){if(b.charAt(i-1)===a.charAt(j-1)){matrix[i][j]=matrix[i-1][j-1]}else{matrix[i][j]=Math.min(matrix[i-1][j-1]+1,matrix[i][j-1]+1,matrix[i-1][j]+1)}}}return matrix[b.length][a.length]}__name(getLevenshteinDistance,"getLevenshteinDistance");function decodeZigZag(z){return z>>>1^-(z&1)}__name(decodeZigZag,"decodeZigZag");function readVarIntFromBuffer(buf,cursor){let result=0;let shift=0;while(cursor.offset<buf.length){const b=buf[cursor.offset++];result|=(b&127)<<shift;if((b&128)===0){return result>>>0}shift+=7;if(shift>28)throw new Error("VarInt overflow")}throw new Error("Unexpected end of VarInt buffer")}__name(readVarIntFromBuffer,"readVarIntFromBuffer");function decodeType13BufferSafely(buf){if(!buf||!Buffer.isBuffer(buf)||buf.length<10){return{success:false,error:"header_too_small"}}if(buf[0]!==13){return{success:false,error:"invalid_type"}}let instId="";for(let i=0;i<7;i++){const code=buf[1+i];if(code>0)instId+=String.fromCharCode(code)}if(!instId){return{success:false,error:"invalid_inst_id"}}const count=buf.readUInt16LE(8);if(count>3e3){return{success:false,error:"count_exceeds_max"}}if(count===0){if(buf.length!==10){return{success:false,error:"unexpected_trailing_bytes"}}return{success:true,instId,count:0,points:[]}}const tempPoints=[];const cursor={offset:10};let prevQx=0;let prevQy=0;try{for(let i=0;i<count;i++){if(cursor.offset>=buf.length){return{success:false,error:"truncated_payload"}}const zzX=readVarIntFromBuffer(buf,cursor);const zzY=readVarIntFromBuffer(buf,cursor);const valX=decodeZigZag(zzX);const valY=decodeZigZag(zzY);if(i===0){prevQx=valX;prevQy=valY}else{prevQx=prevQx+valX|0;prevQy=prevQy+valY|0}if(prevQx<-32768||prevQx>32767||prevQy<-32768||prevQy>32767){return{success:false,error:"coordinates_out_of_bounds"}}tempPoints.push({x:prevQx,y:prevQy})}if(tempPoints.length!==count){return{success:false,error:"point_count_mismatch"}}if(cursor.offset!==buf.length){return{success:false,error:"unexpected_trailing_bytes"}}return{success:true,instId,count,points:tempPoints}}catch(err){return{success:false,error:err?.message||"malformed_payload"}}}__name(decodeType13BufferSafely,"decodeType13BufferSafely");function createType2Buffer(instId,points){const count=points.length;const buf=Buffer.alloc(10+count*4);buf.writeUInt8(2,0);buf.write(instId.padEnd(7,"\0").slice(0,7),1,7,"ascii");buf.writeUInt16LE(count&65535,8);for(let i=0;i<count;i++){buf.writeInt16LE(points[i].x,10+i*4);buf.writeInt16LE(points[i].y,12+i*4)}return buf}__name(createType2Buffer,"createType2Buffer");function createType1Buffer(instId,tool,r,g,b,width,opacity,p0_x,p0_y){const buf=Buffer.alloc(18);buf.writeUInt8(1,0);buf.write((instId||"").padEnd(7,"\0").slice(0,7),1,7,"ascii");buf.writeUInt8(tool&255,8);buf.writeUInt8(r&255,9);buf.writeUInt8(g&255,10);buf.writeUInt8(b&255,11);buf.writeUInt8(width&255,12);buf.writeUInt8(opacity&255,13);buf.writeInt16LE(p0_x,14);buf.writeInt16LE(p0_y,16);return buf}__name(createType1Buffer,"createType1Buffer");function normalizeArabic(str){return str.replace(/[أإآٱ]/g,"\u0627").replace(/ة/g,"\u0647").replace(/ى/g,"\u064A").replace(/[\u064B-\u065F]/g,"").trim().toLowerCase()}__name(normalizeArabic,"normalizeArabic");function isCloseGuess(guess,target){const gOrig=guess.toLowerCase().trim();const tOrig=target.toLowerCase().trim();if(!gOrig||!tOrig)return false;if(gOrig===tOrig)return false;const gNorm=normalizeArabic(gOrig);const tNorm=normalizeArabic(tOrig);if(gNorm===tNorm){return true}const len=Math.max(gNorm.length,tNorm.length);const dist=getLevenshteinDistance(gNorm,tNorm);if(len<=2){return false}else if(len<=4){return dist===1}else if(len<=7){return dist<=2}else{return dist<=3||dist/len<=.3}}__name(isCloseGuess,"isCloseGuess");const ALL_WORDS=["\u0637\u0641\u0644","\u0631\u0636\u064A\u0639","\u0639\u062C\u0648\u0632","\u0645\u0647\u0631\u062C","\u0642\u0631\u0635\u0627\u0646","\u0646\u064A\u0646\u062C\u0627","\u0633\u0627\u062D\u0631\u0629","\u0645\u0644\u0643","\u0645\u0644\u0643\u0629","\u0623\u0628","\u0623\u0645","\u0648\u0644\u062F","\u0628\u0646\u062A","\u0623\u0635\u062F\u0642\u0627\u0621","\u0639\u0627\u0626\u0644\u0629","\u062D\u0627\u0645\u0644","\u0633\u0639\u064A\u062F","\u062D\u0632\u064A\u0646","\u063A\u0627\u0636\u0628","\u062E\u0627\u0626\u0641","\u0646\u0627\u0626\u0645","\u0646\u0639\u0633\u0627\u0646","\u0645\u0631\u064A\u0636","\u064A\u0628\u062A\u0633\u0645","\u062C\u0627\u0644\u0633","\u063A\u064A\u0645\u0629","\u0645\u0637\u0631","\u0628\u0631\u0642","\u0642\u0648\u0633 \u0642\u0632\u062D","\u0628\u0631\u0643\u0627\u0646","\u062C\u0628\u0644","\u062C\u0632\u064A\u0631\u0629","\u063A\u0627\u0628\u0629","\u0643\u0647\u0641","\u0635\u062E\u0631\u0629","\u0645\u0638\u0644\u0629","\u0646\u062E\u0644\u0629","\u0632\u0647\u0631\u0629","\u0648\u0631\u062F\u0629","\u0634\u062C\u0631\u0629","\u063A\u0635\u0646","\u062C\u0630\u0639","\u0648\u0631\u0642\u0629 \u0634\u062C\u0631\u0629","\u0646\u0627\u0631","\u062F\u062E\u0627\u0646","\u0634\u0639\u0644\u0629","\u062D\u0641\u0631\u0629","\u0634\u0644\u0627\u0644","\u0646\u0647\u0631","\u0635\u062D\u0631\u0627\u0621","\u0642\u0645\u0631","\u0634\u0645\u0633","\u0647\u0644\u0627\u0644","\u0646\u062C\u0648\u0645","\u0644\u064A\u0644","\u0643\u0648\u0643\u0628","\u0645\u062C\u0631\u0629","\u062B\u0644\u062C","\u0631\u062C\u0644 \u062B\u0644\u062C","\u0628\u064A\u062A","\u0643\u0648\u062E","\u062E\u064A\u0645\u0629","\u0645\u0633\u062C\u062F","\u0645\u062F\u0631\u0633\u0629","\u0645\u0633\u062A\u0634\u0641\u0649","\u0628\u0646\u0643","\u0645\u0637\u0639\u0645","\u0641\u0646\u062F\u0642","\u0645\u0644\u0639\u0628","\u062C\u0633\u0631","\u0628\u0631\u062C","\u0646\u0627\u0641\u0648\u0631\u0629","\u0642\u0644\u0639\u0629","\u0633\u0644\u0645","\u062F\u0631\u062C","\u0647\u0627\u062A\u0641","\u0643\u0645\u0628\u064A\u0648\u062A\u0631","\u0644\u0627\u0628\u062A\u0648\u0628","\u0634\u0627\u0634\u0629","\u0641\u0623\u0631\u0629","\u0633\u0645\u0627\u0639\u0629","\u0645\u064A\u0643\u0631\u0648\u0641\u0648\u0646","\u0643\u0627\u0645\u064A\u0631\u0627","\u0628\u0637\u0627\u0631\u064A\u0629","\u0634\u0627\u062D\u0646","\u0631\u064A\u0645\u0648\u062A","\u062A\u0644\u0641\u0627\u0632","\u062B\u0644\u0627\u062C\u0629","\u0647\u062F\u064A\u0629","\u0628\u0627\u0644\u0648\u0646","\u0635\u0646\u062F\u0648\u0642","\u0635\u0646\u062F\u0648\u0642 \u0643\u0646\u0632","\u062A\u0627\u062C","\u0643\u0623\u0633","\u0645\u064A\u062F\u0627\u0644\u064A\u0629","\u0645\u0641\u062A\u0627\u062D","\u0642\u0641\u0644","\u0633\u0644\u0633\u0644\u0629","\u0645\u063A\u0646\u0627\u0637\u064A\u0633","\u0639\u062F\u0633\u0629 \u0645\u0643\u0628\u0631\u0629","\u0633\u0627\u0639\u0629 \u0631\u0645\u0644\u064A\u0629","\u0628\u0648\u0635\u0644\u0629","\u0639\u0644\u0645","\u062F\u0631\u0639","\u0643\u064A\u0633 \u0646\u0642\u0648\u062F","\u0645\u0646\u0638\u0627\u0631","\u0645\u0641\u0643","\u0645\u0633\u0645\u0627\u0631","\u0628\u0631\u063A\u064A","\u0645\u0637\u0631\u0642\u0629","\u0641\u0623\u0633","\u062E\u0631\u0637\u0648\u0645","\u0633\u0644\u0643","\u0637\u0627\u0648\u0644\u0629","\u0643\u0631\u0633\u064A","\u0633\u0631\u064A\u0631","\u0623\u0631\u064A\u0643\u0629","\u0643\u0646\u0628\u0629","\u062E\u0632\u0627\u0646\u0629","\u0645\u0643\u062A\u0628\u0629","\u0645\u0643\u062A\u0628","\u0645\u0631\u0622\u0629","\u0645\u0635\u0628\u0627\u062D","\u0645\u0631\u0648\u062D\u0629","\u0645\u0643\u064A\u0641","\u0633\u062A\u0627\u0631\u0629","\u0633\u062C\u0627\u062F\u0629","\u0648\u0633\u0627\u062F\u0629","\u0628\u0637\u0627\u0646\u064A\u0629","\u0639\u0644\u0627\u0642\u0629 \u0645\u0644\u0627\u0628\u0633","\u0633\u0644\u0629","\u0645\u0646\u0628\u0647","\u0635\u0648\u0631\u0629","\u0645\u0632\u0647\u0631\u064A\u0629","\u0634\u0645\u0639\u0629","\u0641\u0627\u0646\u0648\u0633","\u062D\u0648\u0636 \u0633\u0645\u0643","\u0631\u0648\u0628\u0648\u062A","\u0637\u0627\u0626\u0631\u0629 \u0648\u0631\u0642\u064A\u0629","\u064A\u0648\u064A\u0648","\u062F\u0645\u064A\u0629","\u0645\u0643\u0639\u0628 \u0631\u0648\u0628\u064A\u0643","\u0623\u062D\u062C\u064A\u0629","\u0646\u0631\u062F","\u0648\u0631\u0642 \u0644\u0639\u0628","\u0634\u0637\u0631\u0646\u062C","\u062F\u0648\u0645\u064A\u0646\u0648","\u0645\u0644\u062D","\u0633\u0643\u0631","\u0641\u0644\u0641\u0644","\u0632\u064A\u062A","\u0643\u0627\u062A\u0634\u0628","\u0632\u0628\u062F\u0629","\u0633\u0643\u064A\u0646","\u0634\u0648\u0643\u0629","\u0645\u0644\u0639\u0642\u0629","\u0635\u062D\u0646","\u0625\u0628\u0631\u064A\u0642","\u062F\u0644\u0648","\u0635\u0627\u0628\u0648\u0646","\u0641\u0631\u0634\u0627\u0629 \u0623\u0633\u0646\u0627\u0646","\u0641\u0631\u0634\u0627\u0629","\u0645\u0646\u062F\u064A\u0644","\u0641\u0631\u0646","\u0645\u062F\u0641\u0623\u0629","\u0645\u064A\u0643\u0631\u0648\u0648\u064A\u0641","\u0635\u0628\u0627\u0631","\u0639\u0628\u0627\u062F \u0627\u0644\u0634\u0645\u0633","\u0639\u0634\u0628","\u0641\u0633\u062A\u0627\u0646","\u062A\u0646\u0648\u0631\u0629","\u0628\u0646\u0637\u0644\u0648\u0646","\u0642\u0645\u064A\u0635","\u062C\u0627\u0643\u064A\u062A","\u0633\u062A\u0631\u0629","\u0634\u0648\u0631\u062A","\u062D\u062C\u0627\u0628","\u0641\u064A\u0648\u0646\u0643\u0629","\u0642\u0628\u0639\u0629","\u062D\u0632\u0627\u0645","\u0646\u0638\u0627\u0631\u0627\u062A \u0634\u0645\u0633\u064A\u0629","\u062D\u0642\u064A\u0628\u0629 \u064A\u062F","\u0633\u0648\u0627\u0631","\u0642\u0644\u0627\u062F\u0629","\u0623\u0642\u0631\u0627\u0637","\u062E\u0627\u062A\u0645","\u0645\u0639\u0637\u0641","\u062D\u0630\u0627\u0621","\u062C\u0648\u0627\u0631\u0628","\u0643\u0639\u0628","\u062D\u0642\u064A\u0628\u0629 \u0638\u0647\u0631","\u0631\u0628\u0637\u0629 \u0639\u0646\u0642","\u0642\u0641\u0627\u0632","\u0648\u0634\u0627\u062D","\u0646\u0638\u0627\u0631\u0627\u062A","\u0633\u0627\u0639\u0629 \u064A\u062F","\u0642\u0628\u0639\u0629 \u0642\u0634","\u0634\u0628\u0634\u0628","\u0634\u0628\u062D","\u0632\u0648\u0645\u0628\u064A","\u0645\u0648\u0645\u064A\u0627\u0621","\u062F\u064A\u0646\u0627\u0635\u0648\u0631","\u062A\u0646\u064A\u0646","\u063A\u0648\u0644","\u0648\u062D\u0634","\u0645\u0635\u0627\u0635 \u062F\u0645\u0627\u0621","\u0647\u064A\u0643\u0644 \u0639\u0638\u0645\u064A","\u0641\u0632\u0627\u0639\u0629","\u0635\u0627\u0641\u0631\u0629","\u0639\u0644\u0645 \u0627\u0644\u0628\u062F\u0627\u064A\u0629","\u0643\u0631\u0629 \u0633\u0644\u0629","\u0643\u0631\u0629 \u0642\u062F\u0645","\u062A\u0646\u0633","\u0623\u0644\u0648\u0627\u0646","\u0642\u0644\u0645 \u0631\u0635\u0627\u0635","\u0645\u0645\u062D\u0627\u0629","\u0625\u0639\u0635\u0627\u0631","\u062D\u0627\u062F\u062B","\u064A\u0633\u0642\u0637","\u0642\u0634\u0631\u0629 \u0645\u0648\u0632","\u0628\u064A\u0636 \u0645\u0642\u0644\u064A","\u0643\u0648\u0628 \u0645\u0643\u0633\u0648\u0631","\u0642\u0644\u0645 \u0645\u0643\u0633\u0648\u0631","\u0633\u0627\u0639\u0629","\u0623\u0646\u0641 \u0623\u062D\u0645\u0631","\u0623\u0646\u0641 \u0637\u0648\u064A\u0644","\u0634\u0627\u0631\u0628 \u0637\u0648\u064A\u0644","\u0641\u0642\u0627\u0639\u0627\u062A","\u0623\u0633\u062F","\u0646\u0645\u0631","\u0641\u0647\u062F","\u0630\u0626\u0628","\u062B\u0639\u0644\u0628","\u0642\u0631\u062F","\u063A\u0648\u0631\u064A\u0644\u0627","\u063A\u0632\u0627\u0644","\u0623\u0631\u0646\u0628","\u0641\u0623\u0631","\u0633\u0646\u062C\u0627\u0628","\u0643\u0648\u0627\u0644\u0627","\u062F\u0628","\u0643\u0646\u063A\u0631","\u0641\u064A\u0644","\u0632\u0631\u0627\u0641\u0629","\u0648\u062D\u064A\u062F \u0627\u0644\u0642\u0631\u0646","\u062A\u0645\u0633\u0627\u062D","\u062B\u0639\u0628\u0627\u0646","\u0633\u062D\u0644\u064A\u0629","\u0636\u0641\u062F\u0639","\u062E\u0641\u0627\u0634","\u062D\u0645\u0627\u0631","\u062D\u0635\u0627\u0646","\u0628\u0642\u0631\u0629","\u062B\u0648\u0631","\u062E\u0631\u0648\u0641","\u0645\u0627\u0639\u0632","\u062C\u0645\u0644","\u0628\u0627\u0646\u062F\u0627","\u0642\u0646\u0641\u0630","\u0633\u0644\u062D\u0641\u0627\u0629","\u062D\u0645\u0627\u0631 \u0648\u062D\u0634\u064A","\u0642\u0637","\u0647\u0627\u0645\u0633\u062A\u0631","\u0642\u0646\u062F\u0633","\u0631\u0627\u0643\u0648\u0646","\u062C\u0627\u0645\u0648\u0633","\u062E\u0646\u0632\u064A\u0631","\u0643\u0644\u0628","\u0645\u0627\u0645\u0648\u062B","\u0643\u0648\u0628\u0631\u0627","\u0641\u0631\u0633 \u0627\u0644\u0646\u0647\u0631","\u0639\u0635\u0641\u0648\u0631","\u062D\u0645\u0627\u0645\u0629","\u0628\u0628\u063A\u0627\u0621","\u0647\u062F\u0647\u062F","\u0646\u0642\u0627\u0631 \u0627\u0644\u062E\u0634\u0628","\u063A\u0631\u0627\u0628","\u0628\u0648\u0645\u0629","\u0646\u0633\u0631","\u0635\u0642\u0631","\u0628\u062C\u0639\u0629","\u0628\u0637\u0629","\u062F\u062C\u0627\u062C\u0629","\u062F\u064A\u0643","\u0635\u0648\u0635","\u0628\u0637\u0631\u064A\u0642","\u0637\u0627\u0648\u0648\u0633","\u0646\u0639\u0627\u0645\u0629","\u0633\u0645\u0643\u0629","\u0633\u0645\u0643\u0629 \u0630\u0647\u0628\u064A\u0629","\u0642\u0631\u0634","\u062D\u0648\u062A","\u062F\u0648\u0644\u0641\u064A\u0646","\u0623\u062E\u0637\u0628\u0648\u0637","\u062D\u0628\u0627\u0631","\u0633\u0644\u0637\u0639\u0648\u0646","\u0646\u062C\u0645 \u0627\u0644\u0628\u062D\u0631","\u0642\u0646\u062F\u064A\u0644","\u0641\u0642\u0645\u0629","\u0645\u062D\u0627\u0631\u0629","\u0635\u062F\u0641\u0629","\u0646\u062D\u0644\u0629","\u062F\u0628\u0648\u0631","\u0641\u0631\u0627\u0634\u0629","\u064A\u0639\u0633\u0648\u0628","\u062F\u0639\u0633\u0648\u0642\u0629","\u062E\u0646\u0641\u0633\u0627\u0621","\u0646\u0645\u0644\u0629","\u0630\u0628\u0627\u0628\u0629","\u0628\u0639\u0648\u0636\u0629","\u0635\u0631\u0635\u0648\u0631","\u0623\u0645 \u0623\u0631\u0628\u0639\u0629 \u0648\u0623\u0631\u0628\u0639\u064A\u0646","\u0639\u0646\u0643\u0628\u0648\u062A","\u0639\u0642\u0631\u0628","\u062F\u0648\u062F\u0629","\u0633\u0631\u0639\u0648\u0641","\u062D\u0644\u0632\u0648\u0646","\u0633\u064A\u0627\u0631\u0629","\u0634\u0627\u062D\u0646\u0629","\u0628\u0627\u0635","\u062F\u0631\u0627\u062C\u0629","\u0633\u064A\u0627\u0631\u0629 \u0625\u0633\u0639\u0627\u0641","\u0633\u064A\u0627\u0631\u0629 \u0625\u0637\u0641\u0627\u0621","\u0642\u0637\u0627\u0631","\u0633\u0641\u064A\u0646\u0629","\u0642\u0627\u0631\u0628","\u062C\u0631\u0627\u0641\u0629","\u0644\u064A\u0645\u0648\u0632\u064A\u0646","\u063A\u0648\u0627\u0635\u0629","\u0635\u0627\u0631\u0648\u062E","\u0645\u0646\u0637\u0627\u062F","\u0633\u0643\u0648\u062A\u0631","\u0633\u0641\u064A\u0646\u0629 \u0642\u0631\u0627\u0635\u0646\u0629","\u0637\u0648\u0642 \u0646\u062C\u0627\u0629","\u0645\u0631\u0633\u0627\u0629","\u062A\u0641\u0627\u062D","\u0628\u0631\u062A\u0642\u0627\u0644","\u0645\u0648\u0632","\u0639\u0646\u0628","\u0641\u0631\u0627\u0648\u0644\u0629","\u0643\u064A\u0648\u064A","\u0623\u0646\u0627\u0646\u0627\u0633","\u0628\u0637\u064A\u062E","\u0643\u0631\u0632","\u0644\u064A\u0645\u0648\u0646","\u062C\u0648\u0627\u0641\u0629","\u0631\u0645\u0627\u0646","\u062A\u0648\u062A","\u0645\u0627\u0646\u062C\u0648","\u0623\u0641\u0648\u0643\u0627\u062F\u0648","\u062A\u0645\u0631","\u0637\u0645\u0627\u0637\u0645","\u062E\u064A\u0627\u0631","\u062C\u0632\u0631","\u0628\u0635\u0644","\u0628\u0631\u0648\u0643\u0644\u064A","\u0643\u0648\u0633\u0629","\u0641\u0637\u0631","\u0630\u0631\u0629","\u0628\u0627\u0630\u0646\u062C\u0627\u0646","\u0644\u0641\u062A","\u064A\u0642\u0637\u064A\u0646","\u0639\u062F\u0633","\u0641\u0627\u0635\u0648\u0644\u064A\u0627","\u0641\u0648\u0644 \u0633\u0648\u062F\u0627\u0646\u064A","\u062C\u0628\u0646","\u062F\u062C\u0627\u062C","\u0644\u062D\u0645","\u0634\u0627\u0648\u0631\u0645\u0627","\u0628\u0631\u062C\u0631","\u0628\u064A\u062A\u0632\u0627","\u0628\u0637\u0627\u0637\u0633","\u0643\u0628\u0627\u0628","\u0645\u0646\u0633\u0641","\u0643\u064A\u0643","\u062F\u0648\u0646\u0627\u062A","\u0628\u0633\u0643\u0648\u064A\u062A","\u0641\u0634\u0627\u0631","\u0622\u064A\u0633 \u0643\u0631\u064A\u0645","\u0634\u0648\u0643\u0648\u0644\u0627\u062A\u0629","\u062D\u0644\u0648\u0649","\u0645\u0635\u0627\u0635\u0629","\u0645\u0631\u0628\u0649","\u0628\u064A\u0636","\u0639\u0633\u0644","\u062E\u0628\u0632","\u0645\u0639\u0643\u0631\u0648\u0646\u0629","\u0623\u0631\u0632","\u062D\u0644\u064A\u0628","\u0642\u0647\u0648\u0629","\u0634\u0627\u064A","\u0639\u0635\u064A\u0631 \u0628\u0631\u062A\u0642\u0627\u0644","\u0639\u0635\u064A\u0631 \u0641\u0631\u0627\u0648\u0644\u0629","\u0639\u0635\u064A\u0631 \u062C\u0632\u0631","\u064A\u0642\u0631\u0623","\u064A\u0631\u0633\u0645","\u064A\u063A\u0646\u064A","\u0631\u0642\u0635","\u064A\u0623\u0643\u0644","\u064A\u0633\u0628\u062D","\u064A\u0628\u0643\u064A","\u064A\u062C\u0631\u064A","\u064A\u0645\u0634\u064A","\u064A\u0636\u062D\u0643","\u0623\u062B\u0642\u0627\u0644","\u0639\u0631\u0642","\u062D\u0644\u0645","\u0637\u0628\u064A\u0628 \u0623\u0633\u0646\u0627\u0646","\u0645\u0645\u0631\u0636\u0629","\u0637\u0628\u064A\u0628","\u0634\u0631\u0637\u064A","\u0631\u062C\u0644 \u0625\u0637\u0641\u0627\u0621","\u0645\u062D\u0642\u0642","\u0642\u0627\u0636\u064A","\u062C\u0646\u062F\u064A","\u0645\u0639\u0644\u0645","\u0646\u062C\u0627\u0631","\u062D\u062F\u0627\u062F","\u0645\u064A\u0643\u0627\u0646\u064A\u0643\u064A","\u0637\u064A\u0627\u0631","\u0633\u064A\u0627\u0631\u0629 \u0623\u062C\u0631\u0629","\u0642\u0628\u0637\u0627\u0646","\u0637\u0628\u0627\u062E","\u0646\u0627\u062F\u0644","\u0631\u0633\u0627\u0645","\u0645\u0635\u0648\u0631","\u0645\u063A\u0646\u064A","\u0639\u0627\u0645\u0644 \u0646\u0638\u0627\u0641\u0629","\u0633\u0627\u0639\u064A \u0628\u0631\u064A\u062F","\u0631\u0627\u0626\u062F \u0641\u0636\u0627\u0621","\u063A\u0648\u0627\u0635","\u0645\u0630\u064A\u0639","\u062E\u064A\u0627\u0637","\u062D\u0644\u0627\u0642","\u0639\u064A\u0646","\u0623\u0646\u0641","\u0623\u0630\u0646","\u0623\u0633\u0646\u0627\u0646","\u0641\u0645","\u0634\u0639\u0631","\u0634\u0627\u0631\u0628","\u0644\u062D\u064A\u0629","\u0639\u0646\u0642","\u0643\u062A\u0641","\u064A\u062F","\u0630\u0631\u0627\u0639","\u0623\u0638\u0627\u0641\u0631","\u0623\u0635\u0628\u0639","\u0644\u0627\u064A\u0643","\u062F\u0633 \u0644\u0627\u064A\u0643","\u0623\u0635\u0644\u0639","\u0634\u0639\u0631 \u0642\u0635\u064A\u0631","\u0634\u0639\u0631 \u0637\u0648\u064A\u0644","\u0637\u0631\u064A\u0642","\u0634\u0627\u0631\u0639","\u0625\u0634\u0627\u0631\u0629 \u0645\u0631\u0648\u0631","\u0634\u0631\u0641\u0629","\u0646\u0627\u0641\u0630\u0629","\u0628\u0627\u0628","\u062D\u0627\u062C\u0628","\u0631\u0645\u0648\u0634","\u0623\u062D\u0645\u0631 \u0634\u0641\u0627\u0647","\u0637\u0644\u0627\u0621 \u0623\u0638\u0627\u0641\u0631"];class RoomManager{constructor(){this.rooms=new Map;this.players=new Map;this.evictionTimers=new Map;this.io=null;this.tickInterval=null;this.clientCapabilities=new Map;this.pendingDrawingIdentities=new Map}static{__name(this,"RoomManager")}setClientCapabilities(socketId,caps){const existing=this.clientCapabilities.get(socketId)||{};this.clientCapabilities.set(socketId,{...existing,...caps})}removeClientCapabilities(socketId){this.clientCapabilities.delete(socketId)}isClientType13Capable(socketId){return Boolean(this.clientCapabilities.get(socketId)?.supportsType13)}setIo(io){this.io=io;if(!this.tickInterval){this.tickInterval=setInterval(()=>this.tick(),1e3);console.log("[Game Engine] Global tick loop started (1s interval)")}}tick(){try{this.rooms.forEach(room=>{try{this.kickIdlePlayers(room);this.processRoomTick(room)}catch(e){console.error(`Error processing room tick for ${room.id}:`,e)}})}catch(e){console.error("Error in global tick loop:",e)}}kickIdlePlayers(room){const warningThreshold=140*1e3;const countdownSeconds=90;const idleTimeout=warningThreshold+countdownSeconds*1e3;const now=Date.now();const playersToKick=[];room.players.forEach(p=>{if(p.offlineSince===void 0){const lastAct=p.lastActivity||now;const idleTime=now-lastAct;if(idleTime>idleTimeout){playersToKick.push(p)}else if(idleTime>warningThreshold){if(!p.afkWarningSent){p.afkWarningSent=true;const socket=this.io?.sockets.sockets.get(p.id);if(socket){const secondsLeft=Math.max(0,Math.ceil((idleTimeout-idleTime)/1e3));socket.emit("afk_warning",{secondsLeft});console.log(`[AFK WARNING] Sent warning to ${p.name} (${p.id}). Seconds left: ${secondsLeft}`)}}}else{p.afkWarningSent=false}}});playersToKick.forEach(p=>{console.warn(`[AFK KICK] Player ${p.name} (${p.id}) is idle for > 4.5m. Removing.`);const socket=this.io?.sockets.sockets.get(p.id);if(socket){socket.emit("session_expired",{reason:"afk_idle"});socket.disconnect(true)}this.removePlayerFromRoom(room.id,p.id);this.players.delete(p.id);this.broadcastMessage(room,{id:"sys-afk-"+Date.now().toString()+Math.random().toString(36).substr(2,5),text:`\u062A\u0645 \u0637\u0631\u062F ${p.name} \u0628\u0633\u0628\u0628 \u0639\u062F\u0645 \u0627\u0644\u0646\u0634\u0627\u0637 (AFK)`,type:"system"})})}processRoomTick(room){if(room.isFreeDraw){return}const{gameState}=room;if(gameState.status==="WAITING"){const onlinePlayersCount=room.players.filter(p=>!p.isOffline).length;if(onlinePlayersCount>=2){this.transitionToChoosing(room)}}else if(gameState.status==="CHOOSING"){gameState.timeLeft--;const drawer=room.players.find(p=>(p.persistentId||p.id)===gameState.currentDrawerId);if(gameState.timeLeft<=91){this.transitionToRoundEnd(room,"turn_lost")}}else if(gameState.status==="DRAWING"){gameState.timeLeft--;const activeGuessersCount=room.players.filter(p=>(p.persistentId||p.id)!==gameState.currentDrawerId&&!p.isOffline).length;const onlineCorrectGuessersCount=gameState.correctGuessers.filter(pId=>{const p=room.players.find(pl=>(pl.persistentId||pl.id)===pId);return p&&!p.isOffline}).length;if(gameState.timeLeft<=0){this.transitionToRoundEnd(room,"timeout")}else if(activeGuessersCount>0&&onlineCorrectGuessersCount>=activeGuessersCount){this.transitionToRoundEnd(room,"all_guessed")}}else if(gameState.status==="ROUND_END"){gameState.timeLeft--;if(gameState.timeLeft<=0){this.transitionToChoosing(room)}}else if(gameState.status==="PODIUM"){gameState.timeLeft--;if(gameState.timeLeft<=0){room.players.forEach(p=>p.score=0);this.transitionToWaiting(room)}}if(this.io&&gameState.status!=="WAITING"){this.io.to(room.id).emit("timer_tick",{timeLeft:gameState.timeLeft,status:gameState.status})}}transitionToWaiting(room){console.log(`[Room ${room.id}] Transitioning to WAITING`);const lastDrawerBeforeWaiting=room.gameState.currentDrawerId;room.gameState.status="WAITING";room.gameState.currentDrawerId=null;room.gameState.currentWord=null;room.gameState.wordOptions=[];room.gameState.correctGuessers=[];room.gameState.timeLeft=0;const onlinePlayersCount=room.players.filter(p=>!p.isOffline).length;if(onlinePlayersCount>=2){return this.transitionToChoosing(room,lastDrawerBeforeWaiting)}this.broadcastState(room)}transitionToChoosing(room,previousDrawerId){if(room.players.length<2){return this.transitionToWaiting(room)}const onlinePlayersCount=room.players.filter(p=>!p.isOffline).length;if(onlinePlayersCount<2){return this.transitionToWaiting(room)}const lastDrawerId=previousDrawerId||room.gameState.currentDrawerId;if(lastDrawerId){const idx=room.gameState.turnQueue.indexOf(lastDrawerId);if(idx!==-1){room.gameState.turnQueue.splice(idx,1);room.gameState.turnQueue.push(lastDrawerId)}}let nextDrawerId=null;let selectedIndex=-1;for(let i=0;i<room.gameState.turnQueue.length;i++){const candidateId=room.gameState.turnQueue[i];const p=room.players.find(player=>(player.persistentId||player.id)===candidateId);if(p){nextDrawerId=candidateId;selectedIndex=i;break}}if(!nextDrawerId){return this.transitionToWaiting(room)}if(selectedIndex>0){room.gameState.turnQueue.splice(selectedIndex,1);room.gameState.turnQueue.unshift(nextDrawerId)}let availableWords=ALL_WORDS.filter(w=>!room.usedWords.includes(w));if(availableWords.length<2){room.usedWords=[];availableWords=[...ALL_WORDS]}const shuffled=[...availableWords].sort(()=>.5-Math.random());const selectedWords=shuffled.slice(0,2);room.usedWords.push(...selectedWords);console.log(`[Room ${room.id}] Transitioning to CHOOSING. Drawer: ${nextDrawerId}`);room.gameState.status="CHOOSING";room.gameState.currentDrawerId=nextDrawerId;room.gameState.currentWord=null;room.gameState.wordOptions=selectedWords;room.gameState.correctGuessers=[];room.gameState.hintsUsed=0;room.gameState.revealedIndices=[];room.gameState.drawHistory=[];room.gameState.redoStack=[];room.gameState.timeLeft=100;room.gameState.reports=[];room.gameState.isFastAllGuessed=false;room.gameState.noOneGuessedVariant=void 0;room.gameState.drawingStartTime=void 0;room.turnStartScores={};room.players.forEach(p=>{const uniqueId=p.persistentId||p.id;room.turnStartScores[uniqueId]=p.score});this.clearDrawHistoryForRoomAndClient(room);const drawer=room.players.find(p=>(p.persistentId||p.id)===nextDrawerId);const name=drawer?drawer.name:"Unknown";this.broadcastGuess(room,{id:"sys-"+Date.now()+"-turn",text:`Turn of ${name}`,type:"system",subType:"turn",color:"#38BDF8"});this.broadcastState(room)}transitionToPodium(room){console.log(`[Room ${room.id}] Transitioning to PODIUM`);room.gameState.status="PODIUM";room.gameState.timeLeft=15;const sorted=[...room.players].sort((a,b)=>b.score-a.score);if(sorted.length>0&&sorted[0].score>0){sorted[0].wins+=1}const winner=[...room.players].reduce((max,p)=>p.score>max.score?p:max,room.players[0]||{name:"Unknown",score:0});this.broadcastGuess(room,{id:"sys-"+Date.now()+"-podium-winner",text:`Game over. The winner is ${winner.name} with ${winner.score} points`,type:"system",subType:"game_over",color:"#38BDF8"});this.broadcastState(room)}transitionToRoundEnd(room,reason="timeout"){if(room.gameState.status==="ROUND_END"&&reason!=="canceled"){return}const targetWinningScore=room.winningScore||40;const winner=room.players.find(p=>p.score>=targetWinningScore);if(winner&&reason!=="canceled"){return this.transitionToPodium(room)}console.log(`[Room ${room.id}] Transitioning to ROUND_END reason: ${reason}`);room.gameState.status="ROUND_END";room.gameState.roundEndReason=reason;room.gameState.roundEndWord=room.gameState.currentWord||void 0;room.gameState.timeLeft=8;const word=room.gameState.currentWord||"";this.clearDrawHistoryForRoomAndClient(room);if(reason==="canceled"){if(room.turnStartScores){room.players.forEach(p=>{const uniqueId=p.persistentId||p.id;if(room.turnStartScores&&room.turnStartScores[uniqueId]!==void 0){p.score=room.turnStartScores[uniqueId]}})}this.broadcastGuess(room,{id:"sys-"+Date.now()+"-canceled",text:`Canceled turn`,type:"system",subType:"canceled",color:"#EF4444"})}else if(reason==="all_guessed"){const elapsedSeconds=room.gameState.drawingStartTime?(Date.now()-room.gameState.drawingStartTime)/1e3:999;room.gameState.isFastAllGuessed=elapsedSeconds<=30;this.broadcastGuess(room,{id:"sys-"+Date.now()+"-all-guessed",text:`Everybody hit the answer!`,type:"system",subType:"all_guessed",color:"#00E540"})}else if(reason==="timeout"||reason==="drawer_left"){const hasSucceeded=(room.gameState.correctGuessers||[]).length>0;if(!hasSucceeded){room.gameState.noOneGuessedVariant=Math.random()<.5?2:1}else{room.gameState.noOneGuessedVariant=void 0}this.broadcastGuess(room,{id:"sys-"+Date.now()+"-timeover",text:hasSucceeded?`Time's Up!`:`Nobody hit the answer`,type:"system",subType:"answer_reveal",color:"#38BDF8"});if(word&&hasSucceeded){this.broadcastGuess(room,{id:"sys-"+Date.now()+"-answer-word",text:`The answer was: ${word}`,type:"system",subType:"answer_reveal",word,color:"#38BDF8"})}}else if(reason==="skipped"){const hasSucceeded=(room.gameState.correctGuessers||[]).length>0;const drawer=room.players.find(p=>(p.persistentId||p.id)===room.gameState.currentDrawerId);const name=drawer?drawer.name:"\u0627\u0644\u0631\u0633\u0627\u0645";this.broadcastGuess(room,{id:"sys-"+Date.now()+"-skip",text:`${name} skipped the turn`,type:"system",subType:"skipped",color:"#EF4444"});if(word&&hasSucceeded){this.broadcastGuess(room,{id:"sys-"+Date.now()+"-answer-word",text:`The answer was: ${word}`,type:"system",subType:"answer_reveal",word,color:"#38BDF8"})}}else if(reason==="turn_lost"){const drawer=room.players.find(p=>(p.persistentId||p.id)===room.gameState.currentDrawerId);const name=drawer?drawer.name:"\u0627\u0644\u0631\u0633\u0627\u0645";this.broadcastGuess(room,{id:"sys-"+Date.now()+"-lost",text:`${name} has lost the turn`,type:"system",subType:"lost_turn",color:"#EF4444"})}this.broadcastGuess(room,{id:"sys-"+Date.now()+"-interval",text:`Interval...`,type:"system",subType:"interval",color:"#38BDF8"});this.broadcastState(room)}startGameRound(roomId,word,socketId){const room=this.rooms.get(roomId);if(!room)return;const player=this.players.get(socketId);const pId=player?player.persistentId||player.id:socketId;if(room.gameState.status!=="CHOOSING"||room.gameState.currentDrawerId!==pId)return;room.gameState.currentWord=word;room.gameState.status="DRAWING";room.gameState.wordOptions=[];room.gameState.drawingStartTime=Date.now();room.gameState.isFastAllGuessed=false;room.gameState.noOneGuessedVariant=void 0;console.log(`[Room ${room.id}] Transitioning to DRAWING. Word: ${word}`);this.broadcastState(room)}handleSkipTurn(roomId,socketId){const room=this.rooms.get(roomId);if(!room)return;const player=this.players.get(socketId);const pId=player?player.persistentId||player.id:socketId;if(room.gameState.currentDrawerId!==pId)return;if(room.gameState.status!=="CHOOSING"&&room.gameState.status!=="DRAWING")return;this.transitionToRoundEnd(room,"skipped")}submitGuess(roomId,socketId,guess){const room=this.rooms.get(roomId);if(!room||room.gameState.status!=="DRAWING")return;const player=this.players.get(socketId);if(!player)return;const pId=player.persistentId||player.id;if(room.gameState.currentDrawerId===pId)return;if(room.gameState.correctGuessers.includes(pId))return;const currentWord=room.gameState.currentWord||"";const isCorrect=guess.toLowerCase().trim()===currentWord.toLowerCase().trim()||normalizeArabic(guess)===normalizeArabic(currentWord);if(isCorrect){room.gameState.correctGuessers.push(pId);const hintsUsed=room.gameState.hintsUsed||0;const baseScore=10-hintsUsed;const guesserScore=Math.max(1,baseScore-(room.gameState.correctGuessers.length-1));player.score+=guesserScore;const drawer=room.players.find(p=>(p.persistentId||p.id)===room.gameState.currentDrawerId);if(drawer){if(room.gameState.correctGuessers.length===1){drawer.score+=Math.max(1,11-hintsUsed)}else{drawer.score+=2}}this.broadcastGuess(room,{id:"sys-"+Date.now(),text:`${player.name} guessed the word!`,type:"system",subType:"hit",senderId:socketId,word:room.gameState.currentWord,sender:player.name,color:"#00E540"});const activeGuessersCount=room.players.filter(p=>(p.persistentId||p.id)!==room.gameState.currentDrawerId&&!p.isOffline).length;const onlineCorrectGuessersCount=room.gameState.correctGuessers.filter(pIdToMatch=>{const p=room.players.find(pl=>(pl.persistentId||pl.id)===pIdToMatch);return p&&!p.isOffline}).length;const CRITICAL_GRACE_PERIOD=20;const TIME_DEDUCTION=10;if(room.gameState.timeLeft>CRITICAL_GRACE_PERIOD){let newTime=room.gameState.timeLeft-TIME_DEDUCTION;if(newTime<CRITICAL_GRACE_PERIOD){newTime=CRITICAL_GRACE_PERIOD}room.gameState.timeLeft=newTime}if(activeGuessersCount>0&&onlineCorrectGuessersCount>=activeGuessersCount){this.transitionToRoundEnd(room,"all_guessed")}else{this.broadcastState(room)}}else{if(isCloseGuess(guess,currentWord)){if(this.io){const privateMsg={id:"sys-"+Date.now()+"-close-"+Math.random().toString(36).substring(2,5),text:`${guess} is close!`,type:"system",subType:"close",word:guess,senderId:socketId};this.io.to(socketId).emit("receive_guess",privateMsg)}}else{this.broadcastGuess(room,{id:Date.now().toString()+Math.random().toString(36).substring(2,5),text:guess,sender:player.name,senderId:socketId,type:"message"})}}}requestHint(roomId,socketId){const room=this.rooms.get(roomId);if(!room||room.gameState.status!=="DRAWING")return;const player=this.players.get(socketId);const pId=player?player.persistentId||player.id:socketId;if(room.gameState.currentDrawerId!==pId)return;const word=room.gameState.currentWord||"";const words=word.split(" ").filter(w=>w.length>0);let maxHints=0;if(words.length<=1){const charCount=word.replace(/\s/g,"").length;maxHints=charCount<3?1:2;if(charCount>=5){maxHints=3}}else{maxHints=1;for(const w of words){if(w.length>=5)maxHints+=2;else if(w.length>=3)maxHints+=1}}room.gameState.hintsUsed=room.gameState.hintsUsed||0;room.gameState.revealedIndices=room.gameState.revealedIndices||[];if(room.gameState.hintsUsed>=maxHints)return;room.gameState.hintsUsed++;if(room.gameState.hintsUsed>=2||maxHints===1&&room.gameState.hintsUsed===1){const validIndices=[];const wordsArray=word.split(" ");let charIndex=0;for(let w=0;w<wordsArray.length;w++){const wStr=wordsArray[w];if(wStr.length===0){charIndex++;continue}let limit=0;if(wStr.length>=5)limit=2;else if(wStr.length>=3)limit=1;const wordIndices=[];for(let i=0;i<wStr.length;i++){wordIndices.push(charIndex+i)}charIndex+=wStr.length+1;const revealedInWord=wordIndices.filter(idx=>room.gameState.revealedIndices.includes(idx)).length;if(revealedInWord<limit){const unrevealedInWord=wordIndices.filter(idx=>!room.gameState.revealedIndices.includes(idx));validIndices.push(...unrevealedInWord)}}if(validIndices.length>0){const pick=validIndices[Math.floor(Math.random()*validIndices.length)];room.gameState.revealedIndices.push(pick)}else{const unrevealed=[];for(let i=0;i<word.length;i++){if(word[i]!==" "&&!room.gameState.revealedIndices.includes(i)){unrevealed.push(i)}}if(unrevealed.length>0){const pick=unrevealed[Math.floor(Math.random()*unrevealed.length)];room.gameState.revealedIndices.push(pick)}}}this.broadcastState(room)}reportDrawing(roomId,socketId){const room=this.rooms.get(roomId);if(!room)return;if(room.gameState.status!=="DRAWING")return;const player=this.players.get(socketId);if(!player)return;const pId=player.persistentId||player.id;if(room.gameState.currentDrawerId===pId)return;if(!room.gameState.reports){room.gameState.reports=[]}if(room.gameState.reports.includes(pId))return;room.gameState.reports.push(pId);this.broadcastGuess(room,{id:"sys-"+Date.now()+"-report-"+pId,text:`${player.name} reported!`,type:"system",subType:"report",sender:player.name,color:"#EF4444"});const activePlayersCount=room.players.filter(p=>!p.isOffline).length;let requiredReports=2;if(activePlayersCount<=4){requiredReports=Math.max(2,Math.ceil(activePlayersCount/2))}else if(activePlayersCount===5){requiredReports=2}else if(activePlayersCount===6){requiredReports=3}else if(activePlayersCount===7){requiredReports=4}else if(activePlayersCount===8){requiredReports=4}else{requiredReports=Math.floor(activePlayersCount/2)}if(room.gameState.reports.length>=requiredReports){console.log(`[Report Engine] Cancel threshold reached (${room.gameState.reports.length}/${requiredReports}). Triggering CANCELED TURN.`);this.transitionToRoundEnd(room,"canceled")}else{this.broadcastState(room)}}sendStateToPlayer(room,p){if(this.io){const word=room.gameState.currentWord||"";const charCount=word.replace(/\s/g,"").length;let maxHints=charCount<3?1:2;if(charCount>=5){maxHints=3}const hintsUsed=room.gameState.hintsUsed||0;const revealedIndices=room.gameState.revealedIndices||[];let maskedWordArray=[];if(hintsUsed>=1){maskedWordArray=word.split("").map((char,index)=>{if(char===" ")return{isSpace:true,char:" "};let reveal=false;if(revealedIndices.includes(index))reveal=true;return{isSpace:false,char:reveal?char:null,index}})}const isDrawer=p.id===room.gameState.currentDrawerId||p.persistentId&&p.persistentId===room.gameState.currentDrawerId||Boolean(room.isFreeDraw)&&Boolean(room.activeDrawers?.includes(p.id)||p.persistentId&&room.activeDrawers?.includes(p.persistentId));const isRTL=/[\u0600-\u06FF]/.test(word);const{drawHistory,...publicGameState}=room.gameState;const hasHistory=Boolean(room.gameState.drawHistory&&room.gameState.drawHistory.length>0);this.io.to(p.id).emit("room_state_update",{roomId:room.id,players:room.players,votekicks:room.votekicks||{},isFreeDraw:!!room.isFreeDraw,activeDrawers:room.activeDrawers||[],drawingIdentities:room.drawingIdentities||{},hasDrawHistory:hasHistory,gameState:{...publicGameState,hasDrawHistory:hasHistory,currentWord:isDrawer?room.gameState.currentWord:null,wordOptions:isDrawer?room.gameState.wordOptions:[],maskedWordArray,isRTL}})}}broadcastState(room){if(this.io){room.players.forEach(p=>{this.sendStateToPlayer(room,p)})}}createRoom(roomId){if(!this.rooms.has(roomId)){const config=getRoomConfig(roomId);this.rooms.set(roomId,{id:roomId,maxPlayers:config.maxPlayers,winningScore:config.winningScore,theme:config.theme,isFreeDraw:!!config.isFreeDraw,isExperimental:!!config.isExperimental,activeDrawers:[],players:[],gameState:{status:config.isFreeDraw?"DRAWING":"WAITING",currentDrawerId:null,currentWord:null,timeLeft:0,correctGuessers:[],turnQueue:[],hintsUsed:0,revealedIndices:[],drawHistory:[],isDrawingActive:false},usedWords:[],chatMessages:[],guessMessages:[],bannedUsers:[],votekicks:{}})}return this.rooms.get(roomId)}startFreeDraw(roomId,socketId){const room=this.rooms.get(roomId);if(!room||!room.isFreeDraw)return;const player=this.players.get(socketId);const pId=player?.persistentId||socketId;if(!room.activeDrawers)room.activeDrawers=[];if(!room.activeDrawers.includes(pId)){room.activeDrawers.push(pId)}if(!room.activeDrawers.includes(socketId)){room.activeDrawers.push(socketId)}room.gameState.status="DRAWING";this.broadcastState(room)}stopFreeDraw(roomId,socketId){const room=this.rooms.get(roomId);if(!room||!room.isFreeDraw)return;const player=this.players.get(socketId);const pId=player?.persistentId||socketId;if(room.activeDrawers){room.activeDrawers=room.activeDrawers.filter(id=>id!==pId&&id!==socketId)}this.broadcastState(room)}saveChatMessage(roomId,message){const room=this.rooms.get(roomId);if(!room)return;if(!room.chatMessages)room.chatMessages=[];room.chatMessages.push(message);if(room.chatMessages.length>40){room.chatMessages.shift()}}saveGuessMessage(roomId,message){const room=this.rooms.get(roomId);if(!room)return;if(!room.guessMessages)room.guessMessages=[];room.guessMessages.push(message);if(room.guessMessages.length>40){room.guessMessages.shift()}}broadcastMessage(room,msg){this.saveChatMessage(room.id,msg);if(this.io){this.io.to(room.id).emit("receive_message",msg)}}broadcastGuess(room,msg){this.saveGuessMessage(room.id,msg);if(this.io){this.io.to(room.id).emit("receive_guess",msg)}}clearDrawHistoryForRoomAndClient(room){if(room){room.gameState.drawHistory=[];room.gameState.redoStack=[];room.gameState.isDrawingActive=false;if(room.freeDrawStrokes){room.freeDrawStrokes.clear()}if(room.freeDrawCanonicalCache){room.freeDrawCanonicalCache.clear()}console.log(`[Memory Sweeper] Wiped drawing history completely to avoid RAM Bloat`);if(this.io){this.io.to(room.id).emit("draw_clear",{instanceId:"server-sweeper"});const clearBuf=Buffer.alloc(8);clearBuf.writeUInt8(5,0);clearBuf.write("server",1,7,"ascii");this.io.to(room.id).emit("draw_binary",clearBuf)}}}getRoom(roomId){return this.rooms.get(roomId)}getOrCreateFreeDrawStrokes(room){if(!room.freeDrawStrokes){room.freeDrawStrokes=new Map}return room.freeDrawStrokes}syncActiveFreeDrawStrokesToSocket(room,targetSocket){if(!room||!room.isFreeDraw&&!room.isExperimental)return;if(!room.freeDrawStrokes||room.freeDrawStrokes.size===0)return;if(!targetSocket||!targetSocket.emit)return;for(const stroke of room.freeDrawStrokes.values()){if(!stroke||stroke.status!=="ACTIVE")continue;if(!stroke.points||stroke.points.length===0)continue;if(targetSocket.id&&stroke.socketId===targetSocket.id)continue;const pts=stroke.points;const p0=pts[0];const startBuf=createType1Buffer(stroke.instId,stroke.tool,stroke.r,stroke.g,stroke.b,stroke.width,stroke.opacity,p0.x,p0.y);targetSocket.emit("draw_binary",startBuf);if(pts.length>1){const remaining=pts.slice(1);const CHUNK_SIZE=250;for(let i=0;i<remaining.length;i+=CHUNK_SIZE){const chunk=remaining.slice(i,i+CHUNK_SIZE);const moveBuf=createType2Buffer(stroke.instId,chunk);targetSocket.emit("draw_binary",moveBuf)}}}}getOrCreateFreeDrawCanonicalCache(room){if(!room.freeDrawCanonicalCache){room.freeDrawCanonicalCache=new Map}return room.freeDrawCanonicalCache}handleFreeDrawStart(roomId,socketId,buf){const room=this.rooms.get(roomId);if(!room||!room.isFreeDraw&&!room.isExperimental||!Buffer.isBuffer(buf)||buf.length<18)return false;if(buf[0]!==1)return false;let instId="";for(let i=0;i<7;i++){const code=buf[1+i];if(code>0)instId+=String.fromCharCode(code)}const tool=buf[8];const r=buf[9];const g=buf[10];const b=buf[11];const width=buf[12];const opacity=buf[13];const p0_x=buf.readInt16LE(14);const p0_y=buf.readInt16LE(16);const strokes=this.getOrCreateFreeDrawStrokes(room);const key=`${socketId}_${instId}`;if(strokes.has(key)){strokes.delete(key)}strokes.set(key,{socketId,instId,tool,r,g,b,width,opacity,points:[{x:p0_x,y:p0_y}],receivedPointCount:1,createdAt:Date.now(),status:"ACTIVE"});return true}handleFreeDrawMove(roomId,socketId,buf){const room=this.rooms.get(roomId);if(!room||!room.isFreeDraw&&!room.isExperimental||!Buffer.isBuffer(buf)||buf.length<10)return false;if(buf[0]!==2)return false;let instId="";for(let i=0;i<7;i++){const code=buf[1+i];if(code>0)instId+=String.fromCharCode(code)}const strokes=this.getOrCreateFreeDrawStrokes(room);const key=`${socketId}_${instId}`;const stroke=strokes.get(key);if(!stroke||stroke.status!=="ACTIVE")return false;if(Date.now()-stroke.createdAt>6e4){console.warn(`[FreeDraw Server] Stroke exceeded 60s hard lifetime limit. Aborting: ${key}`);this.abortFreeDrawStroke(roomId,socketId,instId);return false}const count=buf.readUInt16LE(8);const expectedByteLen=10+count*4;if(buf.length<expectedByteLen)return false;if(stroke.points.length+count>3e3){console.warn(`[FreeDraw Server] Stroke exceeded 3000 point limit. Aborting: ${key}`);this.abortFreeDrawStroke(roomId,socketId,instId);return false}for(let i=0;i<count;i++){const px=buf.readInt16LE(10+i*4);const py=buf.readInt16LE(12+i*4);stroke.points.push({x:px,y:py})}stroke.receivedPointCount=stroke.points.length;return true}handleFreeDrawMoveCompressed(roomId,socketId,buf){const room=this.rooms.get(roomId);if(!room||!room.isFreeDraw&&!room.isExperimental)return{success:false};const decoded=decodeType13BufferSafely(buf);if(!decoded.success||!decoded.points||!decoded.instId){return{success:false}}const instId=decoded.instId;const strokes=this.getOrCreateFreeDrawStrokes(room);const key=`${socketId}_${instId}`;const stroke=strokes.get(key);if(!stroke||stroke.status!=="ACTIVE")return{success:false};if(Date.now()-stroke.createdAt>6e4){console.warn(`[FreeDraw Server] Stroke exceeded 60s hard lifetime limit. Aborting: ${key}`);this.abortFreeDrawStroke(roomId,socketId,instId);return{success:false}}if(stroke.points.length+decoded.points.length>3e3){console.warn(`[FreeDraw Server] Stroke exceeded 3000 point limit. Aborting: ${key}`);this.abortFreeDrawStroke(roomId,socketId,instId);return{success:false}}for(let i=0;i<decoded.points.length;i++){stroke.points.push(decoded.points[i])}stroke.receivedPointCount=stroke.points.length;return{success:true,instId,points:decoded.points}}handleFreeDrawEnd(roomId,socketId,buf){const room=this.rooms.get(roomId);if(!room||!room.isFreeDraw&&!room.isExperimental||!Buffer.isBuffer(buf)||buf.length<8)return null;if(buf[0]!==3)return null;let instId="";for(let i=0;i<7;i++){const code=buf[1+i];if(code>0)instId+=String.fromCharCode(code)}const strokes=this.getOrCreateFreeDrawStrokes(room);const key=`${socketId}_${instId}`;const stroke=strokes.get(key);if(!stroke||stroke.status!=="ACTIVE"){return null}let expectedCount=stroke.receivedPointCount;let strokeId=0;if(buf.length>=27){strokeId=buf.readUInt16LE(23);expectedCount=buf.readUInt16LE(25)}const isCancelled=buf.length>=23&&buf[22]===1;if(isCancelled){this.abortFreeDrawStroke(roomId,socketId,instId,strokeId);return null}if(Date.now()-stroke.createdAt>6e4){console.warn(`[FreeDraw Server] Stroke exceeded lifetime on draw_end. Aborting: ${key}`);this.abortFreeDrawStroke(roomId,socketId,instId,strokeId);return null}const pts=stroke.points;const pointsLength=pts.length;const type9Buf=Buffer.alloc(16+pointsLength*4+2);type9Buf.writeUInt8(9,0);type9Buf.write(instId.padEnd(7,"\0").slice(0,7),1,7,"ascii");type9Buf.writeUInt8(stroke.tool,8);type9Buf.writeUInt8(stroke.r,9);type9Buf.writeUInt8(stroke.g,10);type9Buf.writeUInt8(stroke.b,11);type9Buf.writeUInt8(stroke.width,12);type9Buf.writeUInt8(stroke.opacity,13);type9Buf.writeUInt16LE(pointsLength,14);for(let i=0;i<pointsLength;i++){const p=pts[i];type9Buf.writeInt16LE(p.x,16+i*4);type9Buf.writeInt16LE(p.y,18+i*4)}type9Buf.writeUInt16LE((strokeId||0)&65535,16+pointsLength*4);this.recordDrawCommand(roomId,"draw_binary",type9Buf,instId,strokeId);this.recordDrawCommand(roomId,"draw_binary",buf,instId,strokeId);const cache=this.getOrCreateFreeDrawCanonicalCache(room);const cacheKey=`${instId}_${strokeId}`;cache.set(cacheKey,{buffer:type9Buf,createdAt:Date.now()});const now=Date.now();for(const[ck,val]of cache.entries()){if(now-val.createdAt>3e4||cache.size>100){cache.delete(ck)}}strokes.delete(key);return{committed:true,strokeId,pointCount:pointsLength,instId}}abortFreeDrawStroke(roomId,socketId,instId,strokeId=0){const room=this.rooms.get(roomId);if(!room||!room.isFreeDraw&&!room.isExperimental)return;const strokes=this.getOrCreateFreeDrawStrokes(room);const key=`${socketId}_${instId}`;strokes.delete(key);if(this.io){const abortBuf=Buffer.alloc(10);abortBuf.writeUInt8(12,0);abortBuf.write(instId.padEnd(7,"\0").slice(0,7),1,7,"ascii");abortBuf.writeUInt16LE(strokeId&65535,8);this.io.to(roomId).emit("draw_binary",abortBuf)}}abortAllActiveFreeDrawStrokesForSocket(socketId){this.cleanupDrawingIdentitiesForSocket(socketId);for(const room of this.rooms.values()){if((room.isFreeDraw||room.isExperimental)&&room.freeDrawStrokes){for(const[key,stroke]of room.freeDrawStrokes.entries()){if(stroke.socketId===socketId){this.abortFreeDrawStroke(room.id,socketId,stroke.instId)}}}}}registerDrawingIdentity(socketId,instanceId){if(!instanceId||typeof instanceId!=="string")return;const trimmedId=instanceId.trim();if(trimmedId.length===0||trimmedId.length>7||!/^[a-z0-9]+$/i.test(trimmedId)){return}const player=this.getPlayer(socketId);let targetRoom=void 0;if(player&&player.roomId){targetRoom=this.rooms.get(player.roomId)}if(!targetRoom){for(const room of this.rooms.values()){if(room.players.some(p=>p.id===socketId)){targetRoom=room;break}}}if(!targetRoom||!targetRoom.isFreeDraw){this.pendingDrawingIdentities.set(socketId,trimmedId);return}if(!targetRoom.players.some(p=>p.id===socketId)){this.pendingDrawingIdentities.set(socketId,trimmedId);return}this.pendingDrawingIdentities.delete(socketId);targetRoom.drawingIdentities=targetRoom.drawingIdentities||{};const existing=targetRoom.drawingIdentities[trimmedId];if(existing&&existing.socketId!==socketId){const otherSocketActive=this.io?.sockets.sockets.has(existing.socketId)&&targetRoom.players.some(p=>p.id===existing.socketId);if(otherSocketActive){return}}const playerName=player?player.name||"\u0644\u0627\u0639\u0628":"\u0644\u0627\u0639\u0628";targetRoom.drawingIdentities[trimmedId]={socketId,playerName};if(this.io){this.io.to(targetRoom.id).emit("drawing_identities_update",targetRoom.drawingIdentities)}}getDrawingIdentitiesForRoom(roomId){return this.rooms.get(roomId)?.drawingIdentities}unregisterDrawingIdentity(socketId,instanceId){if(!instanceId||typeof instanceId!=="string")return;const trimmedId=instanceId.trim();if(trimmedId.length===0||trimmedId.length>7||!/^[a-z0-9]+$/i.test(trimmedId)){return}const player=this.getPlayer(socketId);let targetRoom=void 0;if(player&&player.roomId){targetRoom=this.rooms.get(player.roomId)}if(!targetRoom){for(const room of this.rooms.values()){if(room.players.some(p=>p.id===socketId)){targetRoom=room;break}}}if(targetRoom&&targetRoom.drawingIdentities&&targetRoom.drawingIdentities[trimmedId]){const mapping=targetRoom.drawingIdentities[trimmedId];if(mapping.socketId===socketId){delete targetRoom.drawingIdentities[trimmedId];if(this.io){this.io.to(targetRoom.id).emit("drawing_identities_update",targetRoom.drawingIdentities)}}}}cleanupDrawingIdentitiesForSocket(socketId){for(const room of this.rooms.values()){if(room.drawingIdentities){let changed=false;for(const[instId,info]of Object.entries(room.drawingIdentities)){if(info.socketId===socketId){delete room.drawingIdentities[instId];changed=true}}if(changed&&this.io){this.io.to(room.id).emit("drawing_identities_update",room.drawingIdentities)}}}}abortAllActiveFreeDrawStrokesForRoom(roomId){const room=this.rooms.get(roomId);if(room&&(room.isFreeDraw||room.isExperimental)&&room.freeDrawStrokes){for(const stroke of room.freeDrawStrokes.values()){this.abortFreeDrawStroke(room.id,stroke.socketId,stroke.instId)}room.freeDrawStrokes.clear()}}handleFreeDrawClear(roomId,buf){const room=this.rooms.get(roomId);if(!room)return;this.abortAllActiveFreeDrawStrokesForRoom(roomId);if(room.freeDrawCanonicalCache){room.freeDrawCanonicalCache.clear()}room.gameState.drawHistory=[];room.gameState.redoStack=[];room.gameState.isDrawingActive=false;this.recordDrawCommand(roomId,"draw_binary",buf)}getCanonicalFreeDrawStroke(roomId,instId,strokeId){const room=this.rooms.get(roomId);if(!room||!room.isFreeDraw&&!room.isExperimental||!room.freeDrawCanonicalCache)return null;const cacheKey=`${instId}_${strokeId}`;const cached=room.freeDrawCanonicalCache.get(cacheKey);return cached?cached.buffer:null}recordDrawCommand(roomId,event,data,customInstId,customStrokeId){const room=this.rooms.get(roomId);if(!room)return;if(!room.gameState.drawHistory)room.gameState.drawHistory=[];if(!room.gameState.redoStack)room.gameState.redoStack=[];const extractInstanceIdFromBuffer=__name(buf=>{if(!buf||!Buffer.isBuffer(buf)||buf.length<8)return"";let str="";for(let i=0;i<7;i++){const code=buf[1+i];if(code>0){str+=String.fromCharCode(code)}}return str},"extractInstanceIdFromBuffer");const isBinary=event==="draw_binary"&&Buffer.isBuffer(data)&&data.length>0;const type=isBinary?data[0]:0;const instId=customInstId||(isBinary?extractInstanceIdFromBuffer(data):"");let strokeId=customStrokeId;if(strokeId===void 0&&isBinary&&Buffer.isBuffer(data)){if((type===1||type===3)&&data.length>=25){strokeId=data.readUInt16LE(23)}else if(type===4){const hasTarget=data.length>=21;if(hasTarget&&data.length>=23){strokeId=data.readUInt16LE(21)}else if(!hasTarget&&data.length>=19){strokeId=data.readUInt16LE(17)}}else if(type===9){const pointsLen=data.length>=16?data.readUInt16LE(14):0;const expectedLen=16+pointsLen*4;if(data.length>=expectedLen+2){strokeId=data.readUInt16LE(expectedLen)}}}if(isBinary&&instId&&(type===1||type===2||type===3||type===6)){const hasStroke=room.gameState.drawHistory.some(cmd=>{if(cmd.event==="draw_binary"&&Buffer.isBuffer(cmd.data)&&cmd.data.length>0){return cmd.data[0]===9&&extractInstanceIdFromBuffer(cmd.data)===instId}return false});if(hasStroke){return}}let isValidStart=false;if(isBinary){if(type===1){room.gameState.isDrawingActive=true;isValidStart=true}else if(type===2){if(room.gameState.isDrawingActive===false){return}}else if(type===3||type===6){room.gameState.isDrawingActive=false}else if(type===9){isValidStart=true;room.gameState.isDrawingActive=false;if(instId){room.gameState.drawHistory=room.gameState.drawHistory.filter(cmd=>{if(cmd.event==="draw_binary"&&Buffer.isBuffer(cmd.data)&&cmd.data.length>0){const t=cmd.data[0];if((t===1||t===2||t===3||t===6)&&extractInstanceIdFromBuffer(cmd.data)===instId){return false}}return true})}}else if(type===4||type===10||type===5){isValidStart=true;room.gameState.isDrawingActive=false}}else if(event==="draw_start"||event==="draw_action"||event==="draw_clear"){isValidStart=true}if(room.gameState.drawHistory.length===0&&!isValidStart){return}const historyEntry={event,data};if(instId)historyEntry.instId=instId;if(strokeId!==void 0)historyEntry.strokeId=strokeId;room.gameState.drawHistory.push(historyEntry);room.gameState.redoStack=[]}undoFreeDrawStroke(roomId,targetInstId,targetStrokeId){const room=this.rooms.get(roomId);if(!room||!room.gameState.drawHistory||room.gameState.drawHistory.length===0){return false}const history=room.gameState.drawHistory;const matchesTarget=__name(cmd=>{if(!cmd)return false;if(cmd.instId===targetInstId&&cmd.strokeId===targetStrokeId){return true}if(cmd.event==="draw_binary"&&Buffer.isBuffer(cmd.data)&&cmd.data.length>=8){const b=cmd.data;const type=b[0];let inst="";for(let i=0;i<7;i++){const code=b[1+i];if(code>0)inst+=String.fromCharCode(code)}if(inst!==targetInstId)return false;if((type===1||type===3)&&b.length>=25){const sId=b.readUInt16LE(23);if(sId===targetStrokeId)return true}}return false},"matchesTarget");const hasMatch=history.some(matchesTarget);if(!hasMatch){return false}room.gameState.drawHistory=history.filter(cmd=>!matchesTarget(cmd));if(room.freeDrawCanonicalCache){const cacheKey=`${targetInstId}_${targetStrokeId}`;room.freeDrawCanonicalCache.delete(cacheKey)}return true}getLastStrokeStartIndex(drawHistory){for(let i=drawHistory.length-1;i>=0;i--){const cmd=drawHistory[i];if(!cmd)continue;if(cmd.event==="draw_start"||cmd.event==="draw_action"){return i}if(cmd.event==="draw_binary"&&cmd.data){let firstByte=null;if(Buffer.isBuffer(cmd.data)&&cmd.data.length>0){firstByte=cmd.data[0]}else if(Array.isArray(cmd.data)&&cmd.data.length>0){firstByte=cmd.data[0]}if(firstByte===1||firstByte===4||firstByte===9){return i}}}return-1}undoLastDrawing(roomId){const room=this.rooms.get(roomId);if(!room)return[];if(!room.gameState.drawHistory)room.gameState.drawHistory=[];if(!room.gameState.redoStack)room.gameState.redoStack=[];room.gameState.isDrawingActive=false;const canUndo=room.gameState.drawHistory.length>0&&room.gameState.redoStack.length===0;if(canUndo){const history=room.gameState.drawHistory;const lastIndex=history.length-1;const lastCmd=history[lastIndex];const isEndCmd=__name(cmd=>{if(!cmd)return false;if(cmd.event==="draw_end"||cmd.event==="draw_cancel")return true;if(cmd.event==="draw_binary"&&cmd.data){let b=null;if(Buffer.isBuffer(cmd.data)&&cmd.data.length>0)b=cmd.data[0];else if(Array.isArray(cmd.data)&&cmd.data.length>0)b=cmd.data[0];return b===3||b===6}return false},"isEndCmd");const isStrokeCmd=__name(cmd=>{if(!cmd)return false;if(cmd.event==="draw_stroke")return true;if(cmd.event==="draw_binary"&&cmd.data){let b=null;if(Buffer.isBuffer(cmd.data)&&cmd.data.length>0)b=cmd.data[0];else if(Array.isArray(cmd.data)&&cmd.data.length>0)b=cmd.data[0];return b===9}return false},"isStrokeCmd");if(lastIndex>=1&&isEndCmd(lastCmd)&&isStrokeCmd(history[lastIndex-1])){const endCmd=history.pop();const strokeCmd=history.pop();room.gameState.redoStack=[[strokeCmd,endCmd]]}else{const removed=history.pop();if(removed){room.gameState.redoStack=[removed]}}}return room.gameState.drawHistory}redoDrawing(roomId){const room=this.rooms.get(roomId);if(!room)return[];if(!room.gameState.drawHistory)room.gameState.drawHistory=[];if(!room.gameState.redoStack)room.gameState.redoStack=[];const history=room.gameState.drawHistory;const redoStack=room.gameState.redoStack;if(redoStack.length>0){const restored=redoStack.pop();if(restored){if(Array.isArray(restored)){history.push(...restored)}else{history.push(restored)}}}return history}clearDrawHistory(roomId){const room=this.rooms.get(roomId);if(room&&room.gameState.drawHistory){if(room.isFreeDraw){this.abortAllActiveFreeDrawStrokesForRoom(roomId)}room.gameState.drawHistory=[];room.gameState.redoStack=[];room.gameState.isDrawingActive=false}}addPlayerToRoom(roomId,player){console.error(`[NEW CONNECTION] Socket ID: ${player.id} , Username: ${player.name}, Persistent ID: ${player.persistentId||"N/A"}`);const room=this.createRoom(roomId);const existingPlayer=this.players.get(player.id);if(existingPlayer&&existingPlayer.roomId&&existingPlayer.roomId!==roomId){this.removePlayerFromRoom(existingPlayer.roomId,player.id)}player.roomId=roomId;player.lastActivity=Date.now();this.players.set(player.id,player);if(!room.players.find(p=>p.id===player.id)){room.players.push(player);const pId=player.persistentId||player.id;if(!room.gameState.turnQueue.includes(pId)){room.gameState.turnQueue.push(pId)}}const pendingInstId=this.pendingDrawingIdentities.get(player.id);if(pendingInstId&&room.isFreeDraw){this.pendingDrawingIdentities.delete(player.id);this.registerDrawingIdentity(player.id,pendingInstId)}else if(room.isFreeDraw&&room.drawingIdentities&&this.io){this.io.to(player.id).emit("drawing_identities_update",room.drawingIdentities)}this.broadcastState(room);return room}removePlayerFromRoom(roomId,socketId){try{this.cleanupDrawingIdentitiesForSocket(socketId);const room=this.rooms.get(roomId);if(room){const player=this.players.get(socketId);const pId=player?player.persistentId||player.id:socketId;room.players=room.players.filter(p=>p.id!==socketId);room.gameState.turnQueue=room.gameState.turnQueue.filter(id=>id!==pId);room.gameState.correctGuessers=room.gameState.correctGuessers.filter(id=>id!==pId);if(player){player.roomId=null}if(room.players.length===0){if(room.gameState){room.gameState.drawHistory=[];room.gameState.redoStack=[]}room.chatMessages=[];this.rooms.delete(roomId);return void 0}if(room.activeDrawers){room.activeDrawers=room.activeDrawers.filter(id=>id!==pId&&id!==socketId)}if(room.players.length<2&&!room.isFreeDraw){room.players.forEach(p=>p.score=0)}if(!room.isFreeDraw&&room.gameState.currentDrawerId===pId){if(room.gameState.correctGuessers.length===0&&room.players.length>0){this.transitionToRoundEnd(room,"drawer_left")}else{this.broadcastState(room)}}else{this.broadcastState(room)}}return room}catch(e){console.error("Error removing player from room:",e);return void 0}}reconnectPlayer(roomId,persistentId,nickname,newSocketId){const room=this.rooms.get(roomId);if(!room)return null;let existingPlayer=room.players.find(p=>p.persistentId&&p.persistentId===persistentId);let matchMethod="persistentId";if(!existingPlayer){existingPlayer=room.players.find(p=>p.name===nickname&&!p.persistentId);if(existingPlayer)matchMethod="nickname"}if(!existingPlayer){console.error(`[RECONNECT ATTEMPT] Searching for User: ${nickname}, Found Match? No, Old Socket ID: N/A, New Socket ID: ${newSocketId}`);return null}const oldSocketId=existingPlayer.id;const pId=existingPlayer.persistentId||existingPlayer.name;if(this.evictionTimers.has(pId)){console.log(`[GRACE PERIOD] Rescued player ${existingPlayer.name} (${pId}). Cancelling 10s eviction timer.`);clearTimeout(this.evictionTimers.get(pId));this.evictionTimers.delete(pId)}if(oldSocketId===newSocketId){console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Socket ID unchanged: ${newSocketId}`);existingPlayer.isOffline=false;existingPlayer.lastActivity=Date.now();delete existingPlayer.offlineSince;this.broadcastState(room);return room}console.error(`[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Old Socket ID: ${oldSocketId}, New Socket ID: ${newSocketId}`);if(oldSocketId&&oldSocketId!==newSocketId&&this.io){const oldSocket=this.io.sockets.sockets.get(oldSocketId);if(oldSocket){console.log(`[Ghost Socket Shield] Force-disconnecting leaking ghost socket: ${oldSocketId}`);oldSocket.disconnect(true)}}existingPlayer.id=newSocketId;existingPlayer.isOffline=false;existingPlayer.lastActivity=Date.now();delete existingPlayer.offlineSince;this.players.delete(oldSocketId);this.players.set(newSocketId,existingPlayer);if(room.chatMessages){room.chatMessages.forEach(msg=>{if(msg.senderId===oldSocketId)msg.senderId=newSocketId})}if(room.guessMessages){room.guessMessages.forEach(msg=>{if(msg.senderId===oldSocketId)msg.senderId=newSocketId})}if(room.activeDrawers){if(oldSocketId&&room.activeDrawers.includes(oldSocketId)){room.activeDrawers=room.activeDrawers.map(id=>id===oldSocketId?newSocketId:id)}const playerPid=existingPlayer.persistentId;if(playerPid&&room.activeDrawers.includes(playerPid)&&!room.activeDrawers.includes(newSocketId)){room.activeDrawers.push(newSocketId)}}const pendingInstId=this.pendingDrawingIdentities.get(newSocketId);if(pendingInstId&&room.isFreeDraw){this.pendingDrawingIdentities.delete(newSocketId);this.registerDrawingIdentity(newSocketId,pendingInstId)}else if(room.isFreeDraw&&room.drawingIdentities&&this.io){this.io.to(newSocketId).emit("drawing_identities_update",room.drawingIdentities)}this.broadcastState(room);return room}getPlayer(socketId){return this.players.get(socketId)}handleDisconnect(socketId){this.removeClientCapabilities(socketId);this.pendingDrawingIdentities.delete(socketId);try{const player=this.players.get(socketId);let activeRoomPlayer=null;let roomId=player?.roomId;if(!roomId){for(const[rid,room]of this.rooms.entries()){const found=room.players.find(p=>p.id===socketId);if(found){activeRoomPlayer=found;roomId=rid;break}}}else{const room=this.rooms.get(roomId);if(room){activeRoomPlayer=room.players.find(p=>p.id===socketId);const playerByNameOrRef=room.players.find(p=>p.name===player?.name);if(playerByNameOrRef&&playerByNameOrRef.id!==socketId){console.warn(`[IGNORED DISCONNECT] Socket ${socketId} belongs to old connection of ${playerByNameOrRef.name}. Current active socket is ${playerByNameOrRef.id}.`);return}}}const pToUpdate=activeRoomPlayer||player;if(!pToUpdate)return;if(pToUpdate.id!==socketId){console.warn(`[IGNORED DISCONNECT - ID MISMATCH] Disconnecting: ${socketId}, Active: ${pToUpdate.id}`);return}console.error(`[PLAYER DISCONNECTED] Socket ID: ${socketId}, Username: ${pToUpdate.name}`);this.abortAllActiveFreeDrawStrokesForSocket(socketId);pToUpdate.isOffline=false;pToUpdate.offlineSince=Date.now();if(roomId){const room=this.rooms.get(roomId);if(room){const pId=pToUpdate.persistentId||pToUpdate.name;if(this.evictionTimers.has(pId)){clearTimeout(this.evictionTimers.get(pId))}console.log(`[GRACE PERIOD] Starting 90-second silent grace timer for disconnected player ${pToUpdate.name} (${pId})`);const timer=setTimeout(()=>{try{const currentRoom=this.rooms.get(roomId);if(currentRoom){const checkPlayer=currentRoom.players.find(p=>(p.persistentId||p.name)===pId);if(checkPlayer&&checkPlayer.offlineSince!==void 0){console.log(`[GRACE PERIOD] Silent eviction timeout triggered for ${checkPlayer.name}. Cleaning up.`);const socket=this.io?.sockets.sockets.get(checkPlayer.id);if(socket){socket.emit("session_expired",{reason:"connection_lost"});socket.disconnect(true)}this.removePlayerFromRoom(roomId,checkPlayer.id);this.players.delete(checkPlayer.id);this.evictionTimers.delete(pId);this.broadcastMessage(currentRoom,{id:"sys-"+Date.now().toString()+Math.random().toString(36).substr(2,5),text:`\u0627\u0646\u0642\u0637\u0639 \u0627\u062A\u0635\u0627\u0644 ${checkPlayer.name} \u0648\u062A\u0645\u062A \u0625\u0632\u0627\u0644\u062A\u0647 \u0645\u0646 \u0627\u0644\u0644\u0639\u0628\u0629`,type:"system"})}}}catch(err){console.error("Error running grace eviction:",err)}},9e4);this.evictionTimers.set(pId,timer)}}}catch(e){console.error("Error in handleDisconnect:",e)}}removePlayer(socketId){try{const player=this.players.get(socketId);if(player&&player.roomId){const room=this.rooms.get(player.roomId);if(room){const activePlayer=room.players.find(p=>p.name===player.name);if(activePlayer&&activePlayer.id!==socketId){console.warn(`[IGNORED REMOVE] Socket ${socketId} belongs to old connection of ${activePlayer.name}. Active socket is ${activePlayer.id}. ignoring.`);this.players.delete(socketId);return}}this.removePlayerFromRoom(player.roomId,socketId)}this.players.delete(socketId)}catch(e){console.error("Error removing player:",e)}}}const roomManager=new RoomManager;export{RoomManager,createType1Buffer,createType2Buffer,decodeType13BufferSafely,decodeZigZag,normalizeArabic,readVarIntFromBuffer,roomManager};
+import { Server } from "socket.io";
+import { Player, Room, GameState, getRoomConfig } from "../src/types/game.js";
 
-//# sourceMappingURL=data:application/json;base64,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LENBQ0YsT0FBUyxJQUFLLENBQ1osUUFBUSxNQUFNLGdDQUFpQyxHQUFHLENBQ3BELENBQ0YsRUFBRyxHQUFLLEVBRVIsS0FBSyxlQUFlLElBQUksSUFBSyxLQUFLLENBQ3BDLENBQ0YsQ0FDRixPQUFTLEVBQUcsQ0FDVixRQUFRLE1BQU0sNkJBQThCLENBQUMsQ0FDL0MsQ0FDRixDQUVBLGFBQWEsU0FBa0IsQ0FDN0IsR0FBSSxDQUNGLE1BQU0sT0FBUyxLQUFLLFFBQVEsSUFBSSxRQUFRLEVBQ3hDLEdBQUksUUFBVSxPQUFPLE9BQVEsQ0FFM0IsTUFBTSxLQUFPLEtBQUssTUFBTSxJQUFJLE9BQU8sTUFBTSxFQUN6QyxHQUFJLEtBQU0sQ0FDUixNQUFNLGFBQWUsS0FBSyxRQUFRLEtBQU0sR0FBTSxFQUFFLE9BQVMsT0FBTyxJQUFJLEVBQ3BFLEdBQUksY0FBZ0IsYUFBYSxLQUFPLFNBQVUsQ0FDaEQsUUFBUSxLQUNOLDJCQUEyQixRQUFRLGlDQUFpQyxhQUFhLElBQUksc0JBQXNCLGFBQWEsRUFBRSxhQUM1SCxFQUNBLEtBQUssUUFBUSxPQUFPLFFBQVEsRUFDNUIsTUFDRixDQUNGLENBRUEsS0FBSyxxQkFBcUIsT0FBTyxPQUFRLFFBQVEsQ0FDbkQsQ0FDQSxLQUFLLFFBQVEsT0FBTyxRQUFRLENBQzlCLE9BQVMsRUFBRyxDQUNWLFFBQVEsTUFBTSx5QkFBMEIsQ0FBQyxDQUMzQyxDQUNGLENBQ0YsQ0FFTyxNQUFNLFlBQWMsSUFBSSIsIm5hbWVzIjpbXSwiaWdub3JlTGlzdCI6W10sInNvdXJjZXMiOlsiL2FwcC9hcHBsZXQvc2VydmVyL3Jvb21zLnRzIl0sInNvdXJjZXNDb250ZW50IjpbbnVsbF19
+function getLevenshteinDistance(a: string, b: string): number {
+  const matrix: number[][] = [];
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+export function decodeZigZag(z: number): number {
+  return (z >>> 1) ^ -(z & 1);
+}
+
+export function readVarIntFromBuffer(buf: Buffer, cursor: { offset: number }): number {
+  let result = 0;
+  let shift = 0;
+  while (cursor.offset < buf.length) {
+    const b = buf[cursor.offset++];
+    result |= (b & 0x7f) << shift;
+    if ((b & 0x80) === 0) {
+      return result >>> 0;
+    }
+    shift += 7;
+    if (shift > 28) throw new Error("VarInt overflow");
+  }
+  throw new Error("Unexpected end of VarInt buffer");
+}
+
+export function decodeType13BufferSafely(buf: Buffer): {
+  success: boolean;
+  instId?: string;
+  count?: number;
+  points?: { x: number; y: number }[];
+  error?: string;
+} {
+  if (!buf || !Buffer.isBuffer(buf) || buf.length < 10) {
+    return { success: false, error: 'header_too_small' };
+  }
+  if (buf[0] !== 13) {
+    return { success: false, error: 'invalid_type' };
+  }
+
+  let instId = "";
+  for (let i = 0; i < 7; i++) {
+    const code = buf[1 + i];
+    if (code > 0) instId += String.fromCharCode(code);
+  }
+  if (!instId) {
+    return { success: false, error: 'invalid_inst_id' };
+  }
+
+  const count = buf.readUInt16LE(8);
+  if (count > 3000) {
+    return { success: false, error: 'count_exceeds_max' };
+  }
+
+  if (count === 0) {
+    if (buf.length !== 10) {
+      return { success: false, error: 'unexpected_trailing_bytes' };
+    }
+    return { success: true, instId, count: 0, points: [] };
+  }
+
+  const tempPoints: { x: number; y: number }[] = [];
+  const cursor = { offset: 10 };
+  let prevQx = 0;
+  let prevQy = 0;
+
+  try {
+    for (let i = 0; i < count; i++) {
+      if (cursor.offset >= buf.length) {
+        return { success: false, error: 'truncated_payload' };
+      }
+      const zzX = readVarIntFromBuffer(buf, cursor);
+      const zzY = readVarIntFromBuffer(buf, cursor);
+      const valX = decodeZigZag(zzX);
+      const valY = decodeZigZag(zzY);
+
+      if (i === 0) {
+        prevQx = valX;
+        prevQy = valY;
+      } else {
+        prevQx = (prevQx + valX) | 0;
+        prevQy = (prevQy + valY) | 0;
+      }
+
+      // Bounds validation: ensure coordinates fit in Int16 (-32768 to 32767)
+      if (prevQx < -32768 || prevQx > 32767 || prevQy < -32768 || prevQy > 32767) {
+        return { success: false, error: 'coordinates_out_of_bounds' };
+      }
+
+      tempPoints.push({ x: prevQx, y: prevQy });
+    }
+
+    if (tempPoints.length !== count) {
+      return { success: false, error: 'point_count_mismatch' };
+    }
+
+    // Strict payload end check: no unexpected trailing bytes
+    if (cursor.offset !== buf.length) {
+      return { success: false, error: 'unexpected_trailing_bytes' };
+    }
+
+    return { success: true, instId, count, points: tempPoints };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'malformed_payload' };
+  }
+}
+
+export function createType2Buffer(instId: string, points: { x: number; y: number }[]): Buffer {
+  const count = points.length;
+  const buf = Buffer.alloc(10 + count * 4);
+  buf.writeUInt8(2, 0); // MSG_DRAW_MOVE = 2
+  buf.write(instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
+  buf.writeUInt16LE(count & 0xFFFF, 8);
+  for (let i = 0; i < count; i++) {
+    buf.writeInt16LE(points[i].x, 10 + i * 4);
+    buf.writeInt16LE(points[i].y, 12 + i * 4);
+  }
+  return buf;
+}
+
+export function createType1Buffer(
+  instId: string,
+  tool: number,
+  r: number,
+  g: number,
+  b: number,
+  width: number,
+  opacity: number,
+  p0_x: number,
+  p0_y: number
+): Buffer {
+  const buf = Buffer.alloc(18);
+  buf.writeUInt8(1, 0); // MSG_DRAW_START = 1
+  buf.write((instId || '').padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
+  buf.writeUInt8(tool & 0xFF, 8);
+  buf.writeUInt8(r & 0xFF, 9);
+  buf.writeUInt8(g & 0xFF, 10);
+  buf.writeUInt8(b & 0xFF, 11);
+  buf.writeUInt8(width & 0xFF, 12);
+  buf.writeUInt8(opacity & 0xFF, 13);
+  buf.writeInt16LE(p0_x, 14);
+  buf.writeInt16LE(p0_y, 16);
+  return buf;
+}
+
+export function normalizeArabic(str: string): string {
+  return str
+    .replace(/[أإآٱ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[\u064B-\u065F]/g, "") // remove Arabic tashkeel (diacritics)
+    .trim()
+    .toLowerCase();
+}
+
+function isCloseGuess(guess: string, target: string): boolean {
+  const gOrig = guess.toLowerCase().trim();
+  const tOrig = target.toLowerCase().trim();
+
+  if (!gOrig || !tOrig) return false;
+  if (gOrig === tOrig) return false;
+
+  // Compare normalized versions
+  const gNorm = normalizeArabic(gOrig);
+  const tNorm = normalizeArabic(tOrig);
+
+  if (gNorm === tNorm) {
+    // Under normalization they match perfectly - this is definitely very close!
+    return true;
+  }
+
+  const len = Math.max(gNorm.length, tNorm.length);
+  const dist = getLevenshteinDistance(gNorm, tNorm);
+
+  if (len <= 2) {
+    return false;
+  } else if (len <= 4) {
+    return dist === 1;
+  } else if (len <= 7) {
+    return dist <= 2; // threshold of 1 or 2
+  } else {
+    // For length > 7, distance <= 3 or <= 30% of the word length
+    return dist <= 3 || dist / len <= 0.3;
+  }
+}
+
+const ALL_WORDS = [
+  "طفل", "رضيع", "عجوز", "مهرج", "قرصان", "نينجا",
+  "ساحرة", "ملك", "ملكة", "أب", "أم", "ولد", "بنت",
+  "أصدقاء", "عائلة", "حامل", "سعيد", "حزين", "غاضب", "خائف", "نائم", "نعسان",
+  "مريض", "يبتسم", "جالس", "غيمة", "مطر", "برق",
+  "قوس قزح", "بركان", "جبل", "جزيرة", "غابة", "كهف", "صخرة", "مظلة",
+  "نخلة", "زهرة", "وردة", "شجرة", "غصن", "جذع",
+  "ورقة شجرة", "نار", "دخان", "شعلة", "حفرة", "شلال",
+  "نهر", "صحراء", "قمر", "شمس", "هلال", "نجوم",
+  "ليل", "كوكب", "مجرة", "ثلج", "رجل ثلج", "بيت",
+  "كوخ", "خيمة", "مسجد", "مدرسة", "مستشفى", "بنك",
+  "مطعم", "فندق", "ملعب", "جسر", "برج", "نافورة", "قلعة",
+  "سلم", "درج", "هاتف", "كمبيوتر", "لابتوب", "شاشة", "فأرة",
+  "سماعة", "ميكروفون", "كاميرا", "بطارية", "شاحن", "ريموت",
+  "تلفاز", "ثلاجة", "هدية", "بالون", "صندوق", "صندوق كنز",
+  "تاج", "كأس", "ميدالية", "مفتاح", "قفل", "سلسلة",
+  "مغناطيس", "عدسة مكبرة", "ساعة رملية", "بوصلة", "علم", "درع",
+  "كيس نقود", "منظار", "مفك", "مسمار", "برغي", "مطرقة",
+  "فأس", "خرطوم", "سلك", "طاولة", "كرسي", "سرير",
+  "أريكة", "كنبة", "خزانة", "مكتبة", "مكتب", "مرآة",
+  "مصباح", "مروحة", "مكيف", "ستارة", "سجادة", "وسادة",
+  "بطانية", "علاقة ملابس", "سلة", "منبه", "صورة", "مزهرية",
+  "شمعة", "فانوس", "حوض سمك", "روبوت", "طائرة ورقية", "يويو", "دمية",
+  "مكعب روبيك", "أحجية", "نرد", "ورق لعب", "شطرنج", "دومينو",
+  "ملح", "سكر", "فلفل", "زيت", "كاتشب", "زبدة",
+  "سكين", "شوكة", "ملعقة", "صحن", "إبريق", "دلو", "صابون", "فرشاة أسنان", "فرشاة", "منديل", "فرن", "مدفأة",
+  "ميكروويف", "صبار", "عباد الشمس", "عشب", "فستان", "تنورة",
+  "بنطلون", "قميص", "جاكيت", "سترة", "شورت", "حجاب",
+  "فيونكة", "قبعة", "حزام", "نظارات شمسية", "حقيبة يد", "سوار",
+  "قلادة", "أقراط", "خاتم", "معطف", "حذاء", "جوارب",
+  "كعب", "حقيبة ظهر", "ربطة عنق", "قفاز", "وشاح", "نظارات",
+  "ساعة يد", "قبعة قش", "شبشب", "شبح", "زومبي", "مومياء",
+  "ديناصور", "تنين", "غول", "وحش", "مصاص دماء", "هيكل عظمي",
+  "فزاعة", "صافرة", "علم البداية", "كرة سلة", "كرة قدم", "تنس",
+  "ألوان", "قلم رصاص", "ممحاة", "إعصار", "حادث", "يسقط",
+  "قشرة موز", "بيض مقلي", "كوب مكسور", "قلم مكسور", "ساعة", "أنف أحمر",
+  "أنف طويل", "شارب طويل", "فقاعات", "أسد", "نمر", "فهد",
+  "ذئب", "ثعلب", "قرد", "غوريلا", "غزال", "أرنب",
+  "فأر", "سنجاب", "كوالا", "دب", "كنغر", "فيل",
+  "زرافة", "وحيد القرن", "تمساح", "ثعبان", "سحلية", "ضفدع",
+  "خفاش", "حمار", "حصان", "بقرة", "ثور", "خروف",
+  "ماعز", "جمل", "باندا", "قنفذ", "سلحفاة", "حمار وحشي",
+  "قط", "هامستر", "قندس", "راكون", "جاموس", "خنزير",
+  "كلب", "ماموث", "كوبرا", "فرس النهر", "عصفور", "حمامة",
+  "ببغاء", "هدهد", "نقار الخشب", "غراب", "بومة", "نسر",
+  "صقر", "بجعة", "بطة", "دجاجة", "ديك", "صوص",
+  "بطريق", "طاووس", "نعامة", "سمكة", "سمكة ذهبية",
+  "قرش", "حوت", "دولفين", "أخطبوط", "حبار", "سلطعون",
+  "نجم البحر", "قنديل", "فقمة", "محارة", "صدفة",
+  "نحلة", "دبور", "فراشة", "يعسوب", "دعسوقة", "خنفساء",
+  "نملة", "ذبابة", "بعوضة", "صرصور", "أم أربعة وأربعين", "عنكبوت",
+  "عقرب", "دودة", "سرعوف", "حلزون",
+  "سيارة", "شاحنة", "باص", "دراجة", "سيارة إسعاف", "سيارة إطفاء",
+  "قطار", "سفينة", "قارب", "جرافة", "ليموزين", "غواصة", "صاروخ",
+  "منطاد", "سكوتر", "سفينة قراصنة", "طوق نجاة", "مرساة", "تفاح",
+  "برتقال", "موز", "عنب", "فراولة", "كيوي", "أناناس", "بطيخ", "كرز", "ليمون",
+  "جوافة", "رمان", "توت", "مانجو", "أفوكادو", "تمر",
+  "طماطم", "خيار", "جزر", "بصل", "بروكلي", "كوسة", "فطر", "ذرة",
+  "باذنجان", "لفت", "يقطين", "عدس", "فاصوليا", "فول سوداني",
+  "جبن", "دجاج", "لحم", "شاورما", "برجر", "بيتزا",
+  "بطاطس", "كباب", "منسف", "كيك", "دونات", "بسكويت", "فشار",
+  "آيس كريم", "شوكولاتة", "حلوى", "مصاصة", "مربى", "بيض", "عسل", "خبز",
+  "معكرونة", "أرز", "حليب", "قهوة", "شاي", "عصير برتقال", "عصير فراولة",
+  "عصير جزر", "يقرأ", "يرسم", "يغني", "رقص", "يأكل",
+  "يسبح", "يبكي", "يجري", "يمشي", "يضحك",
+  "أثقال", "عرق", "حلم", "طبيب أسنان", "ممرضة", "طبيب",
+  "شرطي", "رجل إطفاء", "محقق", "قاضي", "جندي", "معلم",
+  "نجار", "حداد", "ميكانيكي", "طيار", "سيارة أجرة", "قبطان",
+  "طباخ", "نادل", "رسام", "مصور", "مغني", "عامل نظافة",
+  "ساعي بريد", "رائد فضاء", "غواص", "مذيع", "خياط", "حلاق",
+  "عين", "أنف", "أذن", "أسنان", "فم", "شعر",
+  "شارب", "لحية", "عنق", "كتف", "يد", "ذراع",
+  "أظافر", "أصبع", "لايك", "دس لايك", "أصلع", "شعر قصير",
+  "شعر طويل", "طريق", "شارع", "إشارة مرور", "شرفة", "نافذة",
+  "باب","حاجب","رموش","أحمر شفاه","طلاء أظافر"
+];
+
+export class RoomManager {
+  private rooms: Map<string, Room> = new Map();
+  private players: Map<string, Player> = new Map();
+  private evictionTimers: Map<string, NodeJS.Timeout> = new Map();
+  private io: Server | null = null;
+  private tickInterval: NodeJS.Timeout | null = null;
+  private clientCapabilities: Map<string, { supportsType13?: boolean }> = new Map();
+  private pendingDrawingIdentities: Map<string, string> = new Map();
+
+  public setClientCapabilities(socketId: string, caps: { supportsType13?: boolean }) {
+    const existing = this.clientCapabilities.get(socketId) || {};
+    this.clientCapabilities.set(socketId, { ...existing, ...caps });
+  }
+
+  public removeClientCapabilities(socketId: string) {
+    this.clientCapabilities.delete(socketId);
+  }
+
+  public isClientType13Capable(socketId: string): boolean {
+    return Boolean(this.clientCapabilities.get(socketId)?.supportsType13);
+  }
+
+  setIo(io: Server) {
+    this.io = io;
+    if (!this.tickInterval) {
+      this.tickInterval = setInterval(() => this.tick(), 1000);
+      console.log("[Game Engine] Global tick loop started (1s interval)");
+    }
+  }
+
+  private tick() {
+    try {
+      this.rooms.forEach((room) => {
+        try {
+          this.kickIdlePlayers(room);
+          this.processRoomTick(room);
+        } catch (e) {
+          console.error(`Error processing room tick for ${room.id}:`, e);
+        }
+      });
+    } catch (e) {
+      console.error("Error in global tick loop:", e);
+    }
+  }
+
+  private kickIdlePlayers(room: Room) {
+    // Inactivity / AFK Timing:
+    // warningThreshold: Inactivity period before the warning popup appears (140s)
+    // countdownSeconds: Countdown duration inside the modal before kicking (fixed at 90s)
+    const warningThreshold = 140 * 1000; // 140 seconds before AFK warning popup appears
+    const countdownSeconds = 90; // 90 seconds countdown in modal
+    const idleTimeout = warningThreshold + (countdownSeconds * 1000); // 140s + 90s = 230s total until kick
+    const now = Date.now();
+    const playersToKick: Player[] = [];
+
+    room.players.forEach((p) => {
+      // If player is already disconnected (offlineSince is set), they have a silent 90s grace timer running.
+      // So we only actively monitor online interactive players for AFK warning.
+      if (p.offlineSince === undefined) {
+        const lastAct = p.lastActivity || now;
+        const idleTime = now - lastAct;
+
+        if (idleTime > idleTimeout) {
+          playersToKick.push(p);
+        } else if (idleTime > warningThreshold) {
+          if (!p.afkWarningSent) {
+            p.afkWarningSent = true;
+            const socket = this.io?.sockets.sockets.get(p.id);
+            if (socket) {
+              const secondsLeft = Math.max(0, Math.ceil((idleTimeout - idleTime) / 1000));
+              socket.emit('afk_warning', { secondsLeft });
+              console.log(`[AFK WARNING] Sent warning to ${p.name} (${p.id}). Seconds left: ${secondsLeft}`);
+            }
+          }
+        } else {
+          p.afkWarningSent = false;
+        }
+      }
+    });
+
+    playersToKick.forEach((p) => {
+      console.warn(`[AFK KICK] Player ${p.name} (${p.id}) is idle for > 4.5m. Removing.`);
+      
+      const socket = this.io?.sockets.sockets.get(p.id);
+      if (socket) {
+        socket.emit('session_expired', { reason: 'afk_idle' });
+        socket.disconnect(true);
+      }
+
+      this.removePlayerFromRoom(room.id, p.id);
+      this.players.delete(p.id);
+
+      this.broadcastMessage(room, {
+        id: "sys-afk-" + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        text: `تم طرد ${p.name} بسبب عدم النشاط (AFK)`,
+        type: "system",
+      });
+    });
+  }
+
+  private processRoomTick(room: Room) {
+    if (room.isFreeDraw) {
+      // In Free Draw mode: time is unlimited, no automatic round timeouts or word selection
+      return;
+    }
+    const { gameState } = room;
+
+    if (gameState.status === "WAITING") {
+      const onlinePlayersCount = room.players.filter(
+        (p) => !p.isOffline,
+      ).length;
+      if (onlinePlayersCount >= 2) {
+        this.transitionToChoosing(room);
+      }
+    } else if (gameState.status === "CHOOSING") {
+      gameState.timeLeft--;
+      const drawer = room.players.find(
+        (p) => (p.persistentId || p.id) === gameState.currentDrawerId,
+      );
+      // Skip turn only if they missed the deadline (do not skip immediately for being offline)
+      if (gameState.timeLeft <= 91) {
+        // Player missed their turn
+        this.transitionToRoundEnd(room, "turn_lost"); // Show round end overlay instead of skipping immediately
+      }
+    } else if (gameState.status === "DRAWING") {
+      gameState.timeLeft--;
+      const activeGuessersCount = room.players.filter(
+        (p) =>
+          (p.persistentId || p.id) !== gameState.currentDrawerId &&
+          !p.isOffline,
+      ).length;
+      const onlineCorrectGuessersCount = gameState.correctGuessers.filter(
+        (pId) => {
+          const p = room.players.find(
+            (pl) => (pl.persistentId || pl.id) === pId,
+          );
+          return p && !p.isOffline;
+        },
+      ).length;
+
+      if (gameState.timeLeft <= 0) {
+        // Time is up
+        this.transitionToRoundEnd(room, "timeout");
+      } else if (
+        activeGuessersCount > 0 &&
+        onlineCorrectGuessersCount >= activeGuessersCount
+      ) {
+        // Everyone online guessed correctly
+        this.transitionToRoundEnd(room, "all_guessed");
+      }
+    } else if (gameState.status === "ROUND_END") {
+      gameState.timeLeft--;
+      if (gameState.timeLeft <= 0) {
+        this.transitionToChoosing(room);
+      }
+    } else if (gameState.status === "PODIUM") {
+      gameState.timeLeft--;
+      if (gameState.timeLeft <= 0) {
+        // Reset scores (the win was already added in transitionToPodium)
+        room.players.forEach((p) => (p.score = 0));
+
+        // Since we broadcast waiting, it clears the board
+        this.transitionToWaiting(room);
+      }
+    }
+
+    if (this.io && gameState.status !== "WAITING") {
+      this.io
+        .to(room.id)
+        .emit("timer_tick", {
+          timeLeft: gameState.timeLeft,
+          status: gameState.status,
+        });
+    }
+  }
+
+  private transitionToWaiting(room: Room) {
+    console.log(`[Room ${room.id}] Transitioning to WAITING`);
+    const lastDrawerBeforeWaiting = room.gameState.currentDrawerId;
+
+    room.gameState.status = "WAITING";
+    room.gameState.currentDrawerId = null;
+    room.gameState.currentWord = null;
+    room.gameState.wordOptions = [];
+    room.gameState.correctGuessers = [];
+    room.gameState.timeLeft = 0;
+
+    const onlinePlayersCount = room.players.filter((p) => !p.isOffline).length;
+    if (onlinePlayersCount >= 2) {
+      return this.transitionToChoosing(room, lastDrawerBeforeWaiting);
+    }
+
+    this.broadcastState(room);
+  }
+
+  private transitionToChoosing(room: Room, previousDrawerId?: string | null) {
+    if (room.players.length < 2) {
+      return this.transitionToWaiting(room);
+    }
+
+    const onlinePlayersCount = room.players.filter((p) => !p.isOffline).length;
+    if (onlinePlayersCount < 2) {
+      return this.transitionToWaiting(room);
+    }
+
+    // Safety Guard: if we already have a current drawer or a previous drawer from the round that just ended,
+    // move them to the back of the queue before picking the next drawer
+    const lastDrawerId = previousDrawerId || room.gameState.currentDrawerId;
+    if (lastDrawerId) {
+      const idx = room.gameState.turnQueue.indexOf(lastDrawerId);
+      if (idx !== -1) {
+        room.gameState.turnQueue.splice(idx, 1);
+        room.gameState.turnQueue.push(lastDrawerId);
+      }
+    }
+
+    // Logic for next turn - find the first player in the queue who is present in the room
+    let nextDrawerId: string | null = null;
+    let selectedIndex = -1;
+
+    for (let i = 0; i < room.gameState.turnQueue.length; i++) {
+      const candidateId = room.gameState.turnQueue[i];
+      const p = room.players.find(
+        (player) => (player.persistentId || player.id) === candidateId,
+      );
+      if (p) {
+        nextDrawerId = candidateId;
+        selectedIndex = i;
+        break;
+      }
+    }
+
+    if (!nextDrawerId) {
+      return this.transitionToWaiting(room);
+    }
+
+    // Ensure the selected next drawer is at the front of the queue so they remain at index 0 during their turn
+    if (selectedIndex > 0) {
+      room.gameState.turnQueue.splice(selectedIndex, 1);
+      room.gameState.turnQueue.unshift(nextDrawerId);
+    }
+
+    // Use unused words
+    let availableWords = ALL_WORDS.filter((w) => !room.usedWords.includes(w));
+    if (availableWords.length < 2) {
+      room.usedWords = [];
+      availableWords = [...ALL_WORDS];
+    }
+    const shuffled = [...availableWords].sort(() => 0.5 - Math.random());
+    const selectedWords = shuffled.slice(0, 2);
+    room.usedWords.push(...selectedWords);
+
+    console.log(
+      `[Room ${room.id}] Transitioning to CHOOSING. Drawer: ${nextDrawerId}`,
+    );
+    room.gameState.status = "CHOOSING";
+    room.gameState.currentDrawerId = nextDrawerId;
+    room.gameState.currentWord = null;
+    room.gameState.wordOptions = selectedWords;
+    room.gameState.correctGuessers = [];
+    room.gameState.hintsUsed = 0;
+    room.gameState.revealedIndices = [];
+    room.gameState.drawHistory = [];
+    //@ts-ignore
+    room.gameState.redoStack = [];
+    room.gameState.timeLeft = 100;
+    room.gameState.reports = [];
+    room.gameState.isFastAllGuessed = false;
+    room.gameState.noOneGuessedVariant = undefined;
+    room.gameState.drawingStartTime = undefined;
+
+    // Snapshot scores to enable rollback if the round gets reported/canceled
+    room.turnStartScores = {};
+    room.players.forEach((p) => {
+      const uniqueId = p.persistentId || p.id;
+      room.turnStartScores![uniqueId] = p.score;
+    });
+
+    this.clearDrawHistoryForRoomAndClient(room);
+    const drawer = room.players.find(
+      (p) => (p.persistentId || p.id) === nextDrawerId,
+    );
+    const name = drawer ? drawer.name : "Unknown";
+    this.broadcastGuess(room, {
+      id: "sys-" + Date.now() + "-turn",
+      text: `Turn of ${name}`,
+      type: "system",
+      subType: "turn",
+      color: "#38BDF8",
+    });
+
+    this.broadcastState(room);
+  }
+
+  private transitionToPodium(room: Room) {
+    console.log(`[Room ${room.id}] Transitioning to PODIUM`);
+    room.gameState.status = "PODIUM";
+    room.gameState.timeLeft = 15;
+
+    // Increment winner's wins immediately
+    const sorted = [...room.players].sort((a, b) => b.score - a.score);
+    if (sorted.length > 0 && sorted[0].score > 0) {
+      sorted[0].wins += 1;
+    }
+
+    const winner = [...room.players].reduce(
+      (max, p) => (p.score > max.score ? p : max),
+      room.players[0] || { name: "Unknown", score: 0 },
+    );
+    this.broadcastGuess(room, {
+      id: "sys-" + Date.now() + "-podium-winner",
+      text: `Game over. The winner is ${winner.name} with ${winner.score} points`,
+      type: "system",
+      subType: "game_over",
+      color: "#38BDF8",
+    });
+
+    this.broadcastState(room);
+  }
+
+  private transitionToRoundEnd(
+    room: Room,
+    reason:
+      | "timeout"
+      | "all_guessed"
+      | "drawer_left"
+      | "turn_lost"
+      | "skipped"
+      | "canceled" = "timeout",
+  ) {
+    // Standard validation: don't transition more than once if already round end
+    if (room.gameState.status === "ROUND_END" && reason !== "canceled") {
+      return;
+    }
+
+    const targetWinningScore = room.winningScore || 40;
+    const winner = room.players.find((p) => p.score >= targetWinningScore);
+    if (winner && reason !== "canceled") {
+      return this.transitionToPodium(room);
+    }
+
+    console.log(
+      `[Room ${room.id}] Transitioning to ROUND_END reason: ${reason}`,
+    );
+    room.gameState.status = "ROUND_END";
+    room.gameState.roundEndReason = reason;
+    room.gameState.roundEndWord = room.gameState.currentWord || undefined;
+    room.gameState.timeLeft = 8;
+
+    const word = room.gameState.currentWord || "";
+
+    // Wiping drawHistory to guard server memory from RAM Bloat
+    this.clearDrawHistoryForRoomAndClient(room);
+
+    if (reason === "canceled") {
+      // Rollback scores to the snapshot of turnStartScores
+      if (room.turnStartScores) {
+        room.players.forEach((p) => {
+          const uniqueId = p.persistentId || p.id;
+          if (room.turnStartScores && room.turnStartScores[uniqueId] !== undefined) {
+            p.score = room.turnStartScores[uniqueId];
+          }
+        });
+      }
+      this.broadcastGuess(room, {
+        id: "sys-" + Date.now() + "-canceled",
+        text: `Canceled turn`,
+        type: "system",
+        subType: "canceled",
+        color: "#EF4444",
+      });
+    } else if (reason === "all_guessed") {
+      const elapsedSeconds = room.gameState.drawingStartTime
+        ? (Date.now() - room.gameState.drawingStartTime) / 1000
+        : 999;
+      room.gameState.isFastAllGuessed = elapsedSeconds <= 30;
+      this.broadcastGuess(room, {
+        id: "sys-" + Date.now() + "-all-guessed",
+        text: `Everybody hit the answer!`,
+        type: "system",
+        subType: "all_guessed",
+        color: "#00E540",
+      });
+    } else if (reason === "timeout" || reason === "drawer_left") {
+      const hasSucceeded = (room.gameState.correctGuessers || []).length > 0;
+      if (!hasSucceeded) {
+        room.gameState.noOneGuessedVariant = Math.random() < 0.5 ? 2 : 1;
+      } else {
+        room.gameState.noOneGuessedVariant = undefined;
+      }
+      this.broadcastGuess(room, {
+        id: "sys-" + Date.now() + "-timeover",
+        text: hasSucceeded ? `Time's Up!` : `Nobody hit the answer`,
+        type: "system",
+        subType: "answer_reveal",
+        color: "#38BDF8",
+      });
+      if (word && hasSucceeded) {
+        this.broadcastGuess(room, {
+          id: "sys-" + Date.now() + "-answer-word",
+          text: `The answer was: ${word}`,
+          type: "system",
+          subType: "answer_reveal",
+          word: word,
+          color: "#38BDF8",
+        });
+      }
+    } else if (reason === "skipped") {
+      const hasSucceeded = (room.gameState.correctGuessers || []).length > 0;
+      const drawer = room.players.find(
+        (p) => (p.persistentId || p.id) === room.gameState.currentDrawerId,
+      );
+      const name = drawer ? drawer.name : "الرسام";
+      this.broadcastGuess(room, {
+        id: "sys-" + Date.now() + "-skip",
+        text: `${name} skipped the turn`,
+        type: "system",
+        subType: "skipped",
+        color: "#EF4444",
+      });
+      if (word && hasSucceeded) {
+        this.broadcastGuess(room, {
+          id: "sys-" + Date.now() + "-answer-word",
+          text: `The answer was: ${word}`,
+          type: "system",
+          subType: "answer_reveal",
+          word: word,
+          color: "#38BDF8",
+        });
+      }
+    } else if (reason === "turn_lost") {
+      const drawer = room.players.find(
+        (p) => (p.persistentId || p.id) === room.gameState.currentDrawerId,
+      );
+      const name = drawer ? drawer.name : "الرسام";
+      this.broadcastGuess(room, {
+        id: "sys-" + Date.now() + "-lost",
+        text: `${name} has lost the turn`,
+        type: "system",
+        subType: "lost_turn",
+        color: "#EF4444",
+      });
+    }
+
+    // Emit Interval message in logs
+    this.broadcastGuess(room, {
+      id: "sys-" + Date.now() + "-interval",
+      text: `Interval...`,
+      type: "system",
+      subType: "interval",
+      color: "#38BDF8",
+    });
+
+    this.broadcastState(room);
+  }
+
+  public startGameRound(roomId: string, word: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    const player = this.players.get(socketId);
+    const pId = player ? player.persistentId || player.id : socketId;
+    if (
+      room.gameState.status !== "CHOOSING" ||
+      room.gameState.currentDrawerId !== pId
+    )
+      return;
+
+    room.gameState.currentWord = word;
+    room.gameState.status = "DRAWING";
+    room.gameState.wordOptions = [];
+    room.gameState.drawingStartTime = Date.now();
+    room.gameState.isFastAllGuessed = false;
+    room.gameState.noOneGuessedVariant = undefined;
+    console.log(`[Room ${room.id}] Transitioning to DRAWING. Word: ${word}`);
+    this.broadcastState(room);
+  }
+
+  public handleSkipTurn(roomId: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    const player = this.players.get(socketId);
+    const pId = player ? player.persistentId || player.id : socketId;
+    if (room.gameState.currentDrawerId !== pId) return;
+    if (
+      room.gameState.status !== "CHOOSING" &&
+      room.gameState.status !== "DRAWING"
+    )
+      return;
+
+    this.transitionToRoundEnd(room, "skipped");
+  }
+
+  public submitGuess(roomId: string, socketId: string, guess: string) {
+    const room = this.rooms.get(roomId);
+    if (!room || room.gameState.status !== "DRAWING") return;
+
+    const player = this.players.get(socketId);
+    if (!player) return;
+
+    const pId = player.persistentId || player.id;
+
+    // Reject if player is drawer
+    if (room.gameState.currentDrawerId === pId) return;
+
+    // Reject if player already guessed
+    if (room.gameState.correctGuessers.includes(pId)) return;
+
+    const currentWord = room.gameState.currentWord || "";
+    const isCorrect =
+      guess.toLowerCase().trim() === currentWord.toLowerCase().trim() ||
+      normalizeArabic(guess) === normalizeArabic(currentWord);
+
+    if (isCorrect) {
+      room.gameState.correctGuessers.push(pId);
+
+      const hintsUsed = room.gameState.hintsUsed || 0;
+      const baseScore = 10 - hintsUsed;
+      const guesserScore = Math.max(
+        1,
+        baseScore - (room.gameState.correctGuessers.length - 1),
+      );
+      player.score += guesserScore;
+
+      const drawer = room.players.find(
+        (p) => (p.persistentId || p.id) === room.gameState.currentDrawerId,
+      );
+      if (drawer) {
+        if (room.gameState.correctGuessers.length === 1) {
+          drawer.score += Math.max(1, 11 - hintsUsed);
+        } else {
+          drawer.score += 2;
+        }
+      }
+
+      this.broadcastGuess(room, {
+        id: "sys-" + Date.now(),
+        text: `${player.name} guessed the word!`,
+        type: "system",
+        subType: "hit",
+        senderId: socketId,
+        word: room.gameState.currentWord,
+        sender: player.name,
+        color: "#00E540", // vibrant green
+      });
+
+      // Deduct time based on Gartic.io-style mechanics (10 seconds per correct guess, locking of remaining time below 20 seconds)
+      const activeGuessersCount = room.players.filter(
+        (p) =>
+          (p.persistentId || p.id) !== room.gameState.currentDrawerId &&
+          !p.isOffline,
+      ).length;
+      const onlineCorrectGuessersCount = room.gameState.correctGuessers.filter(
+        (pIdToMatch) => {
+          const p = room.players.find(
+            (pl) => (pl.persistentId || pl.id) === pIdToMatch,
+          );
+          return p && !p.isOffline;
+        },
+      ).length;
+
+      const CRITICAL_GRACE_PERIOD = 20; // safe zone (20 seconds)
+      const TIME_DEDUCTION = 10;        // 10 seconds deducted per correct guess
+
+      if (room.gameState.timeLeft > CRITICAL_GRACE_PERIOD) {
+        let newTime = room.gameState.timeLeft - TIME_DEDUCTION;
+        if (newTime < CRITICAL_GRACE_PERIOD) {
+          newTime = CRITICAL_GRACE_PERIOD;
+        }
+        room.gameState.timeLeft = newTime;
+      }
+
+      if (
+        activeGuessersCount > 0 &&
+        onlineCorrectGuessersCount >= activeGuessersCount
+      ) {
+        this.transitionToRoundEnd(room, "all_guessed");
+      } else {
+        this.broadcastState(room);
+      }
+    } else {
+      // Check if guess is close to currentWord
+      if (isCloseGuess(guess, currentWord)) {
+        if (this.io) {
+          const privateMsg = {
+            id: "sys-" + Date.now() + "-close-" + Math.random().toString(36).substring(2, 5),
+            text: `${guess} is close!`,
+            type: "system",
+            subType: "close",
+            word: guess,
+            senderId: socketId,
+          };
+          this.io.to(socketId).emit("receive_guess", privateMsg);
+        }
+      } else {
+        // Broadcast incorrect guess to chat but maybe with a specific 'guess' type or regular message
+        this.broadcastGuess(room, {
+          id: Date.now().toString() + Math.random().toString(36).substring(2, 5),
+          text: guess,
+          sender: player.name,
+          senderId: socketId,
+          type: "message",
+        });
+      }
+    }
+  }
+
+  public requestHint(roomId: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room || room.gameState.status !== "DRAWING") return;
+
+    const player = this.players.get(socketId);
+    const pId = player ? player.persistentId || player.id : socketId;
+
+    // Only drawer can request hints
+    if (room.gameState.currentDrawerId !== pId) return;
+
+    const word = room.gameState.currentWord || "";
+const words = word.split(" ").filter(w => w.length > 0);
+    let maxHints = 0;
+    if (words.length <= 1) {
+      const charCount = word.replace(/\s/g, "").length;
+      maxHints = charCount < 3 ? 1 : 2;
+      if (charCount >= 5) {
+        maxHints = 3;
+      }
+    } else {
+      maxHints = 1;
+      for (const w of words) {
+        if (w.length >= 5) maxHints += 2;
+        else if (w.length >= 3) maxHints += 1;
+      }
+    }
+
+    room.gameState.hintsUsed = room.gameState.hintsUsed || 0;
+    room.gameState.revealedIndices = room.gameState.revealedIndices || [];
+
+    if (room.gameState.hintsUsed >= maxHints) return;
+
+    room.gameState.hintsUsed++;
+
+    if (
+      room.gameState.hintsUsed >= 2 ||
+      (maxHints === 1 && room.gameState.hintsUsed === 1)
+    ) {
+      const validIndices = [];
+      const wordsArray = word.split(" ");
+      let charIndex = 0;
+      
+      for (let w = 0; w < wordsArray.length; w++) {
+        const wStr = wordsArray[w];
+        if (wStr.length === 0) {
+          charIndex++;
+          continue;
+        }
+        
+        let limit = 0;
+        if (wStr.length >= 5) limit = 2;
+        else if (wStr.length >= 3) limit = 1;
+        
+        const wordIndices = [];
+        for (let i = 0; i < wStr.length; i++) {
+           wordIndices.push(charIndex + i);
+        }
+        charIndex += wStr.length + 1;
+        
+        const revealedInWord = wordIndices.filter(idx => room.gameState.revealedIndices.includes(idx)).length;
+        
+        if (revealedInWord < limit) {
+           const unrevealedInWord = wordIndices.filter(idx => !room.gameState.revealedIndices.includes(idx));
+           validIndices.push(...unrevealedInWord);
+        }
+      }
+
+      if (validIndices.length > 0) {
+        const pick = validIndices[Math.floor(Math.random() * validIndices.length)];
+        room.gameState.revealedIndices.push(pick);
+      } else {
+        const unrevealed = [];
+        for (let i = 0; i < word.length; i++) {
+          if (word[i] !== " " && !room.gameState.revealedIndices.includes(i)) {
+            unrevealed.push(i);
+          }
+        }
+        if (unrevealed.length > 0) {
+          const pick = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+          room.gameState.revealedIndices.push(pick);
+        }
+      }
+    }
+
+    this.broadcastState(room);
+  }
+
+  public reportDrawing(roomId: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+
+    if (room.gameState.status !== "DRAWING") return;
+
+    const player = this.players.get(socketId);
+    if (!player) return;
+
+    const pId = player.persistentId || player.id;
+
+    // The drawer cannot report their own drawing!
+    if (room.gameState.currentDrawerId === pId) return;
+
+    if (!room.gameState.reports) {
+      room.gameState.reports = [];
+    }
+
+    // Prevent double reporting
+    if (room.gameState.reports.includes(pId)) return;
+
+    room.gameState.reports.push(pId);
+
+    // Broadcast report message to the guess/info logs feed exactly as shown: "⚠️ [PlayerName] reported!"
+    this.broadcastGuess(room, {
+      id: "sys-" + Date.now() + "-report-" + pId,
+      text: `${player.name} reported!`,
+      type: "system",
+      subType: "report",
+      sender: player.name,
+      color: "#EF4444",
+    });
+
+    const activePlayersCount = room.players.filter((p) => !p.isOffline).length;
+    let requiredReports = 2; // Default for <=5 players
+    if (activePlayersCount <= 4) {
+      requiredReports = Math.max(2, Math.ceil(activePlayersCount / 2));
+    } else if (activePlayersCount === 5) {
+      requiredReports = 2;
+    } else if (activePlayersCount === 6) {
+      requiredReports = 3;
+    } else if (activePlayersCount === 7) {
+      requiredReports = 4;
+    } else if (activePlayersCount === 8) {
+      requiredReports = 4;
+    } else {
+      requiredReports = Math.floor(activePlayersCount / 2);
+    }
+
+    if (room.gameState.reports.length >= requiredReports) {
+      console.log(`[Report Engine] Cancel threshold reached (${room.gameState.reports.length}/${requiredReports}). Triggering CANCELED TURN.`);
+      this.transitionToRoundEnd(room, "canceled");
+    } else {
+      this.broadcastState(room);
+    }
+  }
+
+  public sendStateToPlayer(room: Room, p: Player) {
+    if (this.io) {
+      // Create a masked version of the word for everyone
+      const word = room.gameState.currentWord || "";
+      const charCount = word.replace(/\s/g, "").length;
+      let maxHints = charCount < 3 ? 1 : 2;
+      if (charCount >= 5) {
+        maxHints = 3;
+      }
+      const hintsUsed = room.gameState.hintsUsed || 0;
+      const revealedIndices = room.gameState.revealedIndices || [];
+
+      let maskedWordArray = [] as any[];
+      if (hintsUsed >= 1) {
+        maskedWordArray = word.split("").map((char, index) => {
+          if (char === " ") return { isSpace: true, char: " " };
+          let reveal = false;
+          if (revealedIndices.includes(index)) reveal = true;
+          return { isSpace: false, char: reveal ? char : null, index };
+        });
+      }
+
+      const isDrawer =
+        p.id === room.gameState.currentDrawerId ||
+        (p.persistentId && p.persistentId === room.gameState.currentDrawerId) ||
+        (Boolean(room.isFreeDraw) && Boolean(room.activeDrawers?.includes(p.id) || (p.persistentId && room.activeDrawers?.includes(p.persistentId))));
+      const isRTL = /[\u0600-\u06FF]/.test(word);
+      const { drawHistory, ...publicGameState } = room.gameState;
+      const hasHistory = Boolean(room.gameState.drawHistory && room.gameState.drawHistory.length > 0);
+      this.io.to(p.id).emit("room_state_update", {
+        roomId: room.id,
+        players: room.players,
+        votekicks: room.votekicks || {},
+        isFreeDraw: !!room.isFreeDraw,
+        activeDrawers: room.activeDrawers || [],
+        drawingIdentities: room.drawingIdentities || {},
+        hasDrawHistory: hasHistory,
+        gameState: {
+          ...publicGameState,
+          hasDrawHistory: hasHistory,
+          currentWord: isDrawer ? room.gameState.currentWord : null,
+          wordOptions: isDrawer ? room.gameState.wordOptions : [],
+          maskedWordArray: maskedWordArray,
+          isRTL: isRTL,
+        },
+      });
+    }
+  }
+
+  private broadcastState(room: Room) {
+    if (this.io) {
+      room.players.forEach((p) => {
+        this.sendStateToPlayer(room, p);
+      });
+    }
+  }
+
+  createRoom(roomId: string): Room {
+    if (!this.rooms.has(roomId)) {
+      const config = getRoomConfig(roomId);
+      this.rooms.set(roomId, {
+        id: roomId,
+        maxPlayers: config.maxPlayers,
+        winningScore: config.winningScore,
+        theme: config.theme,
+        isFreeDraw: !!config.isFreeDraw,
+        isExperimental: !!config.isExperimental,
+        activeDrawers: [],
+        players: [],
+        gameState: {
+          status: config.isFreeDraw ? "DRAWING" : "WAITING",
+          currentDrawerId: null,
+          currentWord: null,
+          timeLeft: 0,
+          correctGuessers: [],
+          turnQueue: [],
+          hintsUsed: 0,
+          revealedIndices: [],
+          drawHistory: [],
+          isDrawingActive: false,
+        },
+        usedWords: [],
+        chatMessages: [],
+        guessMessages: [],
+        bannedUsers: [],
+        votekicks: {},
+      });
+    }
+    return this.rooms.get(roomId)!;
+  }
+
+  public startFreeDraw(roomId: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room || !room.isFreeDraw) return;
+    const player = this.players.get(socketId);
+    const pId = player?.persistentId || socketId;
+    if (!room.activeDrawers) room.activeDrawers = [];
+    if (!room.activeDrawers.includes(pId)) {
+      room.activeDrawers.push(pId);
+    }
+    if (!room.activeDrawers.includes(socketId)) {
+      room.activeDrawers.push(socketId);
+    }
+    room.gameState.status = "DRAWING";
+    this.broadcastState(room);
+  }
+
+  public stopFreeDraw(roomId: string, socketId: string) {
+    const room = this.rooms.get(roomId);
+    if (!room || !room.isFreeDraw) return;
+    const player = this.players.get(socketId);
+    const pId = player?.persistentId || socketId;
+    if (room.activeDrawers) {
+      room.activeDrawers = room.activeDrawers.filter((id) => id !== pId && id !== socketId);
+    }
+    this.broadcastState(room);
+  }
+
+  public saveChatMessage(roomId: string, message: any) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    if (!room.chatMessages) room.chatMessages = [];
+    room.chatMessages.push(message);
+    if (room.chatMessages.length > 40) {
+      room.chatMessages.shift(); // sliding window / rolling queue of 40 max
+    }
+  }
+
+  public saveGuessMessage(roomId: string, message: any) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    if (!room.guessMessages) room.guessMessages = [];
+    room.guessMessages.push(message);
+    if (room.guessMessages.length > 40) {
+      room.guessMessages.shift(); // sliding window / rolling queue of 40 max
+    }
+  }
+
+  public broadcastMessage(room: Room, msg: any) {
+    this.saveChatMessage(room.id, msg);
+    if (this.io) {
+      this.io.to(room.id).emit("receive_message", msg);
+    }
+  }
+
+  public broadcastGuess(room: Room, msg: any) {
+    this.saveGuessMessage(room.id, msg);
+    if (this.io) {
+      this.io.to(room.id).emit("receive_guess", msg);
+    }
+  }
+
+  public clearDrawHistoryForRoomAndClient(room: Room) {
+    if (room) {
+      room.gameState.drawHistory = [];
+      //@ts-ignore
+      room.gameState.redoStack = [];
+      room.gameState.isDrawingActive = false;
+
+      // Strict cleanup of in-memory stroke collectors and canonical caches
+      if (room.freeDrawStrokes) {
+        room.freeDrawStrokes.clear();
+      }
+      if (room.freeDrawCanonicalCache) {
+        room.freeDrawCanonicalCache.clear();
+      }
+
+      console.log(
+        `[Memory Sweeper] Wiped drawing history completely to avoid RAM Bloat`,
+      );
+
+      if (this.io) {
+        // Emit explicit draw_clear message to the room to wipe locally
+        this.io
+          .to(room.id)
+          .emit("draw_clear", { instanceId: "server-sweeper" });
+
+        // Also construct an 8-byte MSG_DRAW_CLEAR binary draw_binary buffer to ensure any binary client clears
+        const clearBuf = Buffer.alloc(8);
+        clearBuf.writeUInt8(5, 0); // MSG_DRAW_CLEAR type
+        clearBuf.write("server", 1, 7, "ascii"); // string padding or server identification
+        this.io.to(room.id).emit("draw_binary", clearBuf);
+      }
+    }
+  }
+
+  getRoom(roomId: string): Room | undefined {
+    return this.rooms.get(roomId);
+  }
+
+  // --- Free Draw Live Stroke Streaming & Server Commit Engine ---
+  public getOrCreateFreeDrawStrokes(room: Room): Map<string, any> {
+    if (!room.freeDrawStrokes) {
+      room.freeDrawStrokes = new Map();
+    }
+    return room.freeDrawStrokes;
+  }
+
+  public syncActiveFreeDrawStrokesToSocket(room: Room, targetSocket: any) {
+    if (!room || (!room.isFreeDraw && !room.isExperimental)) return;
+    if (!room.freeDrawStrokes || room.freeDrawStrokes.size === 0) return;
+    if (!targetSocket || !targetSocket.emit) return;
+
+    for (const stroke of room.freeDrawStrokes.values()) {
+      if (!stroke || stroke.status !== 'ACTIVE') continue;
+      if (!stroke.points || stroke.points.length === 0) continue;
+      // Do not send catch-up of an active stroke to the drawer themselves
+      if (targetSocket.id && stroke.socketId === targetSocket.id) continue;
+
+      const pts = stroke.points;
+      const p0 = pts[0];
+
+      // 1. Synthetic Type 1 (MSG_DRAW_START) packet
+      const startBuf = createType1Buffer(
+        stroke.instId,
+        stroke.tool,
+        stroke.r,
+        stroke.g,
+        stroke.b,
+        stroke.width,
+        stroke.opacity,
+        p0.x,
+        p0.y
+      );
+      targetSocket.emit('draw_binary', startBuf);
+
+      // 2. Type 2 (MSG_DRAW_MOVE) packets for remaining accepted points
+      if (pts.length > 1) {
+        const remaining = pts.slice(1);
+        const CHUNK_SIZE = 250;
+        for (let i = 0; i < remaining.length; i += CHUNK_SIZE) {
+          const chunk = remaining.slice(i, i + CHUNK_SIZE);
+          const moveBuf = createType2Buffer(stroke.instId, chunk);
+          targetSocket.emit('draw_binary', moveBuf);
+        }
+      }
+    }
+  }
+
+  public getOrCreateFreeDrawCanonicalCache(room: Room): Map<string, { buffer: Buffer; createdAt: number }> {
+    if (!room.freeDrawCanonicalCache) {
+      room.freeDrawCanonicalCache = new Map();
+    }
+    return room.freeDrawCanonicalCache;
+  }
+
+  public handleFreeDrawStart(roomId: string, socketId: string, buf: Buffer): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room || (!room.isFreeDraw && !room.isExperimental) || !Buffer.isBuffer(buf) || buf.length < 18) return false;
+    if (buf[0] !== 1) return false; // MSG_DRAW_START
+
+    // Header layout:
+    // 0: type (1)
+    // 1..7: instId (7B)
+    // 8: tool (1B)
+    // 9: r, 10: g, 11: b (3B)
+    // 12: width (1B)
+    // 13: opacity (1B)
+    // 14..15: p0_x (2B Int16 LE)
+    // 16..17: p0_y (2B Int16 LE)
+
+    let instId = "";
+    for (let i = 0; i < 7; i++) {
+      const code = buf[1 + i];
+      if (code > 0) instId += String.fromCharCode(code);
+    }
+    const tool = buf[8];
+    const r = buf[9];
+    const g = buf[10];
+    const b = buf[11];
+    const width = buf[12];
+    const opacity = buf[13];
+    const p0_x = buf.readInt16LE(14);
+    const p0_y = buf.readInt16LE(16);
+
+    const strokes = this.getOrCreateFreeDrawStrokes(room);
+    const key = `${socketId}_${instId}`;
+
+    // If an existing stroke was hanging for this key, abort it
+    if (strokes.has(key)) {
+      strokes.delete(key);
+    }
+
+    strokes.set(key, {
+      socketId,
+      instId,
+      tool,
+      r,
+      g,
+      b,
+      width,
+      opacity,
+      points: [{ x: p0_x, y: p0_y }],
+      receivedPointCount: 1, // Includes p0
+      createdAt: Date.now(),
+      status: 'ACTIVE'
+    });
+
+    return true;
+  }
+
+  public handleFreeDrawMove(roomId: string, socketId: string, buf: Buffer): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room || (!room.isFreeDraw && !room.isExperimental) || !Buffer.isBuffer(buf) || buf.length < 10) return false;
+    if (buf[0] !== 2) return false; // MSG_DRAW_MOVE
+
+    let instId = "";
+    for (let i = 0; i < 7; i++) {
+      const code = buf[1 + i];
+      if (code > 0) instId += String.fromCharCode(code);
+    }
+
+    const strokes = this.getOrCreateFreeDrawStrokes(room);
+    const key = `${socketId}_${instId}`;
+    const stroke = strokes.get(key);
+    if (!stroke || stroke.status !== 'ACTIVE') return false;
+
+    // Safety check 1: Hard absolute duration limit (60s)
+    if (Date.now() - stroke.createdAt > 60000) {
+      console.warn(`[FreeDraw Server] Stroke exceeded 60s hard lifetime limit. Aborting: ${key}`);
+      this.abortFreeDrawStroke(roomId, socketId, instId);
+      return false;
+    }
+
+    const count = buf.readUInt16LE(8);
+    const expectedByteLen = 10 + count * 4;
+    if (buf.length < expectedByteLen) return false;
+
+    // Safety check 2: Buffer point limit (3,000 points)
+    if (stroke.points.length + count > 3000) {
+      console.warn(`[FreeDraw Server] Stroke exceeded 3000 point limit. Aborting: ${key}`);
+      this.abortFreeDrawStroke(roomId, socketId, instId);
+      return false;
+    }
+
+    for (let i = 0; i < count; i++) {
+      const px = buf.readInt16LE(10 + i * 4);
+      const py = buf.readInt16LE(12 + i * 4);
+      stroke.points.push({ x: px, y: py });
+    }
+    stroke.receivedPointCount = stroke.points.length;
+
+    return true;
+  }
+
+  public handleFreeDrawMoveCompressed(
+    roomId: string,
+    socketId: string,
+    buf: Buffer
+  ): { success: boolean; instId?: string; points?: { x: number; y: number }[] } {
+    const room = this.rooms.get(roomId);
+    if (!room || (!room.isFreeDraw && !room.isExperimental)) return { success: false };
+
+    // 1. Strict Payload Validation & Temporary Local Decode
+    const decoded = decodeType13BufferSafely(buf);
+    if (!decoded.success || !decoded.points || !decoded.instId) {
+      return { success: false };
+    }
+
+    const instId = decoded.instId;
+    const strokes = this.getOrCreateFreeDrawStrokes(room);
+    const key = `${socketId}_${instId}`;
+    const stroke = strokes.get(key);
+    if (!stroke || stroke.status !== 'ACTIVE') return { success: false };
+
+    // Safety check 1: Hard absolute duration limit (60s)
+    if (Date.now() - stroke.createdAt > 60000) {
+      console.warn(`[FreeDraw Server] Stroke exceeded 60s hard lifetime limit. Aborting: ${key}`);
+      this.abortFreeDrawStroke(roomId, socketId, instId);
+      return { success: false };
+    }
+
+    // Safety check 2: Buffer point limit (3,000 points)
+    if (stroke.points.length + decoded.points.length > 3000) {
+      console.warn(`[FreeDraw Server] Stroke exceeded 3000 point limit. Aborting: ${key}`);
+      this.abortFreeDrawStroke(roomId, socketId, instId);
+      return { success: false };
+    }
+
+    // 2. ATOMIC COMMIT: Append points to stroke.points ONLY after complete verification
+    for (let i = 0; i < decoded.points.length; i++) {
+      stroke.points.push(decoded.points[i]);
+    }
+    stroke.receivedPointCount = stroke.points.length;
+
+    return { success: true, instId, points: decoded.points };
+  }
+
+  public handleFreeDrawEnd(
+    roomId: string,
+    socketId: string,
+    buf: Buffer
+  ): { committed: boolean; strokeId: number; pointCount: number; instId: string } | null {
+    const room = this.rooms.get(roomId);
+    if (!room || (!room.isFreeDraw && !room.isExperimental) || !Buffer.isBuffer(buf) || buf.length < 8) return null;
+    if (buf[0] !== 3) return null; // MSG_DRAW_END
+
+    let instId = "";
+    for (let i = 0; i < 7; i++) {
+      const code = buf[1 + i];
+      if (code > 0) instId += String.fromCharCode(code);
+    }
+
+    const strokes = this.getOrCreateFreeDrawStrokes(room);
+    const key = `${socketId}_${instId}`;
+    const stroke = strokes.get(key);
+
+    if (!stroke || stroke.status !== 'ACTIVE') {
+      return null;
+    }
+
+    // Read optional strokeId and expectedPointCount if provided at end of buffer
+    // Type 3: 0..7 header. In extended draw_end: offset 8..9 is tool, offset 14..17 is startX,startY, offset 22 is isCancelled.
+    // If client encodes totalExpectedPoints at offset 23 (Uint16LE):
+    let expectedCount = stroke.receivedPointCount;
+    let strokeId = 0;
+    if (buf.length >= 27) {
+      strokeId = buf.readUInt16LE(23);
+      expectedCount = buf.readUInt16LE(25);
+    }
+
+    const isCancelled = buf.length >= 23 && buf[22] === 1;
+    if (isCancelled) {
+      this.abortFreeDrawStroke(roomId, socketId, instId, strokeId);
+      return null;
+    }
+
+    // Check lifetime limit
+    if (Date.now() - stroke.createdAt > 60000) {
+      console.warn(`[FreeDraw Server] Stroke exceeded lifetime on draw_end. Aborting: ${key}`);
+      this.abortFreeDrawStroke(roomId, socketId, instId, strokeId);
+      return null;
+    }
+
+    // Canonical Server Data Rule: "The points actually received by the server"
+    const pts = stroke.points;
+    const pointsLength = pts.length;
+
+    // Construct Canonical Binary Type 9 Stroke Buffer (byte-for-byte identical to client Type 9)
+    // 0: Type 9 (1B)
+    // 1..7: instId (7B ascii)
+    // 8: tool (1B)
+    // 9: r, 10: g, 11: b (3B)
+    // 12: width (1B)
+    // 13: opacity (1B)
+    // 14..15: pointsLength (2B Uint16LE)
+    // 16..: Int16LE pairs (each 4B)
+    // 16 + pointsLength * 4..: strokeId (2B Uint16LE)
+    const type9Buf = Buffer.alloc(16 + pointsLength * 4 + 2);
+    type9Buf.writeUInt8(9, 0); // MSG_DRAW_STROKE = 9
+    type9Buf.write(instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
+    type9Buf.writeUInt8(stroke.tool, 8);
+    type9Buf.writeUInt8(stroke.r, 9);
+    type9Buf.writeUInt8(stroke.g, 10);
+    type9Buf.writeUInt8(stroke.b, 11);
+    type9Buf.writeUInt8(stroke.width, 12);
+    type9Buf.writeUInt8(stroke.opacity, 13);
+    type9Buf.writeUInt16LE(pointsLength, 14);
+
+    for (let i = 0; i < pointsLength; i++) {
+      const p = pts[i];
+      type9Buf.writeInt16LE(p.x, 16 + i * 4);
+      type9Buf.writeInt16LE(p.y, 18 + i * 4);
+    }
+    type9Buf.writeUInt16LE((strokeId || 0) & 0xFFFF, 16 + pointsLength * 4);
+
+    // Record canonical stroke into standard drawHistory through existing protected path
+    this.recordDrawCommand(roomId, 'draw_binary', type9Buf, instId, strokeId);
+
+    // Also record the normal draw_end (Type 3) into drawHistory so undoLastDrawing
+    // cleanly pops both Type 9 + Type 3 as an atomic pair (lines 1205-1216 in rooms.ts)
+    this.recordDrawCommand(roomId, 'draw_binary', buf, instId, strokeId);
+
+    // Cache canonical Type 9 temporarily for targeted client repair requests
+    const cache = this.getOrCreateFreeDrawCanonicalCache(room);
+    const cacheKey = `${instId}_${strokeId}`;
+    cache.set(cacheKey, { buffer: type9Buf, createdAt: Date.now() });
+
+    // Evict old canonical cache entries older than 30s or if cache exceeds 100 entries
+    const now = Date.now();
+    for (const [ck, val] of cache.entries()) {
+      if (now - val.createdAt > 30000 || cache.size > 100) {
+        cache.delete(ck);
+      }
+    }
+
+    // Clean up active stroke buffer
+    strokes.delete(key);
+
+    return {
+      committed: true,
+      strokeId,
+      pointCount: pointsLength,
+      instId
+    };
+  }
+
+  public abortFreeDrawStroke(roomId: string, socketId: string, instId: string, strokeId: number = 0) {
+    const room = this.rooms.get(roomId);
+    if (!room || (!room.isFreeDraw && !room.isExperimental)) return;
+    const strokes = this.getOrCreateFreeDrawStrokes(room);
+    const key = `${socketId}_${instId}`;
+    strokes.delete(key);
+
+    // Broadcast reliable draw_abort binary message (Type 12) to all clients in room
+    if (this.io) {
+      const abortBuf = Buffer.alloc(10);
+      abortBuf.writeUInt8(12, 0); // MSG_DRAW_ABORT = 12
+      abortBuf.write(instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
+      abortBuf.writeUInt16LE(strokeId & 0xFFFF, 8);
+      this.io.to(roomId).emit('draw_binary', abortBuf);
+    }
+  }
+
+  public abortAllActiveFreeDrawStrokesForSocket(socketId: string) {
+    this.cleanupDrawingIdentitiesForSocket(socketId);
+    for (const room of this.rooms.values()) {
+      if ((room.isFreeDraw || room.isExperimental) && room.freeDrawStrokes) {
+        for (const [key, stroke] of room.freeDrawStrokes.entries()) {
+          if (stroke.socketId === socketId) {
+            this.abortFreeDrawStroke(room.id, socketId, stroke.instId);
+          }
+        }
+      }
+    }
+  }
+
+  public registerDrawingIdentity(socketId: string, instanceId: string) {
+    if (!instanceId || typeof instanceId !== 'string') return;
+    const trimmedId = instanceId.trim();
+    if (trimmedId.length === 0 || trimmedId.length > 7 || !/^[a-z0-9]+$/i.test(trimmedId)) {
+      return;
+    }
+
+    const player = this.getPlayer(socketId);
+    let targetRoom: Room | undefined = undefined;
+    if (player && player.roomId) {
+      targetRoom = this.rooms.get(player.roomId);
+    }
+    if (!targetRoom) {
+      for (const room of this.rooms.values()) {
+        if (room.players.some(p => p.id === socketId)) {
+          targetRoom = room;
+          break;
+        }
+      }
+    }
+
+    if (!targetRoom || !targetRoom.isFreeDraw) {
+      this.pendingDrawingIdentities.set(socketId, trimmedId);
+      return;
+    }
+    if (!targetRoom.players.some(p => p.id === socketId)) {
+      this.pendingDrawingIdentities.set(socketId, trimmedId);
+      return;
+    }
+
+    this.pendingDrawingIdentities.delete(socketId);
+
+    targetRoom.drawingIdentities = targetRoom.drawingIdentities || {};
+    const existing = targetRoom.drawingIdentities[trimmedId];
+    if (existing && existing.socketId !== socketId) {
+      const otherSocketActive = this.io?.sockets.sockets.has(existing.socketId) &&
+        targetRoom.players.some(p => p.id === existing.socketId);
+      if (otherSocketActive) {
+        return; // Prevent stealing active mapping
+      }
+    }
+
+    const playerName = player ? (player.name || 'لاعب') : 'لاعب';
+    targetRoom.drawingIdentities[trimmedId] = { socketId, playerName };
+
+    if (this.io) {
+      this.io.to(targetRoom.id).emit('drawing_identities_update', targetRoom.drawingIdentities);
+    }
+  }
+
+  public getDrawingIdentitiesForRoom(roomId: string): Record<string, { socketId: string; playerName: string }> | undefined {
+    return this.rooms.get(roomId)?.drawingIdentities;
+  }
+
+  public unregisterDrawingIdentity(socketId: string, instanceId: string) {
+    if (!instanceId || typeof instanceId !== 'string') return;
+    const trimmedId = instanceId.trim();
+    if (trimmedId.length === 0 || trimmedId.length > 7 || !/^[a-z0-9]+$/i.test(trimmedId)) {
+      return;
+    }
+
+    const player = this.getPlayer(socketId);
+    let targetRoom: Room | undefined = undefined;
+    if (player && player.roomId) {
+      targetRoom = this.rooms.get(player.roomId);
+    }
+    if (!targetRoom) {
+      for (const room of this.rooms.values()) {
+        if (room.players.some(p => p.id === socketId)) {
+          targetRoom = room;
+          break;
+        }
+      }
+    }
+
+    if (targetRoom && targetRoom.drawingIdentities && targetRoom.drawingIdentities[trimmedId]) {
+      const mapping = targetRoom.drawingIdentities[trimmedId];
+      if (mapping.socketId === socketId) {
+        delete targetRoom.drawingIdentities[trimmedId];
+        if (this.io) {
+          this.io.to(targetRoom.id).emit('drawing_identities_update', targetRoom.drawingIdentities);
+        }
+      }
+    }
+  }
+
+  public cleanupDrawingIdentitiesForSocket(socketId: string) {
+    for (const room of this.rooms.values()) {
+      if (room.drawingIdentities) {
+        let changed = false;
+        for (const [instId, info] of Object.entries(room.drawingIdentities)) {
+          if (info.socketId === socketId) {
+            delete room.drawingIdentities[instId];
+            changed = true;
+          }
+        }
+        if (changed && this.io) {
+          this.io.to(room.id).emit('drawing_identities_update', room.drawingIdentities);
+        }
+      }
+    }
+  }
+
+  public abortAllActiveFreeDrawStrokesForRoom(roomId: string) {
+    const room = this.rooms.get(roomId);
+    if (room && (room.isFreeDraw || room.isExperimental) && room.freeDrawStrokes) {
+      for (const stroke of room.freeDrawStrokes.values()) {
+        this.abortFreeDrawStroke(room.id, stroke.socketId, stroke.instId);
+      }
+      room.freeDrawStrokes.clear();
+    }
+  }
+
+  public handleFreeDrawClear(roomId: string, buf: Buffer) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    this.abortAllActiveFreeDrawStrokesForRoom(roomId);
+    if (room.freeDrawCanonicalCache) {
+      room.freeDrawCanonicalCache.clear();
+    }
+    room.gameState.drawHistory = [];
+    //@ts-ignore
+    room.gameState.redoStack = [];
+    room.gameState.isDrawingActive = false;
+    this.recordDrawCommand(roomId, 'draw_binary', buf);
+  }
+
+  public getCanonicalFreeDrawStroke(roomId: string, instId: string, strokeId: number): Buffer | null {
+    const room = this.rooms.get(roomId);
+    if (!room || (!room.isFreeDraw && !room.isExperimental) || !room.freeDrawCanonicalCache) return null;
+    const cacheKey = `${instId}_${strokeId}`;
+    const cached = room.freeDrawCanonicalCache.get(cacheKey);
+    return cached ? cached.buffer : null;
+  }
+
+  recordDrawCommand(roomId: string, event: string, data: any, customInstId?: string, customStrokeId?: number) {
+    const room = this.rooms.get(roomId);
+    if (!room) return;
+    if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
+    //@ts-ignore
+    if (!room.gameState.redoStack) room.gameState.redoStack = [];
+
+    // Helper to extract instanceId from binary buffer safely on the server side
+    const extractInstanceIdFromBuffer = (buf: any): string => {
+      if (!buf || !Buffer.isBuffer(buf) || buf.length < 8) return "";
+      let str = "";
+      for (let i = 0; i < 7; i++) {
+        const code = buf[1 + i];
+        if (code > 0) {
+          str += String.fromCharCode(code);
+        }
+      }
+      return str;
+    };
+
+    const isBinary = event === "draw_binary" && Buffer.isBuffer(data) && data.length > 0;
+    const type = isBinary ? data[0] : 0;
+    const instId = customInstId || (isBinary ? extractInstanceIdFromBuffer(data) : "");
+    let strokeId = customStrokeId;
+    if (strokeId === undefined && isBinary && Buffer.isBuffer(data)) {
+      if ((type === 1 || type === 3) && data.length >= 25) {
+        strokeId = data.readUInt16LE(23);
+      } else if (type === 4) {
+        // draw_action (bucket)
+        const hasTarget = data.length >= 21;
+        if (hasTarget && data.length >= 23) {
+          strokeId = data.readUInt16LE(21);
+        } else if (!hasTarget && data.length >= 19) {
+          strokeId = data.readUInt16LE(17);
+        }
+      } else if (type === 9) {
+        // draw_stroke (shapes / consolidated strokes)
+        const pointsLen = data.length >= 16 ? data.readUInt16LE(14) : 0;
+        const expectedLen = 16 + pointsLen * 4;
+        if (data.length >= expectedLen + 2) {
+          strokeId = data.readUInt16LE(expectedLen);
+        }
+      }
+    }
+
+    // If we already have a solidified draw_stroke (type 9) in history for this instId, do not append any further transient drawing actions
+    if (isBinary && instId && (type === 1 || type === 2 || type === 3 || type === 6)) {
+      const hasStroke = room.gameState.drawHistory.some(cmd => {
+        if (cmd.event === 'draw_binary' && Buffer.isBuffer(cmd.data) && cmd.data.length > 0) {
+          return cmd.data[0] === 9 && extractInstanceIdFromBuffer(cmd.data) === instId;
+        }
+        return false;
+      });
+      if (hasStroke) {
+        return; // Ignore duplicated transient live packet as it's already recorded in a completed stroke object!
+      }
+    }
+
+    let isValidStart = false;
+
+    if (isBinary) {
+      if (type === 1) { // draw_start
+        room.gameState.isDrawingActive = true;
+        isValidStart = true;
+      } else if (type === 2) { // draw_move
+        if (room.gameState.isDrawingActive === false) {
+          return;
+        }
+      } else if (type === 3 || type === 6) { // draw_end أو draw_cancel
+        room.gameState.isDrawingActive = false;
+      } else if (type === 9) { // draw_stroke
+        isValidStart = true;
+        room.gameState.isDrawingActive = false;
+
+        // Consolidate legacy transient stroke streams under the same session instanceId
+        if (instId) {
+          room.gameState.drawHistory = room.gameState.drawHistory.filter(cmd => {
+            if (cmd.event === 'draw_binary' && Buffer.isBuffer(cmd.data) && cmd.data.length > 0) {
+              const t = cmd.data[0];
+              if ((t === 1 || t === 2 || t === 3 || t === 6) && extractInstanceIdFromBuffer(cmd.data) === instId) {
+                return false;
+              }
+            }
+            return true;
+          });
+        }
+      } else if (type === 4 || type === 10 || type === 5) { // draw_action (bucket) or draw_clear
+        isValidStart = true;
+        room.gameState.isDrawingActive = false;
+      }
+    } else if (event === "draw_start" || event === "draw_action" || event === "draw_clear") {
+      isValidStart = true;
+    }
+
+    // Protection to avoid orphaned packages on an empty draw history
+    if (room.gameState.drawHistory.length === 0 && !isValidStart) {
+      return;
+    }
+
+    const historyEntry: any = { event, data };
+    if (instId) historyEntry.instId = instId;
+    if (strokeId !== undefined) historyEntry.strokeId = strokeId;
+    room.gameState.drawHistory.push(historyEntry);
+
+    room.gameState.redoStack = [];
+  }
+
+  public undoFreeDrawStroke(roomId: string, targetInstId: string, targetStrokeId: number): boolean {
+    const room = this.rooms.get(roomId);
+    if (!room || !room.gameState.drawHistory || room.gameState.drawHistory.length === 0) {
+      return false;
+    }
+
+    const history = room.gameState.drawHistory;
+
+    const matchesTarget = (cmd: any): boolean => {
+      if (!cmd) return false;
+      if (cmd.instId === targetInstId && cmd.strokeId === targetStrokeId) {
+        return true;
+      }
+      if (cmd.event === 'draw_binary' && Buffer.isBuffer(cmd.data) && cmd.data.length >= 8) {
+        const b = cmd.data;
+        const type = b[0];
+        let inst = "";
+        for (let i = 0; i < 7; i++) {
+          const code = b[1 + i];
+          if (code > 0) inst += String.fromCharCode(code);
+        }
+        if (inst !== targetInstId) return false;
+        if ((type === 1 || type === 3) && b.length >= 25) {
+          const sId = b.readUInt16LE(23);
+          if (sId === targetStrokeId) return true;
+        }
+      }
+      return false;
+    };
+
+    const hasMatch = history.some(matchesTarget);
+    if (!hasMatch) {
+      return false; // NO-OP: Target not found! Do not touch drawHistory.
+    }
+
+    // Filter out ONLY the matching element(s) for this target stroke,
+    // keeping the order of all other elements and buckets completely intact!
+    room.gameState.drawHistory = history.filter(cmd => !matchesTarget(cmd));
+
+    // Invalidate canonical cache for this stroke if present
+    if (room.freeDrawCanonicalCache) {
+      const cacheKey = `${targetInstId}_${targetStrokeId}`;
+      room.freeDrawCanonicalCache.delete(cacheKey);
+    }
+
+    return true;
+  }
+
+  private getLastStrokeStartIndex(drawHistory: any[]): number {
+    for (let i = drawHistory.length - 1; i >= 0; i--) {
+      const cmd = drawHistory[i];
+      if (!cmd) continue;
+      if (cmd.event === 'draw_start' || cmd.event === 'draw_action') {
+        return i;
+      }
+      if (cmd.event === 'draw_binary' && cmd.data) {
+        let firstByte: number | null = null;
+        if (Buffer.isBuffer(cmd.data) && cmd.data.length > 0) {
+          firstByte = cmd.data[0];
+        } else if (Array.isArray(cmd.data) && cmd.data.length > 0) {
+          firstByte = cmd.data[0];
+        }
+        if (firstByte === 1 || firstByte === 4 || firstByte === 9) { // MSG_DRAW_START or MSG_DRAW_ACTION or MSG_DRAW_STROKE
+          return i;
+        }
+      }
+    }
+    return -1;
+  }
+
+  undoLastDrawing(roomId: string): { event: string; data: any }[] {
+    const room = this.rooms.get(roomId);
+    if (!room) return [];
+    if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
+    if (!room.gameState.redoStack) room.gameState.redoStack = [];
+
+    // Lock drawing immediately when undo is pressed to lock out any late-arriving draw_move packets
+    room.gameState.isDrawingActive = false;
+
+    const canUndo = room.gameState.drawHistory.length > 0 && room.gameState.redoStack.length === 0;
+    if (canUndo) {
+      const history = room.gameState.drawHistory;
+      const lastIndex = history.length - 1;
+      const lastCmd = history[lastIndex];
+
+      const isEndCmd = (cmd: any): boolean => {
+        if (!cmd) return false;
+        if (cmd.event === 'draw_end' || cmd.event === 'draw_cancel') return true;
+        if (cmd.event === 'draw_binary' && cmd.data) {
+          let b: number | null = null;
+          if (Buffer.isBuffer(cmd.data) && cmd.data.length > 0) b = cmd.data[0];
+          else if (Array.isArray(cmd.data) && cmd.data.length > 0) b = cmd.data[0];
+          return b === 3 || b === 6;
+        }
+        return false;
+      };
+
+      const isStrokeCmd = (cmd: any): boolean => {
+        if (!cmd) return false;
+        if (cmd.event === 'draw_stroke') return true;
+        if (cmd.event === 'draw_binary' && cmd.data) {
+          let b: number | null = null;
+          if (Buffer.isBuffer(cmd.data) && cmd.data.length > 0) b = cmd.data[0];
+          else if (Array.isArray(cmd.data) && cmd.data.length > 0) b = cmd.data[0];
+          return b === 9;
+        }
+        return false;
+      };
+
+      // 🛡️ Atomic Stroke Undo: If the last completed action is draw_stroke followed by draw_end (Type 9 + Type 3),
+      // remove both together as a single logical unit so that draw_stroke does not remain orphaned in drawHistory.
+      if (lastIndex >= 1 && isEndCmd(lastCmd) && isStrokeCmd(history[lastIndex - 1])) {
+        const endCmd = history.pop()!;
+        const strokeCmd = history.pop()!;
+        room.gameState.redoStack = [[strokeCmd, endCmd]];
+      } else {
+        const removed = history.pop();
+        if (removed) {
+          room.gameState.redoStack = [removed]; // Enforce 1-step undo/redo limit
+        }
+      }
+    }
+
+    return room.gameState.drawHistory;
+  }
+
+  redoDrawing(roomId: string): { event: string; data: any }[] {
+    const room = this.rooms.get(roomId);
+    if (!room) return [];
+    if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
+    if (!room.gameState.redoStack) room.gameState.redoStack = [];
+
+    const history = room.gameState.drawHistory;
+    const redoStack = room.gameState.redoStack;
+
+    if (redoStack.length > 0) {
+      const restored = redoStack.pop();
+      if (restored) {
+        if (Array.isArray(restored)) {
+          history.push(...restored);
+        } else {
+          history.push(restored);
+        }
+      }
+    }
+    return history;
+  }
+
+  clearDrawHistory(roomId: string) {
+    const room = this.rooms.get(roomId);
+    if (room && room.gameState.drawHistory) {
+      if (room.isFreeDraw) {
+        this.abortAllActiveFreeDrawStrokesForRoom(roomId);
+      }
+      room.gameState.drawHistory = [];
+      //@ts-ignore
+      room.gameState.redoStack = [];
+      room.gameState.isDrawingActive = false;
+    }
+  }
+
+  addPlayerToRoom(roomId: string, player: Player): Room {
+    console.error(
+      `[NEW CONNECTION] Socket ID: ${player.id} , Username: ${player.name}, Persistent ID: ${player.persistentId || "N/A"}`,
+    );
+    const room = this.createRoom(roomId);
+
+    // Remove from previous room if any
+    const existingPlayer = this.players.get(player.id);
+    if (
+      existingPlayer &&
+      existingPlayer.roomId &&
+      existingPlayer.roomId !== roomId
+    ) {
+      this.removePlayerFromRoom(existingPlayer.roomId, player.id);
+    }
+
+    player.roomId = roomId;
+    player.lastActivity = Date.now();
+    this.players.set(player.id, player);
+
+    // Add to new room if not already in it
+    if (!room.players.find((p) => p.id === player.id)) {
+      room.players.push(player);
+      const pId = player.persistentId || player.id;
+      if (!room.gameState.turnQueue.includes(pId)) {
+        room.gameState.turnQueue.push(pId);
+      }
+    }
+
+    const pendingInstId = this.pendingDrawingIdentities.get(player.id);
+    if (pendingInstId && room.isFreeDraw) {
+      this.pendingDrawingIdentities.delete(player.id);
+      this.registerDrawingIdentity(player.id, pendingInstId);
+    } else if (room.isFreeDraw && room.drawingIdentities && this.io) {
+      this.io.to(player.id).emit('drawing_identities_update', room.drawingIdentities);
+    }
+
+    this.broadcastState(room);
+    return room;
+  }
+
+  removePlayerFromRoom(roomId: string, socketId: string): Room | undefined {
+    try {
+      this.cleanupDrawingIdentitiesForSocket(socketId);
+      const room = this.rooms.get(roomId);
+      if (room) {
+        const player = this.players.get(socketId);
+        const pId = player ? player.persistentId || player.id : socketId;
+
+        room.players = room.players.filter((p) => p.id !== socketId);
+        room.gameState.turnQueue = room.gameState.turnQueue.filter(
+          (id) => id !== pId,
+        );
+        room.gameState.correctGuessers = room.gameState.correctGuessers.filter(
+          (id) => id !== pId,
+        );
+
+        if (player) {
+          player.roomId = null;
+        }
+
+        if (room.players.length === 0) {
+          // Immediately purge drawing history, redo stack, and chat to free memory
+          if (room.gameState) {
+            room.gameState.drawHistory = [];
+            room.gameState.redoStack = [];
+          }
+          room.chatMessages = [];
+          this.rooms.delete(roomId);
+          return undefined; // Room deleted
+        }
+
+        if (room.activeDrawers) {
+          room.activeDrawers = room.activeDrawers.filter((id) => id !== pId && id !== socketId);
+        }
+
+        if (room.players.length < 2 && !room.isFreeDraw) {
+          room.players.forEach((p) => (p.score = 0));
+        }
+
+        // Handle if current drawer leaves
+        if (!room.isFreeDraw && room.gameState.currentDrawerId === pId) {
+          if (
+            room.gameState.correctGuessers.length === 0 &&
+            room.players.length > 0
+          ) {
+            this.transitionToRoundEnd(room, "drawer_left");
+          } else {
+            this.broadcastState(room);
+          }
+        } else {
+          this.broadcastState(room);
+        }
+      }
+      return room;
+    } catch (e) {
+      console.error("Error removing player from room:", e);
+      return undefined;
+    }
+  }
+
+  public reconnectPlayer(
+    roomId: string,
+    persistentId: string,
+    nickname: string,
+    newSocketId: string,
+  ): Room | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+
+    let existingPlayer = room.players.find(
+      (p) => p.persistentId && p.persistentId === persistentId,
+    );
+    let matchMethod = "persistentId";
+    if (!existingPlayer) {
+      // We ONLY fallback to nickname if the existing player DOES NOT have a persistentId
+      // (which shouldn't happen, but just in case for older clients)
+      existingPlayer = room.players.find((p) => p.name === nickname && !p.persistentId);
+      if (existingPlayer) matchMethod = "nickname";
+    }
+
+    if (!existingPlayer) {
+      console.error(
+        `[RECONNECT ATTEMPT] Searching for User: ${nickname}, Found Match? No, Old Socket ID: N/A, New Socket ID: ${newSocketId}`,
+      );
+      return null;
+    }
+
+    const oldSocketId = existingPlayer.id;
+
+    // Rescue player: cancel their eviction timer
+    const pId = existingPlayer.persistentId || existingPlayer.name;
+    if (this.evictionTimers.has(pId)) {
+      console.log(
+        `[GRACE PERIOD] Rescued player ${existingPlayer.name} (${pId}). Cancelling 10s eviction timer.`,
+      );
+      clearTimeout(this.evictionTimers.get(pId));
+      this.evictionTimers.delete(pId);
+    }
+
+    if (oldSocketId === newSocketId) {
+      console.error(
+        `[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Socket ID unchanged: ${newSocketId}`,
+      );
+      existingPlayer.isOffline = false;
+      existingPlayer.lastActivity = Date.now();
+      delete existingPlayer.offlineSince;
+      this.broadcastState(room);
+      return room;
+    }
+
+    console.error(
+      `[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Old Socket ID: ${oldSocketId}, New Socket ID: ${newSocketId}`,
+    );
+
+    // --- Ghost Socket Shield ---
+    // If we have a new socket ID, forcefully disconnect the stale ghost socket connection
+    // to prevent listeners from leaking, ghost states, or chat freeze.
+    if (oldSocketId && oldSocketId !== newSocketId && this.io) {
+      const oldSocket = this.io.sockets.sockets.get(oldSocketId);
+      if (oldSocket) {
+        console.log(`[Ghost Socket Shield] Force-disconnecting leaking ghost socket: ${oldSocketId}`);
+        oldSocket.disconnect(true);
+      }
+    }
+
+    // Update Player ID mapping
+    existingPlayer.id = newSocketId;
+    existingPlayer.isOffline = false;
+    existingPlayer.lastActivity = Date.now();
+    delete existingPlayer.offlineSince;
+
+    // Update RoomManager players map
+    this.players.delete(oldSocketId);
+    this.players.set(newSocketId, existingPlayer);
+
+    // Also explicitly update the chat messages and guesses to reference the new ID natively
+    if (room.chatMessages) {
+      room.chatMessages.forEach((msg) => {
+        if (msg.senderId === oldSocketId) msg.senderId = newSocketId;
+      });
+    }
+    if (room.guessMessages) {
+      room.guessMessages.forEach((msg) => {
+        if (msg.senderId === oldSocketId) msg.senderId = newSocketId;
+      });
+    }
+
+    // Preserve activeDrawers mapping for reconnected player in Free Draw
+    if (room.activeDrawers) {
+      if (oldSocketId && room.activeDrawers.includes(oldSocketId)) {
+        room.activeDrawers = room.activeDrawers.map((id) => (id === oldSocketId ? newSocketId : id));
+      }
+      const playerPid = existingPlayer.persistentId;
+      if (playerPid && room.activeDrawers.includes(playerPid) && !room.activeDrawers.includes(newSocketId)) {
+        room.activeDrawers.push(newSocketId);
+      }
+    }
+
+    const pendingInstId = this.pendingDrawingIdentities.get(newSocketId);
+    if (pendingInstId && room.isFreeDraw) {
+      this.pendingDrawingIdentities.delete(newSocketId);
+      this.registerDrawingIdentity(newSocketId, pendingInstId);
+    } else if (room.isFreeDraw && room.drawingIdentities && this.io) {
+      this.io.to(newSocketId).emit('drawing_identities_update', room.drawingIdentities);
+    }
+
+    this.broadcastState(room);
+    return room;
+  }
+
+  getPlayer(socketId: string): Player | undefined {
+    return this.players.get(socketId);
+  }
+
+  public handleDisconnect(socketId: string) {
+    this.removeClientCapabilities(socketId);
+    this.pendingDrawingIdentities.delete(socketId);
+    try {
+      const player = this.players.get(socketId);
+
+      // Explicitly check the room's player array as well to ensure it's not a dangling old socket
+      // matched by username or old map entry
+      let activeRoomPlayer = null;
+      let roomId = player?.roomId;
+
+      if (!roomId) {
+        // Fallback manual scan just in case this.players map was out of sync
+        for (const [rid, room] of this.rooms.entries()) {
+          const found = room.players.find((p) => p.id === socketId);
+          if (found) {
+            activeRoomPlayer = found;
+            roomId = rid;
+            break;
+          }
+        }
+      } else {
+        const room = this.rooms.get(roomId);
+        if (room) {
+          activeRoomPlayer = room.players.find((p) => p.id === socketId);
+
+          // If player is found in this.players map but their actual ID in the room array was updated to a NEW socket, ignore this disconnect
+          const playerByNameOrRef = room.players.find(
+            (p) => p.name === player?.name,
+          );
+          if (playerByNameOrRef && playerByNameOrRef.id !== socketId) {
+            console.warn(
+              `[IGNORED DISCONNECT] Socket ${socketId} belongs to old connection of ${playerByNameOrRef.name}. Current active socket is ${playerByNameOrRef.id}.`,
+            );
+            return;
+          }
+        }
+      }
+
+      const pToUpdate = activeRoomPlayer || player;
+      if (!pToUpdate) return;
+
+      if (pToUpdate.id !== socketId) {
+        console.warn(
+          `[IGNORED DISCONNECT - ID MISMATCH] Disconnecting: ${socketId}, Active: ${pToUpdate.id}`,
+        );
+        return;
+      }
+
+      console.error(
+        `[PLAYER DISCONNECTED] Socket ID: ${socketId}, Username: ${pToUpdate.name}`,
+      );
+
+      // Clean up any active Free Draw strokes for this disconnecting socket
+      this.abortAllActiveFreeDrawStrokesForSocket(socketId);
+
+      // Keep isOffline false to prevent UI state shifts or premature turn skipping
+      pToUpdate.isOffline = false;
+      pToUpdate.offlineSince = Date.now();
+
+      if (roomId) {
+        const room = this.rooms.get(roomId);
+        if (room) {
+          // Grace period setup (90 seconds silent grace)
+          const pId = pToUpdate.persistentId || pToUpdate.name;
+          if (this.evictionTimers.has(pId)) {
+            clearTimeout(this.evictionTimers.get(pId));
+          }
+
+          console.log(
+            `[GRACE PERIOD] Starting 90-second silent grace timer for disconnected player ${pToUpdate.name} (${pId})`,
+          );
+          const timer = setTimeout(() => {
+            try {
+              const currentRoom = this.rooms.get(roomId!);
+              if (currentRoom) {
+                const checkPlayer = currentRoom.players.find(
+                  (p) => (p.persistentId || p.name) === pId,
+                );
+                // If they are still disconnected (offlineSince is still set, meaning they haven't reconnected)
+                if (checkPlayer && checkPlayer.offlineSince !== undefined) {
+                  console.log(
+                    `[GRACE PERIOD] Silent eviction timeout triggered for ${checkPlayer.name}. Cleaning up.`,
+                  );
+
+                  const socket = this.io?.sockets.sockets.get(checkPlayer.id);
+                  if (socket) {
+                    socket.emit('session_expired', { reason: 'connection_lost' });
+                    socket.disconnect(true);
+                  }
+
+                  this.removePlayerFromRoom(roomId!, checkPlayer.id);
+                  this.players.delete(checkPlayer.id);
+                  this.evictionTimers.delete(pId);
+
+                  this.broadcastMessage(currentRoom, {
+                    id:
+                      "sys-" +
+                      Date.now().toString() +
+                      Math.random().toString(36).substr(2, 5),
+                    text: `انقطع اتصال ${checkPlayer.name} وتمت إزالته من اللعبة`,
+                    type: "system",
+                  });
+                }
+              }
+            } catch (err) {
+              console.error("Error running grace eviction:", err);
+            }
+          }, 90000); // 90 seconds silent grace period!
+
+          this.evictionTimers.set(pId, timer);
+        }
+      }
+    } catch (e) {
+      console.error("Error in handleDisconnect:", e);
+    }
+  }
+
+  removePlayer(socketId: string) {
+    try {
+      const player = this.players.get(socketId);
+      if (player && player.roomId) {
+        // Strict guard: only proceed if the current room's player still uses THIS socketId
+        const room = this.rooms.get(player.roomId);
+        if (room) {
+          const activePlayer = room.players.find((p) => p.name === player.name);
+          if (activePlayer && activePlayer.id !== socketId) {
+            console.warn(
+              `[IGNORED REMOVE] Socket ${socketId} belongs to old connection of ${activePlayer.name}. Active socket is ${activePlayer.id}. ignoring.`,
+            );
+            this.players.delete(socketId); // Just clean map if it's lingering
+            return;
+          }
+        }
+
+        this.removePlayerFromRoom(player.roomId, socketId);
+      }
+      this.players.delete(socketId);
+    } catch (e) {
+      console.error("Error removing player:", e);
+    }
+  }
+}
+
+export const roomManager = new RoomManager();
