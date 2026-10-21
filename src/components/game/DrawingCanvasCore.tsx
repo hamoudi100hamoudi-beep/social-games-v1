@@ -106,6 +106,17 @@ interface UndoDiagnostics {
   floodFillExecutions: number;
   cumulativeFillDurationMs: number;
   maxFillDurationMs: number;
+  checkpointSelectionDurationMs: number;
+  checkpointRestoreDurationMs: number;
+  batchSetupDurationMs: number;
+  checkpointCaptureDurationMs: number;
+  checkpointCaptureAttempts: number;
+  checkpointCaptureSuccesses: number;
+  batchFlushDurationMs: number;
+  batchFlushCount: number;
+  replayOtherDurationMs: number;
+  cumulativeFilledPixels: number;
+  maxFillPixelCount: number;
   totalSyncDurationMs: number;
   replayDurationMs?: number;
   totalUndoDurationMs?: number;
@@ -183,6 +194,8 @@ interface TargetRGBA {
   a: number;
   isFullCanvasOpaque?: boolean;
   fillHex?: string;
+  isNoOp?: boolean;
+  filledPixelCount?: number;
 }
 
 // Bounded seed recovery search offsets within Euclidean distance <= 2.0 physical pixels, ordered by distance
@@ -209,7 +222,7 @@ const executeRasterFloodFill = (
   reusableVisited?: Uint8Array,
   reusableQueueX?: number[],
   reusableQueueY?: number[]
-): (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean }) | null => {
+): (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean; filledPixelCount?: number }) | null => {
   // Derive pixel seed coordinates directly from canvas physical backing store scale (cw / logicalWidth)
   const scaleX = cw / logicalWidth;
   const scaleY = ch / logicalHeight;
@@ -265,7 +278,7 @@ const executeRasterFloodFill = (
   const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
 
   if (ta >= 240 && fillOpacity >= 0.95 && Math.abs(tr - fr) <= 5 && Math.abs(tg - fg) <= 5 && Math.abs(tb - fb) <= 5) {
-    return { r: tr, g: tg, b: tb, a: ta, isNoOp: true };
+    return { r: tr, g: tg, b: tb, a: ta, isNoOp: true, filledPixelCount: 0 };
   }
 
   let visited: Uint8Array;
@@ -382,7 +395,7 @@ const executeRasterFloodFill = (
   }
 
   const isFullCanvasOpaque = (filledPixelCount === cw * ch) && (fillOpacity >= 0.95);
-  return { r: tr, g: tg, b: tb, a: ta, isFullCanvasOpaque, fillHex };
+  return { r: tr, g: tg, b: tb, a: ta, isFullCanvasOpaque, fillHex, filledPixelCount };
 };
 
 const floodFill = (
@@ -394,7 +407,7 @@ const floodFill = (
   logicalWidth: number = DEFAULT_LOGICAL_WIDTH,
   logicalHeight: number = DEFAULT_LOGICAL_HEIGHT,
   expectedTarget?: TargetRGBA
-): (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean }) | null => {
+): (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean; filledPixelCount?: number }) | null => {
   const canvas = ctx.canvas;
   const cw = canvas.width;
   const ch = canvas.height;
@@ -1042,14 +1055,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     historyCheckpointsRef.current = [];
   };
 
-  const captureHistoryCheckpoint = (index: number, commandList?: any[], sourceImageData?: ImageData) => {
-    if (!propsRef.current.isFreeDraw || !isBucketCheckpointExpEnabled()) return;
+  const captureHistoryCheckpoint = (index: number, commandList?: any[], sourceImageData?: ImageData): boolean => {
+    if (!propsRef.current.isFreeDraw || !isBucketCheckpointExpEnabled()) return false;
     const ctx = ctxRef.current;
-    if (!ctx || !ctx.canvas) return;
+    if (!ctx || !ctx.canvas) return false;
 
     const list = commandList || localCommandsRef.current;
     const lastClearIndex = findLatestClearIndex(list);
-    if (index <= lastClearIndex) return;
+    if (index <= lastClearIndex) return false;
 
     const existingIdx = historyCheckpointsRef.current.findIndex(cp => cp.index === index);
     if (existingIdx !== -1) {
@@ -1068,8 +1081,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         existing.anchorSignature = index > 0 ? getCommandSignature(list[index - 1]) : "";
         existing.lastClearIndex = lastClearIndex;
         existing.timestamp = Date.now();
+        return true;
       }
-      return;
+      return false;
     }
 
     if (historyCheckpointsRef.current.length >= MAX_HISTORY_CHECKPOINTS) {
@@ -1104,7 +1118,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       };
       historyCheckpointsRef.current.push(cp);
       historyCheckpointsRef.current.sort((a, b) => a.index - b.index);
+      return true;
     }
+    return false;
   };
 
   const invalidateHistoryCheckpointsAfter = (targetIndex: number) => {
@@ -3127,10 +3143,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // 3. Pre-flight Cache Restoration (Non-destructive check & restore):
     // MUST succeed before mutating list or redo stack to prevent double-removal on failure
+    const restoreStart = diag ? performance.now() : 0;
     const restored = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
     if (!restored) {
       if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'bitmap_restoration_failure'; }
       return false;
+    }
+    if (diag) {
+      diag.checkpointRestoreDurationMs = performance.now() - restoreStart;
     }
 
     // 4. Fast-Path is 100% VALID: Commit state modifications only AFTER restoration succeeds
@@ -3178,9 +3198,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             diag.hints.existedBefore++;
           }
         }
+        const otherStart = diag ? performance.now() : 0;
         applyReplayCommand(ctx, list[i], replayPaths, replaySessions, diag);
+        if (diag && !isBucketCommand(list[i])) {
+          diag.replayOtherDurationMs += (performance.now() - otherStart);
+        }
       }
 
+      const leftoverFastStart = diag ? performance.now() : 0;
       Object.keys(replaySessions).forEach((instId) => {
         try {
           const session = replaySessions[instId];
@@ -3199,6 +3224,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           // Ignore
         }
       });
+      if (diag) {
+        diag.replayOtherDurationMs += (performance.now() - leftoverFastStart);
+      }
       isReplayingRef.current = false;
     }
 
@@ -3294,6 +3322,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           floodFillExecutions: 0,
           cumulativeFillDurationMs: 0,
           maxFillDurationMs: 0,
+          checkpointSelectionDurationMs: 0,
+          checkpointRestoreDurationMs: 0,
+          batchSetupDurationMs: 0,
+          checkpointCaptureDurationMs: 0,
+          checkpointCaptureAttempts: 0,
+          checkpointCaptureSuccesses: 0,
+          batchFlushDurationMs: 0,
+          batchFlushCount: 0,
+          replayOtherDurationMs: 0,
+          cumulativeFilledPixels: 0,
+          maxFillPixelCount: 0,
           totalSyncDurationMs: 0,
           replayDurationMs: 0,
           totalUndoDurationMs: 0,
@@ -3337,8 +3376,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         if (diag) {
           const totalDuration = performance.now() - startTime;
-          diag.totalUndoDurationMs = totalDuration;
-          diag.totalSyncDurationMs = totalDuration;
+          diag.totalUndoDurationMs = Math.round(totalDuration * 100) / 100;
+          diag.totalSyncDurationMs = diag.totalUndoDurationMs;
+          diag.cumulativeFillDurationMs = Math.round(diag.cumulativeFillDurationMs * 100) / 100;
+          diag.maxFillDurationMs = Math.round(diag.maxFillDurationMs * 100) / 100;
+          diag.checkpointSelectionDurationMs = Math.round(diag.checkpointSelectionDurationMs * 100) / 100;
+          diag.checkpointRestoreDurationMs = Math.round(diag.checkpointRestoreDurationMs * 100) / 100;
+          diag.batchSetupDurationMs = Math.round(diag.batchSetupDurationMs * 100) / 100;
+          diag.checkpointCaptureDurationMs = Math.round(diag.checkpointCaptureDurationMs * 100) / 100;
+          diag.batchFlushDurationMs = Math.round(diag.batchFlushDurationMs * 100) / 100;
+          diag.replayOtherDurationMs = Math.round(diag.replayOtherDurationMs * 100) / 100;
           console.log("[FREE_DRAW_UNDO_DIAG]", JSON.stringify(diag));
         }
 
@@ -3720,6 +3767,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 const dur = performance.now() - fillStart;
                 diag.cumulativeFillDurationMs += dur;
                 if (dur > diag.maxFillDurationMs) diag.maxFillDurationMs = dur;
+                if (fillRes) {
+                  const pCount = fillRes.filledPixelCount || 0;
+                  diag.cumulativeFilledPixels += pCount;
+                  if (pCount > diag.maxFillPixelCount) diag.maxFillPixelCount = pCount;
+                }
               }
               if (cmdObj) {
                 if (fillRes?.isFullCanvasOpaque) {
@@ -3747,6 +3799,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               const dur = performance.now() - fillStart;
               diag.cumulativeFillDurationMs += dur;
               if (dur > diag.maxFillDurationMs) diag.maxFillDurationMs = dur;
+              if (fillRes) {
+                const pCount = fillRes.filledPixelCount || 0;
+                diag.cumulativeFilledPixels += pCount;
+                if (pCount > diag.maxFillPixelCount) diag.maxFillPixelCount = pCount;
+              }
             }
             if (cmdObj) {
               if (fillRes?.isFullCanvasOpaque) {
@@ -3854,6 +3911,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       const N = commands.length;
       let startIndex = 0;
+      const cpSelectStart = diag ? performance.now() : 0;
       const lastClearIndex = findLatestClearIndex(commands);
 
       if (diag) {
@@ -3865,6 +3923,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       // Best valid checkpoint strictly <= N
       const bestCp = getBestCheckpoint(commands, N);
+      if (diag) {
+        diag.checkpointSelectionDurationMs = performance.now() - cpSelectStart;
+      }
 
       if (diag) {
         diag.checkpointFacts.bucketThresholdActive = isBucketCheckpointExpEnabled();
@@ -3906,6 +3967,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }
 
+      const cpRestoreStart = diag ? performance.now() : 0;
       if (bestCp && bestCp.index > lastClearIndex) {
         // 1. Clear ONLY the permanent base canvas
         ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
@@ -3920,6 +3982,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         invalidateCheckpoint('all');
         ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         startIndex = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+      }
+      if (diag) {
+        diag.checkpointRestoreDurationMs = performance.now() - cpRestoreStart;
       }
 
       if (diag) {
@@ -4009,7 +4074,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       const flushBatchBuffer = () => {
         if (batchImageData && ctx) {
+          const flushStart = diag ? performance.now() : 0;
           ctx.putImageData(batchImageData, 0, 0);
+          if (diag) {
+            diag.batchFlushCount++;
+            diag.batchFlushDurationMs += (performance.now() - flushStart);
+          }
           batchImageData = null;
           batchData = null;
         }
@@ -4032,6 +4102,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         if (i === candidateBaseIndex && !isCheckpointValid(baseCheckpointRef.current, commands)) {
           if (useBatchReplay) flushBatchBuffer();
+          const capStart = diag ? performance.now() : 0;
+          if (diag) diag.checkpointCaptureAttempts++;
           const bCanvas = ensureCheckpointCanvas('base');
           const bCtx = bCanvas.getContext('2d');
           if (bCtx) {
@@ -4046,11 +4118,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               anchorSignature: getCommandSignature(commands[candidateBaseIndex - 1]),
               lastClearIndex
             };
+            if (diag) diag.checkpointCaptureSuccesses++;
+          }
+          if (diag) {
+            diag.checkpointCaptureDurationMs += (performance.now() - capStart);
           }
         }
 
         if (i === candidateTailIndex && !isCheckpointValid(tailCheckpointRef.current, commands)) {
           if (useBatchReplay) flushBatchBuffer();
+          const capStart = diag ? performance.now() : 0;
+          if (diag) diag.checkpointCaptureAttempts++;
           const tCanvas = ensureCheckpointCanvas('tail');
           const tCtx = tCanvas.getContext('2d');
           if (tCtx) {
@@ -4065,12 +4143,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               anchorSignature: getCommandSignature(commands[candidateTailIndex - 1]),
               lastClearIndex
             };
+            if (diag) diag.checkpointCaptureSuccesses++;
+          }
+          if (diag) {
+            diag.checkpointCaptureDurationMs += (performance.now() - capStart);
           }
         }
 
         if (useBatchReplay && isBucketCommand(commands[i])) {
           // --- Batch Bucket Replay Path ---
           if (!batchImageData) {
+            const setupStart = diag ? performance.now() : 0;
             if (!sharedOffscreenCanvas) {
               sharedOffscreenCanvas = document.createElement('canvas');
             }
@@ -4091,6 +4174,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (!batchVisited) batchVisited = new Uint8Array(batchCw * batchCh);
             if (!batchQueueX) batchQueueX = [];
             if (!batchQueueY) batchQueueY = [];
+            if (diag) {
+              diag.batchSetupDurationMs += (performance.now() - setupStart);
+            }
           }
 
           const cmdObj = commands[i];
@@ -4125,6 +4211,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               const dur = performance.now() - fillStart;
               diag.cumulativeFillDurationMs += dur;
               if (dur > diag.maxFillDurationMs) diag.maxFillDurationMs = dur;
+              if (fillRes?.filledPixelCount) {
+                diag.cumulativeFilledPixels += fillRes.filledPixelCount;
+                if (fillRes.filledPixelCount > diag.maxFillPixelCount) {
+                  diag.maxFillPixelCount = fillRes.filledPixelCount;
+                }
+              }
             }
             if (cmdObj) {
               if (fillRes?.isFullCanvasOpaque) {
@@ -4142,16 +4234,32 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
 
           if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
-            captureHistoryCheckpoint(i + 1, commands, batchImageData || undefined);
+            const capStart = diag ? performance.now() : 0;
+            if (diag) diag.checkpointCaptureAttempts++;
+            const success = captureHistoryCheckpoint(i + 1, commands, batchImageData || undefined);
+            if (diag) {
+              diag.checkpointCaptureDurationMs += (performance.now() - capStart);
+              if (success) diag.checkpointCaptureSuccesses++;
+            }
           }
         } else {
           // --- Non-Bucket or Standard Path ---
           if (useBatchReplay) {
             flushBatchBuffer();
           }
+          const otherStart = diag ? performance.now() : 0;
           applyReplayCommand(ctx, commands[i], replayPaths, replaySessions, diag);
+          if (diag && !isBucketCommand(commands[i])) {
+            diag.replayOtherDurationMs += (performance.now() - otherStart);
+          }
           if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw && isBucketCommand(commands[i])) {
-            captureHistoryCheckpoint(i + 1, commands);
+            const capStart = diag ? performance.now() : 0;
+            if (diag) diag.checkpointCaptureAttempts++;
+            const success = captureHistoryCheckpoint(i + 1, commands);
+            if (diag) {
+              diag.checkpointCaptureDurationMs += (performance.now() - capStart);
+              if (success) diag.checkpointCaptureSuccesses++;
+            }
           }
         }
       }
@@ -4161,6 +4269,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
 
       // Render any leftover committed strokes
+      const leftoverStart = diag ? performance.now() : 0;
       Object.keys(replaySessions).forEach((instId) => {
         try {
           const session = replaySessions[instId];
@@ -4179,6 +4288,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           // Ignore
         }
       });
+      if (diag) {
+        diag.replayOtherDurationMs += (performance.now() - leftoverStart);
+      }
 
       if (diag) {
         diag.baseIndexAfter = baseCheckpointRef.current.index;
@@ -4194,9 +4306,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       syncHistoryButtons();
       if (diag) {
         const replayDuration = performance.now() - replayStartTime;
-        diag.replayDurationMs = replayDuration;
+        diag.replayDurationMs = Math.round(replayDuration * 100) / 100;
+        diag.cumulativeFillDurationMs = Math.round(diag.cumulativeFillDurationMs * 100) / 100;
+        diag.maxFillDurationMs = Math.round(diag.maxFillDurationMs * 100) / 100;
+        diag.checkpointSelectionDurationMs = Math.round(diag.checkpointSelectionDurationMs * 100) / 100;
+        diag.checkpointRestoreDurationMs = Math.round(diag.checkpointRestoreDurationMs * 100) / 100;
+        diag.batchSetupDurationMs = Math.round(diag.batchSetupDurationMs * 100) / 100;
+        diag.checkpointCaptureDurationMs = Math.round(diag.checkpointCaptureDurationMs * 100) / 100;
+        diag.batchFlushDurationMs = Math.round(diag.batchFlushDurationMs * 100) / 100;
+        diag.replayOtherDurationMs = Math.round(diag.replayOtherDurationMs * 100) / 100;
         if (diag.type !== 'local_undo') {
-          diag.totalSyncDurationMs = replayDuration;
+          diag.totalSyncDurationMs = diag.replayDurationMs;
           console.log("[FREE_DRAW_UNDO_DIAG]", JSON.stringify(diag));
         }
       }
@@ -4679,6 +4799,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             floodFillExecutions: 0,
             cumulativeFillDurationMs: 0,
             maxFillDurationMs: 0,
+            checkpointSelectionDurationMs: 0,
+            checkpointRestoreDurationMs: 0,
+            batchSetupDurationMs: 0,
+            checkpointCaptureDurationMs: 0,
+            checkpointCaptureAttempts: 0,
+            checkpointCaptureSuccesses: 0,
+            batchFlushDurationMs: 0,
+            batchFlushCount: 0,
+            replayOtherDurationMs: 0,
+            cumulativeFilledPixels: 0,
+            maxFillPixelCount: 0,
             totalSyncDurationMs: 0,
             replayDurationMs: 0,
             totalUndoDurationMs: 0,
