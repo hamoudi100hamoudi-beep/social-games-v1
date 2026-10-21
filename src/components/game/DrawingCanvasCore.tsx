@@ -4101,17 +4101,31 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
 
         if (i === candidateBaseIndex && !isCheckpointValid(baseCheckpointRef.current, commands)) {
-          if (useBatchReplay) flushBatchBuffer();
           const capStart = diag ? performance.now() : 0;
           if (diag) diag.checkpointCaptureAttempts++;
           const bCanvas = ensureCheckpointCanvas('base');
           const bCtx = bCanvas.getContext('2d');
           if (bCtx) {
-            bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
-            bCtx.save();
-            bCtx.setTransform(1, 0, 0, 1, 0, 0);
-            bCtx.drawImage(ctx.canvas, 0, 0);
-            bCtx.restore();
+            const canCopyDirectlyFromBatch = Boolean(
+              useBatchReplay &&
+              batchImageData &&
+              batchData &&
+              batchImageData.data &&
+              batchImageData.width === bCanvas.width &&
+              batchImageData.height === bCanvas.height
+            );
+
+            if (canCopyDirectlyFromBatch && batchImageData) {
+              bCtx.putImageData(batchImageData, 0, 0);
+            } else {
+              if (useBatchReplay) flushBatchBuffer();
+              bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+              bCtx.save();
+              bCtx.setTransform(1, 0, 0, 1, 0, 0);
+              bCtx.drawImage(ctx.canvas, 0, 0);
+              bCtx.restore();
+            }
+
             baseCheckpointRef.current = {
               canvas: bCanvas,
               index: candidateBaseIndex,
@@ -4126,17 +4140,31 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
 
         if (i === candidateTailIndex && !isCheckpointValid(tailCheckpointRef.current, commands)) {
-          if (useBatchReplay) flushBatchBuffer();
           const capStart = diag ? performance.now() : 0;
           if (diag) diag.checkpointCaptureAttempts++;
           const tCanvas = ensureCheckpointCanvas('tail');
           const tCtx = tCanvas.getContext('2d');
           if (tCtx) {
-            tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
-            tCtx.save();
-            tCtx.setTransform(1, 0, 0, 1, 0, 0);
-            tCtx.drawImage(ctx.canvas, 0, 0);
-            tCtx.restore();
+            const canCopyDirectlyFromBatch = Boolean(
+              useBatchReplay &&
+              batchImageData &&
+              batchData &&
+              batchImageData.data &&
+              batchImageData.width === tCanvas.width &&
+              batchImageData.height === tCanvas.height
+            );
+
+            if (canCopyDirectlyFromBatch && batchImageData) {
+              tCtx.putImageData(batchImageData, 0, 0);
+            } else {
+              if (useBatchReplay) flushBatchBuffer();
+              tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+              tCtx.save();
+              tCtx.setTransform(1, 0, 0, 1, 0, 0);
+              tCtx.drawImage(ctx.canvas, 0, 0);
+              tCtx.restore();
+            }
+
             tailCheckpointRef.current = {
               canvas: tCanvas,
               index: candidateTailIndex,
