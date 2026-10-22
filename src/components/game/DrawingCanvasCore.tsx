@@ -305,6 +305,7 @@ const executeRasterFloodFill = (
 
   let head = 0;
   let filledPixelCount = 0;
+  const byteStride = cw * 4;
 
   while (head < queueX.length) {
     const cx = queueX[head];
@@ -330,6 +331,10 @@ const executeRasterFloodFill = (
 
     let spanAbove = false;
     let spanBelow = false;
+    const hasAbove = yCurr > 0;
+    const hasBelow = yCurr < ch - 1;
+    const yAbove = yCurr - 1;
+    const yBelow = yCurr + 1;
 
     while (xCurr < cw && !visited[pixelIdx] && matchColor(data, idx, tr, tg, tb, ta)) {
       visited[pixelIdx] = 1;
@@ -362,26 +367,26 @@ const executeRasterFloodFill = (
         }
       }
 
-      if (yCurr > 0) {
-        const idxAbove = ((yCurr - 1) * cw + xCurr) * 4;
-        const pixelIdxAbove = (yCurr - 1) * cw + xCurr;
+      if (hasAbove) {
+        const pixelIdxAbove = pixelIdx - cw;
+        const idxAbove = idx - byteStride;
         const matchesAbove = !visited[pixelIdxAbove] && matchColor(data, idxAbove, tr, tg, tb, ta);
         if (!spanAbove && matchesAbove) {
           queueX.push(xCurr);
-          queueY.push(yCurr - 1);
+          queueY.push(yAbove);
           spanAbove = true;
         } else if (spanAbove && !matchesAbove) {
           spanAbove = false;
         }
       }
 
-      if (yCurr < ch - 1) {
-        const idxBelow = ((yCurr + 1) * cw + xCurr) * 4;
-        const pixelIdxBelow = (yCurr + 1) * cw + xCurr;
+      if (hasBelow) {
+        const pixelIdxBelow = pixelIdx + cw;
+        const idxBelow = idx + byteStride;
         const matchesBelow = !visited[pixelIdxBelow] && matchColor(data, idxBelow, tr, tg, tb, ta);
         if (!spanBelow && matchesBelow) {
           queueX.push(xCurr);
-          queueY.push(yCurr + 1);
+          queueY.push(yBelow);
           spanBelow = true;
         } else if (spanBelow && !matchesBelow) {
           spanBelow = false;
