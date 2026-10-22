@@ -151,6 +151,43 @@ const isDiagEnabled = (): boolean => {
   }
 };
 
+export interface JoinSyncDiagnostics {
+  syncId: string;
+  syncGeneration: number;
+  totalCommands: number;
+  bucketCommandCount: number;
+  nonBucketCommandCount: number;
+  canvasReadyAtReceipt: boolean;
+  canvasWaitDurationMs: number;
+  totalJoinDurationMs: number;
+  totalReplayDurationMs: number;
+  floodFillExecutions: number;
+  cumulativeFillDurationMs: number;
+  cumulativeRasterKernelDurationMs: number;
+  cumulativeGetImageDataDurationMs: number;
+  cumulativePutImageDataDurationMs: number;
+  checkpointCaptureDurationMs: number;
+  checkpointCaptureAttempts: number;
+  checkpointCaptureSuccesses: number;
+  chunkCount: number;
+  chunkDurationsMs: number[];
+  maxChunkDurationMs: number;
+  repeatedSyncDetected: boolean;
+  superseded: boolean;
+  isCompleted: boolean;
+  timestamp: string;
+  _receiptTime: number;
+}
+
+export const isJoinDiagEnabled = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem('freedraw_bucket_join_diag') === '1';
+  } catch (e) {
+    return false;
+  }
+};
+
 export const isBucketCheckpointExpEnabled = (): boolean => {
   if (typeof window === 'undefined') return true;
   try {
@@ -411,7 +448,8 @@ const floodFill = (
   fillOpacity: number = 1,
   logicalWidth: number = DEFAULT_LOGICAL_WIDTH,
   logicalHeight: number = DEFAULT_LOGICAL_HEIGHT,
-  expectedTarget?: TargetRGBA
+  expectedTarget?: TargetRGBA,
+  joinDiag?: JoinSyncDiagnostics | null
 ): (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean; filledPixelCount?: number }) | null => {
   const canvas = ctx.canvas;
   const cw = canvas.width;
@@ -432,12 +470,17 @@ const floodFill = (
   const offscreenCtx = sharedOffscreenCtx;
   if (!offscreenCtx) return null;
 
+  const tGetStart = joinDiag ? performance.now() : 0;
   offscreenCtx.clearRect(0, 0, cw, ch);
   offscreenCtx.drawImage(canvas, 0, 0);
 
   const imageData = offscreenCtx.getImageData(0, 0, cw, ch);
+  if (joinDiag) {
+    joinDiag.cumulativeGetImageDataDurationMs += performance.now() - tGetStart;
+  }
   const data = imageData.data;
 
+  const tKernelStart = joinDiag ? performance.now() : 0;
   const fillRes = executeRasterFloodFill(
     data,
     cw,
@@ -450,9 +493,16 @@ const floodFill = (
     logicalHeight,
     expectedTarget
   );
+  if (joinDiag) {
+    joinDiag.cumulativeRasterKernelDurationMs += performance.now() - tKernelStart;
+  }
 
   if (fillRes && !fillRes.isNoOp) {
+    const tPutStart = joinDiag ? performance.now() : 0;
     ctx.putImageData(imageData, 0, 0);
+    if (joinDiag) {
+      joinDiag.cumulativePutImageDataDurationMs += performance.now() - tPutStart;
+    }
   }
 
   return fillRes;
@@ -547,6 +597,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const checkAndTriggerInitialSyncRef = useRef<(() => void) | null>(null);
   const processIncomingHistorySyncRef = useRef<((commands: any[]) => void) | null>(null);
+  const activeJoinDiagRef = useRef<JoinSyncDiagnostics | null>(null);
 
   // Local drawing track refs
   const isDrawingRef = useRef(false);
@@ -3633,7 +3684,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     cmdObj: any,
     replayPaths: Record<string, { x: number; y: number }[]>,
     replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }>,
-    diag?: UndoDiagnostics | null
+    diag?: UndoDiagnostics | null,
+    joinDiag?: JoinSyncDiagnostics | null
   ) => {
     try {
       const decoded = decodeBinaryDrawMessage(cmdObj.data);
@@ -3765,8 +3817,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 diag.hints.forcedFill++;
                 if (cmdObj?._replayHint) diag.hints.discarded++;
               }
-              const fillStart = diag ? performance.now() : 0;
-              const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
+              const fillStart = (diag || joinDiag) ? performance.now() : 0;
+              const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA, joinDiag);
               if (diag) {
                 diag.floodFillExecutions++;
                 const dur = performance.now() - fillStart;
@@ -3777,6 +3829,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                   diag.cumulativeFilledPixels += pCount;
                   if (pCount > diag.maxFillPixelCount) diag.maxFillPixelCount = pCount;
                 }
+              }
+              if (joinDiag) {
+                joinDiag.floodFillExecutions++;
+                const dur = performance.now() - fillStart;
+                joinDiag.cumulativeFillDurationMs += dur;
               }
               if (cmdObj) {
                 if (fillRes?.isFullCanvasOpaque) {
@@ -3797,8 +3854,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               diag.hints.forcedFill++;
               if (cmdObj?._replayHint) diag.hints.discarded++;
             }
-            const fillStart = diag ? performance.now() : 0;
-            const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA);
+            const fillStart = (diag || joinDiag) ? performance.now() : 0;
+            const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA, joinDiag);
             if (diag) {
               diag.floodFillExecutions++;
               const dur = performance.now() - fillStart;
@@ -3809,6 +3866,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 diag.cumulativeFilledPixels += pCount;
                 if (pCount > diag.maxFillPixelCount) diag.maxFillPixelCount = pCount;
               }
+            }
+            if (joinDiag) {
+              joinDiag.floodFillExecutions++;
+              const dur = performance.now() - fillStart;
+              joinDiag.cumulativeFillDurationMs += dur;
             }
             if (cmdObj) {
               if (fillRes?.isFullCanvasOpaque) {
@@ -4907,6 +4969,47 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
         const currentSyncGen = ++historySyncGenerationRef.current;
 
+        let joinDiag = isJoinDiagEnabled() ? activeJoinDiagRef.current : null;
+        if (isJoinDiagEnabled() && !joinDiag) {
+          let bCount = 0;
+          for (let i = 0; i < commands.length; i++) {
+            if (isBucketCommand(commands[i])) bCount++;
+          }
+          joinDiag = {
+            syncId: Math.random().toString(36).substring(2, 9),
+            syncGeneration: currentSyncGen,
+            totalCommands: commands.length,
+            bucketCommandCount: bCount,
+            nonBucketCommandCount: commands.length - bCount,
+            canvasReadyAtReceipt: true,
+            canvasWaitDurationMs: 0,
+            totalJoinDurationMs: 0,
+            totalReplayDurationMs: 0,
+            floodFillExecutions: 0,
+            cumulativeFillDurationMs: 0,
+            cumulativeRasterKernelDurationMs: 0,
+            cumulativeGetImageDataDurationMs: 0,
+            cumulativePutImageDataDurationMs: 0,
+            checkpointCaptureDurationMs: 0,
+            checkpointCaptureAttempts: 0,
+            checkpointCaptureSuccesses: 0,
+            chunkCount: 0,
+            chunkDurationsMs: [],
+            maxChunkDurationMs: 0,
+            repeatedSyncDetected: false,
+            superseded: false,
+            isCompleted: false,
+            timestamp: new Date().toISOString(),
+            _receiptTime: performance.now()
+          };
+          activeJoinDiagRef.current = joinDiag;
+        } else if (joinDiag) {
+          joinDiag.syncGeneration = currentSyncGen;
+          if (!joinDiag.canvasReadyAtReceipt && joinDiag.canvasWaitDurationMs === 0) {
+            joinDiag.canvasWaitDurationMs = Math.round((performance.now() - joinDiag._receiptTime) * 100) / 100;
+          }
+        }
+
         invalidateCheckpoint('all');
 
         // Cancel in-flight spectator playback from previous state
@@ -4953,6 +5056,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             advanceCheckpointIncremental();
             executeRedrawTempLayer();
           }
+          if (joinDiag) {
+            joinDiag.isCompleted = true;
+            joinDiag.totalJoinDurationMs = Math.round((performance.now() - joinDiag._receiptTime) * 100) / 100;
+            console.log(
+              `%c[FREE_DRAW_JOIN_DIAG]%c Empty history sync completed in ${joinDiag.totalJoinDurationMs}ms`,
+              'color: #00e676; font-weight: bold;',
+              'color: inherit;'
+            );
+            console.log("[FREE_DRAW_JOIN_DIAG]", JSON.stringify(joinDiag, (k, v) => (k === '_receiptTime' ? undefined : v), 2));
+          }
           console.log("[DrawingCanvasCore] Empty history sync completed.");
           return;
         }
@@ -4963,15 +5076,42 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const processChunk = () => {
           // If a newer sync has started, abort this chunk loop immediately
           if (historySyncGenerationRef.current !== currentSyncGen) {
+            if (joinDiag) {
+              joinDiag.superseded = true;
+              console.warn(`[FREE_DRAW_JOIN_DIAG] Chunk processing aborted! Sync generation ${currentSyncGen} superseded by ${historySyncGenerationRef.current}.`);
+            }
             return;
           }
 
+          const chunkStartTime = joinDiag ? performance.now() : 0;
           const endIndex = Math.min(currentIndex + CHUNK_SIZE, commands.length);
           
           for (let i = currentIndex; i < endIndex; i++) {
-            applyReplayCommand(ctx, commands[i], replayPaths, replaySessions);
+            const cmdReplayStart = joinDiag ? performance.now() : 0;
+            applyReplayCommand(ctx, commands[i], replayPaths, replaySessions, undefined, joinDiag);
+            if (joinDiag) {
+              joinDiag.totalReplayDurationMs += performance.now() - cmdReplayStart;
+            }
+
             if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw && isBucketCommand(commands[i])) {
-              captureHistoryCheckpoint(i + 1, commands);
+              const cpStart = joinDiag ? performance.now() : 0;
+              const success = captureHistoryCheckpoint(i + 1, commands);
+              if (joinDiag) {
+                joinDiag.checkpointCaptureAttempts++;
+                joinDiag.checkpointCaptureDurationMs += performance.now() - cpStart;
+                if (success) {
+                  joinDiag.checkpointCaptureSuccesses++;
+                }
+              }
+            }
+          }
+
+          if (joinDiag) {
+            const chunkDur = performance.now() - chunkStartTime;
+            joinDiag.chunkCount++;
+            joinDiag.chunkDurationsMs.push(Math.round(chunkDur * 100) / 100);
+            if (chunkDur > joinDiag.maxChunkDurationMs) {
+              joinDiag.maxChunkDurationMs = Math.round(chunkDur * 100) / 100;
             }
           }
 
@@ -4983,6 +5123,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             syncChunkRafRef.current = null;
 
             if (historySyncGenerationRef.current !== currentSyncGen) {
+              if (joinDiag) {
+                joinDiag.superseded = true;
+              }
               return;
             }
 
@@ -5020,6 +5163,35 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               advanceCheckpointIncremental();
               executeRedrawTempLayer();
             }
+            if (joinDiag) {
+              joinDiag.isCompleted = true;
+              joinDiag.totalJoinDurationMs = Math.round((performance.now() - joinDiag._receiptTime) * 100) / 100;
+              joinDiag.totalReplayDurationMs = Math.round(joinDiag.totalReplayDurationMs * 100) / 100;
+              joinDiag.cumulativeFillDurationMs = Math.round(joinDiag.cumulativeFillDurationMs * 100) / 100;
+              joinDiag.cumulativeRasterKernelDurationMs = Math.round(joinDiag.cumulativeRasterKernelDurationMs * 100) / 100;
+              joinDiag.cumulativeGetImageDataDurationMs = Math.round(joinDiag.cumulativeGetImageDataDurationMs * 100) / 100;
+              joinDiag.cumulativePutImageDataDurationMs = Math.round(joinDiag.cumulativePutImageDataDurationMs * 100) / 100;
+              joinDiag.checkpointCaptureDurationMs = Math.round(joinDiag.checkpointCaptureDurationMs * 100) / 100;
+
+              console.log(
+                `%c[FREE_DRAW_JOIN_DIAG]%c History reconstruction finished: ${joinDiag.totalCommands} cmds (${joinDiag.bucketCommandCount} buckets, ${joinDiag.nonBucketCommandCount} other) across ${joinDiag.chunkCount} chunks in ${joinDiag.totalJoinDurationMs}ms\n` +
+                `├─ Replay Execution: ${joinDiag.totalReplayDurationMs}ms\n` +
+                `│  ├─ FloodFill Total: ${joinDiag.cumulativeFillDurationMs}ms (${joinDiag.floodFillExecutions} fills)\n` +
+                `│  │  ├─ Raster Kernel: ${joinDiag.cumulativeRasterKernelDurationMs}ms\n` +
+                `│  │  ├─ getImageData / drawImage: ${joinDiag.cumulativeGetImageDataDurationMs}ms\n` +
+                `│  │  └─ putImageData: ${joinDiag.cumulativePutImageDataDurationMs}ms\n` +
+                `│  └─ Other Replay Cmds: ${Math.round((joinDiag.totalReplayDurationMs - joinDiag.cumulativeFillDurationMs) * 100) / 100}ms\n` +
+                `├─ Checkpoint Capture: ${joinDiag.checkpointCaptureDurationMs}ms (${joinDiag.checkpointCaptureSuccesses}/${joinDiag.checkpointCaptureAttempts} retained)\n` +
+                `├─ Canvas Readiness Wait: ${joinDiag.canvasWaitDurationMs}ms\n` +
+                `└─ Chunks: ${joinDiag.chunkCount} chunks (max chunk: ${joinDiag.maxChunkDurationMs}ms, repeated/superseded: ${joinDiag.repeatedSyncDetected ? 'yes' : 'no'}/${joinDiag.superseded ? 'yes' : 'no'})`,
+                'color: #00e676; font-weight: bold;',
+                'color: inherit;'
+              );
+              console.log(
+                "[FREE_DRAW_JOIN_DIAG]",
+                JSON.stringify(joinDiag, (k, v) => (k === '_receiptTime' ? undefined : v), 2)
+              );
+            }
             console.log("[DrawingCanvasCore] Deferred queue fully rendered.");
           }
         };
@@ -5028,6 +5200,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       } catch (err) {
         console.error("[DrawingCanvasCore] Sync Chunk Error:", err);
+        const joinDiag = isJoinDiagEnabled() ? activeJoinDiagRef.current : null;
+        if (joinDiag) {
+          joinDiag.isCompleted = false;
+          console.error("[FREE_DRAW_JOIN_DIAG] Reconstruction failed with error:", err);
+        }
         setIsSyncing(false);
       }
     };
@@ -5040,6 +5217,50 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       console.log("[DrawingCanvasCore] Received draw_history_sync event, payload length:", safeCommands.length);
       
       const isCanvasReady = Boolean(isCanvasResizeObserverReadyRef.current && ctxRef.current && tempCtxRef.current);
+
+      if (isJoinDiagEnabled()) {
+        const isRepeated = Boolean(activeJoinDiagRef.current && !activeJoinDiagRef.current.isCompleted);
+        if (isRepeated && activeJoinDiagRef.current) {
+          activeJoinDiagRef.current.superseded = true;
+          console.warn(`[FREE_DRAW_JOIN_DIAG] Previous join sync #${activeJoinDiagRef.current.syncId} (generation ${activeJoinDiagRef.current.syncGeneration}) superseded by incoming draw_history_sync`);
+        }
+
+        let bucketCount = 0;
+        for (let i = 0; i < safeCommands.length; i++) {
+          if (isBucketCommand(safeCommands[i])) {
+            bucketCount++;
+          }
+        }
+
+        activeJoinDiagRef.current = {
+          syncId: Math.random().toString(36).substring(2, 9),
+          syncGeneration: historySyncGenerationRef.current,
+          totalCommands: safeCommands.length,
+          bucketCommandCount: bucketCount,
+          nonBucketCommandCount: safeCommands.length - bucketCount,
+          canvasReadyAtReceipt: isCanvasReady,
+          canvasWaitDurationMs: 0,
+          totalJoinDurationMs: 0,
+          totalReplayDurationMs: 0,
+          floodFillExecutions: 0,
+          cumulativeFillDurationMs: 0,
+          cumulativeRasterKernelDurationMs: 0,
+          cumulativeGetImageDataDurationMs: 0,
+          cumulativePutImageDataDurationMs: 0,
+          checkpointCaptureDurationMs: 0,
+          checkpointCaptureAttempts: 0,
+          checkpointCaptureSuccesses: 0,
+          chunkCount: 0,
+          chunkDurationsMs: [],
+          maxChunkDurationMs: 0,
+          repeatedSyncDetected: isRepeated,
+          superseded: false,
+          isCompleted: false,
+          timestamp: new Date().toISOString(),
+          _receiptTime: performance.now()
+        };
+      }
+
       if (!isCanvasReady) {
         console.log("[DrawingCanvasCore] Canvas or ResizeObserver not ready. Buffering history sync...");
         pendingHistorySyncRef.current = safeCommands;
