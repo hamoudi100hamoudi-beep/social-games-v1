@@ -157,7 +157,8 @@ export interface JoinSyncDiagnostics {
   totalCommands: number;
   bucketCommandCount: number;
   nonBucketCommandCount: number;
-  canvasReadyAtReceipt: boolean;
+  canvasReadyAtReceipt: boolean | null;
+  receiptTimeCaptured: boolean;
   canvasWaitDurationMs: number;
   totalJoinDurationMs: number;
   totalReplayDurationMs: number;
@@ -881,6 +882,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncTimeoutRef.current = null;
       }
       drainingStrokesRef.current = [];
+      activeJoinDiagRef.current = null;
     };
   }, []);
 
@@ -4981,7 +4983,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             totalCommands: commands.length,
             bucketCommandCount: bCount,
             nonBucketCommandCount: commands.length - bCount,
-            canvasReadyAtReceipt: true,
+            canvasReadyAtReceipt: null,
+            receiptTimeCaptured: false,
             canvasWaitDurationMs: 0,
             totalJoinDurationMs: 0,
             totalReplayDurationMs: 0,
@@ -5005,7 +5008,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           activeJoinDiagRef.current = joinDiag;
         } else if (joinDiag) {
           joinDiag.syncGeneration = currentSyncGen;
-          if (!joinDiag.canvasReadyAtReceipt && joinDiag.canvasWaitDurationMs === 0) {
+          if (joinDiag.receiptTimeCaptured && !joinDiag.canvasReadyAtReceipt && joinDiag.canvasWaitDurationMs === 0) {
             joinDiag.canvasWaitDurationMs = Math.round((performance.now() - joinDiag._receiptTime) * 100) / 100;
           }
         }
@@ -5065,6 +5068,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               'color: inherit;'
             );
             console.log("[FREE_DRAW_JOIN_DIAG]", JSON.stringify(joinDiag, (k, v) => (k === '_receiptTime' ? undefined : v), 2));
+            if (activeJoinDiagRef.current === joinDiag) {
+              activeJoinDiagRef.current = null;
+            }
           }
           console.log("[DrawingCanvasCore] Empty history sync completed.");
           return;
@@ -5079,6 +5085,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (joinDiag) {
               joinDiag.superseded = true;
               console.warn(`[FREE_DRAW_JOIN_DIAG] Chunk processing aborted! Sync generation ${currentSyncGen} superseded by ${historySyncGenerationRef.current}.`);
+              if (activeJoinDiagRef.current === joinDiag) {
+                activeJoinDiagRef.current = null;
+              }
             }
             return;
           }
@@ -5125,6 +5134,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (historySyncGenerationRef.current !== currentSyncGen) {
               if (joinDiag) {
                 joinDiag.superseded = true;
+                if (activeJoinDiagRef.current === joinDiag) {
+                  activeJoinDiagRef.current = null;
+                }
               }
               return;
             }
@@ -5178,10 +5190,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 `├─ Replay Execution: ${joinDiag.totalReplayDurationMs}ms\n` +
                 `│  ├─ FloodFill Total: ${joinDiag.cumulativeFillDurationMs}ms (${joinDiag.floodFillExecutions} fills)\n` +
                 `│  │  ├─ Raster Kernel: ${joinDiag.cumulativeRasterKernelDurationMs}ms\n` +
-                `│  │  ├─ getImageData / drawImage: ${joinDiag.cumulativeGetImageDataDurationMs}ms\n` +
+                `│  │  ├─ getImageData / prep (clearRect + drawImage): ${joinDiag.cumulativeGetImageDataDurationMs}ms\n` +
                 `│  │  └─ putImageData: ${joinDiag.cumulativePutImageDataDurationMs}ms\n` +
                 `│  └─ Other Replay Cmds: ${Math.round((joinDiag.totalReplayDurationMs - joinDiag.cumulativeFillDurationMs) * 100) / 100}ms\n` +
-                `├─ Checkpoint Capture: ${joinDiag.checkpointCaptureDurationMs}ms (${joinDiag.checkpointCaptureSuccesses}/${joinDiag.checkpointCaptureAttempts} retained)\n` +
+                `├─ Checkpoint Capture: ${joinDiag.checkpointCaptureDurationMs}ms (${joinDiag.checkpointCaptureSuccesses}/${joinDiag.checkpointCaptureAttempts} successful captures)\n` +
                 `├─ Canvas Readiness Wait: ${joinDiag.canvasWaitDurationMs}ms\n` +
                 `└─ Chunks: ${joinDiag.chunkCount} chunks (max chunk: ${joinDiag.maxChunkDurationMs}ms, repeated/superseded: ${joinDiag.repeatedSyncDetected ? 'yes' : 'no'}/${joinDiag.superseded ? 'yes' : 'no'})`,
                 'color: #00e676; font-weight: bold;',
@@ -5191,6 +5203,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 "[FREE_DRAW_JOIN_DIAG]",
                 JSON.stringify(joinDiag, (k, v) => (k === '_receiptTime' ? undefined : v), 2)
               );
+              if (activeJoinDiagRef.current === joinDiag) {
+                activeJoinDiagRef.current = null;
+              }
             }
             console.log("[DrawingCanvasCore] Deferred queue fully rendered.");
           }
@@ -5204,6 +5219,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (joinDiag) {
           joinDiag.isCompleted = false;
           console.error("[FREE_DRAW_JOIN_DIAG] Reconstruction failed with error:", err);
+          if (activeJoinDiagRef.current === joinDiag) {
+            activeJoinDiagRef.current = null;
+          }
         }
         setIsSyncing(false);
       }
@@ -5239,6 +5257,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           bucketCommandCount: bucketCount,
           nonBucketCommandCount: safeCommands.length - bucketCount,
           canvasReadyAtReceipt: isCanvasReady,
+          receiptTimeCaptured: true,
           canvasWaitDurationMs: 0,
           totalJoinDurationMs: 0,
           totalReplayDurationMs: 0,
@@ -5312,6 +5331,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       socket.off('draw_binary', onDrawBinary);
       socket.off('draw_history_sync', onDrawHistorySync);
       socket.off('draw_redo_sync', onDrawRedoSync);
+      activeJoinDiagRef.current = null;
     };
   }, [socket, instanceId]);
 
