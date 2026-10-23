@@ -3,6 +3,7 @@ import { useSocket } from './components/SocketProvider';
 import GameRoom from './components/GameRoom';
 import ExperimentalGameRoom from './components/experimental/ExperimentalGameRoom';
 import Lobby from './components/Lobby';
+import { FreeDrawMobileDebug } from './components/game/FreeDrawMobileDebug';
 import { safeLocalStorage } from './utils/storage';
 import { soundManager } from './utils/soundManager';
 import { preloadGameSprites } from './utils/preloadAssets';
@@ -93,6 +94,8 @@ export default function App() {
         <img src="/exit.webp" decoding="sync" loading="eager" alt="" />
         <img src="/afk_warning.webp" decoding="sync" loading="eager" alt="" />
       </div>
+
+      <FreeDrawMobileDebug />
 
       {gameState === 'lobby' ? (
         <Lobby onPlay={handlePlay} />

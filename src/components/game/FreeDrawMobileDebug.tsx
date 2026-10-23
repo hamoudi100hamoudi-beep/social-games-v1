@@ -25,10 +25,14 @@ export const FreeDrawMobileDebug: React.FC = () => {
   const [isActive, setIsActive] = useState<boolean>(() => isMobileDebugActive());
   const [isPanelOpen, setIsPanelOpen] = useState<boolean>(false);
 
-  // Read current live states from localStorage
   const [undoDiagEnabled, setUndoDiagEnabled] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem('freedraw_bucket_undo_diag') === '1';
+  });
+
+  const [joinDiagEnabled, setJoinDiagEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('freedraw_bucket_join_diag') === '1';
   });
 
   const [checkpointExpEnabled, setCheckpointExpEnabled] = useState<boolean>(() => {
@@ -41,23 +45,19 @@ export const FreeDrawMobileDebug: React.FC = () => {
     return localStorage.getItem('freedraw_bucket_batch_replay_exp') !== '0';
   });
 
-  // When active in Free Draw: initialize Eruda once dynamically in background
+  // When active: initialize Eruda once dynamically in background across all pages
   useEffect(() => {
     if (!isActive) return;
 
     // Load Eruda so it begins capturing console and network logs immediately
     getOrInitEruda();
-
-    // Clean up when unmounting from Free Draw (e.g. leaving room or navigating to Lobby)
-    return () => {
-      destroyEruda();
-    };
   }, [isActive]);
 
   // Keep state synchronized if changed externally or after reload
   const refreshStates = () => {
     if (typeof window === 'undefined') return;
     setUndoDiagEnabled(localStorage.getItem('freedraw_bucket_undo_diag') === '1');
+    setJoinDiagEnabled(localStorage.getItem('freedraw_bucket_join_diag') === '1');
     setCheckpointExpEnabled(localStorage.getItem('freedraw_bucket_checkpoint_exp') !== '0');
     setBatchReplayEnabled(localStorage.getItem('freedraw_bucket_batch_replay_exp') !== '0');
   };
@@ -75,6 +75,17 @@ export const FreeDrawMobileDebug: React.FC = () => {
       localStorage.removeItem('freedraw_bucket_undo_diag');
     }
     setUndoDiagEnabled(nextVal);
+  };
+
+  // Toggle Room Join Diagnostics flag (Default: OFF)
+  const toggleJoinDiag = () => {
+    const nextVal = !joinDiagEnabled;
+    if (nextVal) {
+      localStorage.setItem('freedraw_bucket_join_diag', '1');
+    } else {
+      localStorage.removeItem('freedraw_bucket_join_diag');
+    }
+    setJoinDiagEnabled(nextVal);
   };
 
   // Toggle Adaptive Bucket Checkpoints flag (Default: ON, explicit opt-out with '0')
@@ -220,7 +231,43 @@ export const FreeDrawMobileDebug: React.FC = () => {
                 </div>
               </div>
 
-              {/* 2. Adaptive Bucket Checkpoints Toggle (Default: ON) */}
+              {/* 2. Room Join Diagnostics Toggle */}
+              <div 
+                onClick={toggleJoinDiag}
+                className="flex items-center justify-between p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800/90 border border-slate-700/50 cursor-pointer transition-all active:scale-[0.99]"
+              >
+                <div className="flex flex-col gap-0.5 pr-1">
+                  <div className="flex items-center gap-1.5 font-bold text-slate-100 text-xs sm:text-sm">
+                    <Terminal size={14} className="text-emerald-400 shrink-0" />
+                    <span>Room Join Diagnostics</span>
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 leading-tight">
+                    قياس أوقات إعادة بناء سجل الرسم ودخول الغرفة (Bucket Sync)
+                  </span>
+                  <code className="text-[9px] text-slate-500 font-mono mt-0.5">
+                    freedraw_bucket_join_diag
+                  </code>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 mr-2">
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                    joinDiagEnabled 
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' 
+                      : 'bg-slate-700/50 text-slate-400 border border-slate-600/30'
+                  }`}>
+                    {joinDiagEnabled ? 'ON' : 'OFF'}
+                  </span>
+                  <div className={`w-11 h-6 rounded-full transition-colors relative flex items-center px-0.5 ${
+                    joinDiagEnabled ? 'bg-emerald-600' : 'bg-slate-700'
+                  }`}>
+                    <div className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform ${
+                      joinDiagEnabled ? '-translate-x-5' : 'translate-x-0'
+                    }`} />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Adaptive Bucket Checkpoints Toggle (Default: ON) */}
               <div 
                 onClick={toggleCheckpointExp}
                 className="flex items-center justify-between p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800/90 border border-slate-700/50 cursor-pointer transition-all active:scale-[0.99]"
@@ -256,7 +303,7 @@ export const FreeDrawMobileDebug: React.FC = () => {
                 </div>
               </div>
 
-              {/* 3. Bucket Batch Replay Toggle (Default: ON) */}
+              {/* 4. Bucket Batch Replay Toggle (Default: ON) */}
               <div 
                 onClick={toggleBatchReplay}
                 className="flex items-center justify-between p-3 rounded-xl bg-slate-800/60 hover:bg-slate-800/90 border border-slate-700/50 cursor-pointer transition-all active:scale-[0.99]"

@@ -18,11 +18,28 @@ let isInitialized = false;
 export const isMobileDebugActive = (): boolean => {
   if (typeof window === 'undefined') return false;
   try {
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('fddebug') === '1') {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('fddebug') === '1') {
       localStorage.setItem('freedraw_mobile_debug', '1');
       return true;
     }
+
+    if (window.location.hash) {
+      const hashStr = window.location.hash;
+      const qIndex = hashStr.indexOf('?');
+      if (qIndex !== -1) {
+        const hashParams = new URLSearchParams(hashStr.slice(qIndex));
+        if (hashParams.get('fddebug') === '1') {
+          localStorage.setItem('freedraw_mobile_debug', '1');
+          return true;
+        }
+      }
+      if (hashStr.includes('fddebug=1')) {
+        localStorage.setItem('freedraw_mobile_debug', '1');
+        return true;
+      }
+    }
+
     return localStorage.getItem('freedraw_mobile_debug') === '1';
   } catch (e) {
     return false;
@@ -40,9 +57,13 @@ export const disableMobileDebug = () => {
     const url = new URL(window.location.href);
     if (url.searchParams.has('fddebug')) {
       url.searchParams.delete('fddebug');
-      const cleanUrl = url.pathname + (url.search ? url.search : '') + url.hash;
-      window.history.replaceState({}, document.title, cleanUrl);
     }
+    let cleanHash = url.hash;
+    if (cleanHash && cleanHash.includes('fddebug=1')) {
+      cleanHash = cleanHash.replace(/[?&]fddebug=1/, '').replace(/#$/, '');
+    }
+    const cleanUrl = url.pathname + (url.search ? url.search : '') + cleanHash;
+    window.history.replaceState({}, document.title, cleanUrl);
   } catch (e) {}
   destroyEruda();
 };

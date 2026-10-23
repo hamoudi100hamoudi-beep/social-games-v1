@@ -37,6 +37,7 @@ import { safeLocalStorage } from "../utils/storage";
 import { soundManager } from "../utils/soundManager";
 import { useRoomEventGate } from "../hooks/useRoomEventGate";
 import { getRoomConfig } from "../types/game";
+import { isMobileDebugActive } from "../utils/erudaManager";
 import { FreeDrawMobileDebug } from "./game/FreeDrawMobileDebug";
 
 // 🧪 DIAGNOSTIC TEST: FREE DRAW ISOLATION TEST
@@ -2574,7 +2575,7 @@ export default function GameRoom({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35, ease: "easeInOut" }}
-            className="fixed inset-0 flex flex-col items-center justify-center bg-[#061220] z-[999999] cursor-not-allowed select-none touch-none"
+            className={`fixed inset-0 flex flex-col items-center justify-center ${isMobileDebugActive() ? "bg-[#061220]/50" : "bg-[#061220]"} z-[999999] cursor-not-allowed select-none touch-none`}
             style={{ pointerEvents: "auto" }}
           >
             <div className="flex flex-col items-center">
