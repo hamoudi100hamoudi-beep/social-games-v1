@@ -591,6 +591,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
   const hasSyncedOnceRef = useRef(false);
   const historySyncInProgressRef = useRef(false);
+  const initialSyncFallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const fallbackSyncInFlightRef = useRef(false);
+  const activeHistoryCommandsRef = useRef<any[] | null>(null);
+  const lastCompletedHistoryCommandsRef = useRef<any[] | null>(null);
   const isServerRoomJoinedRef = useRef(false);
   const pendingHistorySyncRef = useRef<any[] | null>(null);
   const syncRetryTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -882,9 +886,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         clearTimeout(syncTimeoutRef.current);
         syncTimeoutRef.current = null;
       }
+      if (initialSyncFallbackTimerRef.current) {
+        clearTimeout(initialSyncFallbackTimerRef.current);
+        initialSyncFallbackTimerRef.current = null;
+      }
       drainingStrokesRef.current = [];
       activeJoinDiagRef.current = null;
       historySyncInProgressRef.current = false;
+      fallbackSyncInFlightRef.current = false;
+      activeHistoryCommandsRef.current = null;
+      lastCompletedHistoryCommandsRef.current = null;
     };
   }, []);
 
@@ -3019,7 +3030,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     drainingStrokesRef.current = [];
 
     // Reinitialize Undo / Redo stacks
+    if (initialSyncFallbackTimerRef.current) {
+      clearTimeout(initialSyncFallbackTimerRef.current);
+      initialSyncFallbackTimerRef.current = null;
+    }
     historySyncInProgressRef.current = false;
+    fallbackSyncInFlightRef.current = false;
+    activeHistoryCommandsRef.current = null;
+    lastCompletedHistoryCommandsRef.current = null;
     bufferedSyncRef.current = null;
     localCommandsRef.current = [];
     localRedoStackRef.current = [];
@@ -4959,12 +4977,81 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
     };
 
+    const areCommandsEqual = (a: any, b: any): boolean => {
+      if (a === b) return true;
+      if (!a || !b) return false;
+      if (a.event !== b.event) return false;
+      if (a.instId !== b.instId) return false;
+      if (a.strokeId !== b.strokeId) return false;
+
+      const dataA = a.data;
+      const dataB = b.data;
+      if (dataA === dataB) return true;
+      if (!dataA || !dataB) return false;
+
+      const isArrA = Array.isArray(dataA) || ArrayBuffer.isView(dataA);
+      const isArrB = Array.isArray(dataB) || ArrayBuffer.isView(dataB);
+      if (isArrA || isArrB) {
+        if (!isArrA || !isArrB) return false;
+        const lenA = (dataA as any).length;
+        const lenB = (dataB as any).length;
+        if (lenA !== lenB) return false;
+        if (lenA === 0) return true;
+        if (dataA[0] !== dataB[0] || dataA[lenA - 1] !== dataB[lenB - 1]) return false;
+        for (let i = 0; i < lenA; i++) {
+          if (dataA[i] !== dataB[i]) return false;
+        }
+        return true;
+      }
+
+      if (typeof dataA === 'object' && typeof dataB === 'object') {
+        if (dataA.tool !== dataB.tool) return false;
+        if (dataA.color !== dataB.color) return false;
+        if (dataA.width !== dataB.width) return false;
+        if (dataA.opacity !== dataB.opacity) return false;
+        if (dataA.x !== dataB.x || dataA.y !== dataB.y) return false;
+        if (dataA.startX !== dataB.startX || dataA.startY !== dataB.startY) return false;
+        if (dataA.endX !== dataB.endX || dataA.endY !== dataB.endY) return false;
+        if (dataA.instanceId !== dataB.instanceId) return false;
+        if (dataA.strokeId !== dataB.strokeId) return false;
+
+        if (Array.isArray(dataA.points) || Array.isArray(dataB.points)) {
+          if (!Array.isArray(dataA.points) || !Array.isArray(dataB.points)) return false;
+          if (dataA.points.length !== dataB.points.length) return false;
+          const pLen = dataA.points.length;
+          if (pLen > 0) {
+            if (dataA.points[0]?.x !== dataB.points[0]?.x || dataA.points[0]?.y !== dataB.points[0]?.y) return false;
+            if (dataA.points[pLen - 1]?.x !== dataB.points[pLen - 1]?.x || dataA.points[pLen - 1]?.y !== dataB.points[pLen - 1]?.y) return false;
+          }
+        }
+        return true;
+      }
+
+      return false;
+    };
+
+    const areHistoryArraysEqual = (listA: any[], listB: any[]): boolean => {
+      if (listA === listB) return true;
+      if (!listA || !listB) return false;
+      if (listA.length !== listB.length) return false;
+      if (listA.length === 0) return true;
+
+      if (!areCommandsEqual(listA[0], listB[0])) return false;
+      if (listA.length > 1 && !areCommandsEqual(listA[listA.length - 1], listB[listB.length - 1])) return false;
+
+      for (let i = 0; i < listA.length; i++) {
+        if (!areCommandsEqual(listA[i], listB[i])) return false;
+      }
+      return true;
+    };
+
     const processIncomingHistorySync = (commands: any[]) => {
       try {
         const ctx = ctxRef.current;
         const tempCtx = tempCtxRef.current;
         if (!ctx || !tempCtx) return;
 
+        activeHistoryCommandsRef.current = commands;
         console.log("[DrawingCanvasCore] Starting Deferred Queue & Forced Multi-Snapshots chunking...", commands.length);
 
         // Cancel any pending chunk processing loop and advance generation ID
@@ -5050,6 +5137,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (commands.length === 0) {
           isReplayingRef.current = false;
           historySyncInProgressRef.current = false;
+          activeHistoryCommandsRef.current = null;
+          lastCompletedHistoryCommandsRef.current = commands;
+          fallbackSyncInFlightRef.current = false;
           saveSnapshot();
           syncHistoryButtons();
           setIsSyncing(false);
@@ -5086,6 +5176,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const processChunk = () => {
           // If a newer sync has started, abort this chunk loop immediately
           if (historySyncGenerationRef.current !== currentSyncGen) {
+            if (activeHistoryCommandsRef.current === commands) {
+              activeHistoryCommandsRef.current = null;
+            }
             if (joinDiag) {
               joinDiag.superseded = true;
               console.warn(`[FREE_DRAW_JOIN_DIAG] Chunk processing aborted! Sync generation ${currentSyncGen} superseded by ${historySyncGenerationRef.current}.`);
@@ -5167,6 +5260,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             // Live drawing sessions by other users that arrived while chunks were rendering are preserved.
             isReplayingRef.current = false;
             historySyncInProgressRef.current = false;
+            activeHistoryCommandsRef.current = null;
+            lastCompletedHistoryCommandsRef.current = commands;
+            fallbackSyncInFlightRef.current = false;
             saveSnapshot();
             syncHistoryButtons();
             setIsSyncing(false);
@@ -5221,6 +5317,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } catch (err) {
         console.error("[DrawingCanvasCore] Sync Chunk Error:", err);
         historySyncInProgressRef.current = false;
+        if (activeHistoryCommandsRef.current === commands) {
+          activeHistoryCommandsRef.current = null;
+        }
         const joinDiag = isJoinDiagEnabled() ? activeJoinDiagRef.current : null;
         if (joinDiag) {
           joinDiag.isCompleted = false;
@@ -5234,12 +5333,44 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
 
     const onDrawHistorySync = (commands: any[]) => {
+      if (initialSyncFallbackTimerRef.current) {
+        clearTimeout(initialSyncFallbackTimerRef.current);
+        initialSyncFallbackTimerRef.current = null;
+        console.log("[DrawingCanvasCore] Received draw_history_sync event. Cancelled fallback sync timer.");
+      }
+
+      const safeCommands = Array.isArray(commands) ? commands : [];
+      console.log("[DrawingCanvasCore] Received draw_history_sync event, payload length:", safeCommands.length);
+
+      // 🛡️ Content-based duplicate suppression:
+      // Case 1: Identical payload is ALREADY currently being actively replayed in chunk loop
+      if (activeHistoryCommandsRef.current && areHistoryArraysEqual(safeCommands, activeHistoryCommandsRef.current)) {
+        console.log(
+          `%c[DrawingCanvasCore]%c Suppressing duplicate draw_history_sync: identical payload (${safeCommands.length} commands) is currently being actively replayed.`,
+          'color: #ffa726; font-weight: bold;',
+          'color: inherit;'
+        );
+        fallbackSyncInFlightRef.current = false;
+        return;
+      }
+
+      // Case 2: Identical payload was ALREADY completely replayed in this join session
+      if (hasSyncedOnceRef.current && lastCompletedHistoryCommandsRef.current && areHistoryArraysEqual(safeCommands, lastCompletedHistoryCommandsRef.current)) {
+        console.log(
+          `%c[DrawingCanvasCore]%c Suppressing redundant draw_history_sync: identical payload (${safeCommands.length} commands) was already completely replayed in this session.`,
+          'color: #ffa726; font-weight: bold;',
+          'color: inherit;'
+        );
+        fallbackSyncInFlightRef.current = false;
+        setIsSyncing(false);
+        syncHistoryButtons();
+        return;
+      }
+
       historySyncInProgressRef.current = true;
       if (isResetPendingRef.current) {
         flushPendingReset();
       }
-      const safeCommands = Array.isArray(commands) ? commands : [];
-      console.log("[DrawingCanvasCore] Received draw_history_sync event, payload length:", safeCommands.length);
       
       const isCanvasReady = Boolean(isCanvasResizeObserverReadyRef.current && ctxRef.current && tempCtxRef.current);
 
@@ -5340,6 +5471,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       socket.off('draw_redo_sync', onDrawRedoSync);
       activeJoinDiagRef.current = null;
       historySyncInProgressRef.current = false;
+      if (initialSyncFallbackTimerRef.current) {
+        clearTimeout(initialSyncFallbackTimerRef.current);
+        initialSyncFallbackTimerRef.current = null;
+      }
+      fallbackSyncInFlightRef.current = false;
     };
   }, [socket, instanceId]);
 
@@ -5404,8 +5540,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, []);
 
   const startSyncFlow = () => {
-    if (historySyncInProgressRef.current || hasSyncedOnceRef.current) {
-      console.log("[DrawingCanvasCore] Suppressing sync request: sync already in progress or completed.");
+    if (initialSyncFallbackTimerRef.current) {
+      clearTimeout(initialSyncFallbackTimerRef.current);
+      initialSyncFallbackTimerRef.current = null;
+    }
+    if (fallbackSyncInFlightRef.current || historySyncInProgressRef.current || hasSyncedOnceRef.current) {
+      console.log("[DrawingCanvasCore] Suppressing sync request: fallback sync already in flight, in progress, or completed.");
       return;
     }
     const now = Date.now();
@@ -5413,7 +5553,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       console.log("[DrawingCanvasCore] Suppressing duplicate sync request within 1000ms cooldown window.");
       return;
     }
-    historySyncInProgressRef.current = true;
+    fallbackSyncInFlightRef.current = true;
     lastSyncRequestTimeRef.current = now;
 
     setIsSyncing(true);
@@ -5424,6 +5564,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
     syncTimeoutRef.current = setTimeout(() => {
       console.log("[DrawingCanvasCore] Sync safety timeout reached (4s). Overriding loading screen.");
+      fallbackSyncInFlightRef.current = false;
       historySyncInProgressRef.current = false;
       setIsSyncing(false);
       setHasSyncedOnce(true);
@@ -5463,8 +5604,33 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
     }
 
-    if (socket?.connected && isJoined && isCanvasReady && !hasSyncedOnceRef.current && !historySyncInProgressRef.current) {
-      startSyncFlow();
+    if (
+      socket?.connected &&
+      isJoined &&
+      isCanvasReady &&
+      !hasSyncedOnceRef.current &&
+      !historySyncInProgressRef.current &&
+      !fallbackSyncInFlightRef.current
+    ) {
+      if (!initialSyncFallbackTimerRef.current) {
+        console.log("[DrawingCanvasCore] Scheduling fallback sync request in 600ms...");
+        initialSyncFallbackTimerRef.current = setTimeout(() => {
+          initialSyncFallbackTimerRef.current = null;
+          const currentJoined = Boolean(isRoomJoined || isServerRoomJoinedRef.current);
+          const currentCanvasReady = Boolean(isCanvasResizeObserverReadyRef.current && ctxRef.current && tempCtxRef.current);
+          if (
+            socket?.connected &&
+            currentJoined &&
+            currentCanvasReady &&
+            !hasSyncedOnceRef.current &&
+            !historySyncInProgressRef.current &&
+            !fallbackSyncInFlightRef.current
+          ) {
+            console.log("[DrawingCanvasCore] Fallback timer elapsed (600ms) without receiving automatic sync. Executing fallback sync flow...");
+            startSyncFlow();
+          }
+        }, 600);
+      }
     }
   };
 
@@ -5495,6 +5661,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const handleConnect = () => {
       console.log("[DrawingCanvasCore] System connection established.");
       socket.emit('client_capabilities', { supportsType13: true });
+      if (initialSyncFallbackTimerRef.current) {
+        clearTimeout(initialSyncFallbackTimerRef.current);
+        initialSyncFallbackTimerRef.current = null;
+      }
+      fallbackSyncInFlightRef.current = false;
       historySyncInProgressRef.current = false;
       hasSyncedOnceRef.current = false;
       setHasSyncedOnce(false);
@@ -5504,6 +5675,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const handleDisconnect = () => {
       console.log("[DrawingCanvasCore] System connection lost.");
       isServerRoomJoinedRef.current = false;
+      if (initialSyncFallbackTimerRef.current) {
+        clearTimeout(initialSyncFallbackTimerRef.current);
+        initialSyncFallbackTimerRef.current = null;
+      }
+      fallbackSyncInFlightRef.current = false;
       historySyncInProgressRef.current = false;
       setIsSyncing(true);
     };
