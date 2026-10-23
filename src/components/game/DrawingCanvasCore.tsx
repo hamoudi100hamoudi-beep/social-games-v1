@@ -590,6 +590,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const [isSyncing, setIsSyncing] = useState(true);
   const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
   const hasSyncedOnceRef = useRef(false);
+  const historySyncInProgressRef = useRef(false);
   const isServerRoomJoinedRef = useRef(false);
   const pendingHistorySyncRef = useRef<any[] | null>(null);
   const syncRetryTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -883,6 +884,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
       drainingStrokesRef.current = [];
       activeJoinDiagRef.current = null;
+      historySyncInProgressRef.current = false;
     };
   }, []);
 
@@ -3017,6 +3019,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     drainingStrokesRef.current = [];
 
     // Reinitialize Undo / Redo stacks
+    historySyncInProgressRef.current = false;
     bufferedSyncRef.current = null;
     localCommandsRef.current = [];
     localRedoStackRef.current = [];
@@ -5046,6 +5049,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         // Fast path for empty history
         if (commands.length === 0) {
           isReplayingRef.current = false;
+          historySyncInProgressRef.current = false;
           saveSnapshot();
           syncHistoryButtons();
           setIsSyncing(false);
@@ -5162,6 +5166,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             // IMPORTANT: DO NOT wipe activeSessionsRef.current = {} here!
             // Live drawing sessions by other users that arrived while chunks were rendering are preserved.
             isReplayingRef.current = false;
+            historySyncInProgressRef.current = false;
             saveSnapshot();
             syncHistoryButtons();
             setIsSyncing(false);
@@ -5215,6 +5220,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       } catch (err) {
         console.error("[DrawingCanvasCore] Sync Chunk Error:", err);
+        historySyncInProgressRef.current = false;
         const joinDiag = isJoinDiagEnabled() ? activeJoinDiagRef.current : null;
         if (joinDiag) {
           joinDiag.isCompleted = false;
@@ -5228,6 +5234,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
 
     const onDrawHistorySync = (commands: any[]) => {
+      historySyncInProgressRef.current = true;
       if (isResetPendingRef.current) {
         flushPendingReset();
       }
@@ -5332,6 +5339,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       socket.off('draw_history_sync', onDrawHistorySync);
       socket.off('draw_redo_sync', onDrawRedoSync);
       activeJoinDiagRef.current = null;
+      historySyncInProgressRef.current = false;
     };
   }, [socket, instanceId]);
 
@@ -5396,11 +5404,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, []);
 
   const startSyncFlow = () => {
+    if (historySyncInProgressRef.current || hasSyncedOnceRef.current) {
+      console.log("[DrawingCanvasCore] Suppressing sync request: sync already in progress or completed.");
+      return;
+    }
     const now = Date.now();
     if (now - lastSyncRequestTimeRef.current < 1000) {
       console.log("[DrawingCanvasCore] Suppressing duplicate sync request within 1000ms cooldown window.");
       return;
     }
+    historySyncInProgressRef.current = true;
     lastSyncRequestTimeRef.current = now;
 
     setIsSyncing(true);
@@ -5411,6 +5424,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
     syncTimeoutRef.current = setTimeout(() => {
       console.log("[DrawingCanvasCore] Sync safety timeout reached (4s). Overriding loading screen.");
+      historySyncInProgressRef.current = false;
       setIsSyncing(false);
       setHasSyncedOnce(true);
       hasSyncedOnceRef.current = true;
@@ -5449,7 +5463,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
     }
 
-    if (socket?.connected && isJoined && isCanvasReady && !hasSyncedOnceRef.current) {
+    if (socket?.connected && isJoined && isCanvasReady && !hasSyncedOnceRef.current && !historySyncInProgressRef.current) {
       startSyncFlow();
     }
   };
@@ -5481,6 +5495,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const handleConnect = () => {
       console.log("[DrawingCanvasCore] System connection established.");
       socket.emit('client_capabilities', { supportsType13: true });
+      historySyncInProgressRef.current = false;
       hasSyncedOnceRef.current = false;
       setHasSyncedOnce(false);
       checkAndTriggerInitialSync();
@@ -5489,6 +5504,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const handleDisconnect = () => {
       console.log("[DrawingCanvasCore] System connection lost.");
       isServerRoomJoinedRef.current = false;
+      historySyncInProgressRef.current = false;
       setIsSyncing(true);
     };
 
