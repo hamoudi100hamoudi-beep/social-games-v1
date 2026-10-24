@@ -222,11 +222,23 @@ async function startServer() {
       }
     });
 
-    socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly, supportsType13 }, callback) => {
+    socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly, supportsType13, reconnectSecret }, callback) => {
       if (supportsType13) {
         roomManager.setClientCapabilities(socket.id, { supportsType13: true });
       }
       try {
+        if (!roomManager.isValidRoomId(roomId)) {
+          console.warn(`[Join Filter] Rejecting join to invalid/non-existent room: ${roomId}`);
+          if (callback) callback({ error: 'room_not_found', success: false });
+          return;
+        }
+
+        if (!playerId || typeof playerId !== 'string' || playerId.trim().length === 0) {
+          console.warn(`[Join Filter] Rejecting join without playerId from socket: ${socket.id}`);
+          if (callback) callback({ error: 'unauthorized', success: false, reason: 'missing_player_id' });
+          return;
+        }
+
         const checkRoom = roomManager.getRoom(roomId);
         if (checkRoom) {
           if (!checkRoom.bannedUsers) checkRoom.bannedUsers = [];
@@ -240,8 +252,15 @@ async function startServer() {
           }
         }
 
-        const reconnectedRoom = roomManager.reconnectPlayer(roomId, playerId || '', nickname, socket.id);
-        if (reconnectedRoom) {
+        const reconnectRes = roomManager.reconnectPlayer(roomId, playerId, nickname, socket.id, reconnectSecret);
+        if (reconnectRes.status === 'auth_failed') {
+          console.warn(`[AUTH REJECTED] Unauthorized reconnect attempt for player ID: ${playerId || 'N/A'} in room: ${roomId}`);
+          if (callback) callback({ error: 'unauthorized', success: false, reason: reconnectRes.reason });
+          return;
+        }
+
+        if (reconnectRes.status === 'reconnected') {
+            const reconnectedRoom = reconnectRes.room;
             socket.join(roomId);
             if (callback) callback({ success: true, reconnected: true });
             
@@ -268,6 +287,15 @@ async function startServer() {
             return;
         }
 
+        // --- NEW JOIN AUTHENTICATION GATE (Phase 1: Verification without registration) ---
+        const authJoinRes = roomManager.validateJoinIdentity(playerId, reconnectSecret, socket.id);
+        if (!authJoinRes.ok) {
+          console.warn(`[AUTH REJECTED] Join rejected for playerId: ${playerId || 'N/A'}, reason: ${authJoinRes.reason}`);
+          if (callback) callback({ error: 'unauthorized', success: false, reason: authJoinRes.reason });
+          return;
+        }
+
+        // --- Check Room conditions (Nickname taken & Capacity) ---
         const existingRoom = roomManager.getRoom(roomId);
         if (existingRoom) {
           const isNicknameTaken = existingRoom.players.some(p => p.name === nickname);
@@ -284,6 +312,16 @@ async function startServer() {
           return;
         }
 
+        // --- NEW JOIN AUTHENTICATION GATE (Phase 2: Commit initial credential ONLY after join conditions pass) ---
+        if (authJoinRes.isNew) {
+          const regOk = roomManager.commitNewJoinCredential(authJoinRes.cleanPid, reconnectSecret!);
+          if (!regOk) {
+            console.warn(`[AUTH REJECTED] Failed to register credential for playerId: ${playerId}`);
+            if (callback) callback({ error: 'unauthorized', success: false, reason: 'registration_failed' });
+            return;
+          }
+        }
+
         socket.join(roomId);
         const room = roomManager.addPlayerToRoom(roomId, {
           id: socket.id,
@@ -292,7 +330,7 @@ async function startServer() {
           roomId: roomId,
           score: 0,
           wins: 0,
-          persistentId: playerId
+          persistentId: authJoinRes.cleanPid
         });
         
         if (callback) callback({ success: true, reconnected: false });

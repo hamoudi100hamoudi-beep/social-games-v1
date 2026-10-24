@@ -35,6 +35,7 @@ import CinematicModal from "../game/CinematicModal";
 import ExitSprite from "../game/ExitSprite";
 import AfkWarningSprite from "../game/AfkWarningSprite";
 import { safeLocalStorage } from "../../utils/storage";
+import { getPlayerIdentity } from "../../utils/playerAuth";
 import { soundManager } from "../../utils/soundManager";
 import { useRoomEventGate } from "../../hooks/useRoomEventGate";
 import { getRoomConfig } from "../../types/game";
@@ -328,18 +329,8 @@ export default function ExperimentalGameRoom({
     setIsMuted(newMuted);
   };
 
-  const persistentPlayerId = React.useMemo(() => {
-    if (typeof window === "undefined") return "";
-    let id = safeLocalStorage.getItem("gartic_player_id");
-    if (!id) {
-      id =
-        "usr-" +
-        Math.random().toString(36).substring(2, 11) +
-        "-" +
-        Date.now().toString(36);
-      safeLocalStorage.setItem("gartic_player_id", id);
-    }
-    return id;
+  const { playerId: persistentPlayerId, reconnectSecret } = React.useMemo(() => {
+    return getPlayerIdentity();
   }, []);
 
   const [gameState, setGameState] = useState<any>({
@@ -802,6 +793,7 @@ export default function ExperimentalGameRoom({
           nickname,
           avatar: avatar || nickname.charAt(0).toUpperCase(),
           playerId: persistentPlayerId,
+          reconnectSecret,
           reconnectOnly: reconnectOnly,
         },
         (res: any) => {
@@ -825,6 +817,13 @@ export default function ExperimentalGameRoom({
               } else {
                 safeLocalStorage.setItem("gartic_connection_lost", Date.now().toString());
               }
+            }
+            onLeave?.();
+          } else if (res && res.error === "unauthorized") {
+            console.warn("[GameRoom] Reconnect rejected: unauthorized session credential mismatch.");
+            if (typeof window !== "undefined") {
+              safeLocalStorage.removeItem("gartic_player_room");
+              safeLocalStorage.setItem("gartic_session_expired_reason", "unauthorized");
             }
             onLeave?.();
           } else if (res && res.error === "nickname_taken") {

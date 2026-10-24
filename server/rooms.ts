@@ -1,5 +1,6 @@
 import { Server } from "socket.io";
-import { Player, Room, GameState, getRoomConfig } from "../src/types/game.js";
+import { Player, Room, GameState, getRoomConfig, ROOM_PRESETS } from "../src/types/game.js";
+import { sessionAuthStore, SessionAuthStore } from "./sessionAuth.js";
 
 function getLevenshteinDistance(a: string, b: string): number {
   const matrix: number[][] = [];
@@ -282,6 +283,8 @@ const ALL_WORDS = [
 ];
 
 export class RoomManager {
+  public authStore: SessionAuthStore = sessionAuthStore;
+  private authPruneCounter: number = 0;
   private rooms: Map<string, Room> = new Map();
   private players: Map<string, Player> = new Map();
   private evictionTimers: Map<string, NodeJS.Timeout> = new Map();
@@ -289,6 +292,99 @@ export class RoomManager {
   private tickInterval: NodeJS.Timeout | null = null;
   private clientCapabilities: Map<string, { supportsType13?: boolean }> = new Map();
   private pendingDrawingIdentities: Map<string, string> = new Map();
+
+  public isPlayerInAnyRoom(persistentId: string): boolean {
+    if (!persistentId) return false;
+    for (const room of this.rooms.values()) {
+      if (room.players.some((p) => (p.persistentId || p.id) === persistentId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public getPlayerByPersistentId(persistentId: string): { player: Player; room: Room } | null {
+    if (!persistentId) return null;
+    for (const room of this.rooms.values()) {
+      const p = room.players.find((pl) => (pl.persistentId || pl.id) === persistentId);
+      if (p) {
+        return { player: p, room };
+      }
+    }
+    return null;
+  }
+
+  public verifyPlayerSecret(persistentId: string, secret: unknown): boolean {
+    return this.authStore.verifyCredential(persistentId, secret);
+  }
+
+  public isValidRoomId(roomId: unknown): boolean {
+    if (!roomId || typeof roomId !== 'string' || roomId.trim().length === 0) return false;
+    const cleanId = roomId.trim();
+    if (this.rooms.has(cleanId)) return true;
+    const normalized = cleanId.toLowerCase();
+    return (
+      ROOM_PRESETS.some((r) => r.id.toLowerCase() === normalized) ||
+      normalized === 'general' ||
+      normalized === '10p' ||
+      normalized === 'free' ||
+      normalized === 'freedraw' ||
+      normalized === 'experimental' ||
+      normalized === 'experimental draw'
+    );
+  }
+
+  public validateJoinIdentity(
+    playerId: string | undefined,
+    reconnectSecret: string | undefined,
+    socketId: string
+  ): { ok: true; isNew: boolean; cleanPid: string } | { ok: false; reason: string } {
+    if (!playerId || typeof playerId !== 'string' || playerId.trim().length === 0) {
+      return { ok: false, reason: 'missing_player_id' };
+    }
+
+    const cleanPid = playerId.trim();
+    const hasCredential = this.authStore.hasCredential(cleanPid);
+    if (hasCredential) {
+      const isAuthed = this.verifyPlayerSecret(cleanPid, reconnectSecret);
+      if (!isAuthed) {
+        return { ok: false, reason: 'invalid_credentials' };
+      }
+      return { ok: true, isNew: false, cleanPid };
+    }
+
+    // Not registered in authStore. A valid secret is strictly required to establish initial credentials!
+    if (!reconnectSecret || !this.authStore.isValidSecret(reconnectSecret)) {
+      return { ok: false, reason: 'missing_or_invalid_secret' };
+    }
+
+    const activeExisting = this.getPlayerByPersistentId(cleanPid);
+    if (activeExisting && activeExisting.player.id !== socketId) {
+      return { ok: false, reason: 'identity_already_active' };
+    }
+
+    return { ok: true, isNew: true, cleanPid };
+  }
+
+  public commitNewJoinCredential(cleanPid: string, reconnectSecret: string): boolean {
+    return this.authStore.registerCredential(cleanPid, reconnectSecret);
+  }
+
+  public authenticateNewJoin(
+    playerId: string | undefined,
+    reconnectSecret: string | undefined,
+    socketId: string
+  ): { ok: true } | { ok: false; reason: string } {
+    const val = this.validateJoinIdentity(playerId, reconnectSecret, socketId);
+    if (!val.ok) return val;
+    if (val.isNew) {
+      const regOk = this.commitNewJoinCredential(val.cleanPid, reconnectSecret!);
+      if (!regOk) {
+        return { ok: false, reason: 'registration_failed' };
+      }
+    }
+    return { ok: true };
+  }
 
   public setClientCapabilities(socketId: string, caps: { supportsType13?: boolean }) {
     const existing = this.clientCapabilities.get(socketId) || {};
@@ -313,6 +409,12 @@ export class RoomManager {
 
   private tick() {
     try {
+      this.authPruneCounter++;
+      if (this.authPruneCounter >= 900) {
+        this.authPruneCounter = 0;
+        this.authStore.prune((pid) => this.isPlayerInAnyRoom(pid));
+      }
+
       this.rooms.forEach((room) => {
         try {
           this.kickIdlePlayers(room);
@@ -2067,26 +2169,53 @@ const words = word.split(" ").filter(w => w.length > 0);
     persistentId: string,
     nickname: string,
     newSocketId: string,
-  ): Room | null {
+    reconnectSecret?: string,
+  ): { status: 'reconnected'; room: Room } | { status: 'auth_failed'; reason: string } | { status: 'not_found' } {
     const room = this.rooms.get(roomId);
-    if (!room) return null;
+    if (!room) return { status: 'not_found' };
 
     let existingPlayer = room.players.find(
       (p) => p.persistentId && p.persistentId === persistentId,
     );
     let matchMethod = "persistentId";
-    if (!existingPlayer) {
-      // We ONLY fallback to nickname if the existing player DOES NOT have a persistentId
-      // (which shouldn't happen, but just in case for older clients)
-      existingPlayer = room.players.find((p) => p.name === nickname && !p.persistentId);
-      if (existingPlayer) matchMethod = "nickname";
-    }
 
     if (!existingPlayer) {
       console.error(
         `[RECONNECT ATTEMPT] Searching for User: ${nickname}, Found Match? No, Old Socket ID: N/A, New Socket ID: ${newSocketId}`,
       );
-      return null;
+      return { status: 'not_found' };
+    }
+
+    // --- SESSION AUTHENTICATION GATE ---
+    // Strictly verify ownership BEFORE any socket replacement, disconnection, or timer cancellation
+    const targetPid = existingPlayer.persistentId;
+    if (targetPid) {
+      const hasStoredCred = this.authStore.hasCredential(targetPid);
+      if (hasStoredCred) {
+        const isSecretValid = this.authStore.verifyCredential(targetPid, reconnectSecret);
+        if (!isSecretValid) {
+          console.warn(`[AUTH GATE] Rejected unauthorized reconnect attempt for persistentId: ${targetPid}`);
+          return { status: 'auth_failed', reason: 'invalid_credentials' };
+        }
+      } else {
+        // Player exists in room, but no credential stored (e.g. server restart or legacy).
+        // If the player is currently active in the room and the incoming socket is different, reject claiming active session!
+        if (existingPlayer.id !== newSocketId && !existingPlayer.isOffline && existingPlayer.offlineSince === undefined) {
+          console.warn(`[AUTH GATE] Rejected claiming active session without credential for persistentId: ${targetPid}`);
+          return { status: 'auth_failed', reason: 'active_session_conflict' };
+        }
+        if (this.authStore.isValidSecret(reconnectSecret)) {
+          const regOk = this.authStore.registerCredential(targetPid, reconnectSecret);
+          if (!regOk) {
+            return { status: 'auth_failed', reason: 'registration_failed' };
+          }
+        }
+      }
+    } else {
+      // Legacy fallback player without persistentId:
+      if (existingPlayer.id !== newSocketId && !existingPlayer.isOffline && existingPlayer.offlineSince === undefined) {
+        return { status: 'auth_failed', reason: 'active_session_conflict' };
+      }
     }
 
     const oldSocketId = existingPlayer.id;
@@ -2109,7 +2238,7 @@ const words = word.split(" ").filter(w => w.length > 0);
       existingPlayer.lastActivity = Date.now();
       delete existingPlayer.offlineSince;
       this.broadcastState(room);
-      return room;
+      return { status: 'reconnected', room };
     }
 
     console.error(
@@ -2169,7 +2298,7 @@ const words = word.split(" ").filter(w => w.length > 0);
     }
 
     this.broadcastState(room);
-    return room;
+    return { status: 'reconnected', room };
   }
 
   getPlayer(socketId: string): Player | undefined {
@@ -2270,6 +2399,9 @@ const words = word.split(" ").filter(w => w.length > 0);
                   this.removePlayerFromRoom(roomId!, checkPlayer.id);
                   this.players.delete(checkPlayer.id);
                   this.evictionTimers.delete(pId);
+                  if (pId && !this.isPlayerInAnyRoom(pId)) {
+                    this.authStore.removeCredential(pId);
+                  }
 
                   this.broadcastMessage(currentRoom, {
                     id:
