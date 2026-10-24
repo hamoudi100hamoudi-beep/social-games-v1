@@ -333,9 +333,22 @@ netIo.on('connection', (socket) => {
       }
 
       // Check room conditions (nickname & capacity)
+      const normalizeName = (str: string): string => {
+        if (!str || typeof str !== 'string') return '';
+        return str
+          .normalize('NFKC')
+          .replace(/[أإآٱ]/g, "ا")
+          .replace(/ة/g, "ه")
+          .replace(/ى/g, "ي")
+          .replace(/[\u064B-\u065F]/g, "")
+          .trim()
+          .toLowerCase();
+      };
+
       const existingRoom = netRm.getRoom(roomId);
       if (existingRoom) {
-        const isNicknameTaken = existingRoom.players.some((p) => p.name === nickname);
+        const normIncoming = normalizeName(nickname);
+        const isNicknameTaken = existingRoom.players.some((p) => normalizeName(p.name) === normIncoming);
         if (isNicknameTaken) {
           if (callback) callback({ error: 'nickname_taken', success: false });
           return;
@@ -521,6 +534,48 @@ const missingPidRes: any = await new Promise((res) => {
 });
 assert(missingPidRes.error === 'unauthorized', 'NET-7.9: Join with empty playerId is rejected as unauthorized');
 assert(missingPidRes.reason === 'missing_player_id', 'NET-7.9: Reason is missing_player_id');
+
+// -----------------------------------------------------------------
+// 8. SESSION-NICKNAME-UX-1: Normalized Nickname Taken & Duplicate Rejection Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 8: UX-1 Normalized Nickname Taken Tests ---');
+const uxRoomId = 'General #Test';
+const uxRoom = netRm.getRoom(uxRoomId);
+if (uxRoom) {
+  uxRoom.players = [];
+  uxRoom.maxPlayers = 5;
+}
+
+const clientAlpha = await connectClient();
+const alphaPid = 'usr-ux-alpha-001';
+const alphaSecret = 'sec-alpha-secret-token-12345678';
+const alphaJoin: any = await new Promise((res) => {
+  clientAlpha.emit('join_room', {
+    roomId: uxRoomId,
+    nickname: '  أحمد  ',
+    playerId: alphaPid,
+    reconnectSecret: alphaSecret
+  }, res);
+});
+assert(alphaJoin.success === true, 'UX-8.1: Alpha joins room successfully with spaced nickname');
+
+const clientBeta = await connectClient();
+const betaPid = 'usr-ux-beta-002';
+const betaSecret = 'sec-beta-secret-token-87654321';
+const betaJoin: any = await new Promise((res) => {
+  clientBeta.emit('join_room', {
+    roomId: uxRoomId,
+    nickname: 'أحمد',
+    playerId: betaPid,
+    reconnectSecret: betaSecret
+  }, res);
+});
+assert(betaJoin.error === 'nickname_taken', 'UX-8.2: Beta join with normalized duplicate nickname is rejected with nickname_taken');
+assert(netRm.authStore.hasCredential(betaPid) === false, 'UX-8.2: No credential registered for rejected nickname join');
+assert(uxRoom?.players.length === 1, 'UX-8.2: Room player count remains 1 (no second player created)');
+
+clientAlpha.disconnect();
+clientBeta.disconnect();
 
 // Teardown network sockets & server
 client1.disconnect();

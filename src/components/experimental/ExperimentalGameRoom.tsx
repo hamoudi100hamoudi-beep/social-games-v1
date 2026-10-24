@@ -774,6 +774,20 @@ export default function ExperimentalGameRoom({
   useEffect(() => {
     if (!socket) return;
 
+    let responded = false;
+    const joinTimeout = setTimeout(() => {
+      if (!responded) {
+        responded = true;
+        console.warn("[GameRoom] Join room request timed out after 10s.");
+        setIsInitialLoadingRoom(false);
+        setIsRoomFull(true);
+        if (typeof window !== "undefined") {
+          safeLocalStorage.removeItem("gartic_player_room");
+          safeLocalStorage.setItem("gartic_connection_lost", Date.now().toString());
+        }
+      }
+    }, 10000);
+
     const handleJoin = () => {
       const reconnectOnly = hasEmittedJoin.current || !justJoined;
       console.log(
@@ -797,6 +811,10 @@ export default function ExperimentalGameRoom({
           reconnectOnly: reconnectOnly,
         },
         (res: any) => {
+          if (responded) return;
+          responded = true;
+          clearTimeout(joinTimeout);
+
           if (res && res.success) {
             console.log("[GameRoom] Successfully joined/reconnected room.");
             hasEmittedJoin.current = true;
@@ -2369,8 +2387,8 @@ export default function ExperimentalGameRoom({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35, ease: "easeInOut" }}
-            className="fixed inset-0 flex flex-col items-center justify-center bg-[#061220] z-[999999] cursor-not-allowed select-none touch-none"
-            style={{ pointerEvents: "auto" }}
+            className="fixed inset-0 flex flex-col items-center justify-center bg-[#061220] z-[5000] cursor-not-allowed select-none touch-none"
+            style={{ pointerEvents: isInitialLoadingRoom ? "auto" : "none" }}
           >
             <div className="flex flex-col items-center">
               <div className="relative w-14 h-14">

@@ -296,9 +296,22 @@ async function startServer() {
         }
 
         // --- Check Room conditions (Nickname taken & Capacity) ---
+        const normalizeName = (str: string): string => {
+          if (!str || typeof str !== 'string') return '';
+          return str
+            .normalize('NFKC')
+            .replace(/[أإآٱ]/g, "ا")
+            .replace(/ة/g, "ه")
+            .replace(/ى/g, "ي")
+            .replace(/[\u064B-\u065F]/g, "")
+            .trim()
+            .toLowerCase();
+        };
+
         const existingRoom = roomManager.getRoom(roomId);
         if (existingRoom) {
-          const isNicknameTaken = existingRoom.players.some(p => p.name === nickname);
+          const normIncoming = normalizeName(nickname);
+          const isNicknameTaken = existingRoom.players.some(p => normalizeName(p.name) === normIncoming);
           if (isNicknameTaken) {
             if (callback) callback({ error: 'nickname_taken', success: false });
             return;
