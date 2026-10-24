@@ -2198,18 +2198,10 @@ const words = word.split(" ").filter(w => w.length > 0);
           return { status: 'auth_failed', reason: 'invalid_credentials' };
         }
       } else {
-        // Player exists in room, but no credential stored (e.g. server restart or legacy).
-        // If the player is currently active in the room and the incoming socket is different, reject claiming active session!
-        if (existingPlayer.id !== newSocketId && !existingPlayer.isOffline && existingPlayer.offlineSince === undefined) {
-          console.warn(`[AUTH GATE] Rejected claiming active session without credential for persistentId: ${targetPid}`);
-          return { status: 'auth_failed', reason: 'active_session_conflict' };
-        }
-        if (this.authStore.isValidSecret(reconnectSecret)) {
-          const regOk = this.authStore.registerCredential(targetPid, reconnectSecret);
-          if (!regOk) {
-            return { status: 'auth_failed', reason: 'registration_failed' };
-          }
-        }
+        // Player exists in room, but no credential stored (e.g. server restart or pruned credential).
+        // Securely reject reconnect rather than allowing unauthenticated registration or takeover.
+        console.warn(`[AUTH GATE] Rejected reconnect attempt for persistentId ${targetPid}: missing stored credential`);
+        return { status: 'auth_failed', reason: 'missing_credentials' };
       }
     } else {
       // Legacy fallback player without persistentId:

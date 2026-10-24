@@ -247,6 +247,49 @@ assert(sec2Manager.isValidRoomId('General #Test') === true, 'SEC-2.9: Preset roo
 assert(sec2Manager.isValidRoomId('Ghost-Room-Does-Not-Exist') === false, 'SEC-2.9: Non-existent custom room is rejected');
 
 // -----------------------------------------------------------------
+// 6b. SESSION-IDENTITY-SEC-3: Missing/Pruned Credential Reconnection Defense
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 6b: SEC-3 Missing/Pruned Credential Reconnection Defense ---');
+const sec3Store = new SessionAuthStore();
+const sec3Manager = new RoomManager();
+sec3Manager.authStore = sec3Store;
+
+const charliePid = 'usr-charlie-pruned-999';
+const charlieSocketOriginal = 'socket-charlie-original';
+const charlieSecret = 'sec-charlie-valid-token-12345678';
+
+sec3Store.registerCredential(charliePid, charlieSecret);
+const charlieRoom = sec3Manager.addPlayerToRoom('General #Test', {
+  id: charlieSocketOriginal,
+  name: 'Charlie',
+  avatar: '🦊',
+  roomId: 'General #Test',
+  score: 55,
+  wins: 3,
+  persistentId: charliePid
+});
+
+sec3Manager.handleDisconnect(charlieSocketOriginal);
+const charliePlayerInRoom = charlieRoom.players.find(p => p.persistentId === charliePid);
+assert(charliePlayerInRoom !== undefined, 'SEC-3.1: Charlie is in room and offline');
+
+sec3Store.removeCredential(charliePid);
+assert(sec3Store.hasCredential(charliePid) === false, 'SEC-3.1: Charlie credential successfully removed from store (pruned/lost)');
+
+const reconnectNoSecret = sec3Manager.reconnectPlayer('General #Test', charliePid, 'Charlie', 'socket-charlie-new-1', undefined);
+assert(reconnectNoSecret.status === 'auth_failed', 'SEC-3.2: Reconnect without secret when credential missing returns auth_failed');
+assert((reconnectNoSecret as any).reason === 'missing_credentials', 'SEC-3.2: Rejection reason is missing_credentials');
+assert(charlieRoom.players[0].id === charlieSocketOriginal, 'SEC-3.2: Original socket unchanged');
+assert(charlieRoom.players[0].score === 55, 'SEC-3.2: Original score unchanged');
+assert(sec3Store.hasCredential(charliePid) === false, 'SEC-3.2: No fallback credential registered');
+
+const reconnectNewSecret = sec3Manager.reconnectPlayer('General #Test', charliePid, 'Charlie', 'socket-charlie-new-2', 'sec-attacker-brand-new-999999');
+assert(reconnectNewSecret.status === 'auth_failed', 'SEC-3.3: Reconnect with unregistered new secret returns auth_failed');
+assert((reconnectNewSecret as any).reason === 'missing_credentials', 'SEC-3.3: Rejection reason is missing_credentials');
+assert(charlieRoom.players[0].id === charlieSocketOriginal, 'SEC-3.3: Original socket unchanged');
+assert(sec3Store.hasCredential(charliePid) === false, 'SEC-3.3: No fallback credential registered on failed reconnect');
+
+// -----------------------------------------------------------------
 // 7. Real Socket.IO Network Integration Tests (Port 0 Ephemeral Server)
 // -----------------------------------------------------------------
 console.log('\n--- Test Group 7: Real Socket.IO Network Integration Tests ---');
