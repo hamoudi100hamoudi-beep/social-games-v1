@@ -310,6 +310,7 @@ export default function ExperimentalGameRoom({
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const hasEmittedJoin = React.useRef(false);
+  const [isRoomJoined, setIsRoomJoined] = useState(false);
 
   const [isAfkPopupOpen, setIsAfkPopupOpen] = useState(false);
   const [showReportConfirm, setShowReportConfirm] = useState(false);
@@ -818,6 +819,7 @@ export default function ExperimentalGameRoom({
           if (res && res.success) {
             console.log("[GameRoom] Successfully joined/reconnected room.");
             hasEmittedJoin.current = true;
+            setIsRoomJoined(true);
           } else if (
             res &&
             (res.error === "session_expired" ||
@@ -933,6 +935,7 @@ export default function ExperimentalGameRoom({
       gameState: any;
       hasDrawHistory?: boolean;
     }) => {
+      setIsRoomJoined(true);
       if (typeof state.isFreeDraw !== "undefined") {
         setIsFreeDrawRoom(Boolean(state.isFreeDraw));
       }
@@ -1163,6 +1166,11 @@ export default function ExperimentalGameRoom({
       setHasDrawHistory(Boolean(history && history.length > 0));
     };
 
+    const onDisconnect = () => {
+      setIsRoomJoined(false);
+    };
+
+    socket.on("disconnect", onDisconnect);
     socket.on("room_state_update", onRoomStateUpdate);
     socket.on("receive_message", onReceiveMessage);
     socket.on("receive_guess", onReceiveGuess);
@@ -1174,6 +1182,7 @@ export default function ExperimentalGameRoom({
     socket.on("draw_history_sync", onDrawHistorySync);
 
     return () => {
+      socket.off("disconnect", onDisconnect);
       socket.off("room_state_update", onRoomStateUpdate);
       socket.off("receive_message", onReceiveMessage);
       socket.off("receive_guess", onReceiveGuess);
@@ -1661,6 +1670,7 @@ export default function ExperimentalGameRoom({
                 onSyncStateChangeAction={handleSyncStateChangeAction}
                 onHistoryLengthChangeAction={handleHistoryLengthChangeAction}
                 drawerTimerSlotRef={handleDrawerSlotRef}
+                isRoomJoined={isRoomJoined}
               />
 
               {/* Hit Notifications Overlay (Isolated, zero-re-render Sibling component with fixed slot pool) */}

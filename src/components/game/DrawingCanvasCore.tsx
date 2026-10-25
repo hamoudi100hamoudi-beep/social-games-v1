@@ -1715,11 +1715,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -6744,7 +6744,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
-          {(isSyncing || !isConnected) && (
+          {isRoomJoined && (isSyncing || !isConnected) && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -6779,6 +6779,7 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
   // of the massive DrawingCanvasCore JSX tree, because DrawingCanvasCore reads dynamic
   // live drawing parameters (color, thickness, opacity) synchronously from its internal propsRef.
   return (
+    prevProps.isRoomJoined === nextProps.isRoomJoined &&
     prevProps.readOnly === nextProps.readOnly &&
     prevProps.tool === nextProps.tool &&
     prevProps.currentDrawerId === nextProps.currentDrawerId &&

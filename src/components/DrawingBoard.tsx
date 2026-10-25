@@ -35,6 +35,7 @@ export default function DrawingBoard({
   onHistoryLengthChange,
   amIDrawer = false,
   onExitFreeDraw,
+  isRoomJoined = false,
 }: { 
   readOnly?: boolean;
   onSkipTurn?: () => void;
@@ -50,6 +51,7 @@ export default function DrawingBoard({
   onHistoryLengthChange?: (hasStrokes: boolean) => void;
   amIDrawer?: boolean;
   onExitFreeDraw?: () => void;
+  isRoomJoined?: boolean;
 }) {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
 
@@ -298,6 +300,7 @@ export default function DrawingBoard({
           status={status}
           isZoomEnabled={zoomEnabled}
           isFreeDraw={isFreeDraw}
+          isRoomJoined={isRoomJoined}
           onHistoryStateChange={handleHistoryStateChange}
           onPipetteColorPicked={handlePipetteColorPicked}
           onSyncStateChange={onSyncStateChange}
