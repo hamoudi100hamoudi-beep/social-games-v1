@@ -317,6 +317,17 @@ export default function GameRoom({
   const [unreadCount, setUnreadCount] = useState(0);
   const hasEmittedJoin = React.useRef(false);
   const [isRoomJoined, setIsRoomJoined] = useState(false);
+  const [hasJoinedRoomOnce, setHasJoinedRoomOnce] = useState(false);
+  const hasJoinedRoomOnceRef = React.useRef(false);
+  useEffect(() => {
+    hasJoinedRoomOnceRef.current = hasJoinedRoomOnce;
+  }, [hasJoinedRoomOnce]);
+
+  const [isProlongedDisconnect, setIsProlongedDisconnect] = useState(false);
+  const [isJoinTimedOut, setIsJoinTimedOut] = useState(false);
+
+  const joinAttemptRef = React.useRef(0);
+  const joinTimeoutRef = React.useRef<any>(null);
 
   const [isAfkPopupOpen, setIsAfkPopupOpen] = useState(false);
   const [showReportConfirm, setShowReportConfirm] = useState(false);
@@ -791,28 +802,52 @@ export default function GameRoom({
     return Math.max(0, maxHints - (gameState.hintsUsed || 0));
   }, [isFreeDraw, isDrawingMode, gameState.currentWord, gameState.hintsUsed]);
 
+  // --- Prolonged Disconnect Timer (20 seconds) ---
+  useEffect(() => {
+    const isDisconnectedOrRejoining = hasJoinedRoomOnce && (!isConnected || !isRoomJoined);
+
+    if (!isDisconnectedOrRejoining) {
+      setIsProlongedDisconnect(false);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setIsProlongedDisconnect(true);
+    }, 20000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [hasJoinedRoomOnce, isConnected, isRoomJoined]);
+
   // --- Block 1: Handle Room Join & Rejoin based on (Re)connection status ---
   useEffect(() => {
     if (!socket) return;
 
-    let responded = false;
-    const joinTimeout = setTimeout(() => {
-      if (!responded) {
-        responded = true;
-        console.warn("[GameRoom] Join room request timed out after 10s.");
-        setIsInitialLoadingRoom(false);
-        setIsRoomFull(true);
-        if (typeof window !== "undefined") {
-          safeLocalStorage.removeItem("gartic_player_room");
-          safeLocalStorage.setItem("gartic_connection_lost", Date.now().toString());
-        }
-      }
-    }, 10000);
-
     const handleJoin = () => {
+      const currentAttempt = ++joinAttemptRef.current;
+      if (joinTimeoutRef.current) {
+        clearTimeout(joinTimeoutRef.current);
+      }
+
+      // Schedule 10-second timeout for this specific attempt
+      joinTimeoutRef.current = setTimeout(() => {
+        if (joinAttemptRef.current !== currentAttempt) return;
+        console.warn(`[GameRoom] Join room attempt ${currentAttempt} timed out after 10s.`);
+        setIsInitialLoadingRoom(false);
+        // Timeout does NOT mean room is full. If initial join failed, show timeout error
+        if (!hasJoinedRoomOnceRef.current) {
+          setIsJoinTimedOut(true);
+          if (typeof window !== "undefined") {
+            safeLocalStorage.removeItem("gartic_player_room");
+            safeLocalStorage.setItem("gartic_connection_lost", Date.now().toString());
+          }
+        }
+      }, 10000);
+
       const reconnectOnly = hasEmittedJoin.current || !justJoined;
       console.log(
-        "[GameRoom] Sending join_room:",
+        `[GameRoom] Sending join_room (attempt ${currentAttempt}):`,
         room,
         "with playerId:",
         persistentPlayerId,
@@ -832,14 +867,21 @@ export default function GameRoom({
           reconnectOnly: reconnectOnly,
         },
         (res: any) => {
-          if (responded) return;
-          responded = true;
-          clearTimeout(joinTimeout);
+          // Stale response from a previous attempt: discard
+          if (joinAttemptRef.current !== currentAttempt) return;
+
+          if (joinTimeoutRef.current) {
+            clearTimeout(joinTimeoutRef.current);
+            joinTimeoutRef.current = null;
+          }
 
           if (res && res.success) {
-            console.log("[GameRoom] Successfully joined/reconnected room.");
+            console.log(`[GameRoom] Successfully joined/reconnected room on attempt ${currentAttempt}.`);
             hasEmittedJoin.current = true;
+            setHasJoinedRoomOnce(true);
             setIsRoomJoined(true);
+            setIsInitialLoadingRoom(false);
+            setIsJoinTimedOut(false);
           } else if (
             res &&
             (res.error === "session_expired" ||
@@ -897,6 +939,9 @@ export default function GameRoom({
 
     return () => {
       socket.off("connect", handleJoin);
+      if (joinTimeoutRef.current) {
+        clearTimeout(joinTimeoutRef.current);
+      }
     };
   }, [socket]);
 
@@ -2610,6 +2655,63 @@ export default function GameRoom({
         )}
       </AnimatePresence>
 
+      {/* 🌐 Independent Connection Status Overlay (CONNECTION-STATUS-UX-1) */}
+      <AnimatePresence>
+        {hasJoinedRoomOnce && (!isConnected || !isRoomJoined) && (
+          <motion.div
+            key="connection-status-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="fixed inset-0 z-[9000] bg-[#061220]/60 flex flex-col items-center justify-center p-4 select-none touch-none"
+            dir="rtl"
+          >
+            <div className="bg-[#121B2A] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center">
+              {/* Animated Icon / Spinner */}
+              <div className="relative w-16 h-16 mb-5 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full border-4 border-[#1AD2FF]/20" />
+                <div className="absolute inset-0 rounded-full border-4 border-t-[#1AD2FF] animate-spin" />
+                <WifiOff className="w-7 h-7 text-[#FB923C] animate-pulse" />
+              </div>
+
+              {/* Status Title */}
+              <h3 className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight">
+                {!isConnected
+                  ? "انقطع الاتصال بالخادم"
+                  : "عاد الاتصال"}
+              </h3>
+
+              {/* Status Subtitle */}
+              <p className="text-sm sm:text-base text-slate-300 font-medium mb-6 leading-relaxed">
+                {isProlongedDisconnect
+                  ? "تعذر استعادة الاتصال حتى الآن. يرجى التحقق من اتصالك بالإنترنت."
+                  : !isConnected
+                    ? "نحاول إعادة الاتصال تلقائيًا..."
+                    : "جارٍ إعادة الانضمام إلى الغرفة..."}
+              </p>
+
+              {/* Prolonged Disconnect Action: Return to Lobby */}
+              {isProlongedDisconnect && (
+                <button
+                  id="disconnect-return-lobby-btn"
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      safeLocalStorage.removeItem("gartic_player_room");
+                    }
+                    onLeave?.();
+                  }}
+                  className="w-full py-3.5 px-5 font-black text-sm sm:text-base rounded-2xl transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2 bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/30 active:scale-95 shadow-lg"
+                >
+                  <LogOut className="w-5 h-5 ml-1" />
+                  <span>العودة إلى الردهة</span>
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Profile Modal */}
       <CinematicModal
         isOpen={!!selectedProfilePlayer}
@@ -2927,6 +3029,45 @@ export default function GameRoom({
         </h3>
         <p id="auth-store-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
           بلغ الخادم طاقته الاستيعابية القصوى حالياً، يرجى المحاولة بعد قليل
+        </p>
+      </CinematicModal>
+
+      {/* Join Room Timeout Modal */}
+      <CinematicModal
+        isOpen={isJoinTimedOut}
+        onClose={() => {
+          setIsJoinTimedOut(false);
+          if (typeof window !== "undefined") {
+            safeLocalStorage.removeItem("gartic_player_room");
+          }
+          onLeave?.();
+        }}
+        titleType="report"
+        titleText="TIMEOUT"
+        buttons={[
+          {
+            id: "join-timeout-exit-btn",
+            text: "OK",
+            onClick: () => {
+              setIsJoinTimedOut(false);
+              if (typeof window !== "undefined") {
+                safeLocalStorage.removeItem("gartic_player_room");
+              }
+              onLeave?.();
+            },
+            variant: "danger",
+          },
+        ]}
+      >
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
+          <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+        </div>
+
+        <h3 id="join-timeout-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+          Connection Timeout
+        </h3>
+        <p id="join-timeout-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+          تعذر الاتصال بالغرفة في الوقت المحدد، يرجى المحاولة مرة أخرى
         </p>
       </CinematicModal>
 

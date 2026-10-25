@@ -3,6 +3,7 @@ import { Server } from 'socket.io';
 import { io as ioClient } from 'socket.io-client';
 import { RoomManager } from '../server/rooms.js';
 import { SessionAuthStore } from '../server/sessionAuth.js';
+import { registerJoinRoomHandler, normalizeNickname } from '../server/registerJoinRoomHandler.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -299,94 +300,11 @@ const netRm = new RoomManager();
 netRm.setIo(netIo);
 
 netIo.on('connection', (socket) => {
-  socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly, reconnectSecret }, callback) => {
-    try {
-      if (!netRm.isValidRoomId(roomId)) {
-        if (callback) callback({ error: 'room_not_found', success: false });
-        return;
-      }
-
-      if (!playerId || typeof playerId !== 'string' || playerId.trim().length === 0) {
-        if (callback) callback({ error: 'unauthorized', success: false, reason: 'missing_player_id' });
-        return;
-      }
-
-      const reconnectRes = netRm.reconnectPlayer(roomId, playerId, nickname, socket.id, reconnectSecret);
-      if (reconnectRes.status === 'auth_failed') {
-        if (callback) callback({ error: 'unauthorized', success: false, reason: reconnectRes.reason });
-        return;
-      }
-      if (reconnectRes.status === 'reconnected') {
-        if (callback) callback({ success: true, reconnected: true });
-        return;
-      }
-      if (reconnectOnly) {
-        if (callback) callback({ error: 'session_expired', reason: 'connection_lost' });
-        return;
-      }
-
-      // Production-identical join gate invocation (Phase 1: Validation without registration)
-      const authJoinRes = netRm.validateJoinIdentity(playerId, reconnectSecret, socket.id);
-      if (!authJoinRes.ok) {
-        if (authJoinRes.reason === 'auth_store_full') {
-          if (callback) callback({ error: 'auth_store_full', success: false, reason: 'auth_store_full' });
-        } else {
-          if (callback) callback({ error: 'unauthorized', success: false, reason: authJoinRes.reason });
-        }
-        return;
-      }
-
-      // Check room conditions (nickname & capacity)
-      const normalizeName = (str: string): string => {
-        if (!str || typeof str !== 'string') return '';
-        return str
-          .normalize('NFKC')
-          .replace(/[أإآٱ]/g, "ا")
-          .replace(/ة/g, "ه")
-          .replace(/ى/g, "ي")
-          .replace(/[\u064B-\u065F]/g, "")
-          .trim()
-          .toLowerCase();
-      };
-
-      const existingRoom = netRm.getRoom(roomId);
-      if (existingRoom) {
-        const normIncoming = normalizeName(nickname);
-        const isNicknameTaken = existingRoom.players.some((p) => normalizeName(p.name) === normIncoming);
-        if (isNicknameTaken) {
-          if (callback) callback({ error: 'nickname_taken', success: false });
-          return;
-        }
-        const maxCapacity = existingRoom.maxPlayers || 5;
-        const onlineCount = existingRoom.players.filter((p) => !p.isOffline).length;
-        if (onlineCount >= maxCapacity) {
-          if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
-          return;
-        }
-      }
-
-      // Phase 2: Commit credential ONLY after room conditions pass!
-      if (authJoinRes.isNew) {
-        const regOk = netRm.commitNewJoinCredential(authJoinRes.cleanPid, reconnectSecret!);
-        if (!regOk) {
-          if (callback) callback({ error: 'auth_store_full', success: false, reason: 'auth_store_full' });
-          return;
-        }
-      }
-
-      netRm.addPlayerToRoom(roomId, {
-        id: socket.id,
-        name: nickname,
-        avatar: avatar || '🐱',
-        roomId: roomId,
-        score: 0,
-        wins: 0,
-        persistentId: authJoinRes.cleanPid
-      });
-      if (callback) callback({ success: true, reconnected: false });
-    } catch (e: any) {
-      if (callback) callback({ error: e.message });
-    }
+  registerJoinRoomHandler(socket, {
+    io: netIo,
+    roomManager: netRm,
+    getRoomConfig: () => ({ maxPlayers: 5, winningScore: 30, theme: 'General' }),
+    getJsonSafeHistory: (history) => history || []
   });
 });
 
@@ -539,6 +457,83 @@ const missingPidRes: any = await new Promise((res) => {
 assert(missingPidRes.error === 'unauthorized', 'NET-7.9: Join with empty playerId is rejected as unauthorized');
 assert(missingPidRes.reason === 'missing_player_id', 'NET-7.9: Reason is missing_player_id');
 
+// 7.10 Banned player is rejected over network before credential or player registration
+const bannedPid = 'usr-net-banned-001';
+const bannedSecret = 'sec-banned-secret-12345678';
+const generalRoom = netRm.getRoom('General #Test');
+if (generalRoom) {
+  if (!generalRoom.bannedUsers) generalRoom.bannedUsers = [];
+  generalRoom.bannedUsers.push(bannedPid);
+}
+const bannedJoinRes: any = await new Promise((res) => {
+  clientAttacker.emit('join_room', {
+    roomId: 'General #Test',
+    nickname: 'BannedUser',
+    playerId: bannedPid,
+    reconnectSecret: bannedSecret
+  }, res);
+});
+assert(bannedJoinRes.error === 'banned', 'NET-7.10: Banned player is rejected over network with error: banned');
+assert(bannedJoinRes.success === false, 'NET-7.10: Banned join success is false');
+assert(netRm.authStore.hasCredential(bannedPid) === false, 'NET-7.10: No credential registered for banned player');
+assert(generalRoom?.players.some(p => p.persistentId === bannedPid) === false, 'NET-7.10: No player created for banned player');
+
+// 7.11 reconnectOnly request for expired/unknown session over network
+const clientExpired = await connectClient();
+const expiredEventPromise = new Promise<any>((resolve) => {
+  clientExpired.on('session_expired', (data) => resolve(data));
+});
+const expiredReconRes: any = await new Promise((res) => {
+  clientExpired.emit('join_room', {
+    roomId: 'General #Test',
+    nickname: 'ExpiredUser',
+    playerId: 'usr-net-unknown-expired',
+    reconnectSecret: 'sec-some-unknown-secret',
+    reconnectOnly: true
+  }, res);
+});
+const expiredEventData = await expiredEventPromise;
+assert(expiredReconRes.error === 'session_expired', 'NET-7.11: reconnectOnly returns error: session_expired');
+assert(expiredReconRes.reason === 'connection_lost', 'NET-7.11: reconnectOnly reason is connection_lost');
+assert(expiredEventData?.reason === 'connection_lost', 'NET-7.11: session_expired event emitted to client');
+clientExpired.disconnect();
+
+// 7.12 Reconnect when registered credential is lost/pruned over network
+if (generalRoom) {
+  generalRoom.maxPlayers = 10;
+}
+const prunedPid = 'usr-net-pruned-recon';
+const prunedSec = 'sec-pruned-secret-123456';
+const clientPruned = await connectClient();
+const prunedJoin1: any = await new Promise((res) => {
+  clientPruned.emit('join_room', {
+    roomId: 'General #Test',
+    nickname: 'PrunedUser',
+    playerId: prunedPid,
+    reconnectSecret: prunedSec
+  }, res);
+});
+assert(prunedJoin1.success === true, 'NET-7.12: Initial join for pruned-test succeeds');
+clientPruned.disconnect();
+
+// Simulate credential lost/pruned
+netRm.authStore.removeCredential(prunedPid);
+
+const clientPrunedRecon = await connectClient();
+const prunedReconRes: any = await new Promise((res) => {
+  clientPrunedRecon.emit('join_room', {
+    roomId: 'General #Test',
+    nickname: 'PrunedUser',
+    playerId: prunedPid,
+    reconnectSecret: prunedSec,
+    reconnectOnly: true
+  }, res);
+});
+assert(prunedReconRes.error === 'unauthorized', 'NET-7.12: Reconnect with pruned credential rejected with unauthorized');
+assert(prunedReconRes.reason === 'missing_credentials', 'NET-7.12: Reason is missing_credentials');
+assert(netRm.authStore.hasCredential(prunedPid) === false, 'NET-7.12: No fallback credential registered');
+clientPrunedRecon.disconnect();
+
 // -----------------------------------------------------------------
 // 8. SESSION-NICKNAME-UX-1: Normalized Nickname Taken & Duplicate Rejection Tests
 // -----------------------------------------------------------------
@@ -580,6 +575,96 @@ assert(uxRoom?.players.length === 1, 'UX-8.2: Room player count remains 1 (no se
 
 clientAlpha.disconnect();
 clientBeta.disconnect();
+
+// 8.3 Taa Marbuta vs Haa normalization over network
+if (uxRoom) uxRoom.players = [];
+const clientFatima1 = await connectClient();
+const fatima1Pid = 'usr-fatima-1';
+const fatimaJoin1: any = await new Promise((res) => {
+  clientFatima1.emit('join_room', {
+    roomId: uxRoomId,
+    nickname: 'فاطمة',
+    playerId: fatima1Pid,
+    reconnectSecret: 'sec-fatima-1-12345678'
+  }, res);
+});
+assert(fatimaJoin1.success === true, 'UX-8.3: Fatima 1 joins with taa marbuta (فاطمة)');
+
+const clientFatima2 = await connectClient();
+const fatima2Pid = 'usr-fatima-2';
+const fatimaJoin2: any = await new Promise((res) => {
+  clientFatima2.emit('join_room', {
+    roomId: uxRoomId,
+    nickname: 'فاطمه',
+    playerId: fatima2Pid,
+    reconnectSecret: 'sec-fatima-2-12345678'
+  }, res);
+});
+assert(fatimaJoin2.error === 'nickname_taken', 'UX-8.3: Fatima 2 (فاطمه with haa) rejected with nickname_taken');
+assert(netRm.authStore.hasCredential(fatima2Pid) === false, 'UX-8.3: No credential registered for rejected haa variation');
+assert(uxRoom?.players.length === 1, 'UX-8.3: Room player count remains 1');
+clientFatima1.disconnect();
+clientFatima2.disconnect();
+
+// 8.4 Tashkeel / Harakat normalization over network
+if (uxRoom) uxRoom.players = [];
+const clientMohammad1 = await connectClient();
+const mohammad1Pid = 'usr-mohammad-1';
+const mohammadJoin1: any = await new Promise((res) => {
+  clientMohammad1.emit('join_room', {
+    roomId: uxRoomId,
+    nickname: 'محمد',
+    playerId: mohammad1Pid,
+    reconnectSecret: 'sec-mohammad-1-12345678'
+  }, res);
+});
+assert(mohammadJoin1.success === true, 'UX-8.4: Mohammad 1 joins with plain name (محمد)');
+
+const clientMohammad2 = await connectClient();
+const mohammad2Pid = 'usr-mohammad-2';
+const mohammadJoin2: any = await new Promise((res) => {
+  clientMohammad2.emit('join_room', {
+    roomId: uxRoomId,
+    nickname: 'مُحمَّد',
+    playerId: mohammad2Pid,
+    reconnectSecret: 'sec-mohammad-2-12345678'
+  }, res);
+});
+assert(mohammadJoin2.error === 'nickname_taken', 'UX-8.4: Mohammad 2 with tashkeel (مُحمَّد) rejected with nickname_taken');
+assert(netRm.authStore.hasCredential(mohammad2Pid) === false, 'UX-8.4: No credential registered for rejected tashkeel variation');
+assert(uxRoom?.players.length === 1, 'UX-8.4: Room player count remains 1');
+clientMohammad1.disconnect();
+clientMohammad2.disconnect();
+
+// 8.5 Alif Maqsura vs Yaa normalization over network
+if (uxRoom) uxRoom.players = [];
+const clientYosra1 = await connectClient();
+const yosra1Pid = 'usr-yosra-1';
+const yosraJoin1: any = await new Promise((res) => {
+  clientYosra1.emit('join_room', {
+    roomId: uxRoomId,
+    nickname: 'يسرى',
+    playerId: yosra1Pid,
+    reconnectSecret: 'sec-yosra-1-12345678'
+  }, res);
+});
+assert(yosraJoin1.success === true, 'UX-8.5: Yosra 1 joins with alif maqsura (يسرى)');
+
+const clientYosra2 = await connectClient();
+const yosra2Pid = 'usr-yosra-2';
+const yosraJoin2: any = await new Promise((res) => {
+  clientYosra2.emit('join_room', {
+    roomId: uxRoomId,
+    nickname: 'يسري',
+    playerId: yosra2Pid,
+    reconnectSecret: 'sec-yosra-2-12345678'
+  }, res);
+});
+assert(yosraJoin2.error === 'nickname_taken', 'UX-8.5: Yosra 2 with yaa (يسري) rejected with nickname_taken');
+assert(netRm.authStore.hasCredential(yosra2Pid) === false, 'UX-8.5: No credential registered for rejected yaa variation');
+assert(uxRoom?.players.length === 1, 'UX-8.5: Room player count remains 1');
+clientYosra1.disconnect();
+clientYosra2.disconnect();
 
 // -----------------------------------------------------------------
 // 9. SESSION-AUTH-STORE-1: Capacity Cap & Active Player Protection Tests
@@ -736,6 +821,178 @@ assert(netCapStore.size === 2, 'NET-9.8: Store size strictly bounded at 2 over n
 assert(netRoomObj?.players.length === 2, 'NET-9.8: Room player count unchanged (no player created)');
 
 clientCapTest.disconnect();
+
+// -----------------------------------------------------------------
+// 10. CONNECTION-STATUS-UX-1: Connection Status, Reconnect Lifecycle & Sequence Tracking
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 10: CONNECTION-STATUS-UX-1 Tests ---');
+
+// 10.1: Initial Join Lifecycle & State Logic Simulation
+{
+  let isConnected = true;
+  let isRoomJoined = false;
+  let hasJoinedRoomOnce = false;
+
+  const isOverlayVisible = () => hasJoinedRoomOnce && (!isConnected || !isRoomJoined);
+
+  assert(!isOverlayVisible(), 'UX-10.1: Overlay is initially NOT visible prior to first successful join');
+  assert(!hasJoinedRoomOnce, 'UX-10.1: hasJoinedRoomOnce is initially false');
+
+  // Successful join occurs
+  hasJoinedRoomOnce = true;
+  isRoomJoined = true;
+
+  assert(!isOverlayVisible(), 'UX-10.1: Overlay remains NOT visible when connected and joined');
+  assert(hasJoinedRoomOnce, 'UX-10.1: hasJoinedRoomOnce becomes true on successful join');
+
+  // Socket disconnect occurs
+  isConnected = false;
+  isRoomJoined = false;
+
+  assert(isOverlayVisible(), 'UX-10.1: Disconnection overlay becomes visible on socket disconnect');
+
+  // Socket reconnects but room re-join has not yet completed
+  isConnected = true;
+  isRoomJoined = false;
+  assert(isOverlayVisible(), 'UX-10.1: Overlay remains visible while rejoining room');
+
+  // Room re-join completes
+  isRoomJoined = true;
+  assert(!isOverlayVisible(), 'UX-10.1: Overlay cleanly dismisses once room is rejoined');
+}
+
+// 10.2: Nickname Taken Rejection does NOT activate disconnect overlay or set hasJoinedRoomOnce
+{
+  let isConnected = true;
+  let isRoomJoined = false;
+  let hasJoinedRoomOnce = false;
+  let isNicknameTaken = false;
+
+  const isOverlayVisible = () => hasJoinedRoomOnce && (!isConnected || !isRoomJoined);
+
+  // Simulating nickname_taken response:
+  const res = { error: 'nickname_taken', success: false };
+  if (res && res.error === 'nickname_taken') {
+    isNicknameTaken = true;
+    // Note: hasJoinedRoomOnce is NOT set
+  }
+
+  assert(isNicknameTaken, 'UX-10.2: isNicknameTaken is true');
+  assert(!hasJoinedRoomOnce, 'UX-10.2: hasJoinedRoomOnce remains false on nickname_taken');
+  assert(!isOverlayVisible(), 'UX-10.2: Disconnection overlay is NOT shown when nickname is taken');
+}
+
+// 10.3: Multi-attempt Sequence ID Handling (joinAttemptRef)
+{
+  let joinAttempt = 0;
+  let isRoomJoined = false;
+  let staleCallbacksIgnored = 0;
+
+  const simulateJoinAttempt = (attemptNum: number) => {
+    joinAttempt = attemptNum;
+  };
+
+  const simulateJoinCallback = (attemptNum: number, res: any) => {
+    if (attemptNum !== joinAttempt) {
+      staleCallbacksIgnored++;
+      return;
+    }
+    if (res && res.success) {
+      isRoomJoined = true;
+    }
+  };
+
+  // Attempt 1 fired
+  simulateJoinAttempt(1);
+  // Network stutter: Attempt 2 fired before attempt 1 returned
+  simulateJoinAttempt(2);
+  // Stale callback for attempt 1 arrives late
+  simulateJoinCallback(1, { success: false, error: 'stale' });
+
+  assert(staleCallbacksIgnored === 1, 'UX-10.3: Stale callback for attempt 1 was successfully ignored');
+  assert(!isRoomJoined, 'UX-10.3: isRoomJoined is false after stale callback');
+
+  // Valid callback for current attempt (2) arrives
+  simulateJoinCallback(2, { success: true });
+  assert(isRoomJoined, 'UX-10.3: Current attempt 2 callback successfully processed and set isRoomJoined to true');
+}
+
+// 10.4: Timeout Semantics (Does NOT set isRoomFull)
+{
+  let isRoomFull = false;
+  let isJoinTimedOut = false;
+  let isInitialLoadingRoom = true;
+  let hasJoinedRoomOnce = false;
+
+  // Simulate timeout handler from CONNECTION-STATUS-UX-1:
+  const handleTimeout = () => {
+    isInitialLoadingRoom = false;
+    // Timeout does NOT mean room is full
+    if (!hasJoinedRoomOnce) {
+      isJoinTimedOut = true;
+    }
+  };
+
+  handleTimeout();
+
+  assert(!isRoomFull, 'UX-10.4: Timeout does NOT set isRoomFull to true (no false claim that room is full)');
+  assert(isJoinTimedOut, 'UX-10.4: Timeout sets isJoinTimedOut to true for unjoined client');
+  assert(!isInitialLoadingRoom, 'UX-10.4: Initial loading room screen is dismissed on timeout');
+}
+
+// 10.5: Network Reconnect after Disconnect using Real Socket.IO
+{
+  netRm.authStore = new SessionAuthStore(5000);
+  netRm.authStore.setActivePredicate((pid) => netRm.isPlayerInAnyRoom(pid));
+  if (netRoomObj) {
+    netRoomObj.players = [];
+    netRoomObj.maxPlayers = 10;
+  }
+
+  const clientRecon = await connectClient();
+  const reconPid = 'usr-recon-ux-101';
+  const reconSec = 'sec-recon-ux-secret-101';
+
+  // 1. Initial join to General #Test
+  const join1Res: any = await new Promise((res) => {
+    clientRecon.emit('join_room', {
+      roomId: uxRoomId,
+      nickname: 'ReconUser',
+      playerId: reconPid,
+      reconnectSecret: reconSec
+    }, res);
+  });
+
+  assert(join1Res.success === true, 'UX-10.5: First join over network succeeds');
+  const roomAfterJoin1 = netRm.getRoom(uxRoomId);
+  const playerInRoom = roomAfterJoin1?.players.find(p => p.persistentId === reconPid);
+  assert(playerInRoom !== undefined, 'UX-10.5: Player exists in room after first join');
+
+  // 2. Disconnect client
+  clientRecon.disconnect();
+
+  // 3. Connect a new socket (representing reconnect after drop)
+  const clientRecon2 = await connectClient();
+
+  // 4. Rejoin with reconnectOnly: true and valid credentials
+  const rejoinRes: any = await new Promise((res) => {
+    clientRecon2.emit('join_room', {
+      roomId: uxRoomId,
+      nickname: 'ReconUser',
+      playerId: reconPid,
+      reconnectSecret: reconSec,
+      reconnectOnly: true
+    }, res);
+  });
+
+  assert(rejoinRes.success === true, 'UX-10.5: Reconnect after drop succeeds over real network');
+  const roomAfterRejoin = netRm.getRoom(uxRoomId);
+  const playerAfterRejoin = roomAfterRejoin?.players.find(p => p.persistentId === reconPid);
+  assert(playerAfterRejoin?.id === clientRecon2.id, 'UX-10.5: Player socket ID updated to new socket ID upon reconnect');
+  assert(playerAfterRejoin?.isOffline === false, 'UX-10.5: Player is marked online after successful reconnect');
+
+  clientRecon2.disconnect();
+}
 
 // Teardown network sockets & server
 client1.disconnect();

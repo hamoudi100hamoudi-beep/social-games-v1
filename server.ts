@@ -7,6 +7,7 @@ import customParser from 'socket.io-msgpack-parser';
 import { roomManager, normalizeArabic, createType2Buffer } from './server/rooms.js';
 import { getRoomConfig, ROOM_PRESETS } from './src/types/game.js';
 import { getToolName } from './src/utils/drawBinaryHelper.js';
+import { registerJoinRoomHandler } from './server/registerJoinRoomHandler.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -222,156 +223,11 @@ async function startServer() {
       }
     });
 
-    socket.on('join_room', ({ roomId, nickname, avatar, playerId, reconnectOnly, supportsType13, reconnectSecret }, callback) => {
-      if (supportsType13) {
-        roomManager.setClientCapabilities(socket.id, { supportsType13: true });
-      }
-      try {
-        if (!roomManager.isValidRoomId(roomId)) {
-          console.warn(`[Join Filter] Rejecting join to invalid/non-existent room: ${roomId}`);
-          if (callback) callback({ error: 'room_not_found', success: false });
-          return;
-        }
-
-        if (!playerId || typeof playerId !== 'string' || playerId.trim().length === 0) {
-          console.warn(`[Join Filter] Rejecting join without playerId from socket: ${socket.id}`);
-          if (callback) callback({ error: 'unauthorized', success: false, reason: 'missing_player_id' });
-          return;
-        }
-
-        const checkRoom = roomManager.getRoom(roomId);
-        if (checkRoom) {
-          if (!checkRoom.bannedUsers) checkRoom.bannedUsers = [];
-          if (!checkRoom.votekicks) checkRoom.votekicks = {};
-          
-          const isUserBanned = (playerId && checkRoom.bannedUsers.includes(playerId)) || checkRoom.bannedUsers.includes(socket.id);
-          if (isUserBanned) {
-            console.log(`[Ban Filter] Blocked join/reconnect for banned player ID: ${playerId || socket.id} in room: ${roomId}`);
-            if (callback) callback({ error: 'banned', success: false });
-            return;
-          }
-        }
-
-        const reconnectRes = roomManager.reconnectPlayer(roomId, playerId, nickname, socket.id, reconnectSecret);
-        if (reconnectRes.status === 'auth_failed') {
-          console.warn(`[AUTH REJECTED] Unauthorized reconnect attempt for player ID: ${playerId || 'N/A'} in room: ${roomId}`);
-          if (callback) callback({ error: 'unauthorized', success: false, reason: reconnectRes.reason });
-          return;
-        }
-
-        if (reconnectRes.status === 'reconnected') {
-            const reconnectedRoom = reconnectRes.room;
-            socket.join(roomId);
-            if (callback) callback({ success: true, reconnected: true });
-            
-            try {
-              const player = reconnectedRoom.players.find(p => p.id === socket.id);
-              if (player) {
-                player.isOffline = false;
-                roomManager.sendStateToPlayer(reconnectedRoom, player);
-
-                // Always emit draw_history_sync to guarantee the client's loader disappears instantly
-                socket.emit('draw_history_sync', getJsonSafeHistory(reconnectedRoom.gameState.drawHistory || []));
-                socket.emit('draw_redo_sync', getJsonSafeHistory(reconnectedRoom.gameState.redoStack || []));
-                roomManager.syncActiveFreeDrawStrokesToSocket(reconnectedRoom, socket);
-              }
-            } catch (syncErr) {
-              console.error("[Socket] Error during direct sync in rejoin:", syncErr);
-            }
-            return;
-        }
-
-        if (reconnectOnly) {
-            if (callback) callback({ error: 'session_expired', reason: 'connection_lost' });
-            socket.emit('session_expired', { reason: 'connection_lost' });
-            return;
-        }
-
-        // --- NEW JOIN AUTHENTICATION GATE (Phase 1: Verification without registration) ---
-        const authJoinRes = roomManager.validateJoinIdentity(playerId, reconnectSecret, socket.id);
-        if (!authJoinRes.ok) {
-          console.warn(`[AUTH REJECTED] Join rejected for playerId: ${playerId || 'N/A'}, reason: ${authJoinRes.reason}`);
-          if (authJoinRes.reason === 'auth_store_full') {
-            if (callback) callback({ error: 'auth_store_full', success: false, reason: 'auth_store_full' });
-          } else {
-            if (callback) callback({ error: 'unauthorized', success: false, reason: authJoinRes.reason });
-          }
-          return;
-        }
-
-        // --- Check Room conditions (Nickname taken & Capacity) ---
-        const normalizeName = (str: string): string => {
-          if (!str || typeof str !== 'string') return '';
-          return str
-            .normalize('NFKC')
-            .replace(/[أإآٱ]/g, "ا")
-            .replace(/ة/g, "ه")
-            .replace(/ى/g, "ي")
-            .replace(/[\u064B-\u065F]/g, "")
-            .trim()
-            .toLowerCase();
-        };
-
-        const existingRoom = roomManager.getRoom(roomId);
-        if (existingRoom) {
-          const normIncoming = normalizeName(nickname);
-          const isNicknameTaken = existingRoom.players.some(p => normalizeName(p.name) === normIncoming);
-          if (isNicknameTaken) {
-            if (callback) callback({ error: 'nickname_taken', success: false });
-            return;
-          }
-        }
-        
-        const maxCapacity = existingRoom?.maxPlayers || getRoomConfig(roomId).maxPlayers;
-        const onlinePlayersCount = existingRoom ? existingRoom.players.filter(p => !p.isOffline).length : 0;
-        if (existingRoom && onlinePlayersCount >= maxCapacity) {
-          if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
-          return;
-        }
-
-        // --- NEW JOIN AUTHENTICATION GATE (Phase 2: Commit initial credential ONLY after join conditions pass) ---
-        if (authJoinRes.isNew) {
-          const regOk = roomManager.commitNewJoinCredential(authJoinRes.cleanPid, reconnectSecret!);
-          if (!regOk) {
-            console.warn(`[AUTH REJECTED] Failed to register credential for playerId: ${playerId} (auth store full)`);
-            if (callback) callback({ error: 'auth_store_full', success: false, reason: 'auth_store_full' });
-            return;
-          }
-        }
-
-        socket.join(roomId);
-        const room = roomManager.addPlayerToRoom(roomId, {
-          id: socket.id,
-          name: nickname,
-          avatar: avatar || nickname.charAt(0).toUpperCase(),
-          roomId: roomId,
-          score: 0,
-          wins: 0,
-          persistentId: authJoinRes.cleanPid
-        });
-        
-        if (callback) callback({ success: true, reconnected: false });
-
-        try {
-          // Always emit draw_history_sync to guarantee the client's loader disappears instantly
-          socket.emit('draw_history_sync', getJsonSafeHistory(room.gameState.drawHistory || []));
-          socket.emit('draw_redo_sync', getJsonSafeHistory(room.gameState.redoStack || []));
-          roomManager.syncActiveFreeDrawStrokesToSocket(room, socket);
-        } catch (syncErr) {
-          console.error("[Socket] Error during direct sync in join:", syncErr);
-        }
-
-        const joinMsg = {
-          id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-          text: `${nickname} انضم للغرفة`,
-          type: 'system'
-        };
-        roomManager.saveChatMessage(roomId, joinMsg);
-        io.to(roomId).emit('receive_message', joinMsg);
-      } catch (e) {
-        console.error(e);
-        if (callback) callback({ error: 'حدث خطأ أثناء الانضمام للغرفة' });
-      }
+    registerJoinRoomHandler(socket, {
+      io,
+      roomManager,
+      getRoomConfig,
+      getJsonSafeHistory,
     });
 
     socket.on('request_round_sync', () => {
