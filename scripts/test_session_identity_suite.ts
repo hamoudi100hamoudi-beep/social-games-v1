@@ -328,7 +328,11 @@ netIo.on('connection', (socket) => {
       // Production-identical join gate invocation (Phase 1: Validation without registration)
       const authJoinRes = netRm.validateJoinIdentity(playerId, reconnectSecret, socket.id);
       if (!authJoinRes.ok) {
-        if (callback) callback({ error: 'unauthorized', success: false, reason: authJoinRes.reason });
+        if (authJoinRes.reason === 'auth_store_full') {
+          if (callback) callback({ error: 'auth_store_full', success: false, reason: 'auth_store_full' });
+        } else {
+          if (callback) callback({ error: 'unauthorized', success: false, reason: authJoinRes.reason });
+        }
         return;
       }
 
@@ -365,7 +369,7 @@ netIo.on('connection', (socket) => {
       if (authJoinRes.isNew) {
         const regOk = netRm.commitNewJoinCredential(authJoinRes.cleanPid, reconnectSecret!);
         if (!regOk) {
-          if (callback) callback({ error: 'unauthorized', success: false, reason: 'registration_failed' });
+          if (callback) callback({ error: 'auth_store_full', success: false, reason: 'auth_store_full' });
           return;
         }
       }
@@ -576,6 +580,162 @@ assert(uxRoom?.players.length === 1, 'UX-8.2: Room player count remains 1 (no se
 
 clientAlpha.disconnect();
 clientBeta.disconnect();
+
+// -----------------------------------------------------------------
+// 9. SESSION-AUTH-STORE-1: Capacity Cap & Active Player Protection Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 9: SESSION-AUTH-STORE-1 Capacity Cap & Active Protection ---');
+
+// 9.1 Unit Test: Direct SessionAuthStore capacity limit and inactive pruning
+const capStore = new SessionAuthStore(3);
+const pActive1 = 'usr-cap-active-001';
+const pActive2 = 'usr-cap-active-002';
+const pInactive1 = 'usr-cap-inactive-001';
+const secActive1 = 'sec-token-active-001-abcdef';
+const secActive2 = 'sec-token-active-002-abcdef';
+const secInactive1 = 'sec-token-inactive-001-abcdef';
+
+const activeRegistry = new Set<string>([pActive1, pActive2]);
+const isActive = (pid: string) => activeRegistry.has(pid);
+capStore.setActivePredicate(isActive);
+
+// Register 2 active + 1 inactive to reach capacity (3)
+assert(capStore.registerCredential(pActive1, secActive1) === true, 'STORE-9.1: Register active player 1 succeeds');
+assert(capStore.registerCredential(pActive2, secActive2) === true, 'STORE-9.1: Register active player 2 succeeds');
+assert(capStore.registerCredential(pInactive1, secInactive1) === true, 'STORE-9.1: Register inactive player succeeds, store at capacity (3)');
+assert(capStore.size === 3, 'STORE-9.1: Store size is exactly 3');
+
+// 9.2 Check canRegisterNew: Should return true because pInactive1 can be reclaimed
+assert(capStore.canRegisterNew() === true, 'STORE-9.2: canRegisterNew returns true when inactive credential is prune-eligible');
+
+// 9.3 Register new active player 3: Should reclaim space from pInactive1 only
+const pActive3 = 'usr-cap-active-003';
+const secActive3 = 'sec-token-active-003-abcdef';
+activeRegistry.add(pActive3);
+const regActive3 = capStore.registerCredential(pActive3, secActive3);
+assert(regActive3 === true, 'STORE-9.3: Registering active 3 succeeds by pruning inactive credential');
+assert(capStore.size <= 3, 'STORE-9.3: Capacity limit (3) is NOT exceeded after registration');
+assert(capStore.hasCredential(pInactive1) === false, 'STORE-9.3: Inactive credential was pruned');
+assert(capStore.hasCredential(pActive1) === true, 'STORE-9.3: Active player 1 credential preserved');
+assert(capStore.hasCredential(pActive2) === true, 'STORE-9.3: Active player 2 credential preserved');
+assert(capStore.hasCredential(pActive3) === true, 'STORE-9.3: Active player 3 credential registered');
+
+// 9.4 All credentials in store are now active. Try to register 4th player.
+assert(capStore.canRegisterNew() === false, 'STORE-9.4: canRegisterNew returns false when all entries are active and store is full');
+const pActive4 = 'usr-cap-active-004';
+const secActive4 = 'sec-token-active-004-abcdef';
+const regActive4 = capStore.registerCredential(pActive4, secActive4);
+assert(regActive4 === false, 'STORE-9.4: Registering 4th player fails safely when store is full of active players');
+assert(capStore.size === 3, 'STORE-9.4: Store size did NOT exceed 3');
+assert(capStore.hasCredential(pActive1) === true, 'STORE-9.4: Active player 1 was NOT deleted');
+assert(capStore.hasCredential(pActive2) === true, 'STORE-9.4: Active player 2 was NOT deleted');
+assert(capStore.hasCredential(pActive3) === true, 'STORE-9.4: Active player 3 was NOT deleted');
+assert(capStore.hasCredential(pActive4) === false, 'STORE-9.4: Rejected player has no partial or stored credential');
+
+// 9.5 Active reconnection verification: Reconnect with valid secret succeeds under storage pressure
+assert(capStore.verifyCredential(pActive1, secActive1) === true, 'STORE-9.5: Active player 1 can still verify and reconnect');
+assert(capStore.verifyCredential(pActive2, secActive2) === true, 'STORE-9.5: Active player 2 can still verify and reconnect');
+
+// 9.6 RoomManager integration test with custom capacity
+const rmCap = new RoomManager();
+rmCap.authStore = new SessionAuthStore(2);
+rmCap.authStore.setActivePredicate((pid) => rmCap.isPlayerInAnyRoom(pid));
+
+const rmCapRoomId = 'Capacity-Room-Test';
+const rmP1 = 'usr-rm-cap-001';
+const rmSec1 = 'sec-rm-cap-token-001-123456';
+const rmP2 = 'usr-rm-cap-002';
+const rmSec2 = 'sec-rm-cap-token-002-123456';
+
+// Join Player 1
+const authRm1 = rmCap.authenticateNewJoin(rmP1, rmSec1, 'socket-rm-1');
+assert(authRm1.ok === true, 'RM-9.6: Player 1 authenticated and registered');
+rmCap.addPlayerToRoom(rmCapRoomId, {
+  id: 'socket-rm-1',
+  name: 'Player1',
+  avatar: 'A',
+  roomId: rmCapRoomId,
+  score: 10,
+  wins: 0,
+  persistentId: rmP1
+});
+
+// Join Player 2 (store now has 2/2 active players)
+const authRm2 = rmCap.authenticateNewJoin(rmP2, rmSec2, 'socket-rm-2');
+assert(authRm2.ok === true, 'RM-9.6: Player 2 authenticated and registered');
+rmCap.addPlayerToRoom(rmCapRoomId, {
+  id: 'socket-rm-2',
+  name: 'Player2',
+  avatar: 'B',
+  roomId: rmCapRoomId,
+  score: 20,
+  wins: 0,
+  persistentId: rmP2
+});
+
+assert(rmCap.authStore.size === 2, 'RM-9.6: RoomManager authStore reached full capacity (2/2)');
+
+// Attempt to join Player 3 when store is full of active players
+const rmP3 = 'usr-rm-cap-003';
+const rmSec3 = 'sec-rm-cap-token-003-123456';
+const valRm3 = rmCap.validateJoinIdentity(rmP3, rmSec3, 'socket-rm-3');
+assert(valRm3.ok === false, 'RM-9.7: validateJoinIdentity rejects when authStore is full of active players');
+if (!valRm3.ok) {
+  assert(valRm3.reason === 'auth_store_full', 'RM-9.7: Rejection reason is auth_store_full');
+}
+const authRm3 = rmCap.authenticateNewJoin(rmP3, rmSec3, 'socket-rm-3');
+assert(authRm3.ok === false, 'RM-9.7: authenticateNewJoin fails safely');
+if (!authRm3.ok) {
+  assert(authRm3.reason === 'auth_store_full', 'RM-9.7: authenticateNewJoin reason is auth_store_full');
+}
+assert(rmCap.authStore.hasCredential(rmP3) === false, 'RM-9.7: No credential was created for Player 3');
+assert(rmCap.authStore.size === 2, 'RM-9.7: AuthStore size strictly preserved at 2');
+assert(rmCap.authStore.hasCredential(rmP1) === true, 'RM-9.7: Active Player 1 preserved in RoomManager');
+assert(rmCap.authStore.hasCredential(rmP2) === true, 'RM-9.7: Active Player 2 preserved in RoomManager');
+
+// 9.8 Network Socket.IO Integration: auth_store_full over real network
+const netCapStore = new SessionAuthStore(2);
+netRm.authStore = netCapStore;
+netCapStore.setActivePredicate((pid) => netRm.isPlayerInAnyRoom(pid));
+
+const netP1 = 'usr-net-active-101';
+const netP2 = 'usr-net-active-102';
+const netSec1 = 'sec-net-active-101-token-123456';
+const netSec2 = 'sec-net-active-102-token-123456';
+
+netCapStore.registerCredential(netP1, netSec1);
+netCapStore.registerCredential(netP2, netSec2);
+
+const netRoomObj = netRm.getRoom(uxRoomId);
+if (netRoomObj) {
+  netRoomObj.players = [
+    { id: 'socket-dummy-1', name: 'NetActive1', avatar: '1', roomId: uxRoomId, score: 5, wins: 0, persistentId: netP1 },
+    { id: 'socket-dummy-2', name: 'NetActive2', avatar: '2', roomId: uxRoomId, score: 10, wins: 0, persistentId: netP2 },
+  ];
+  netRoomObj.maxPlayers = 10;
+}
+
+const clientCapTest = await connectClient();
+const pNetBlocked = 'usr-net-blocked-999';
+const secNetBlocked = 'sec-net-blocked-token-999999';
+
+const netBlockedJoin: any = await new Promise((res) => {
+  clientCapTest.emit('join_room', {
+    roomId: uxRoomId,
+    nickname: 'CapBlocked',
+    playerId: pNetBlocked,
+    reconnectSecret: secNetBlocked
+  }, res);
+});
+
+assert(netBlockedJoin.error === 'auth_store_full', 'NET-9.8: Network join rejected with error: auth_store_full');
+assert(netBlockedJoin.reason === 'auth_store_full', 'NET-9.8: Network join reason is auth_store_full');
+assert(netBlockedJoin.success === false, 'NET-9.8: Network join success is false');
+assert(netCapStore.hasCredential(pNetBlocked) === false, 'NET-9.8: No credential registered for rejected network client');
+assert(netCapStore.size === 2, 'NET-9.8: Store size strictly bounded at 2 over network');
+assert(netRoomObj?.players.length === 2, 'NET-9.8: Room player count unchanged (no player created)');
+
+clientCapTest.disconnect();
 
 // Teardown network sockets & server
 client1.disconnect();

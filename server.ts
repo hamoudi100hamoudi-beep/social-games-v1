@@ -291,7 +291,11 @@ async function startServer() {
         const authJoinRes = roomManager.validateJoinIdentity(playerId, reconnectSecret, socket.id);
         if (!authJoinRes.ok) {
           console.warn(`[AUTH REJECTED] Join rejected for playerId: ${playerId || 'N/A'}, reason: ${authJoinRes.reason}`);
-          if (callback) callback({ error: 'unauthorized', success: false, reason: authJoinRes.reason });
+          if (authJoinRes.reason === 'auth_store_full') {
+            if (callback) callback({ error: 'auth_store_full', success: false, reason: 'auth_store_full' });
+          } else {
+            if (callback) callback({ error: 'unauthorized', success: false, reason: authJoinRes.reason });
+          }
           return;
         }
 
@@ -329,8 +333,8 @@ async function startServer() {
         if (authJoinRes.isNew) {
           const regOk = roomManager.commitNewJoinCredential(authJoinRes.cleanPid, reconnectSecret!);
           if (!regOk) {
-            console.warn(`[AUTH REJECTED] Failed to register credential for playerId: ${playerId}`);
-            if (callback) callback({ error: 'unauthorized', success: false, reason: 'registration_failed' });
+            console.warn(`[AUTH REJECTED] Failed to register credential for playerId: ${playerId} (auth store full)`);
+            if (callback) callback({ error: 'auth_store_full', success: false, reason: 'auth_store_full' });
             return;
           }
         }

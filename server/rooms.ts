@@ -293,6 +293,10 @@ export class RoomManager {
   private clientCapabilities: Map<string, { supportsType13?: boolean }> = new Map();
   private pendingDrawingIdentities: Map<string, string> = new Map();
 
+  constructor() {
+    this.authStore.setActivePredicate((pid) => this.isPlayerInAnyRoom(pid));
+  }
+
   public isPlayerInAnyRoom(persistentId: string): boolean {
     if (!persistentId) return false;
     for (const room of this.rooms.values()) {
@@ -363,11 +367,16 @@ export class RoomManager {
       return { ok: false, reason: 'identity_already_active' };
     }
 
+    // Capacity check: if store is full and no inactive space can be reclaimed safely
+    if (!this.authStore.canRegisterNew((pid) => this.isPlayerInAnyRoom(pid))) {
+      return { ok: false, reason: 'auth_store_full' };
+    }
+
     return { ok: true, isNew: true, cleanPid };
   }
 
   public commitNewJoinCredential(cleanPid: string, reconnectSecret: string): boolean {
-    return this.authStore.registerCredential(cleanPid, reconnectSecret);
+    return this.authStore.registerCredential(cleanPid, reconnectSecret, (pid) => this.isPlayerInAnyRoom(pid));
   }
 
   public authenticateNewJoin(
@@ -380,7 +389,7 @@ export class RoomManager {
     if (val.isNew) {
       const regOk = this.commitNewJoinCredential(val.cleanPid, reconnectSecret!);
       if (!regOk) {
-        return { ok: false, reason: 'registration_failed' };
+        return { ok: false, reason: 'auth_store_full' };
       }
     }
     return { ok: true };

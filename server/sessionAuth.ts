@@ -6,6 +6,8 @@ export interface CredentialRecord {
   lastUsedAt: number;
 }
 
+export type IsActivePredicate = (persistentId: string) => boolean;
+
 /**
  * SessionAuthStore maintains a private, in-memory repository of cryptographic reconnect credentials.
  * 
@@ -15,10 +17,32 @@ export interface CredentialRecord {
  *    possibility of serializing credentials into public `room_state_update` broadcasts.
  * 3. Secret verification uses constant-time comparison (`crypto.timingSafeEqual`) to prevent timing side-channels.
  * 4. Store size is bounded to prevent unbounded memory growth from stale entries.
+ * 5. Active players' credentials are NEVER pruned under storage pressure. Reclaiming space only prunes
+ *    provably inactive credentials. If no inactive space can be reclaimed, new registrations are rejected.
  */
 export class SessionAuthStore {
   private credentials: Map<string, CredentialRecord> = new Map();
-  private readonly maxEntries: number = 5000;
+  private readonly maxEntries: number;
+  private activePredicate?: IsActivePredicate;
+
+  constructor(maxEntries: number = 5000, activePredicate?: IsActivePredicate) {
+    this.maxEntries = maxEntries;
+    if (activePredicate) {
+      this.activePredicate = activePredicate;
+    }
+  }
+
+  public setActivePredicate(predicate: IsActivePredicate): void {
+    this.activePredicate = predicate;
+  }
+
+  public get capacity(): number {
+    return this.maxEntries;
+  }
+
+  public get size(): number {
+    return this.credentials.size;
+  }
 
   public hashSecret(secret: string): string {
     return crypto.createHash('sha256').update(secret, 'utf8').digest('hex');
@@ -32,7 +56,72 @@ export class SessionAuthStore {
     return typeof id === 'string' && id.trim().length >= 3 && id.length <= 64;
   }
 
-  public registerCredential(persistentId: string, secret: string): boolean {
+  /**
+   * Checks whether the store has capacity to accept a new credential registration.
+   * If at or above maxEntries, returns true only if at least one provably inactive entry can be reclaimed.
+   */
+  public canRegisterNew(isActivePredicate?: IsActivePredicate): boolean {
+    if (this.credentials.size < this.maxEntries) {
+      return true;
+    }
+
+    const predicate = isActivePredicate || this.activePredicate;
+    if (!predicate) {
+      return false; // Cannot prove any credential is inactive without a predicate
+    }
+
+    for (const id of this.credentials.keys()) {
+      if (!predicate(id)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Reclaims space by pruning provably inactive credentials (LRU based on lastUsedAt).
+   * Active credentials (where predicate(id) === true) are strictly protected and never pruned.
+   * @returns The number of inactive credentials pruned.
+   */
+  public pruneInactive(isActivePredicate?: IsActivePredicate, maxToPrune?: number): number {
+    const predicate = isActivePredicate || this.activePredicate;
+    if (!predicate) {
+      return 0;
+    }
+
+    const inactiveList: { id: string; lastUsedAt: number }[] = [];
+    for (const [id, record] of this.credentials.entries()) {
+      if (!predicate(id)) {
+        inactiveList.push({ id, lastUsedAt: record.lastUsedAt });
+      }
+    }
+
+    if (inactiveList.length === 0) {
+      return 0;
+    }
+
+    // Sort LRU: oldest lastUsedAt first
+    inactiveList.sort((a, b) => a.lastUsedAt - b.lastUsedAt);
+
+    const limit = maxToPrune !== undefined
+      ? Math.min(inactiveList.length, maxToPrune)
+      : Math.min(inactiveList.length, Math.max(1, Math.min(500, Math.ceil(this.maxEntries * 0.1))));
+
+    let prunedCount = 0;
+    for (let i = 0; i < limit; i++) {
+      this.credentials.delete(inactiveList[i].id);
+      prunedCount++;
+    }
+
+    return prunedCount;
+  }
+
+  public registerCredential(
+    persistentId: string, 
+    secret: string, 
+    isActivePredicate?: IsActivePredicate
+  ): boolean {
     if (!this.isValidPersistentId(persistentId) || !this.isValidSecret(secret)) {
       return false;
     }
@@ -43,6 +132,16 @@ export class SessionAuthStore {
       return false;
     }
 
+    // Invariant: Cap protection. Never exceed maxEntries and never evict active players.
+    if (this.credentials.size >= this.maxEntries) {
+      this.pruneInactive(isActivePredicate);
+
+      // If still at capacity, reject new registration safely
+      if (this.credentials.size >= this.maxEntries) {
+        return false;
+      }
+    }
+
     const hash = this.hashSecret(secret.trim());
     const now = Date.now();
 
@@ -51,10 +150,6 @@ export class SessionAuthStore {
       createdAt: now,
       lastUsedAt: now,
     });
-
-    if (this.credentials.size > this.maxEntries) {
-      this.pruneOldest(500);
-    }
 
     return true;
   }
@@ -100,34 +195,22 @@ export class SessionAuthStore {
    * Periodic pruning to prevent memory bloat while strictly protecting active players.
    * @param isActivePredicate Callback to determine if a persistentId is currently active in any room.
    */
-  public prune(isActivePredicate: (persistentId: string) => boolean): void {
+  public prune(isActivePredicate?: IsActivePredicate): void {
+    const predicate = isActivePredicate || this.activePredicate;
     const now = Date.now();
     const MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
     for (const [id, record] of this.credentials.entries()) {
       if (now - record.lastUsedAt > MAX_AGE_MS) {
         // Invariant: Never prune an active player's credential!
-        if (!isActivePredicate(id)) {
+        if (!predicate || !predicate(id)) {
           this.credentials.delete(id);
         }
       }
     }
   }
 
-  private pruneOldest(count: number): void {
-    let removed = 0;
-    for (const id of this.credentials.keys()) {
-      if (removed >= count) break;
-      this.credentials.delete(id);
-      removed++;
-    }
-  }
-
   public clearAllForTesting(): void {
     this.credentials.clear();
-  }
-
-  public get size(): number {
-    return this.credentials.size;
   }
 }
 

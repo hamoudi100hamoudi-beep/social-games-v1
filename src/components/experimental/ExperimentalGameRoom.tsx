@@ -499,6 +499,7 @@ export default function ExperimentalGameRoom({
   const [isBanned, setIsBanned] = useState(false);
   const [isRoomFull, setIsRoomFull] = useState(false);
   const [isNicknameTaken, setIsNicknameTaken] = useState(false);
+  const [isAuthStoreFull, setIsAuthStoreFull] = useState(false);
   const [showCooldownWarning, setShowCooldownWarning] = useState(false);
   const lastVoteKickTimeRef = React.useRef<number>(0);
 
@@ -846,6 +847,10 @@ export default function ExperimentalGameRoom({
               safeLocalStorage.setItem("gartic_session_expired_reason", "unauthorized");
             }
             onLeave?.();
+          } else if (res && (res.error === "auth_store_full" || res.reason === "auth_store_full")) {
+            console.warn("[GameRoom] Rejoin blocked: Server session store is full.");
+            setIsAuthStoreFull(true);
+            setIsInitialLoadingRoom(false);
           } else if (res && res.error === "nickname_taken") {
             console.warn("[GameRoom] Rejoin blocked: Nickname is already taken.");
             setIsNicknameTaken(true);
@@ -2690,6 +2695,45 @@ export default function ExperimentalGameRoom({
         </h3>
         <p id="room-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
           هذه الغرفة ممتلئة بالكامل
+        </p>
+      </CinematicModal>
+
+      {/* Server Full (Auth Store Full) Warning Modal */}
+      <CinematicModal
+        isOpen={isAuthStoreFull}
+        onClose={() => {
+          setIsAuthStoreFull(false);
+          if (typeof window !== "undefined") {
+            safeLocalStorage.removeItem("gartic_player_room");
+          }
+          onLeave?.();
+        }}
+        titleType="report"
+        titleText="SERVER FULL"
+        buttons={[
+          {
+            id: "auth-store-full-exit-btn",
+            text: "OK",
+            onClick: () => {
+              setIsAuthStoreFull(false);
+              if (typeof window !== "undefined") {
+                safeLocalStorage.removeItem("gartic_player_room");
+              }
+              onLeave?.();
+            },
+            variant: "danger",
+          },
+        ]}
+      >
+        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
+          <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
+        </div>
+
+        <h3 id="auth-store-full-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
+          Server Capacity Reached
+        </h3>
+        <p id="auth-store-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
+          بلغ الخادم طاقته الاستيعابية القصوى حالياً، يرجى المحاولة بعد قليل
         </p>
       </CinematicModal>
     </>
