@@ -8,6 +8,7 @@ import { roomManager, normalizeArabic, createType2Buffer } from './server/rooms.
 import { getRoomConfig, ROOM_PRESETS } from './src/types/game.js';
 import { getToolName } from './src/utils/drawBinaryHelper.js';
 import { registerJoinRoomHandler } from './server/registerJoinRoomHandler.js';
+import { registerDrawBinaryHandler } from './server/registerDrawBinaryHandler.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -268,97 +269,10 @@ async function startServer() {
       }
     });
 
-    socket.on('draw_binary', (rawBuf) => {
-      const player = roomManager.getPlayer(socket.id);
-      const roomId = player ? player.roomId : null;
-      
-      const buf = Buffer.isBuffer(rawBuf)
-        ? rawBuf
-        : (rawBuf instanceof ArrayBuffer
-          ? Buffer.from(rawBuf)
-          : (ArrayBuffer.isView(rawBuf)
-            ? Buffer.from(rawBuf.buffer, rawBuf.byteOffset, rawBuf.byteLength)
-            : null));
-
-      if (buf && buf.length > 0) {
-        const type = buf[0];
-        if (roomId) {
-          const room = roomManager.getRoom(roomId);
-          const isFreeDraw = Boolean(room && room.isFreeDraw);
-          const isExperimental = Boolean(room && room.isExperimental);
-          const useCanonicalPipeline = isFreeDraw || isExperimental;
-
-          const toolName = buf.length >= 9 ? getToolName(buf[8]) : '';
-          const isContinuousTool = toolName === 'pencil' || toolName === 'eraser';
-
-          if (type === 5) { // draw_clear
-            if (isFreeDraw || isExperimental) {
-              roomManager.handleFreeDrawClear(roomId, buf);
-            } else {
-              roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
-            }
-            socket.broadcast.to(roomId).emit('draw_binary', buf);
-          } else if (type === 7) { // draw_undo
-            if ((isFreeDraw || isExperimental) && buf.length >= 10) {
-              let targetInstId = "";
-              for (let i = 0; i < 7; i++) {
-                const code = buf[1 + i];
-                if (code > 0) targetInstId += String.fromCharCode(code);
-              }
-              const targetStrokeId = buf.readUInt16LE(8);
-              const removed = roomManager.undoFreeDrawStroke(roomId, targetInstId, targetStrokeId);
-              if (removed) {
-                io.to(roomId).emit('draw_binary', buf);
-              }
-            } else {
-              roomManager.undoLastDrawing(roomId);
-              io.to(roomId).emit('draw_binary', buf);
-            }
-          } else if (type === 8) { // draw_redo
-            roomManager.redoDrawing(roomId);
-            io.to(roomId).emit('draw_binary', buf);
-          } else if (useCanonicalPipeline && type === 1 && isContinuousTool) { // Canonical draw_start (Pen/Eraser only)
-            roomManager.handleFreeDrawStart(roomId, socket.id, buf);
-            // Broadcast live draw_start so spectators initialize their local live layer
-            socket.broadcast.to(roomId).emit('draw_binary', buf);
-          } else if (useCanonicalPipeline && (type === 2 || type === 13)) { // Canonical draw_move (Type 2: standard, Type 13: compressed)
-            if (type === 13) {
-              const res = roomManager.handleFreeDrawMoveCompressed(roomId, socket.id, buf);
-              if (!res || !res.success || !res.points || !res.instId) {
-                // Production Hardening: Reject invalid, malformed, or truncated packet!
-                // Do NOT broadcast corrupted/partial packets to viewers!
-                return;
-              }
-              // Production Hardening: Broadcast safely with legacy Type 2 fallback
-              relayFreeDrawMove(roomId, socket, buf, res.instId, res.points);
-            } else {
-              const ok = roomManager.handleFreeDrawMove(roomId, socket.id, buf);
-              if (!ok) return;
-              // Relay standard Type 2 volatile move live to other clients in room
-              socket.broadcast.to(roomId).volatile.emit('draw_binary', buf);
-            }
-          } else if (useCanonicalPipeline && type === 3 && isContinuousTool) { // Canonical draw_end (Pen/Eraser only)
-            const commitResult = roomManager.handleFreeDrawEnd(roomId, socket.id, buf);
-            if (commitResult && commitResult.committed) {
-              // Construct and broadcast reliable draw_commit (Type 11) to the ENTIRE room INCLUDING drawer
-              // [Type 11 (1B)][instId (7B)][strokeId (2B LE)][pointCount (2B LE)] = 12 bytes
-              const commitBuf = Buffer.alloc(12);
-              commitBuf.writeUInt8(11, 0); // MSG_DRAW_COMMIT = 11
-              commitBuf.write(commitResult.instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
-              commitBuf.writeUInt16LE(commitResult.strokeId & 0xFFFF, 8);
-              commitBuf.writeUInt16LE(commitResult.pointCount & 0xFFFF, 10);
-              io.to(roomId).emit('draw_binary', commitBuf);
-            } else {
-              // End or cancelled relay
-              socket.broadcast.to(roomId).emit('draw_binary', buf);
-            }
-          } else {
-            // Normal Rooms or non-commit actions (e.g. shapes, bucket, or Normal room pencil)
-            roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
-            socket.broadcast.to(roomId).emit('draw_binary', buf);
-          }
-        }
-      }
+    registerDrawBinaryHandler(socket, {
+      io,
+      roomManager,
+      relayFreeDrawMove,
     });
 
     socket.on('draw_repair_req', (data) => {

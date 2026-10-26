@@ -4,6 +4,7 @@ import { io as ioClient } from 'socket.io-client';
 import { RoomManager } from '../server/rooms.js';
 import { SessionAuthStore } from '../server/sessionAuth.js';
 import { registerJoinRoomHandler, normalizeNickname } from '../server/registerJoinRoomHandler.js';
+import { registerDrawBinaryHandler, handleDrawBinary } from '../server/registerDrawBinaryHandler.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -305,6 +306,10 @@ netIo.on('connection', (socket) => {
     roomManager: netRm,
     getRoomConfig: () => ({ maxPlayers: 5, winningScore: 30, theme: 'General' }),
     getJsonSafeHistory: (history) => history || []
+  });
+  registerDrawBinaryHandler(socket, {
+    io: netIo,
+    roomManager: netRm
   });
 });
 
@@ -766,12 +771,12 @@ const rmSec3 = 'sec-rm-cap-token-003-123456';
 const valRm3 = rmCap.validateJoinIdentity(rmP3, rmSec3, 'socket-rm-3');
 assert(valRm3.ok === false, 'RM-9.7: validateJoinIdentity rejects when authStore is full of active players');
 if (!valRm3.ok) {
-  assert(valRm3.reason === 'auth_store_full', 'RM-9.7: Rejection reason is auth_store_full');
+  assert((valRm3 as any).reason === 'auth_store_full', 'RM-9.7: Rejection reason is auth_store_full');
 }
 const authRm3 = rmCap.authenticateNewJoin(rmP3, rmSec3, 'socket-rm-3');
 assert(authRm3.ok === false, 'RM-9.7: authenticateNewJoin fails safely');
 if (!authRm3.ok) {
-  assert(authRm3.reason === 'auth_store_full', 'RM-9.7: authenticateNewJoin reason is auth_store_full');
+  assert((authRm3 as any).reason === 'auth_store_full', 'RM-9.7: authenticateNewJoin reason is auth_store_full');
 }
 assert(rmCap.authStore.hasCredential(rmP3) === false, 'RM-9.7: No credential was created for Player 3');
 assert(rmCap.authStore.size === 2, 'RM-9.7: AuthStore size strictly preserved at 2');
@@ -992,6 +997,576 @@ console.log('\n--- Test Group 10: CONNECTION-STATUS-UX-1 Tests ---');
   assert(playerAfterRejoin?.isOffline === false, 'UX-10.5: Player is marked online after successful reconnect');
 
   clientRecon2.disconnect();
+}
+
+// -----------------------------------------------------------------
+// 11. SERVER-DRAW-AUTH-FIX-1: Server-Side Draw Authorization Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 11: SERVER-DRAW-AUTH-FIX-1 Tests ---');
+
+{
+  const makeType1 = (instId: string = 'inst001') => {
+    const buf = Buffer.alloc(18);
+    buf.writeUInt8(1, 0);
+    buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+    buf.writeUInt8(1, 8); // pencil
+    buf.writeUInt8(0, 9);
+    buf.writeUInt8(0, 10);
+    buf.writeUInt8(0, 11);
+    buf.writeUInt8(2, 12);
+    buf.writeUInt8(100, 13);
+    buf.writeInt16LE(10, 14);
+    buf.writeInt16LE(20, 16);
+    return buf;
+  };
+
+  const makeType4 = (instId: string = 'inst001') => {
+    const buf = Buffer.alloc(20);
+    buf.writeUInt8(4, 0);
+    buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+    return buf;
+  };
+
+  const makeType5 = (instId: string = 'inst001') => {
+    const buf = Buffer.alloc(8);
+    buf.writeUInt8(5, 0);
+    buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+    return buf;
+  };
+
+  const makeType7 = (instId: string = 'inst001', strokeId: number = 1) => {
+    const buf = Buffer.alloc(10);
+    buf.writeUInt8(7, 0);
+    buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+    buf.writeUInt16LE(strokeId, 8);
+    return buf;
+  };
+
+  const makeType8 = (instId: string = 'inst001') => {
+    const buf = Buffer.alloc(8);
+    buf.writeUInt8(8, 0);
+    buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+    return buf;
+  };
+
+  // Mock socket factory
+  const createMockSocket = (id: string, broadcastEmits: any[]) => {
+    return {
+      id,
+      broadcast: {
+        to: (_roomId: string) => ({
+          emit: (ev: string, data: any) => {
+            broadcastEmits.push({ event: ev, data });
+          },
+          volatile: {
+            emit: (ev: string, data: any) => {
+              broadcastEmits.push({ event: ev, data, volatile: true });
+            }
+          }
+        })
+      }
+    };
+  };
+
+  // Mock IO factory
+  const createMockIo = (ioEmits: any[]) => {
+    return {
+      to: (_roomId: string) => ({
+        emit: (ev: string, data: any) => {
+          ioEmits.push({ event: ev, data });
+        }
+      })
+    };
+  };
+
+  // 11.1 Current drawer in Normal Room during DRAWING status can draw, bucket, clear, undo, redo
+  {
+    const rm = new RoomManager();
+    const roomId = 'norm-auth-room-1';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = false;
+    room.isExperimental = false;
+    room.gameState.status = 'DRAWING';
+    const drawerPid = 'pid-drawer-1';
+    const drawerSocketId = 'sock-drawer-1';
+    room.gameState.currentDrawerId = drawerPid;
+
+    rm.addPlayerToRoom(roomId, {
+      id: drawerSocketId,
+      name: 'RealDrawer',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: drawerPid,
+      avatar: 'D'
+    });
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(drawerSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Send pencil start (Type 1)
+    handleDrawBinary(mockSocket, makeType1('inst111'), deps);
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.1: Current drawer start command recorded in drawHistory');
+    assert(broadcastEmits.length === 1, 'AUTH-11.1: Current drawer command broadcast to room');
+
+    // Send bucket (Type 4)
+    handleDrawBinary(mockSocket, makeType4('inst111'), deps);
+    assert(room.gameState.drawHistory.length === 2, 'AUTH-11.1: Current drawer bucket command recorded in drawHistory');
+
+    // Send undo (Type 7)
+    handleDrawBinary(mockSocket, makeType7('inst111'), deps);
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.1: Current drawer undo removes command from history');
+    assert(room.gameState.redoStack.length === 1, 'AUTH-11.1: Current drawer undo pushes to redoStack');
+    assert(ioEmits.length === 1, 'AUTH-11.1: Current drawer undo emitted to room via io.to()');
+
+    // Send redo (Type 8)
+    handleDrawBinary(mockSocket, makeType8('inst111'), deps);
+    assert(room.gameState.drawHistory.length === 2, 'AUTH-11.1: Current drawer redo restores command to history');
+    assert(room.gameState.redoStack.length === 0, 'AUTH-11.1: Current drawer redo clears redoStack');
+
+    // Send clear (Type 5)
+    handleDrawBinary(mockSocket, makeType5('inst111'), deps);
+    assert(room.gameState.drawHistory.length === 3, 'AUTH-11.1: Current drawer clear recorded in normal room history');
+  }
+
+  // 11.2 Guesser in Normal Room is rejected immediately (no history change, no broadcast)
+  {
+    const rm = new RoomManager();
+    const roomId = 'norm-auth-room-2';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = false;
+    room.isExperimental = false;
+    room.gameState.status = 'DRAWING';
+    room.gameState.currentDrawerId = 'pid-legit-drawer';
+
+    const guesserPid = 'pid-guesser-2';
+    const guesserSocketId = 'sock-guesser-2';
+
+    rm.addPlayerToRoom(roomId, {
+      id: guesserSocketId,
+      name: 'SneakyGuesser',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: guesserPid,
+      avatar: 'G'
+    });
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(guesserSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Guesser tries to draw
+    handleDrawBinary(mockSocket, makeType1('inst222'), deps);
+    assert(room.gameState.drawHistory.length === 0, 'AUTH-11.2: Guesser draw command is rejected (history empty)');
+    assert(broadcastEmits.length === 0, 'AUTH-11.2: Guesser draw command not broadcast');
+
+    // Guesser tries to clear
+    handleDrawBinary(mockSocket, makeType5('inst222'), deps);
+    assert(room.gameState.drawHistory.length === 0, 'AUTH-11.2: Guesser clear command is rejected');
+    assert(broadcastEmits.length === 0, 'AUTH-11.2: Guesser clear command not broadcast');
+
+    // Guesser tries to undo
+    handleDrawBinary(mockSocket, makeType7('inst222'), deps);
+    assert(ioEmits.length === 0, 'AUTH-11.2: Guesser undo command is rejected (no io emit)');
+
+    // Guesser tries to redo
+    handleDrawBinary(mockSocket, makeType8('inst222'), deps);
+    assert(ioEmits.length === 0, 'AUTH-11.2: Guesser redo command is rejected (no io emit)');
+  }
+
+  // 11.3 No player (even drawer) can draw/undo/clear if round status is NOT DRAWING
+  {
+    const rm = new RoomManager();
+    const roomId = 'norm-auth-room-3';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = false;
+    room.isExperimental = false;
+    const drawerPid = 'pid-drawer-3';
+    const drawerSocketId = 'sock-drawer-3';
+    room.gameState.currentDrawerId = drawerPid;
+
+    rm.addPlayerToRoom(roomId, {
+      id: drawerSocketId,
+      name: 'Drawer3',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: drawerPid,
+      avatar: 'D'
+    });
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(drawerSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Status: WAITING
+    room.gameState.status = 'WAITING';
+    handleDrawBinary(mockSocket, makeType1('inst333'), deps);
+    handleDrawBinary(mockSocket, makeType5('inst333'), deps);
+    assert(room.gameState.drawHistory.length === 0, 'AUTH-11.3: Drawing rejected when round status is WAITING');
+    assert(broadcastEmits.length === 0, 'AUTH-11.3: No broadcast emitted during WAITING');
+
+    // Status: CHOOSING
+    room.gameState.status = 'CHOOSING';
+    handleDrawBinary(mockSocket, makeType1('inst333'), deps);
+    handleDrawBinary(mockSocket, makeType5('inst333'), deps);
+    assert(room.gameState.drawHistory.length === 0, 'AUTH-11.3: Drawing rejected when round status is CHOOSING');
+
+    // Status: ROUND_END
+    room.gameState.status = 'ROUND_END';
+    handleDrawBinary(mockSocket, makeType1('inst333'), deps);
+    handleDrawBinary(mockSocket, makeType5('inst333'), deps);
+    assert(room.gameState.drawHistory.length === 0, 'AUTH-11.3: Drawing rejected when round status is ROUND_END');
+  }
+
+  // 11.4 Experimental Room authorization: Only current drawer during DRAWING is authorized
+  {
+    const rm = new RoomManager();
+    const roomId = 'exp-auth-room-4';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = false;
+    room.isExperimental = true;
+    room.gameState.status = 'DRAWING';
+    const drawerPid = 'pid-exp-drawer';
+    const drawerSocketId = 'sock-exp-drawer';
+    const guesserPid = 'pid-exp-guesser';
+    const guesserSocketId = 'sock-exp-guesser';
+    room.gameState.currentDrawerId = drawerPid;
+
+    rm.addPlayerToRoom(roomId, {
+      id: drawerSocketId,
+      name: 'ExpDrawer',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: drawerPid,
+      avatar: 'E'
+    });
+    rm.addPlayerToRoom(roomId, {
+      id: guesserSocketId,
+      name: 'ExpGuesser',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: guesserPid,
+      avatar: 'G'
+    });
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const drawerSocket = createMockSocket(drawerSocketId, broadcastEmits);
+    const guesserSocket = createMockSocket(guesserSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Drawer in Experimental starts drawing -> succeeds
+    handleDrawBinary(drawerSocket, makeType1('inst444'), deps);
+    assert(broadcastEmits.length === 1, 'AUTH-11.4: Experimental drawer draw_start is authorized');
+
+    // Guesser in Experimental tries to draw -> rejected
+    handleDrawBinary(guesserSocket, makeType1('inst444'), deps);
+    assert(broadcastEmits.length === 1, 'AUTH-11.4: Experimental guesser draw_start is rejected');
+
+    // Guesser tries to clear in Experimental -> rejected
+    handleDrawBinary(guesserSocket, makeType5('inst444'), deps);
+    assert(broadcastEmits.length === 1, 'AUTH-11.4: Experimental guesser clear is rejected');
+
+    // Drawer during WAITING in Experimental -> rejected
+    room.gameState.status = 'WAITING';
+    handleDrawBinary(drawerSocket, makeType1('inst444'), deps);
+    assert(broadcastEmits.length === 1, 'AUTH-11.4: Experimental drawer is rejected when status is not DRAWING');
+  }
+
+  // 11.5 Free Draw Room: Player in activeDrawers can draw and clear
+  {
+    const rm = new RoomManager();
+    const roomId = 'fd-auth-room-5';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = true;
+    const activePid = 'pid-fd-active';
+    const activeSocketId = 'sock-fd-active';
+
+    rm.addPlayerToRoom(roomId, {
+      id: activeSocketId,
+      name: 'FdActive',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: activePid,
+      avatar: 'A'
+    });
+    room.activeDrawers = [activePid];
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(activeSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Active drawer starts drawing
+    handleDrawBinary(mockSocket, makeType1('inst555'), deps);
+    assert(broadcastEmits.length === 1, 'AUTH-11.5: Free Draw active drawer is authorized to draw');
+
+    // Active drawer clears
+    handleDrawBinary(mockSocket, makeType5('inst555'), deps);
+    assert(broadcastEmits.length === 2, 'AUTH-11.5: Free Draw active drawer is authorized to clear');
+  }
+
+  // 11.6 Free Draw Room: Spectator (not in activeDrawers) is rejected
+  {
+    const rm = new RoomManager();
+    const roomId = 'fd-auth-room-6';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = true;
+    room.activeDrawers = ['pid-someone-else'];
+
+    const spectatorPid = 'pid-fd-spectator';
+    const spectatorSocketId = 'sock-fd-spectator';
+
+    rm.addPlayerToRoom(roomId, {
+      id: spectatorSocketId,
+      name: 'FdSpectator',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: spectatorPid,
+      avatar: 'S'
+    });
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(spectatorSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Spectator attempts draw
+    handleDrawBinary(mockSocket, makeType1('inst666'), deps);
+    assert(broadcastEmits.length === 0, 'AUTH-11.6: Free Draw spectator draw rejected');
+
+    // Spectator attempts clear
+    handleDrawBinary(mockSocket, makeType5('inst666'), deps);
+    assert(broadcastEmits.length === 0, 'AUTH-11.6: Free Draw spectator clear rejected');
+
+    // Spectator attempts redo
+    handleDrawBinary(mockSocket, makeType8('inst666'), deps);
+    assert(ioEmits.length === 0, 'AUTH-11.6: Free Draw spectator redo rejected');
+  }
+
+  // 11.7 Free Draw individual undo: Accepted ONLY if targetInstId belongs to socket in drawingIdentities
+  {
+    const rm = new RoomManager();
+    const roomId = 'fd-auth-room-7';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = true;
+    const userAPid = 'pid-user-a';
+    const userASocket = 'sock-user-a';
+    room.activeDrawers = [userAPid];
+
+    rm.addPlayerToRoom(roomId, {
+      id: userASocket,
+      name: 'UserA',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: userAPid,
+      avatar: 'A'
+    });
+
+    // Register drawing identity for UserA
+    room.drawingIdentities = {
+      'instAAA': { socketId: userASocket, playerName: 'UserA' }
+    };
+
+    // Pre-populate a stroke in drawHistory for instAAA, strokeId 10
+    const strokeBuf = Buffer.alloc(24);
+    strokeBuf.writeUInt8(9, 0); // MSG_DRAW_STROKE
+    strokeBuf.write('instAAA', 1, 7, 'ascii');
+    rm.recordDrawCommand(roomId, 'draw_binary', strokeBuf, 'instAAA', 10);
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.7: Initial stroke stored in drawHistory');
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(userASocket, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // User A undoes their own stroke (instAAA, strokeId 10)
+    handleDrawBinary(mockSocket, makeType7('instAAA', 10), deps);
+    assert(room.gameState.drawHistory.length === 0, 'AUTH-11.7: User A successfully undid their own stroke');
+    assert(ioEmits.length === 1, 'AUTH-11.7: Undo broadcast via io.to() for owned stroke');
+  }
+
+  // 11.8 Free Draw individual undo: REJECTED if targetInstId belongs to ANOTHER socket
+  {
+    const rm = new RoomManager();
+    const roomId = 'fd-auth-room-8';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = true;
+
+    const userAPid = 'pid-user-a';
+    const userASocket = 'sock-user-a';
+    const userBPid = 'pid-user-b';
+    const userBSocket = 'sock-user-b';
+    room.activeDrawers = [userAPid, userBPid];
+
+    rm.addPlayerToRoom(roomId, { id: userASocket, name: 'UserA', roomId, score: 0, wins: 0, persistentId: userAPid, avatar: 'A' });
+    rm.addPlayerToRoom(roomId, { id: userBSocket, name: 'UserB', roomId, score: 0, wins: 0, persistentId: userBPid, avatar: 'B' });
+
+    // instBBB belongs to User B
+    room.drawingIdentities = {
+      'instAAA': { socketId: userASocket, playerName: 'UserA' },
+      'instBBB': { socketId: userBSocket, playerName: 'UserB' },
+    };
+
+    // Pre-populate stroke for User B
+    const strokeBufB = Buffer.alloc(24);
+    strokeBufB.writeUInt8(9, 0);
+    strokeBufB.write('instBBB', 1, 7, 'ascii');
+    rm.recordDrawCommand(roomId, 'draw_binary', strokeBufB, 'instBBB', 20);
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.8: User B stroke stored in drawHistory');
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocketA = createMockSocket(userASocket, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // User A maliciously tries to undo User B's stroke
+    handleDrawBinary(mockSocketA, makeType7('instBBB', 20), deps);
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.8: Attack blocked - User B stroke remains in drawHistory');
+    assert(ioEmits.length === 0, 'AUTH-11.8: No undo emitted when trying to undo another socket stroke');
+  }
+
+  // 11.9 Free Draw individual undo: REJECTED if targetInstId is not registered in drawingIdentities
+  {
+    const rm = new RoomManager();
+    const roomId = 'fd-auth-room-9';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = true;
+    const userAPid = 'pid-user-a';
+    const userASocket = 'sock-user-a';
+    room.activeDrawers = [userAPid];
+
+    rm.addPlayerToRoom(roomId, { id: userASocket, name: 'UserA', roomId, score: 0, wins: 0, persistentId: userAPid, avatar: 'A' });
+    room.drawingIdentities = {}; // Empty identities
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocketA = createMockSocket(userASocket, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    handleDrawBinary(mockSocketA, makeType7('instGhost', 5), deps);
+    assert(ioEmits.length === 0, 'AUTH-11.9: Undo rejected for unregistered instId');
+  }
+
+  // 11.10 Redo protection: Guesser or spectator cannot call redo or modify redoStack
+  {
+    const rm = new RoomManager();
+    const roomId = 'norm-auth-room-10';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = false;
+    room.gameState.status = 'DRAWING';
+    room.gameState.currentDrawerId = 'pid-drawer-10';
+
+    const guesserPid = 'pid-guesser-10';
+    const guesserSocket = 'sock-guesser-10';
+    rm.addPlayerToRoom(roomId, { id: guesserSocket, name: 'Guesser10', roomId, score: 0, wins: 0, persistentId: guesserPid, avatar: 'G' });
+
+    // Put a dummy command on redoStack
+    room.gameState.redoStack = [{ event: 'draw_binary', data: makeType1('inst100') }];
+    assert(room.gameState.redoStack.length === 1, 'AUTH-11.10: redoStack has 1 item initially');
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocketGuesser = createMockSocket(guesserSocket, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Guesser tries to trigger redo
+    handleDrawBinary(mockSocketGuesser, makeType8('inst100'), deps);
+    assert(room.gameState.redoStack.length === 1, 'AUTH-11.10: Guesser redo rejected - redoStack remains intact');
+    assert(ioEmits.length === 0, 'AUTH-11.10: Guesser redo did not broadcast');
+  }
+
+  // 11.11 Real Network Socket.IO Verification: Drawer broadcast reaches others, Guesser draw is dropped
+  {
+    const netDrawer = await connectClient();
+    const netGuesser = await connectClient();
+    const netRoomAuth = 'General #Test';
+
+    const drawerPid = 'usr-net-drawer-auth';
+    const guesserPid = 'usr-net-guesser-auth';
+    const drawerSec = 'sec-net-drawer-auth-12345';
+    const guesserSec = 'sec-net-guesser-auth-12345';
+
+    // Join both players
+    await new Promise((res) => {
+      netDrawer.emit('join_room', {
+        roomId: netRoomAuth,
+        nickname: 'NetDrawerAuth',
+        playerId: drawerPid,
+        reconnectSecret: drawerSec
+      }, res);
+    });
+
+    await new Promise((res) => {
+      netGuesser.emit('join_room', {
+        roomId: netRoomAuth,
+        nickname: 'NetGuesserAuth',
+        playerId: guesserPid,
+        reconnectSecret: guesserSec
+      }, res);
+    });
+
+    const room = netRm.getRoom(netRoomAuth)!;
+    room.isFreeDraw = false;
+    room.isExperimental = false;
+    room.gameState.status = 'DRAWING';
+    room.gameState.currentDrawerId = drawerPid;
+    room.gameState.drawHistory = [];
+
+    // Guesser listens for draw_binary broadcasts
+    const guesserReceived: any[] = [];
+    netGuesser.on('draw_binary', (data: any) => {
+      guesserReceived.push(data);
+    });
+
+    // 1. Drawer sends a clear packet (Type 5) over network
+    const clearBuf = makeType5('netInst');
+    netDrawer.emit('draw_binary', clearBuf);
+
+    // Wait 100ms for network propagation
+    await new Promise(r => setTimeout(r, 100));
+
+    assert(guesserReceived.length === 1, 'AUTH-11.11: Guesser received draw packet sent by authorized drawer over network');
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.11: Drawer packet recorded in room drawHistory over network');
+
+    // 2. Guesser attempts to send a draw packet over network
+    const drawerReceived: any[] = [];
+    netDrawer.on('draw_binary', (data: any) => {
+      drawerReceived.push(data);
+    });
+
+    const attackBuf = makeType1('badInst');
+    netGuesser.emit('draw_binary', attackBuf);
+
+    await new Promise(r => setTimeout(r, 100));
+
+    assert(drawerReceived.length === 0, 'AUTH-11.11: Drawer received NO packets from unauthorized guesser over network');
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.11: Room drawHistory was NOT polluted by guesser over network');
+
+    netDrawer.disconnect();
+    netGuesser.disconnect();
+  }
 }
 
 // Teardown network sockets & server
