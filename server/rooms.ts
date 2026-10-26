@@ -895,7 +895,7 @@ export class RoomManager {
   public submitGuess(roomId: string, socketId: string, guess: any) {
     if (!guess || typeof guess !== "string") return;
     const trimmedGuess = guess.trim();
-    if (trimmedGuess.length === 0) return;
+    if (trimmedGuess.length === 0 || trimmedGuess.length > 250) return;
 
     const room = this.rooms.get(roomId);
     if (!room || room.gameState.status !== "DRAWING") return;

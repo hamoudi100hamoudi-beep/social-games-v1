@@ -379,9 +379,18 @@ async function startServer() {
           return; // Ignore if rate limited
         }
 
+        if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.text !== 'string') {
+          return;
+        }
+
+        const trimmedText = data.text.trim();
+        if (trimmedText.length === 0 || trimmedText.length > 250) {
+          return;
+        }
+
         const room = roomManager.getRoom(player.roomId);
         if (room && room.gameState.status === 'DRAWING' && room.gameState.currentWord) {
-           const guess = data.text?.toLowerCase().trim() || "";
+           const guess = trimmedText.toLowerCase();
            const target = room.gameState.currentWord.toLowerCase().trim();
            const guessNorm = normalizeArabic(guess);
            const targetNorm = normalizeArabic(target);
@@ -398,7 +407,7 @@ async function startServer() {
 
         const msg = {
           id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-          text: data.text,
+          text: trimmedText,
           sender: player.name,
           senderId: socket.id,
           avatar: player.avatar,

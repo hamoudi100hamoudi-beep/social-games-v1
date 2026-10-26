@@ -57,8 +57,8 @@ export function handleSubmitGuess(
     }
 
     const trimmedGuess = data.guess.trim();
-    if (trimmedGuess.length === 0) {
-      return; // Silently reject empty or whitespace-only guesses
+    if (trimmedGuess.length === 0 || trimmedGuess.length > 250) {
+      return; // Silently reject empty, whitespace-only, or overly long guesses
     }
 
     roomManager.submitGuess(player.roomId, socket.id, trimmedGuess);

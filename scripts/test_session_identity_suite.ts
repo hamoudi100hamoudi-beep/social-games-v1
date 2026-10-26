@@ -2299,6 +2299,65 @@ console.log('\n--- Test Group 13: SERVER-AUTH-FIX-2B select_word Validation Test
   netGuesserClient.disconnect();
 }
 
+// -----------------------------------------------------------------
+// 14. CHAT-GUESS-HARDEN-1: Chat and Guess Hardening Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 14: CHAT-GUESS-HARDEN-1 Hardening Tests ---');
+{
+  const rm = new RoomManager();
+  const testRoomId = 'ChatGuessHardenRoom';
+  const playerSocket = 'sock-harden-1';
+  const playerPid = 'pid-harden-1';
+
+  const room = rm.createRoom(testRoomId);
+  rm.addPlayerToRoom(testRoomId, {
+    id: playerSocket,
+    name: 'HardenTester',
+    score: 0,
+    avatar: '🛡️',
+    wins: 0,
+    roomId: testRoomId,
+    persistentId: playerPid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  room.gameState.status = 'DRAWING';
+  room.gameState.currentDrawerId = 'other-drawer';
+  room.gameState.currentWord = 'تفاحة';
+
+  const mockSocket = {
+    id: playerSocket,
+    emit: (event: string, data: any) => {},
+    on: () => {}
+  };
+
+  // Test 14.1: Submit Guess max length validation (> 250 chars)
+  let submitGuessCalled = false;
+  const origSubmitGuess = rm.submitGuess.bind(rm);
+  rm.submitGuess = (rId, sId, g) => {
+    submitGuessCalled = true;
+    return origSubmitGuess(rId, sId, g);
+  };
+
+  const longGuess = 'أ'.repeat(251);
+  handleSubmitGuess(mockSocket, { guess: longGuess }, { roomManager: rm, checkRateLimit: () => true });
+  assert(!submitGuessCalled, 'AUTH-14.1: Guess exceeding 250 characters is rejected before RoomManager.submitGuess');
+
+  const exactGuess = 'أ'.repeat(250);
+  handleSubmitGuess(mockSocket, { guess: exactGuess }, { roomManager: rm, checkRateLimit: () => true });
+  assert(submitGuessCalled, 'AUTH-14.1: Guess of exactly 250 characters is accepted');
+
+  // Test 14.2: RoomManager.submitGuess direct max length check
+  let directThrew = false;
+  try {
+    rm.submitGuess(testRoomId, playerSocket, 'ب'.repeat(251));
+  } catch (e) {
+    directThrew = true;
+  }
+  assert(!directThrew, 'AUTH-14.2: RoomManager.submitGuess directly handles long guesses safely without throwing');
+}
+
 // Teardown network sockets & server
 client1.disconnect();
 clientAttacker.disconnect();
