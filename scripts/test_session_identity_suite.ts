@@ -5,6 +5,7 @@ import { RoomManager } from '../server/rooms.js';
 import { SessionAuthStore } from '../server/sessionAuth.js';
 import { registerJoinRoomHandler, normalizeNickname } from '../server/registerJoinRoomHandler.js';
 import { registerDrawBinaryHandler, handleDrawBinary } from '../server/registerDrawBinaryHandler.js';
+import { registerSubmitGuessHandler, handleSubmitGuess } from '../server/registerSubmitGuessHandler.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -309,6 +310,9 @@ netIo.on('connection', (socket) => {
   });
   registerDrawBinaryHandler(socket, {
     io: netIo,
+    roomManager: netRm
+  });
+  registerSubmitGuessHandler(socket, {
     roomManager: netRm
   });
 });
@@ -1858,6 +1862,236 @@ console.log('\n--- Test Group 11: SERVER-DRAW-AUTH-FIX-1 Tests ---');
     assert(fdRoom.gameState.drawHistory.length === 0, 'AUTH-11.16: Legitimate individual stroke undo in Free Draw removes stroke from drawHistory');
     assert(fdIoEmits.length === 1, 'AUTH-11.16: Legitimate individual stroke undo in Free Draw broadcasts via io.to()');
   }
+}
+
+// -----------------------------------------------------------------
+// 12. SERVER-AUTH-FIX-2A: submit_guess Payload Validation & Hardening Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 12: SERVER-AUTH-FIX-2A submit_guess Hardening Tests ---');
+{
+  const rm = new RoomManager();
+  const testRoomId = 'GuessSecurityRoom';
+  const drawerSocket = 'sock-drawer-1';
+  const drawerPid = 'pid-drawer-1';
+  const guesserSocket = 'sock-guesser-1';
+  const guesserPid = 'pid-guesser-1';
+
+  const room = rm.createRoom(testRoomId);
+  rm.addPlayerToRoom(testRoomId, {
+    id: drawerSocket,
+    name: 'DrawerBob',
+    score: 0,
+    avatar: '🎨',
+    wins: 0,
+    roomId: testRoomId,
+    persistentId: drawerPid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+  rm.addPlayerToRoom(testRoomId, {
+    id: guesserSocket,
+    name: 'GuesserAlice',
+    score: 0,
+    avatar: '🔍',
+    wins: 0,
+    roomId: testRoomId,
+    persistentId: guesserPid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  room.gameState.status = 'DRAWING';
+  room.gameState.currentDrawerId = drawerPid;
+  room.gameState.currentWord = 'تفاحة';
+  room.gameState.timeLeft = 60;
+  room.gameState.correctGuessers = [];
+
+  const guesserPlayer = rm.getPlayer(guesserSocket)!;
+  const drawerPlayer = rm.getPlayer(drawerSocket)!;
+
+  const mockSocket = {
+    id: guesserSocket,
+    emit: () => {},
+    on: () => {}
+  };
+
+  // 12.1 Safely handle invalid payloads without throwing or invoking RoomManager.submitGuess
+  let submitGuessCallCount = 0;
+  const originalSubmitGuess = rm.submitGuess.bind(rm);
+  rm.submitGuess = (rId: string, sId: string, g: any) => {
+    submitGuessCallCount++;
+    return originalSubmitGuess(rId, sId, g);
+  };
+
+  const invalidPayloads: any[] = [
+    null,
+    undefined,
+    {},
+    { guess: null },
+    { guess: undefined },
+    { guess: 123 },
+    { guess: true },
+    { guess: false },
+    { guess: {} },
+    { guess: { nested: 'obj' } },
+    { guess: [] },
+    { guess: ['apple'] },
+    { guess: '' },
+    { guess: '   ' },
+    { notGuess: 'تفاحة' },
+    'just a string',
+    12345
+  ];
+
+  const unitLimits = new Map<string, number[]>();
+  for (let i = 0; i < invalidPayloads.length; i++) {
+    const payload = invalidPayloads[i];
+    let threw = false;
+    try {
+      handleSubmitGuess(mockSocket, payload, { roomManager: rm, checkRateLimit: () => true });
+    } catch (e) {
+      threw = true;
+    }
+    assert(!threw, `AUTH-12.1.${i + 1}: Malformed payload ${JSON.stringify(payload)} handled safely without throwing`);
+  }
+
+  // 12.2 Verify rm.submitGuess was NEVER called for any of the invalid payloads
+  assert(submitGuessCallCount === 0, 'AUTH-12.2: rm.submitGuess was not called for any invalid payload');
+
+  // 12.3 Verify state remains pristine
+  assert(guesserPlayer.score === 0, 'AUTH-12.3: Guesser score is unchanged (0)');
+  assert(drawerPlayer.score === 0, 'AUTH-12.3: Drawer score is unchanged (0)');
+  assert(room.gameState.status === 'DRAWING', 'AUTH-12.3: Game state status unchanged (DRAWING)');
+  assert(room.gameState.correctGuessers.length === 0, 'AUTH-12.3: Correct guessers list is empty');
+  assert(room.guessMessages.length === 0, 'AUTH-12.3: No guess messages created in room');
+
+  // 12.4 Verify valid payload succeeds and invokes submitGuess with trimmed string
+  handleSubmitGuess(mockSocket, { guess: ' تفاحة ' }, { roomManager: rm, checkRateLimit: () => true });
+  assert(submitGuessCallCount === 1, 'AUTH-12.4: rm.submitGuess was called for valid guess payload');
+  assert(guesserPlayer.score > 0, 'AUTH-12.4: Guesser score increased after correct guess');
+  assert(drawerPlayer.score > 0, 'AUTH-12.4: Drawer score increased after correct guess');
+  assert(room.gameState.correctGuessers.includes(guesserPid), 'AUTH-12.4: Guesser added to correctGuessers');
+
+  // 12.5 Defensive checks inside RoomManager.submitGuess directly
+  let defensiveThrew = false;
+  try {
+    rm.submitGuess(testRoomId, guesserSocket, null);
+    rm.submitGuess(testRoomId, guesserSocket, undefined);
+    rm.submitGuess(testRoomId, guesserSocket, 123 as any);
+    rm.submitGuess(testRoomId, guesserSocket, {} as any);
+    rm.submitGuess(testRoomId, guesserSocket, [] as any);
+    rm.submitGuess(testRoomId, guesserSocket, '');
+    rm.submitGuess(testRoomId, guesserSocket, '   ');
+  } catch (e) {
+    defensiveThrew = true;
+  }
+  assert(!defensiveThrew, 'AUTH-12.5: RoomManager.submitGuess directly survives non-string inputs without throwing');
+
+  // Defensive check when currentWord is missing or non-string
+  room.gameState.currentWord = null as any;
+  let wordDefensiveThrew = false;
+  try {
+    rm.submitGuess(testRoomId, guesserSocket, 'تفاحة');
+  } catch (e) {
+    wordDefensiveThrew = true;
+  }
+  assert(!wordDefensiveThrew, 'AUTH-12.5: RoomManager.submitGuess safely handles null currentWord without throwing');
+
+  room.gameState.currentWord = undefined as any;
+  try {
+    rm.submitGuess(testRoomId, guesserSocket, 'تفاحة');
+  } catch (e) {
+    wordDefensiveThrew = true;
+  }
+  assert(!wordDefensiveThrew, 'AUTH-12.5: RoomManager.submitGuess safely handles undefined currentWord without throwing');
+
+  // 12.6 Rate limit accounting: invalid payloads MUST consume rate limit attempts
+  const testLimitsMap = new Map<string, number[]>();
+  const testRateKey = 'usr-rate-limit-test';
+  const testRateSocket = {
+    id: 'sock-rate-limit-test',
+    emit: () => {},
+    on: () => {}
+  };
+  const rateRm = new RoomManager();
+  const rateRoom = rateRm.createRoom('RateTestRoom');
+  rateRm.addPlayerToRoom('RateTestRoom', {
+    id: 'sock-rate-limit-test',
+    name: 'RateTester',
+    score: 0,
+    avatar: '⚡',
+    wins: 0,
+    roomId: 'RateTestRoom',
+    persistentId: testRateKey,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+  rateRoom.gameState.status = 'DRAWING';
+  rateRoom.gameState.currentDrawerId = 'other-drawer';
+  rateRoom.gameState.currentWord = 'رمان';
+
+  let rateSubmitCalls = 0;
+  rateRm.submitGuess = () => { rateSubmitCalls++; };
+
+  // Send 5 invalid payloads - each should be accounted in rateLimits
+  for (let i = 0; i < 5; i++) {
+    handleSubmitGuess(testRateSocket, { guess: 123 }, {
+      roomManager: rateRm,
+      guessLimits: testLimitsMap
+    });
+  }
+  const timestamps = testLimitsMap.get(testRateKey) || [];
+  assert(timestamps.length === 5, 'AUTH-12.6: 5 invalid payloads were recorded in rate limit tracking');
+  assert(rateSubmitCalls === 0, 'AUTH-12.6: None of the invalid payloads triggered submitGuess');
+
+  // 6th attempt with a VALID payload should be blocked by rate limit
+  handleSubmitGuess(testRateSocket, { guess: 'رمان' }, {
+    roomManager: rateRm,
+    guessLimits: testLimitsMap
+  });
+  assert(rateSubmitCalls === 0, 'AUTH-12.6: Valid payload after 5 invalid attempts is blocked by rate limiting');
+
+  // 12.7 Real Socket.IO Network Integration Test
+  // Connect a 2nd client to netIo, join room, and test over real WebSocket transport
+  const clientGuess = await connectClient();
+  const netGuesserPid = 'usr-net-guesser-002';
+  const netGuesserSecret = 'sec-net-guesser-secret-token-98765432';
+
+  await new Promise((res) => {
+    clientGuess.emit('join_room', {
+      roomId: 'General #Test',
+      nickname: 'GuesserNet',
+      playerId: netGuesserPid,
+      reconnectSecret: netGuesserSecret
+    }, res);
+  });
+
+  const netRoom = netRm.getRoom('General #Test')!;
+  netRoom.gameState.status = 'DRAWING';
+  netRoom.gameState.currentDrawerId = netDavePid; // Dave is drawer
+  netRoom.gameState.currentWord = 'فراولة';
+  netRoom.gameState.correctGuessers = [];
+
+  const netGuesser = netRoom.players.find(p => p.persistentId === netGuesserPid)!;
+  const initialGuesserScore = netGuesser.score;
+
+  // Send malformed payloads over network (2 attempts < 5 max within 2s)
+  clientGuess.emit('submit_guess', null);
+  clientGuess.emit('submit_guess', { guess: 999 });
+
+  await new Promise(r => setTimeout(r, 60));
+
+  assert(netGuesser.score === initialGuesserScore, 'AUTH-12.7: Malformed payloads over real network socket do not alter score');
+  assert(netRoom.gameState.correctGuessers.length === 0, 'AUTH-12.7: Malformed payloads do not add player to correctGuessers');
+
+  // Send valid guess over network
+  clientGuess.emit('submit_guess', { guess: 'فراولة' });
+  await new Promise(r => setTimeout(r, 60));
+
+  assert(netGuesser.score > initialGuesserScore, 'AUTH-12.7: Valid guess over real network socket successfully updates player score');
+  assert(netRoom.gameState.correctGuessers.includes(netGuesserPid), 'AUTH-12.7: Valid guess adds player to correctGuessers');
+
+  clientGuess.disconnect();
 }
 
 // Teardown network sockets & server

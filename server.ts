@@ -9,6 +9,7 @@ import { getRoomConfig, ROOM_PRESETS } from './src/types/game.js';
 import { getToolName } from './src/utils/drawBinaryHelper.js';
 import { registerJoinRoomHandler } from './server/registerJoinRoomHandler.js';
 import { registerDrawBinaryHandler } from './server/registerDrawBinaryHandler.js';
+import { registerSubmitGuessHandler } from './server/registerSubmitGuessHandler.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -353,14 +354,10 @@ async function startServer() {
       }
     });
 
-    socket.on('submit_guess', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-        if (!checkRateLimit(guessLimits, player.persistentId || socket.id, 5, 2000)) {
-          return; // Ignore if rate limited
-        }
-        roomManager.submitGuess(player.roomId, socket.id, data.guess);
-      }
+    registerSubmitGuessHandler(socket, {
+      roomManager,
+      guessLimits,
+      checkRateLimit,
     });
 
     socket.on('request_hint', () => {

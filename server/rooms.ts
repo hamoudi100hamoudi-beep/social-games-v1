@@ -884,9 +884,16 @@ export class RoomManager {
     this.transitionToRoundEnd(room, "skipped");
   }
 
-  public submitGuess(roomId: string, socketId: string, guess: string) {
+  public submitGuess(roomId: string, socketId: string, guess: any) {
+    if (!guess || typeof guess !== "string") return;
+    const trimmedGuess = guess.trim();
+    if (trimmedGuess.length === 0) return;
+
     const room = this.rooms.get(roomId);
     if (!room || room.gameState.status !== "DRAWING") return;
+
+    const currentWord = room.gameState.currentWord;
+    if (!currentWord || typeof currentWord !== "string" || currentWord.trim().length === 0) return;
 
     const player = this.players.get(socketId);
     if (!player) return;
@@ -899,10 +906,9 @@ export class RoomManager {
     // Reject if player already guessed
     if (room.gameState.correctGuessers.includes(pId)) return;
 
-    const currentWord = room.gameState.currentWord || "";
     const isCorrect =
-      guess.toLowerCase().trim() === currentWord.toLowerCase().trim() ||
-      normalizeArabic(guess) === normalizeArabic(currentWord);
+      trimmedGuess.toLowerCase() === currentWord.toLowerCase().trim() ||
+      normalizeArabic(trimmedGuess) === normalizeArabic(currentWord);
 
     if (isCorrect) {
       room.gameState.correctGuessers.push(pId);
