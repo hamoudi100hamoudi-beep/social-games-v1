@@ -11,6 +11,7 @@ import { registerJoinRoomHandler } from './server/registerJoinRoomHandler.js';
 import { registerDrawBinaryHandler } from './server/registerDrawBinaryHandler.js';
 import { registerSubmitGuessHandler } from './server/registerSubmitGuessHandler.js';
 import { registerSelectWordHandler } from './server/registerSelectWordHandler.js';
+import { registerSendMessageHandler } from './server/registerSendMessageHandler.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -372,50 +373,12 @@ async function startServer() {
       }
     });
 
-    socket.on('send_message', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-        if (!checkRateLimit(chatMessageLimits, player.persistentId || socket.id, 5, 2000)) {
-          return; // Ignore if rate limited
-        }
-
-        if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.text !== 'string') {
-          return;
-        }
-
-        const trimmedText = data.text.trim();
-        if (trimmedText.length === 0 || trimmedText.length > 250) {
-          return;
-        }
-
-        const room = roomManager.getRoom(player.roomId);
-        if (room && room.gameState.status === 'DRAWING' && room.gameState.currentWord) {
-           const guess = trimmedText.toLowerCase();
-           const target = room.gameState.currentWord.toLowerCase().trim();
-           const guessNorm = normalizeArabic(guess);
-           const targetNorm = normalizeArabic(target);
-           
-           if (guess && target && (guess.includes(target) || guessNorm.includes(targetNorm))) {
-              socket.emit('receive_message', {
-                id: 'sys-cheat-' + Date.now(),
-                text: '🚫 لا يمكنك كتابة الإجابة في الدردشة أثناء الرسم!',
-                type: 'warning'
-              });
-              return;
-           }
-        }
-
-        const msg = {
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-          text: trimmedText,
-          sender: player.name,
-          senderId: socket.id,
-          avatar: player.avatar,
-          type: 'message'
-        };
-        roomManager.saveChatMessage(player.roomId, msg);
-        io.to(player.roomId).emit('receive_message', msg);
-      }
+    registerSendMessageHandler(socket, {
+      io,
+      roomManager,
+      chatLimits: chatMessageLimits,
+      checkRateLimit,
+      normalizeArabic,
     });
 
     socket.on('request_kick', ({ roomId, nickname, playerId }, callback) => {

@@ -1,12 +1,13 @@
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { io as ioClient } from 'socket.io-client';
-import { RoomManager } from '../server/rooms.js';
+import { RoomManager, normalizeArabic } from '../server/rooms.js';
 import { SessionAuthStore } from '../server/sessionAuth.js';
 import { registerJoinRoomHandler, normalizeNickname } from '../server/registerJoinRoomHandler.js';
 import { registerDrawBinaryHandler, handleDrawBinary } from '../server/registerDrawBinaryHandler.js';
 import { registerSubmitGuessHandler, handleSubmitGuess } from '../server/registerSubmitGuessHandler.js';
 import { registerSelectWordHandler, handleSelectWord } from '../server/registerSelectWordHandler.js';
+import { registerSendMessageHandler, handleSendMessage } from '../server/registerSendMessageHandler.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -318,6 +319,11 @@ netIo.on('connection', (socket) => {
   });
   registerSelectWordHandler(socket, {
     roomManager: netRm
+  });
+  registerSendMessageHandler(socket, {
+    io: netIo,
+    roomManager: netRm,
+    normalizeArabic
   });
 });
 
@@ -2348,14 +2354,99 @@ console.log('\n--- Test Group 14: CHAT-GUESS-HARDEN-1 Hardening Tests ---');
   handleSubmitGuess(mockSocket, { guess: exactGuess }, { roomManager: rm, checkRateLimit: () => true });
   assert(submitGuessCalled, 'AUTH-14.1: Guess of exactly 250 characters is accepted');
 
-  // Test 14.2: RoomManager.submitGuess direct max length check
-  let directThrew = false;
-  try {
-    rm.submitGuess(testRoomId, playerSocket, 'ب'.repeat(251));
-  } catch (e) {
-    directThrew = true;
+  // Test 14.2: RoomManager.submitGuess direct max length check with state assertions
+  const initialCorrectCount = room.gameState.correctGuessers.length;
+  const initialGuessMessagesCount = room.guessMessages.length;
+
+  rm.submitGuess(testRoomId, playerSocket, 'ب'.repeat(251));
+  assert(room.gameState.correctGuessers.length === initialCorrectCount, 'AUTH-14.2: Long guess > 250 does not add to correctGuessers');
+  assert(room.guessMessages.length === initialGuessMessagesCount, 'AUTH-14.2: Long guess > 250 does not store in guessMessages');
+
+  // Test 14.3: send_message / handleSendMessage comprehensive tests
+  const chatRoomId = 'ChatTestRoom';
+  const chatRoom = rm.createRoom(chatRoomId);
+  rm.addPlayerToRoom(chatRoomId, {
+    id: 'sock-chat-1',
+    name: 'Chatter',
+    score: 0,
+    avatar: '💬',
+    wins: 0,
+    roomId: chatRoomId,
+    persistentId: 'pid-chat-1',
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  const chatSocket = {
+    id: 'sock-chat-1',
+    emit: (event: string, data: any) => {}
+  };
+
+  const invalidChatPayloads: any[] = [
+    null,
+    undefined,
+    123,
+    [],
+    {},
+    { text: null },
+    { text: 456 },
+    { text: '' },
+    { text: '   ' }
+  ];
+
+  for (let i = 0; i < invalidChatPayloads.length; i++) {
+    const payload = invalidChatPayloads[i];
+    const initialMsgCount = chatRoom.chatMessages.length;
+    handleSendMessage(chatSocket, payload, {
+      io: { to: () => ({ emit: () => {} }) },
+      roomManager: rm,
+      checkRateLimit: () => true,
+      normalizeArabic
+    });
+    assert(chatRoom.chatMessages.length === initialMsgCount, `AUTH-14.3.${i + 1}: Invalid chat payload ${JSON.stringify(payload)} rejected and not stored`);
   }
-  assert(!directThrew, 'AUTH-14.2: RoomManager.submitGuess directly handles long guesses safely without throwing');
+
+  // Test 14.4: Chat message length validation (251 rejected, 250 accepted with trim)
+  const initialChatCount = chatRoom.chatMessages.length;
+  handleSendMessage(chatSocket, { text: 'ت'.repeat(251) }, {
+    io: { to: () => ({ emit: () => {} }) },
+    roomManager: rm,
+    checkRateLimit: () => true,
+    normalizeArabic
+  });
+  assert(chatRoom.chatMessages.length === initialChatCount, 'AUTH-14.4: Chat message > 250 chars rejected');
+
+  handleSendMessage(chatSocket, { text: '   مرحباً بك   ' }, {
+    io: { to: () => ({ emit: () => {} }) },
+    roomManager: rm,
+    checkRateLimit: () => true,
+    normalizeArabic
+  });
+  assert(chatRoom.chatMessages.length === initialChatCount + 1, 'AUTH-14.4: Valid chat message accepted');
+  assert(chatRoom.chatMessages[chatRoom.chatMessages.length - 1].text === 'مرحباً بك', 'AUTH-14.4: Accepted message is correctly trimmed');
+
+  // Test 14.5: Anti-cheat word leak check in chat
+  chatRoom.gameState.status = 'DRAWING';
+  chatRoom.gameState.currentWord = 'تفاحة';
+  let cheatWarningEmitted = false;
+  const cheatSocket = {
+    id: 'sock-chat-1',
+    emit: (event: string, data: any) => {
+      if (event === 'receive_message' && data && data.type === 'warning') {
+        cheatWarningEmitted = true;
+      }
+    }
+  };
+
+  const beforeCheatCount = chatRoom.chatMessages.length;
+  handleSendMessage(cheatSocket, { text: 'الكلمة هي تفاحة هنا' }, {
+    io: { to: () => ({ emit: () => {} }) },
+    roomManager: rm,
+    checkRateLimit: () => true,
+    normalizeArabic
+  });
+  assert((cheatWarningEmitted as boolean) === true, 'AUTH-14.5: Secret word leak in chat triggers warning emission');
+  assert(chatRoom.chatMessages.length === beforeCheatCount, 'AUTH-14.5: Leaking message is not stored in room chatMessages');
 }
 
 // Teardown network sockets & server

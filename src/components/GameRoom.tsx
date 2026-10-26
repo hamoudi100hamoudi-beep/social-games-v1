@@ -2357,6 +2357,7 @@ export default function GameRoom({
                     inputMode="text"
                     enterKeyHint="send"
                     id="guess-input"
+                    maxLength={250}
                     dir="auto"
                     autoComplete="one-time-code"
                     autoCorrect="off"
