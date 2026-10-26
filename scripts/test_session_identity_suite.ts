@@ -1567,6 +1567,297 @@ console.log('\n--- Test Group 11: SERVER-DRAW-AUTH-FIX-1 Tests ---');
     netDrawer.disconnect();
     netGuesser.disconnect();
   }
+
+  // 11.12 Defect 1: Active player in Free Draw sends type === 8 -> REJECTED (no redoDrawing, no history/redoStack change, no broadcast)
+  {
+    const rm = new RoomManager();
+    const roomId = 'fd-redo-test-12';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = true;
+    const activePid = 'pid-fd-redo-user';
+    const activeSocketId = 'sock-fd-redo-user';
+    room.activeDrawers = [activePid];
+
+    rm.addPlayerToRoom(roomId, {
+      id: activeSocketId,
+      name: 'FdRedoUser',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: activePid,
+      avatar: 'R'
+    });
+
+    // Initial state to detect any state mutation
+    const initialCmd = { event: 'draw_binary', data: makeType1('cmd001') };
+    const redoItem = { event: 'draw_binary', data: makeType1('redo001') };
+    room.gameState.drawHistory = [initialCmd];
+    room.gameState.redoStack = [redoItem];
+
+    let redoDrawingCalled = false;
+    const origRedoDrawing = rm.redoDrawing.bind(rm);
+    rm.redoDrawing = (rId: string) => {
+      redoDrawingCalled = true;
+      return origRedoDrawing(rId);
+    };
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(activeSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Active drawer in Free Draw tries to send type 8 (draw_redo)
+    handleDrawBinary(mockSocket, makeType8('cmd001'), deps);
+
+    assert(redoDrawingCalled === false, 'AUTH-11.12: roomManager.redoDrawing() was NOT called in Free Draw for type 8');
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.12: Free Draw drawHistory remains unchanged after type 8');
+    assert(room.gameState.redoStack.length === 1, 'AUTH-11.12: Free Draw redoStack remains unchanged after type 8');
+    assert(ioEmits.length === 0, 'AUTH-11.12: No broadcast emitted for type 8 in Free Draw');
+  }
+
+  // 11.13 Defect 1: Current drawer in Experimental during DRAWING sends type === 8 -> REJECTED
+  {
+    const rm = new RoomManager();
+    const roomId = 'exp-redo-test-13';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = false;
+    room.isExperimental = true;
+    room.gameState.status = 'DRAWING';
+    const drawerPid = 'pid-exp-redo-drawer';
+    const drawerSocketId = 'sock-exp-redo-drawer';
+    room.gameState.currentDrawerId = drawerPid;
+
+    rm.addPlayerToRoom(roomId, {
+      id: drawerSocketId,
+      name: 'ExpRedoDrawer',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: drawerPid,
+      avatar: 'E'
+    });
+
+    const initialCmd = { event: 'draw_binary', data: makeType1('cmdExp') };
+    const redoItem = { event: 'draw_binary', data: makeType1('redoExp') };
+    room.gameState.drawHistory = [initialCmd];
+    room.gameState.redoStack = [redoItem];
+
+    let redoDrawingCalled = false;
+    const origRedoDrawing = rm.redoDrawing.bind(rm);
+    rm.redoDrawing = (rId: string) => {
+      redoDrawingCalled = true;
+      return origRedoDrawing(rId);
+    };
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(drawerSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Current drawer in Experimental tries to send type 8 (draw_redo)
+    handleDrawBinary(mockSocket, makeType8('cmdExp'), deps);
+
+    assert(redoDrawingCalled === false, 'AUTH-11.13: roomManager.redoDrawing() was NOT called in Experimental for type 8');
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.13: Experimental drawHistory remains unchanged after type 8');
+    assert(room.gameState.redoStack.length === 1, 'AUTH-11.13: Experimental redoStack remains unchanged after type 8');
+    assert(ioEmits.length === 0, 'AUTH-11.13: No broadcast emitted for type 8 in Experimental');
+  }
+
+  // 11.14 Defect 2: Active player in Free Draw sends truncated type === 7 (< 10 bytes) -> REJECTED (no undoLastDrawing fallback!)
+  {
+    const rm = new RoomManager();
+    const roomId = 'fd-short-undo-14';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = true;
+    const activePid = 'pid-fd-short-user';
+    const activeSocketId = 'sock-fd-short-user';
+    room.activeDrawers = [activePid];
+
+    rm.addPlayerToRoom(roomId, {
+      id: activeSocketId,
+      name: 'FdShortUser',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: activePid,
+      avatar: 'U'
+    });
+
+    const initialCmd = { event: 'draw_binary', data: makeType1('cmdPre') };
+    room.gameState.drawHistory = [initialCmd];
+    room.gameState.redoStack = [];
+
+    let undoLastDrawingCalled = false;
+    const origUndoLastDrawing = rm.undoLastDrawing.bind(rm);
+    rm.undoLastDrawing = (rId: string) => {
+      undoLastDrawingCalled = true;
+      return origUndoLastDrawing(rId);
+    };
+
+    let undoFreeDrawStrokeCalled = false;
+    const origUndoFreeDrawStroke = rm.undoFreeDrawStroke.bind(rm);
+    rm.undoFreeDrawStroke = (rId: string, instId: string, sId: number) => {
+      undoFreeDrawStrokeCalled = true;
+      return origUndoFreeDrawStroke(rId, instId, sId);
+    };
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(activeSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Construct truncated 8-byte type 7 buffer (< 10 bytes)
+    const truncatedBuf = Buffer.alloc(8);
+    truncatedBuf.writeUInt8(7, 0); // type 7
+    truncatedBuf.write('instShort', 1, 7, 'ascii');
+
+    handleDrawBinary(mockSocket, truncatedBuf, deps);
+
+    assert(undoLastDrawingCalled === false, 'AUTH-11.14: Malformed type 7 does NOT fall back to undoLastDrawing() in Free Draw');
+    assert(undoFreeDrawStrokeCalled === false, 'AUTH-11.14: undoFreeDrawStroke() was NOT called for truncated buffer');
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.14: Free Draw drawHistory remains untouched for malformed type 7');
+    assert(ioEmits.length === 0, 'AUTH-11.14: No broadcast emitted for truncated type 7 in Free Draw');
+  }
+
+  // 11.15 Defect 2: Current drawer in Experimental sends truncated type === 7 (< 10 bytes) -> REJECTED (no undoLastDrawing fallback!)
+  {
+    const rm = new RoomManager();
+    const roomId = 'exp-short-undo-15';
+    const room = rm.createRoom(roomId);
+    room.isFreeDraw = false;
+    room.isExperimental = true;
+    room.gameState.status = 'DRAWING';
+    const drawerPid = 'pid-exp-short-drawer';
+    const drawerSocketId = 'sock-exp-short-drawer';
+    room.gameState.currentDrawerId = drawerPid;
+
+    rm.addPlayerToRoom(roomId, {
+      id: drawerSocketId,
+      name: 'ExpShortDrawer',
+      roomId,
+      score: 0,
+      wins: 0,
+      persistentId: drawerPid,
+      avatar: 'E'
+    });
+
+    const initialCmd = { event: 'draw_binary', data: makeType1('cmdPreExp') };
+    room.gameState.drawHistory = [initialCmd];
+    room.gameState.redoStack = [];
+
+    let undoLastDrawingCalled = false;
+    const origUndoLastDrawing = rm.undoLastDrawing.bind(rm);
+    rm.undoLastDrawing = (rId: string) => {
+      undoLastDrawingCalled = true;
+      return origUndoLastDrawing(rId);
+    };
+
+    let undoFreeDrawStrokeCalled = false;
+    const origUndoFreeDrawStroke = rm.undoFreeDrawStroke.bind(rm);
+    rm.undoFreeDrawStroke = (rId: string, instId: string, sId: number) => {
+      undoFreeDrawStrokeCalled = true;
+      return origUndoFreeDrawStroke(rId, instId, sId);
+    };
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(drawerSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Truncated 8-byte type 7 buffer (< 10 bytes)
+    const truncatedBuf = Buffer.alloc(8);
+    truncatedBuf.writeUInt8(7, 0);
+    truncatedBuf.write('instExpS', 1, 7, 'ascii');
+
+    handleDrawBinary(mockSocket, truncatedBuf, deps);
+
+    assert(undoLastDrawingCalled === false, 'AUTH-11.15: Malformed type 7 does NOT fall back to undoLastDrawing() in Experimental');
+    assert(undoFreeDrawStrokeCalled === false, 'AUTH-11.15: undoFreeDrawStroke() was NOT called for truncated buffer in Experimental');
+    assert(room.gameState.drawHistory.length === 1, 'AUTH-11.15: Experimental drawHistory remains untouched for malformed type 7');
+    assert(ioEmits.length === 0, 'AUTH-11.15: No broadcast emitted for truncated type 7 in Experimental');
+  }
+
+  // 11.16 Regression Verification: Legitimate global redo in Normal room and legitimate individual undo in Free Draw remain functional
+  {
+    // Part A: Normal room legitimate global redo
+    const rm = new RoomManager();
+    const normRoomId = 'norm-legit-redo-16';
+    const normRoom = rm.createRoom(normRoomId);
+    normRoom.isFreeDraw = false;
+    normRoom.isExperimental = false;
+    normRoom.gameState.status = 'DRAWING';
+    const drawerPid = 'pid-norm-drawer-16';
+    const drawerSocketId = 'sock-norm-drawer-16';
+    normRoom.gameState.currentDrawerId = drawerPid;
+
+    rm.addPlayerToRoom(normRoomId, {
+      id: drawerSocketId,
+      name: 'NormDrawer16',
+      roomId: normRoomId,
+      score: 0,
+      wins: 0,
+      persistentId: drawerPid,
+      avatar: 'N'
+    });
+
+    const redoCmd = { event: 'draw_binary', data: makeType1('cmdNorm') };
+    normRoom.gameState.drawHistory = [];
+    normRoom.gameState.redoStack = [redoCmd];
+
+    const broadcastEmits: any[] = [];
+    const ioEmits: any[] = [];
+    const mockSocket = createMockSocket(drawerSocketId, broadcastEmits);
+    const mockIo = createMockIo(ioEmits);
+    const deps = { io: mockIo, roomManager: rm };
+
+    // Normal room drawer sends type 8 -> accepted
+    handleDrawBinary(mockSocket, makeType8('cmdNorm'), deps);
+    assert(normRoom.gameState.drawHistory.length === 1, 'AUTH-11.16: Legitimate global redo in normal room restores stroke to drawHistory');
+    assert(normRoom.gameState.redoStack.length === 0, 'AUTH-11.16: Legitimate global redo in normal room empties redoStack');
+    assert(ioEmits.length === 1, 'AUTH-11.16: Legitimate global redo broadcast to normal room via io.to()');
+
+    // Part B: Free Draw legitimate individual stroke undo
+    const fdRoomId = 'fd-legit-undo-16';
+    const fdRoom = rm.createRoom(fdRoomId);
+    fdRoom.isFreeDraw = true;
+    const userPid = 'pid-fd-legit-user';
+    const userSocket = 'sock-fd-legit-user';
+    fdRoom.activeDrawers = [userPid];
+
+    rm.addPlayerToRoom(fdRoomId, {
+      id: userSocket,
+      name: 'LegitFdUser',
+      roomId: fdRoomId,
+      score: 0,
+      wins: 0,
+      persistentId: userPid,
+      avatar: 'L'
+    });
+
+    fdRoom.drawingIdentities = {
+      'instOK1': { socketId: userSocket, playerName: 'LegitFdUser' }
+    };
+
+    const strokeBuf = Buffer.alloc(24);
+    strokeBuf.writeUInt8(9, 0);
+    strokeBuf.write('instOK1', 1, 7, 'ascii');
+    rm.recordDrawCommand(fdRoomId, 'draw_binary', strokeBuf, 'instOK1', 42);
+    assert(fdRoom.gameState.drawHistory.length === 1, 'AUTH-11.16: Initial stroke in Free Draw drawHistory');
+
+    const fdIoEmits: any[] = [];
+    const mockFdSocket = createMockSocket(userSocket, []);
+    const mockFdIo = createMockIo(fdIoEmits);
+    const fdDeps = { io: mockFdIo, roomManager: rm };
+
+    // Valid 10-byte type 7 with matching targetInstId and strokeId 42
+    handleDrawBinary(mockFdSocket, makeType7('instOK1', 42), fdDeps);
+    assert(fdRoom.gameState.drawHistory.length === 0, 'AUTH-11.16: Legitimate individual stroke undo in Free Draw removes stroke from drawHistory');
+    assert(fdIoEmits.length === 1, 'AUTH-11.16: Legitimate individual stroke undo in Free Draw broadcasts via io.to()');
+  }
 }
 
 // Teardown network sockets & server

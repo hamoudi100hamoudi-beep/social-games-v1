@@ -124,7 +124,11 @@ export function handleDrawBinary(
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 7) { // draw_undo
-      if ((isFreeDraw || isExperimental) && buf.length >= 10) {
+      if (isFreeDraw || isExperimental) {
+        // In Free Draw and Experimental, type 7 MUST be a well-formed stroke undo (>= 10 bytes).
+        // Never fall back to global undoLastDrawing() for special modes.
+        if (buf.length < 10) return;
+
         let targetInstId = "";
         for (let i = 0; i < 7; i++) {
           const code = buf[1 + i];
@@ -146,12 +150,18 @@ export function handleDrawBinary(
           io.to(roomId).emit('draw_binary', buf);
         }
       } else {
+        // Normal / Competitive Rooms: standard global undo
         roomManager.undoLastDrawing(roomId);
         if (io && typeof io.to === 'function') {
           io.to(roomId).emit('draw_binary', buf);
         }
       }
     } else if (type === 8) { // draw_redo
+      // Reject global redo (type 8) in Free Draw and Experimental modes;
+      // special modes handle collaborative redo individually per-stroke via client re-emission.
+      if (isFreeDraw || isExperimental) {
+        return;
+      }
       roomManager.redoDrawing(roomId);
       if (io && typeof io.to === 'function') {
         io.to(roomId).emit('draw_binary', buf);
