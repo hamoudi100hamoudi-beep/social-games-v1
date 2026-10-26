@@ -10,6 +10,7 @@ import { getToolName } from './src/utils/drawBinaryHelper.js';
 import { registerJoinRoomHandler } from './server/registerJoinRoomHandler.js';
 import { registerDrawBinaryHandler } from './server/registerDrawBinaryHandler.js';
 import { registerSubmitGuessHandler } from './server/registerSubmitGuessHandler.js';
+import { registerSelectWordHandler } from './server/registerSelectWordHandler.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -347,11 +348,8 @@ async function startServer() {
       }
     });
 
-    socket.on('select_word', (data) => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-        roomManager.startGameRound(player.roomId, data.word, socket.id);
-      }
+    registerSelectWordHandler(socket, {
+      roomManager,
     });
 
     registerSubmitGuessHandler(socket, {

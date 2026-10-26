@@ -6,6 +6,7 @@ import { SessionAuthStore } from '../server/sessionAuth.js';
 import { registerJoinRoomHandler, normalizeNickname } from '../server/registerJoinRoomHandler.js';
 import { registerDrawBinaryHandler, handleDrawBinary } from '../server/registerDrawBinaryHandler.js';
 import { registerSubmitGuessHandler, handleSubmitGuess } from '../server/registerSubmitGuessHandler.js';
+import { registerSelectWordHandler, handleSelectWord } from '../server/registerSelectWordHandler.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -313,6 +314,9 @@ netIo.on('connection', (socket) => {
     roomManager: netRm
   });
   registerSubmitGuessHandler(socket, {
+    roomManager: netRm
+  });
+  registerSelectWordHandler(socket, {
     roomManager: netRm
   });
 });
@@ -2092,6 +2096,207 @@ console.log('\n--- Test Group 12: SERVER-AUTH-FIX-2A submit_guess Hardening Test
   assert(netRoom.gameState.correctGuessers.includes(netGuesserPid), 'AUTH-12.7: Valid guess adds player to correctGuessers');
 
   clientGuess.disconnect();
+}
+
+// -----------------------------------------------------------------
+// 13. SERVER-AUTH-FIX-2B: select_word Validation Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 13: SERVER-AUTH-FIX-2B select_word Validation Tests ---');
+{
+  const rm = new RoomManager();
+  const testRoomId = 'SelectWordSecurityRoom';
+  const drawerSocket = 'sock-drawer-select-1';
+  const drawerPid = 'pid-drawer-select-1';
+  const guesserSocket = 'sock-guesser-select-1';
+  const guesserPid = 'pid-guesser-select-1';
+
+  const room = rm.createRoom(testRoomId);
+  rm.addPlayerToRoom(testRoomId, {
+    id: drawerSocket,
+    name: 'DrawerBob',
+    score: 0,
+    avatar: '🎨',
+    wins: 0,
+    roomId: testRoomId,
+    persistentId: drawerPid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+  rm.addPlayerToRoom(testRoomId, {
+    id: guesserSocket,
+    name: 'GuesserAlice',
+    score: 0,
+    avatar: '🔍',
+    wins: 0,
+    roomId: testRoomId,
+    persistentId: guesserPid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  const validOptions = ['شمس', 'قمر'];
+  room.gameState.status = 'CHOOSING';
+  room.gameState.currentDrawerId = drawerPid;
+  room.gameState.wordOptions = [...validOptions];
+  room.gameState.currentWord = null;
+  room.gameState.timeLeft = 95;
+
+  const mockDrawerSocket = { id: drawerSocket, emit: () => {}, on: () => {} };
+  const mockGuesserSocket = { id: guesserSocket, emit: () => {}, on: () => {} };
+
+  // 13.1 Safely handle invalid / malformed payloads without throwing or altering state
+  const invalidPayloads: any[] = [
+    null,
+    undefined,
+    {},
+    { word: null },
+    { word: undefined },
+    { word: 123 },
+    { word: true },
+    { word: false },
+    { word: {} },
+    { word: { nested: 'obj' } },
+    { word: [] },
+    { word: ['شمس'] },
+    { word: '' },
+    { word: '   ' },
+    { notWord: 'شمس' },
+    'just a string',
+    99999
+  ];
+
+  for (let i = 0; i < invalidPayloads.length; i++) {
+    const payload = invalidPayloads[i];
+    let threw = false;
+    try {
+      handleSelectWord(mockDrawerSocket, payload, { roomManager: rm });
+    } catch (e) {
+      threw = true;
+    }
+    assert(!threw, `AUTH-13.1.${i + 1}: Malformed select_word payload ${JSON.stringify(payload)} handled safely without throwing`);
+    assert(room.gameState.status === 'CHOOSING', `AUTH-13.1.${i + 1}: Status unchanged (CHOOSING)`);
+    assert(room.gameState.currentWord === null, `AUTH-13.1.${i + 1}: currentWord unchanged (null)`);
+    assert(room.gameState.wordOptions.length === 2, `AUTH-13.1.${i + 1}: wordOptions preserved`);
+  }
+
+  // 13.2 Reject word not in wordOptions
+  handleSelectWord(mockDrawerSocket, { word: 'نجمة' }, { roomManager: rm });
+  assert(room.gameState.status === 'CHOOSING', 'AUTH-13.2: Status remains CHOOSING when word is not in wordOptions');
+  assert(room.gameState.currentWord === null, 'AUTH-13.2: currentWord remains null when word is not in wordOptions');
+  assert(room.gameState.wordOptions.length === 2, 'AUTH-13.2: wordOptions remain intact when word is not in wordOptions');
+
+  // 13.3 Reject when sender is not the current drawer
+  handleSelectWord(mockGuesserSocket, { word: 'شمس' }, { roomManager: rm });
+  assert(room.gameState.status === 'CHOOSING', 'AUTH-13.3: Non-drawer player cannot select word');
+  assert(room.gameState.currentWord === null, 'AUTH-13.3: currentWord remains null when non-drawer selects');
+  assert(room.gameState.wordOptions.length === 2, 'AUTH-13.3: wordOptions remain intact when non-drawer selects');
+
+  // 13.4 Reject when status is not CHOOSING
+  room.gameState.status = 'WAITING';
+  handleSelectWord(mockDrawerSocket, { word: 'شمس' }, { roomManager: rm });
+  assert(room.gameState.status === 'WAITING', 'AUTH-13.4: Status remains WAITING when select_word sent during WAITING');
+  assert(room.gameState.currentWord === null, 'AUTH-13.4: currentWord remains null during WAITING');
+
+  room.gameState.status = 'ROUND_END';
+  handleSelectWord(mockDrawerSocket, { word: 'شمس' }, { roomManager: rm });
+  assert(room.gameState.status === 'ROUND_END', 'AUTH-13.4: Status remains ROUND_END when select_word sent during ROUND_END');
+
+  // 13.5 Defensive checks on RoomManager.startGameRound directly
+  room.gameState.status = 'CHOOSING';
+  room.gameState.currentWord = null;
+  room.gameState.wordOptions = [...validOptions];
+
+  let defensiveThrew = false;
+  try {
+    rm.startGameRound(testRoomId, null as any, drawerSocket);
+    rm.startGameRound(testRoomId, undefined as any, drawerSocket);
+    rm.startGameRound(testRoomId, 123 as any, drawerSocket);
+    rm.startGameRound(testRoomId, {} as any, drawerSocket);
+    rm.startGameRound(testRoomId, '' as any, drawerSocket);
+    rm.startGameRound(testRoomId, '   ' as any, drawerSocket);
+  } catch (e) {
+    defensiveThrew = true;
+  }
+  assert(!defensiveThrew, 'AUTH-13.5: RoomManager.startGameRound directly survives non-string inputs without throwing');
+  assert(room.gameState.status === 'CHOOSING', 'AUTH-13.5: Status unchanged after direct invalid startGameRound calls');
+
+  // Defensive check when wordOptions is missing or empty
+  room.gameState.wordOptions = [] as any;
+  rm.startGameRound(testRoomId, 'شمس', drawerSocket);
+  assert(room.gameState.status === 'CHOOSING', 'AUTH-13.5: startGameRound safely rejects when wordOptions is empty');
+
+  room.gameState.wordOptions = null as any;
+  rm.startGameRound(testRoomId, 'شمس', drawerSocket);
+  assert(room.gameState.status === 'CHOOSING', 'AUTH-13.5: startGameRound safely rejects when wordOptions is null');
+
+  // 13.6 Legitimate selection succeeds
+  room.gameState.wordOptions = [...validOptions];
+  handleSelectWord(mockDrawerSocket, { word: 'شمس' }, { roomManager: rm });
+  assert((room.gameState.status as string) === 'DRAWING', 'AUTH-13.6: Status transitions to DRAWING on legitimate word selection');
+  assert(room.gameState.currentWord === 'شمس', 'AUTH-13.6: currentWord set to selected word');
+  assert(room.gameState.wordOptions.length === 0, 'AUTH-13.6: wordOptions emptied after selection');
+  assert(typeof room.gameState.drawingStartTime === 'number', 'AUTH-13.6: drawingStartTime is recorded');
+
+  // 13.7 Real Socket.IO Network Integration Test
+  const netRoom = netRm.createRoom('General #TestSelect');
+  const netDrawerClient = await connectClient();
+  const netGuesserClient = await connectClient();
+
+  const netDrawerPid = 'usr-net-drawer-sel';
+  const netDrawerSec = 'sec-net-drawer-sel-12345678';
+  const netGuesserPid = 'usr-net-guesser-sel';
+  const netGuesserSec = 'sec-net-guesser-sel-87654321';
+
+  await new Promise((res) => {
+    netDrawerClient.emit('join_room', {
+      roomId: 'General #TestSelect',
+      nickname: 'DrawerNet',
+      playerId: netDrawerPid,
+      reconnectSecret: netDrawerSec
+    }, res);
+  });
+
+  await new Promise((res) => {
+    netGuesserClient.emit('join_room', {
+      roomId: 'General #TestSelect',
+      nickname: 'GuesserNet',
+      playerId: netGuesserPid,
+      reconnectSecret: netGuesserSec
+    }, res);
+  });
+
+  netRoom.gameState.status = 'CHOOSING';
+  netRoom.gameState.currentDrawerId = netDrawerPid;
+  netRoom.gameState.wordOptions = ['قارب', 'سيارة'];
+  netRoom.gameState.currentWord = null;
+
+  // Guesser attempts select_word
+  netGuesserClient.emit('select_word', { word: 'قارب' });
+  await new Promise(r => setTimeout(r, 60));
+  assert(netRoom.gameState.status === 'CHOOSING', 'AUTH-13.7: Non-drawer over network cannot select word');
+
+  // Drawer sends malformed payload
+  netDrawerClient.emit('select_word', null);
+  netDrawerClient.emit('select_word', { word: 999 });
+  netDrawerClient.emit('select_word', { word: {} });
+  await new Promise(r => setTimeout(r, 60));
+  assert(netRoom.gameState.status === 'CHOOSING', 'AUTH-13.7: Malformed payloads over network do not trigger round start');
+
+  // Drawer sends unauthorized word (not in options)
+  netDrawerClient.emit('select_word', { word: 'طائرة' });
+  await new Promise(r => setTimeout(r, 60));
+  assert(netRoom.gameState.status === 'CHOOSING', 'AUTH-13.7: Word outside wordOptions over network is rejected');
+  assert(netRoom.gameState.currentWord === null, 'AUTH-13.7: currentWord remains null over network');
+
+  // Drawer sends legitimate choice from wordOptions
+  netDrawerClient.emit('select_word', { word: 'قارب' });
+  await new Promise(r => setTimeout(r, 60));
+  assert((netRoom.gameState.status as string) === 'DRAWING', 'AUTH-13.7: Valid word selection over network transitions to DRAWING');
+  assert(netRoom.gameState.currentWord === 'قارب', 'AUTH-13.7: Valid word selection over network sets currentWord');
+  assert(netRoom.gameState.wordOptions.length === 0, 'AUTH-13.7: wordOptions emptied over network');
+
+  netDrawerClient.disconnect();
+  netGuesserClient.disconnect();
 }
 
 // Teardown network sockets & server

@@ -849,6 +849,10 @@ export class RoomManager {
   }
 
   public startGameRound(roomId: string, word: string, socketId: string) {
+    if (!word || typeof word !== "string") return;
+    const trimmedWord = word.trim();
+    if (trimmedWord.length === 0) return;
+
     const room = this.rooms.get(roomId);
     if (!room) return;
     const player = this.players.get(socketId);
@@ -859,13 +863,17 @@ export class RoomManager {
     )
       return;
 
-    room.gameState.currentWord = word;
+    const wordOptions = room.gameState.wordOptions;
+    if (!Array.isArray(wordOptions) || wordOptions.length === 0) return;
+    if (!wordOptions.includes(trimmedWord)) return;
+
+    room.gameState.currentWord = trimmedWord;
     room.gameState.status = "DRAWING";
     room.gameState.wordOptions = [];
     room.gameState.drawingStartTime = Date.now();
     room.gameState.isFastAllGuessed = false;
     room.gameState.noOneGuessedVariant = undefined;
-    console.log(`[Room ${room.id}] Transitioning to DRAWING. Word: ${word}`);
+    console.log(`[Room ${room.id}] Transitioning to DRAWING. Word: ${trimmedWord}`);
     this.broadcastState(room);
   }
 
