@@ -287,20 +287,26 @@ async function startServer() {
       }
     });
 
-    socket.on('register_drawing_identity', ({ instanceId }) => {
+    socket.on('register_drawing_identity', (data: any) => {
       try {
-        if (instanceId && typeof instanceId === 'string') {
-          roomManager.registerDrawingIdentity(socket.id, instanceId);
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
+          if (instanceId.length > 0) {
+            roomManager.registerDrawingIdentity(socket.id, instanceId);
+          }
         }
       } catch (err) {
         console.error("Error registering drawing identity:", err);
       }
     });
 
-    socket.on('unregister_drawing_identity', ({ instanceId }) => {
+    socket.on('unregister_drawing_identity', (data: any) => {
       try {
-        if (instanceId && typeof instanceId === 'string') {
-          roomManager.unregisterDrawingIdentity(socket.id, instanceId);
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+          const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
+          if (instanceId.length > 0) {
+            roomManager.unregisterDrawingIdentity(socket.id, instanceId);
+          }
         }
       } catch (err) {
         console.error("Error unregistering drawing identity:", err);
@@ -394,24 +400,35 @@ async function startServer() {
       }
     });
 
-    socket.on('submit_vote_kick', ({ targetPlayerId }, callback) => {
+    socket.on('submit_vote_kick', (data: any, callback?: any) => {
       try {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+          if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
+          return;
+        }
+
+        const targetPlayerId = typeof data.targetPlayerId === 'string' ? data.targetPlayerId.trim() : '';
+        if (!targetPlayerId) {
+          if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
+          return;
+        }
+
         const player = roomManager.getPlayer(socket.id);
         if (!player || !player.roomId) {
-          if (callback) callback({ error: 'player_not_found' });
+          if (typeof callback === 'function') callback({ error: 'player_not_found' });
           return;
         }
 
         const roomId = player.roomId;
         const room = roomManager.getRoom(roomId);
         if (!room) {
-          if (callback) callback({ error: 'room_not_found' });
+          if (typeof callback === 'function') callback({ error: 'room_not_found' });
           return;
         }
 
         const targetPlayer = room.players.find(p => p.persistentId === targetPlayerId);
         if (!targetPlayer) {
-          if (callback) callback({ error: 'target_not_found' });
+          if (typeof callback === 'function') callback({ error: 'target_not_found' });
           return;
         }
 
@@ -447,7 +464,7 @@ async function startServer() {
           room.votekicks[targetPlayerId] = updatedVoters;
           const currentCount = updatedVoters.length;
 
-          if (callback) callback({ success: true, voted: false, count: currentCount, required: requiredVotes });
+          if (typeof callback === 'function') callback({ success: true, voted: false, count: currentCount, required: requiredVotes });
 
           // Update state visually
           roomManager.sendStateToPlayer(room, player);
@@ -515,10 +532,10 @@ async function startServer() {
           roomManager.sendStateToPlayer(room, p);
         });
 
-        if (callback) callback({ success: true, voted: true, count: currentCount, required: requiredVotes });
+        if (typeof callback === 'function') callback({ success: true, voted: true, count: currentCount, required: requiredVotes });
       } catch (e) {
         console.error("Error in submit_vote_kick event:", e);
-        if (callback) callback({ error: String(e) });
+        if (typeof callback === 'function') callback({ error: String(e) });
       }
     });
 

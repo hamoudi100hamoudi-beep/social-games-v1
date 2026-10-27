@@ -330,6 +330,153 @@ netIo.on('connection', (socket) => {
     io: netIo,
     roomManager: netRm
   });
+
+  socket.on('register_drawing_identity', (data: any) => {
+    try {
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
+        if (instanceId.length > 0) {
+          netRm.registerDrawingIdentity(socket.id, instanceId);
+        }
+      }
+    } catch (err) {
+      console.error("Error registering drawing identity:", err);
+    }
+  });
+
+  socket.on('unregister_drawing_identity', (data: any) => {
+    try {
+      if (data && typeof data === 'object' && !Array.isArray(data)) {
+        const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
+        if (instanceId.length > 0) {
+          netRm.unregisterDrawingIdentity(socket.id, instanceId);
+        }
+      }
+    } catch (err) {
+      console.error("Error unregistering drawing identity:", err);
+    }
+  });
+
+  socket.on('submit_vote_kick', (data: any, callback?: any) => {
+    try {
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
+        return;
+      }
+
+      const targetPlayerId = typeof data.targetPlayerId === 'string' ? data.targetPlayerId.trim() : '';
+      if (!targetPlayerId) {
+        if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
+        return;
+      }
+
+      const player = netRm.getPlayer(socket.id);
+      if (!player || !player.roomId) {
+        if (typeof callback === 'function') callback({ error: 'player_not_found' });
+        return;
+      }
+
+      const roomId = player.roomId;
+      const room = netRm.getRoom(roomId);
+      if (!room) {
+        if (typeof callback === 'function') callback({ error: 'room_not_found' });
+        return;
+      }
+
+      const targetPlayer = room.players.find(p => p.persistentId === targetPlayerId);
+      if (!targetPlayer) {
+        if (typeof callback === 'function') callback({ error: 'target_not_found' });
+        return;
+      }
+
+      if (!room.votekicks) room.votekicks = {};
+      if (!room.bannedUsers) room.bannedUsers = [];
+
+      const voters = room.votekicks[targetPlayerId] || [];
+      const selfId = player.persistentId || player.id;
+      const alreadyVoted = voters.includes(selfId);
+
+      const onlineCount = room.players.filter(p => !p.isOffline).length;
+
+      let requiredVotes = 2;
+      if (onlineCount <= 5) {
+        requiredVotes = 2;
+      } else if (onlineCount === 6) {
+        requiredVotes = 3;
+      } else if (onlineCount <= 8) {
+        requiredVotes = 4;
+      } else {
+        requiredVotes = 5;
+      }
+
+      if (alreadyVoted) {
+        const updatedVoters = voters.filter(vId => vId !== selfId);
+        room.votekicks[targetPlayerId] = updatedVoters;
+        const currentCount = updatedVoters.length;
+
+        if (typeof callback === 'function') callback({ success: true, voted: false, count: currentCount, required: requiredVotes });
+
+        netRm.sendStateToPlayer(room, player);
+        netRm.sendStateToPlayer(room, targetPlayer);
+        room.players.forEach(p => {
+          netRm.sendStateToPlayer(room, p);
+        });
+        return;
+      }
+
+      voters.push(selfId);
+      room.votekicks[targetPlayerId] = voters;
+      const currentCount = voters.length;
+
+      const announceMsg = {
+        id: 'votekick-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+        text: `${player.name} voted to kick out ${targetPlayer.name}`,
+        voterName: player.name,
+        targetName: targetPlayer.name,
+        type: 'votekick_alert'
+      };
+      netRm.saveChatMessage(roomId, announceMsg);
+      netIo.to(roomId).emit('receive_message', announceMsg);
+
+      if (currentCount >= requiredVotes) {
+        const banId = targetPlayer.persistentId || targetPlayer.id;
+        if (!room.bannedUsers.includes(banId)) {
+          room.bannedUsers.push(banId);
+        }
+
+        netIo.to(targetPlayer.id).emit('banned_from_room');
+        delete room.votekicks[targetPlayerId];
+
+        const socketToKick = netIo.sockets.sockets.get(targetPlayer.id);
+        if (socketToKick) {
+          socketToKick.leave(roomId);
+          socketToKick.emit('banned_from_room');
+        }
+
+        const kickedName = targetPlayer.name;
+        const targetSocketId = targetPlayer.id;
+        netRm.removePlayerFromRoom(roomId, targetSocketId);
+        netRm.removePlayer(targetSocketId);
+
+        const kickedAnnounce = {
+          id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
+          text: `${kickedName} غادر الغرفة`,
+          type: 'system'
+        };
+        netRm.saveChatMessage(roomId, kickedAnnounce);
+        netIo.to(roomId).emit('receive_message', kickedAnnounce);
+      }
+
+      room.players.forEach(p => {
+        netRm.sendStateToPlayer(room, p);
+      });
+
+      if (typeof callback === 'function') callback({ success: true, voted: true, count: currentCount, required: requiredVotes });
+    } catch (e) {
+      console.error("Error in submit_vote_kick event:", e);
+      if (typeof callback === 'function') callback({ error: String(e) });
+    }
+  });
 });
 
 await new Promise<void>((resolve) => netHttpServer.listen(0, '127.0.0.1', resolve));
@@ -2805,6 +2952,123 @@ console.log('\n--- Test Group 15: leave_room Security & Membership Integrity ---
 
   netClientA.disconnect();
   netClientB.disconnect();
+}
+
+// -----------------------------------------------------------------
+// 16. SERVER-AUTH-FIX-3B: Safe Payload Validation for Remaining Socket Events
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 16: Safe Payload Validation for Remaining Socket Events ---');
+{
+  const clientA = await connectClient();
+  const clientB = await connectClient();
+  const netRoomRealC = 'Net-Room-Payload-Auth';
+  netRm.createRoom(netRoomRealC);
+
+  const netAPid = 'usr-payload-a-16';
+  const netASec = 'sec-payload-a-token-16';
+  const netBPid = 'usr-payload-b-16';
+  const netBSec = 'sec-payload-b-token-16';
+
+  await new Promise((res) => {
+    clientA.emit('join_room', {
+      roomId: netRoomRealC,
+      nickname: 'PayloadAlice',
+      playerId: netAPid,
+      reconnectSecret: netASec
+    }, res);
+  });
+
+  await new Promise((res) => {
+    clientB.emit('join_room', {
+      roomId: netRoomRealC,
+      nickname: 'PayloadBob',
+      playerId: netBPid,
+      reconnectSecret: netBSec
+    }, res);
+  });
+
+  const roomC = netRm.getRoom(netRoomRealC)!;
+  assert(roomC.players.length === 2, 'AUTH-16.1: Both players joined test room');
+
+  // 16.2 Malformed submit_vote_kick payloads over network
+  const malformedKickPayloads: any[] = [
+    null,
+    undefined,
+    12345,
+    'not an object',
+    true,
+    [],
+    ['target-1'],
+    {},
+    { targetPlayerId: null },
+    { targetPlayerId: 1234 },
+    { targetPlayerId: '' },
+    { targetPlayerId: '   ' },
+    { wrongField: netBPid }
+  ];
+
+  for (let i = 0; i < malformedKickPayloads.length; i++) {
+    const payload = malformedKickPayloads[i];
+    const initialVotekicks = JSON.stringify(roomC.votekicks || {});
+    const initialMsgCount = roomC.chatMessages.length;
+
+    const res: any = await new Promise((resolve) => {
+      clientA.emit('submit_vote_kick', payload, resolve);
+    });
+
+    assert(res?.success === false, `AUTH-16.2.${i + 1}: Malformed kick payload returns success: false`);
+    assert(res?.error === 'invalid_payload', `AUTH-16.2.${i + 1}: Malformed kick payload returns invalid_payload error`);
+    assert(JSON.stringify(roomC.votekicks || {}) === initialVotekicks, `AUTH-16.2.${i + 1}: Room votekicks state unmutated`);
+    assert(roomC.chatMessages.length === initialMsgCount, `AUTH-16.2.${i + 1}: No chat messages added`);
+  }
+
+  // 16.3 Non-function callback / missing callback with invalid kick payload
+  clientA.emit('submit_vote_kick', null);
+  clientA.emit('submit_vote_kick', 'not-valid');
+  await new Promise((r) => setTimeout(r, 50));
+  assert(clientA.connected, 'AUTH-16.3: Client A remains connected after unhandled callback edge cases');
+
+  // 16.4 Malformed register_drawing_identity and unregister_drawing_identity
+  const malformedIdentities: any[] = [
+    null,
+    undefined,
+    999,
+    'direct-string',
+    true,
+    [],
+    {},
+    { instanceId: null },
+    { instanceId: 123 },
+    { instanceId: '' },
+    { instanceId: '     ' }
+  ];
+
+  for (let i = 0; i < malformedIdentities.length; i++) {
+    clientA.emit('register_drawing_identity', malformedIdentities[i]);
+    clientA.emit('unregister_drawing_identity', malformedIdentities[i]);
+  }
+  await new Promise((r) => setTimeout(r, 100));
+  assert(clientA.connected, 'AUTH-16.4: Client A remains connected after malformed identity packets');
+  assert(clientB.connected, 'AUTH-16.4: Client B remains connected');
+
+  // 16.5 Legitimate submit_vote_kick works cleanly over network
+  const legitKickRes: any = await new Promise((resolve) => {
+    clientA.emit('submit_vote_kick', { targetPlayerId: netBPid }, resolve);
+  });
+  assert(legitKickRes?.success === true, 'AUTH-16.5: Legitimate vote returns success: true');
+  assert(legitKickRes?.voted === true, 'AUTH-16.5: Legitimate vote returns voted: true');
+  assert(roomC.votekicks[netBPid]?.includes(netAPid), 'AUTH-16.5: Vote registered for target');
+
+  // 16.6 Vote toggle (retract vote)
+  const retractKickRes: any = await new Promise((resolve) => {
+    clientA.emit('submit_vote_kick', { targetPlayerId: ` ${netBPid} ` }, resolve);
+  });
+  assert(retractKickRes?.success === true, 'AUTH-16.6: Retracting vote returns success: true');
+  assert(retractKickRes?.voted === false, 'AUTH-16.6: Retracting vote returns voted: false');
+  assert(!roomC.votekicks[netBPid]?.includes(netAPid), 'AUTH-16.6: Vote removed for target');
+
+  clientA.disconnect();
+  clientB.disconnect();
 }
 
 // Teardown network sockets & server
