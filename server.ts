@@ -16,6 +16,8 @@ import { registerLeaveRoomHandler } from './server/registerLeaveRoomHandler.js';
 import { registerDrawingIdentityHandlers } from './server/registerDrawingIdentityHandlers.js';
 import { registerVoteKickHandler } from './server/registerVoteKickHandler.js';
 
+import { checkRateLimit } from './server/rateLimit.js';
+
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
 
@@ -116,19 +118,7 @@ async function startServer() {
   // Rate limiting maps
   const chatMessageLimits = new Map<string, number[]>();
   const guessLimits = new Map<string, number[]>();
-
-  const checkRateLimit = (limitsMap: Map<string, number[]>, socketId: string, maxMessages: number, windowMs: number) => {
-    const now = Date.now();
-    const timestamps = limitsMap.get(socketId) || [];
-    // remove timestamps older than windowMs
-    const recent = timestamps.filter(ts => now - ts < windowMs);
-    if (recent.length >= maxMessages) {
-      return false; // Rate limited
-    }
-    recent.push(now);
-    limitsMap.set(socketId, recent);
-    return true; // Allowed
-  };
+  const voteKickLimits = new Map<string, number[]>();
 
   function relayFreeDrawMove(
     roomId: string,
@@ -383,6 +373,8 @@ async function startServer() {
     registerVoteKickHandler(socket, {
       io,
       roomManager,
+      voteKickLimits,
+      checkRateLimit,
     });
 
     socket.on('ping_activity', () => {

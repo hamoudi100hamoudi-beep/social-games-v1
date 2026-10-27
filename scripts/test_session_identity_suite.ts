@@ -10,7 +10,7 @@ import { registerSelectWordHandler, handleSelectWord } from '../server/registerS
 import { registerSendMessageHandler, handleSendMessage } from '../server/registerSendMessageHandler.js';
 import { registerLeaveRoomHandler, handleLeaveRoom } from '../server/registerLeaveRoomHandler.js';
 import { registerDrawingIdentityHandlers } from '../server/registerDrawingIdentityHandlers.js';
-import { registerVoteKickHandler } from '../server/registerVoteKickHandler.js';
+import { registerVoteKickHandler, handleSubmitVoteKick } from '../server/registerVoteKickHandler.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -2933,6 +2933,96 @@ console.log('\n--- Test Group 16: Safe Payload Validation for Remaining Socket E
 
   clientA.disconnect();
   clientB.disconnect();
+}
+
+// -----------------------------------------------------------------
+// 17. SERVER-AUTH-FIX-3C: Rate Limit submit_vote_kick Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
+{
+  const rm = new RoomManager();
+  const roomId = 'RateLimit-VoteRoom';
+  const room = rm.createRoom(roomId);
+
+  const voterPid = 'usr-voter-ratelimit';
+  const voterSockId = 'sock-voter-ratelimit';
+  const targetPid = 'usr-target-ratelimit';
+  const targetSockId = 'sock-target-ratelimit';
+
+  rm.addPlayerToRoom(roomId, {
+    id: voterSockId,
+    name: 'VoterRL',
+    avatar: '⚡',
+    score: 0,
+    wins: 0,
+    roomId: roomId,
+    persistentId: voterPid,
+    isOffline: false
+  });
+
+  rm.addPlayerToRoom(roomId, {
+    id: targetSockId,
+    name: 'TargetRL',
+    avatar: '🎯',
+    score: 0,
+    wins: 0,
+    roomId: roomId,
+    persistentId: targetPid,
+    isOffline: false
+  });
+
+  const voteKickLimits = new Map<string, number[]>();
+  const mockIo = {
+    to: () => ({ emit: () => {} }),
+    sockets: { sockets: new Map() }
+  };
+
+  const deps = {
+    io: mockIo,
+    roomManager: rm,
+    voteKickLimits,
+    checkRateLimit: (map: Map<string, number[]>, key: string, max: number, windowMs: number) => {
+      const now = Date.now();
+      const ts = map.get(key) || [];
+      const recent = ts.filter(t => now - t < windowMs);
+      if (recent.length >= max) return false;
+      recent.push(now);
+      map.set(key, recent);
+      return true;
+    }
+  };
+
+  const mockSocket = { id: voterSockId };
+
+  // 17.1 First 3 requests succeed within window
+  for (let i = 1; i <= 3; i++) {
+    let res: any = null;
+    handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, (r: any) => { res = r; }, deps);
+    assert(res?.success === true, `RL-17.1.${i}: Request ${i} succeeds`);
+  }
+
+  // Record state after 3 successful requests
+  const votekicksBefore4th = JSON.stringify(room.votekicks || {});
+  const chatCountBefore4th = room.chatMessages.length;
+
+  // 17.2 4th request within window is rate_limited
+  let fourthRes: any = null;
+  handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, (r: any) => { fourthRes = r; }, deps);
+  assert(fourthRes?.success === false, 'RL-17.2: Fourth request within window returns success: false');
+  assert(fourthRes?.error === 'rate_limited', 'RL-17.2: Fourth request returns error: rate_limited');
+
+  // 17.3 Ensure state remains unchanged upon rate limit rejection
+  assert(JSON.stringify(room.votekicks || {}) === votekicksBefore4th, 'RL-17.3: votekicks state unchanged on rate limit');
+  assert(room.chatMessages.length === chatCountBefore4th, 'RL-17.3: chat messages unchanged on rate limit');
+
+  // 17.4 No callback or non-function callback does not throw
+  let threwNoCb = false;
+  try {
+    handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, undefined, deps);
+  } catch (e) {
+    threwNoCb = true;
+  }
+  assert(!threwNoCb, 'RL-17.4: Missing callback does not throw when rate limited');
 }
 
 // Teardown network sockets & server
