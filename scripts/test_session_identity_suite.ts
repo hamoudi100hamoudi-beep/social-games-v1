@@ -2975,9 +2975,17 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
     isOffline: false
   });
 
+  let sendStateCallCount = 0;
+  const originalSendState = rm.sendStateToPlayer;
+  rm.sendStateToPlayer = (...args: any[]) => {
+    sendStateCallCount++;
+    return (originalSendState as any).apply(rm, args);
+  };
+
+  let broadcastedCount = 0;
   const voteKickLimits = new Map<string, number[]>();
   const mockIo = {
-    to: () => ({ emit: () => {} }),
+    to: () => ({ emit: () => { broadcastedCount++; } }),
     sockets: { sockets: new Map() }
   };
 
@@ -3006,6 +3014,8 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
     // Record state after 3 successful requests
     const votekicksBefore4th = JSON.stringify(room.votekicks || {});
     const chatCountBefore4th = room.chatMessages.length;
+    const sendStateCountBefore4th = sendStateCallCount;
+    const broadcastCountBefore4th = broadcastedCount;
 
     // 17.2 4th request within window is rate_limited
     let fourthRes: any = null;
@@ -3013,9 +3023,11 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
     assert(fourthRes?.success === false, 'RL-17.2: Fourth request within window returns success: false');
     assert(fourthRes?.error === 'rate_limited', 'RL-17.2: Fourth request returns error: rate_limited');
 
-    // 17.3 Ensure state remains unchanged upon rate limit rejection
+    // 17.3 Ensure state and side effects remain unchanged upon rate limit rejection
     assert(JSON.stringify(room.votekicks || {}) === votekicksBefore4th, 'RL-17.3: votekicks state unchanged on rate limit');
     assert(room.chatMessages.length === chatCountBefore4th, 'RL-17.3: chat messages unchanged on rate limit');
+    assert(broadcastedCount === broadcastCountBefore4th, 'RL-17.3: zero vote broadcasts on rate limit');
+    assert(sendStateCallCount === sendStateCountBefore4th, 'RL-17.3: zero sendStateToPlayer calls on rate limit');
 
     // 17.4 Advance time by 2001ms (past window) -> new request allowed
     fakeNow += 2001;
@@ -3023,31 +3035,58 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
     handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, (r: any) => { afterWindowRes = r; }, deps);
     assert(afterWindowRes?.success === true, 'RL-17.4: Request succeeds after window expires');
 
-    // 17.5 PersistentId continuity across socket reconnection
-    const newVoterSockId = 'sock-voter-new-socket';
-    rm.addPlayerToRoom(roomId, {
-      id: newVoterSockId,
-      name: 'VoterRL',
+    // 17.5 PersistentId continuity across socket reconnection (independent room and isolated test case)
+    const reconRoomId = 'RateLimit-ReconRoom';
+    const reconRoom = rm.createRoom(reconRoomId);
+    const reconVoterPid = 'usr-voter-recon-pid';
+    const reconTargetPid = 'usr-target-recon-pid';
+    const socketAId = 'sock-recon-a';
+    const socketBId = 'sock-recon-b';
+
+    rm.addPlayerToRoom(reconRoomId, {
+      id: socketAId,
+      name: 'VoterReconA',
       avatar: '⚡',
       score: 0,
       wins: 0,
-      roomId: roomId,
-      persistentId: voterPid, // Same persistentId
+      roomId: reconRoomId,
+      persistentId: reconVoterPid,
       isOffline: false
     });
-    // Update player mapping in rm
-    const reconnectSocket = { id: newVoterSockId };
 
-    // Reset fake time for strict window test on persistentId
-    fakeNow += 5000;
-    // Consume 3 quick requests on new socket
+    rm.addPlayerToRoom(reconRoomId, {
+      id: socketBId,
+      name: 'TargetRecon',
+      avatar: '🎯',
+      score: 0,
+      wins: 0,
+      roomId: reconRoomId,
+      persistentId: reconTargetPid,
+      isOffline: false
+    });
+
+    const socketA = { id: socketAId };
+    const socketB = { id: socketBId };
+
+    // Send 3 requests on socket A within current window (fakeNow) without time advance
     for (let i = 1; i <= 3; i++) {
-      handleSubmitVoteKick(reconnectSocket, { targetPlayerId: targetPid }, () => {}, deps);
+      let r: any = null;
+      handleSubmitVoteKick(socketA, { targetPlayerId: reconTargetPid }, (res: any) => { r = res; }, deps);
+      assert(r?.success === true, `RL-17.5.A.${i}: Request ${i} on socket A succeeds`);
     }
-    // 4th request on new socket using same persistentId should be rate limited
+
+    // Reconnect: update player's socket id in roomManager to socketBId while keeping the same persistentId
+    const playerRecord = rm.getPlayerByPersistentId(reconVoterPid);
+    if (playerRecord) {
+      (rm as any).players.delete(socketAId);
+      playerRecord.player.id = socketBId;
+      (rm as any).players.set(socketBId, playerRecord.player);
+    }
+
+    // Send 4th request immediately from socket B (reconnected socket) WITHOUT advancing time
     let persistentLimitRes: any = null;
-    handleSubmitVoteKick(reconnectSocket, { targetPlayerId: targetPid }, (r: any) => { persistentLimitRes = r; }, deps);
-    assert(persistentLimitRes?.success === false && persistentLimitRes?.error === 'rate_limited', 'RL-17.5: Rate limit quota follows persistentId across socket reconnection');
+    handleSubmitVoteKick(socketB, { targetPlayerId: reconTargetPid }, (r: any) => { persistentLimitRes = r; }, deps);
+    assert(persistentLimitRes?.success === false && persistentLimitRes?.error === 'rate_limited', 'RL-17.5: Rate limit quota follows persistentId across socket reconnection without time advance');
 
     // 17.6 No callback or non-function callback does not throw
     let threwNoCb = false;
@@ -3060,6 +3099,7 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
 
   } finally {
     Date.now = originalDateNow;
+    rm.sendStateToPlayer = originalSendState;
   }
 }
 

@@ -438,7 +438,7 @@ async function runTests() {
         { id: "ghost-sock" },
         { targetPlayerId: "pid-none" },
         (res: any) => { directRes = res; },
-        { io: mockIo, roomManager: rm }
+        { io: mockIo, roomManager: rm, voteKickLimits, checkRateLimit }
       );
       assert(directRes?.error === "player_not_found", "VOTE-3.7: Direct handleSubmitVoteKick invocation correctly executes production logic");
     }
