@@ -27,19 +27,9 @@ export function handleLeaveRoom(
     const actualRoomId = player.roomId;
     const playerName = player.name || 'لاعب';
 
-    // 3. Socket leaves the authoritative room in Socket.IO
+    // 3. Socket leaves strictly the authoritative room in Socket.IO
     if (typeof socket.leave === 'function') {
       socket.leave(actualRoomId);
-      // If client supplied a different roomId string in payload, also leave it defensively
-      if (
-        data &&
-        typeof data === 'object' &&
-        !Array.isArray(data) &&
-        typeof data.roomId === 'string' &&
-        data.roomId !== actualRoomId
-      ) {
-        socket.leave(data.roomId);
-      }
     }
 
     // 4. Remove player from their actual room in roomManager

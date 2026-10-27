@@ -2631,6 +2631,8 @@ console.log('\n--- Test Group 15: leave_room Security & Membership Integrity ---
   assert((broadcastedToBeta as boolean) === false, 'AUTH-15.2: Zero messages broadcasted to Room Beta');
   assert((broadcastedToAlpha as boolean) === true, 'AUTH-15.2: Leave notification broadcasted to actual room (Room Alpha)');
   assert(leftRoomsRecord.includes(roomAlphaId), 'AUTH-15.2: Socket called leave on authoritative room');
+  assert(!leftRoomsRecord.includes(roomBetaId), 'AUTH-15.2: Socket did NOT call leave on spoofed Room Beta');
+  assert(leftRoomsRecord.length === 1, 'AUTH-15.2: Socket leave called strictly once for authoritative room');
 
   // 15.3: Player not in any room (or unregistered socket) is a safe no-op
   let unregisteredLeft: boolean = false;

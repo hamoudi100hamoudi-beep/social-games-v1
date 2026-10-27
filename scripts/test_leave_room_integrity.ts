@@ -176,6 +176,8 @@ async function runTests() {
   assert(roomA.players[0].id === charlieSock, 'Test 2.2: Charlie still present in Room A');
   assert(rm.getPlayer(aliceSock)?.roomId === null, 'Test 2.3: Alice player.roomId set to null');
   assert(leftRooms.includes(roomAId), 'Test 2.4: Socket instructed to leave Room A');
+  assert(!leftRooms.includes(roomBId), 'Test 2.4b: Socket is NOT instructed to leave spoofed Room B');
+  assert(leftRooms.length === 1, 'Test 2.4c: Socket leave was called exactly once for authoritative room');
 
   // Verify Room B was untouched
   assert(roomB.players.length === 1, 'Test 2.5: Room B player count untouched');
