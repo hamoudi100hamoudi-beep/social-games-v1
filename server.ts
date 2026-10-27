@@ -12,6 +12,7 @@ import { registerDrawBinaryHandler } from './server/registerDrawBinaryHandler.js
 import { registerSubmitGuessHandler } from './server/registerSubmitGuessHandler.js';
 import { registerSelectWordHandler } from './server/registerSelectWordHandler.js';
 import { registerSendMessageHandler } from './server/registerSendMessageHandler.js';
+import { registerLeaveRoomHandler } from './server/registerLeaveRoomHandler.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -252,24 +253,9 @@ async function startServer() {
       }
     });
 
-    socket.on('leave_room', ({ roomId }) => {
-      try {
-        socket.leave(roomId);
-        const player = roomManager.getPlayer(socket.id);
-        const playerName = player ? player.name : 'لاعب';
-        const room = roomManager.removePlayerFromRoom(roomId, socket.id);
-        if (room) {
-          const leaveMsg = {
-            id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-            text: `${playerName} غادر الغرفة`,
-            type: 'system'
-          };
-          roomManager.saveChatMessage(roomId, leaveMsg);
-          io.to(roomId).emit('receive_message', leaveMsg);
-        }
-      } catch (e) {
-        console.error(e);
-      }
+    registerLeaveRoomHandler(socket, {
+      io,
+      roomManager,
     });
 
     registerDrawBinaryHandler(socket, {

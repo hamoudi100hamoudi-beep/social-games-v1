@@ -8,6 +8,7 @@ import { registerDrawBinaryHandler, handleDrawBinary } from '../server/registerD
 import { registerSubmitGuessHandler, handleSubmitGuess } from '../server/registerSubmitGuessHandler.js';
 import { registerSelectWordHandler, handleSelectWord } from '../server/registerSelectWordHandler.js';
 import { registerSendMessageHandler, handleSendMessage } from '../server/registerSendMessageHandler.js';
+import { registerLeaveRoomHandler, handleLeaveRoom } from '../server/registerLeaveRoomHandler.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -324,6 +325,10 @@ netIo.on('connection', (socket) => {
     io: netIo,
     roomManager: netRm,
     normalizeArabic
+  });
+  registerLeaveRoomHandler(socket, {
+    io: netIo,
+    roomManager: netRm
   });
 });
 
@@ -2474,6 +2479,330 @@ console.log('\n--- Test Group 14: CHAT-GUESS-HARDEN-1 Hardening Tests ---');
   });
   assert((cheatWarningEmitted as boolean) === true, 'AUTH-14.5: Secret word leak in chat triggers warning emission');
   assert(chatRoom.chatMessages.length === beforeCheatCount, 'AUTH-14.5: Leaking message is not stored in room chatMessages');
+}
+
+// -----------------------------------------------------------------
+// 15. leave_room Security & Server-Authoritative Membership Integrity
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 15: leave_room Security & Membership Integrity ---');
+{
+  const rm = new RoomManager();
+
+  // 15.1: Malformed payloads: null, undefined, primitives, arrays handled safely without throwing
+  const malformedPayloads = [
+    null,
+    undefined,
+    123,
+    true,
+    'not an object',
+    [],
+    ['RoomA'],
+    {},
+    { roomId: null },
+    { roomId: undefined },
+    { roomId: 12345 },
+    { roomId: ['array'] },
+    { notRoomId: 'RoomA' }
+  ];
+
+  for (let i = 0; i < malformedPayloads.length; i++) {
+    const p = malformedPayloads[i];
+    const testRoomId = `malformed-room-${i}`;
+    const testSocketId = `sock-malformed-${i}`;
+    const testPid = `pid-malformed-${i}`;
+
+    rm.createRoom(testRoomId);
+    rm.addPlayerToRoom(testRoomId, {
+      id: testSocketId,
+      name: `Tester${i}`,
+      score: 0,
+      avatar: '🧪',
+      wins: 0,
+      roomId: testRoomId,
+      persistentId: testPid,
+      isOffline: false,
+      lastActivity: Date.now()
+    });
+
+    let leftRoomSocket: string | null = null;
+    const mockSocket = {
+      id: testSocketId,
+      leave: (r: string) => { leftRoomSocket = r; }
+    };
+
+    let threw = false;
+    try {
+      handleLeaveRoom(mockSocket, p, {
+        io: { to: () => ({ emit: () => {} }) },
+        roomManager: rm
+      });
+    } catch (e) {
+      threw = true;
+    }
+
+    assert(!threw, `AUTH-15.1.${i + 1}: Malformed payload ${JSON.stringify(p)} handled safely without throwing`);
+    const playerObj = rm.getPlayer(testSocketId);
+    assert(!playerObj || playerObj.roomId === null, `AUTH-15.1.${i + 1}: Player roomId cleared after departure`);
+    assert(rm.getRoom(testRoomId) === undefined, `AUTH-15.1.${i + 1}: Solo room cleaned up on player exit`);
+  }
+
+  // 15.2: Spoofed roomId protection: Player in Room Alpha attempts to leave Room Beta
+  const roomAlphaId = 'Room-Alpha-15';
+  const roomBetaId = 'Room-Beta-15';
+  const roomAlpha = rm.createRoom(roomAlphaId);
+  const roomBeta = rm.createRoom(roomBetaId);
+
+  const aliceSocket = 'sock-alice-alpha';
+  const alicePid = 'pid-alice-alpha';
+  rm.addPlayerToRoom(roomAlphaId, {
+    id: aliceSocket,
+    name: 'Alice',
+    score: 10,
+    avatar: '👩',
+    wins: 1,
+    roomId: roomAlphaId,
+    persistentId: alicePid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  const bobSocket = 'sock-bob-beta';
+  const bobPid = 'pid-bob-beta';
+  rm.addPlayerToRoom(roomBetaId, {
+    id: bobSocket,
+    name: 'Bob',
+    score: 20,
+    avatar: '👨',
+    wins: 2,
+    roomId: roomBetaId,
+    persistentId: bobPid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  const charlieSocket = 'sock-charlie-alpha';
+  const charliePid = 'pid-charlie-alpha';
+  rm.addPlayerToRoom(roomAlphaId, {
+    id: charlieSocket,
+    name: 'Charlie',
+    score: 5,
+    avatar: '👦',
+    wins: 0,
+    roomId: roomAlphaId,
+    persistentId: charliePid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  const leftRoomsRecord: string[] = [];
+  const aliceMockSocket = {
+    id: aliceSocket,
+    leave: (r: string) => { leftRoomsRecord.push(r); }
+  };
+
+  const betaInitialMsgCount = roomBeta.chatMessages.length;
+  let broadcastedToBeta = false;
+  let broadcastedToAlpha = false;
+
+  const mockIo = {
+    to: (rId: string) => ({
+      emit: (evt: string, msg: any) => {
+        if (rId === roomBetaId) broadcastedToBeta = true;
+        if (rId === roomAlphaId) broadcastedToAlpha = true;
+      }
+    })
+  };
+
+  // Alice maliciously sends { roomId: "Room-Beta-15" }
+  handleLeaveRoom(aliceMockSocket, { roomId: roomBetaId }, {
+    io: mockIo,
+    roomManager: rm
+  });
+
+  // Verify Alice was removed from Room Alpha
+  assert(roomAlpha.players.length === 1, 'AUTH-15.2: Alice removed from Room Alpha (Charlie remains)');
+  assert(roomAlpha.players[0].id === charlieSocket, 'AUTH-15.2: Charlie still in Room Alpha');
+  assert(rm.getPlayer(aliceSocket)?.roomId === null, 'AUTH-15.2: Alice player.roomId set to null');
+
+  // Verify Room Beta was completely untouched
+  assert(roomBeta.players.length === 1, 'AUTH-15.2: Room Beta players list completely intact');
+  assert(roomBeta.players[0].id === bobSocket, 'AUTH-15.2: Bob still in Room Beta');
+  assert(roomBeta.chatMessages.length === betaInitialMsgCount, 'AUTH-15.2: No fake leave message written to Room Beta');
+  assert((broadcastedToBeta as boolean) === false, 'AUTH-15.2: Zero messages broadcasted to Room Beta');
+  assert((broadcastedToAlpha as boolean) === true, 'AUTH-15.2: Leave notification broadcasted to actual room (Room Alpha)');
+  assert(leftRoomsRecord.includes(roomAlphaId), 'AUTH-15.2: Socket called leave on authoritative room');
+
+  // 15.3: Player not in any room (or unregistered socket) is a safe no-op
+  let unregisteredLeft: boolean = false;
+  const unknownSocket = {
+    id: 'sock-ghost-999',
+    leave: () => { unregisteredLeft = true; }
+  };
+  let noOpThrew = false;
+  try {
+    handleLeaveRoom(unknownSocket, { roomId: 'SomeRoom' }, {
+      io: mockIo,
+      roomManager: rm
+    });
+  } catch (e) {
+    noOpThrew = true;
+  }
+  assert(!noOpThrew, 'AUTH-15.3: Departure for unknown socket does not throw');
+  assert(!unregisteredLeft, 'AUTH-15.3: Departure for unknown socket is a safe no-op');
+
+  // 15.4: Drawer departure during active round triggers round transition
+  const drawerRoomId = 'Room-Drawer-Exit-15';
+  const drawerRoom = rm.createRoom(drawerRoomId);
+  drawerRoom.isFreeDraw = false;
+
+  const drawerSockId = 'sock-drawer-exit';
+  const drawerPId = 'pid-drawer-exit';
+  rm.addPlayerToRoom(drawerRoomId, {
+    id: drawerSockId,
+    name: 'DrawerPerson',
+    score: 0,
+    avatar: '🎨',
+    wins: 0,
+    roomId: drawerRoomId,
+    persistentId: drawerPId,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  const guesserSockId = 'sock-guesser-remain';
+  const guesserPId = 'pid-guesser-remain';
+  rm.addPlayerToRoom(drawerRoomId, {
+    id: guesserSockId,
+    name: 'GuesserPerson',
+    score: 0,
+    avatar: '👂',
+    wins: 0,
+    roomId: drawerRoomId,
+    persistentId: guesserPId,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  drawerRoom.gameState.status = 'DRAWING';
+  drawerRoom.gameState.currentDrawerId = drawerPId;
+  drawerRoom.gameState.currentWord = 'برتقال';
+  drawerRoom.gameState.correctGuessers = [];
+
+  const drawerMockSocket = {
+    id: drawerSockId,
+    leave: () => {}
+  };
+
+  handleLeaveRoom(drawerMockSocket, { roomId: drawerRoomId }, {
+    io: mockIo,
+    roomManager: rm
+  });
+
+  assert(drawerRoom.players.length === 1, 'AUTH-15.4: Drawer removed from room');
+  assert((drawerRoom.gameState.status as string) === 'ROUND_END', 'AUTH-15.4: Round status transitioned to ROUND_END on drawer exit');
+  assert((drawerRoom.gameState as any).roundEndReason === 'drawer_left', 'AUTH-15.4: Round end reason is drawer_left');
+
+  // 15.5: Free Draw room departure cleans activeDrawers
+  const fdRoomId = 'Room-FreeDraw-Exit-15';
+  const fdRoom = rm.createRoom(fdRoomId);
+  fdRoom.isFreeDraw = true;
+
+  const fdPlayerSock = 'sock-fd-exit';
+  const fdPlayerPid = 'pid-fd-exit';
+  rm.addPlayerToRoom(fdRoomId, {
+    id: fdPlayerSock,
+    name: 'FdArtist',
+    score: 0,
+    avatar: '🖌️',
+    wins: 0,
+    roomId: fdRoomId,
+    persistentId: fdPlayerPid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  const fdOtherSock = 'sock-fd-other';
+  const fdOtherPid = 'pid-fd-other';
+  rm.addPlayerToRoom(fdRoomId, {
+    id: fdOtherSock,
+    name: 'FdOther',
+    score: 0,
+    avatar: '🖌️',
+    wins: 0,
+    roomId: fdRoomId,
+    persistentId: fdOtherPid,
+    isOffline: false,
+    lastActivity: Date.now()
+  });
+
+  fdRoom.activeDrawers = [fdPlayerPid, fdOtherPid];
+
+  const fdMockSocket = {
+    id: fdPlayerSock,
+    leave: () => {}
+  };
+
+  handleLeaveRoom(fdMockSocket, { roomId: fdRoomId }, {
+    io: mockIo,
+    roomManager: rm
+  });
+
+  assert(fdRoom.players.length === 1, 'AUTH-15.5: Player removed from Free Draw room');
+  assert(!fdRoom.activeDrawers.includes(fdPlayerPid), 'AUTH-15.5: Player removed from Free Draw activeDrawers');
+  assert(fdRoom.activeDrawers.includes(fdOtherPid), 'AUTH-15.5: Other drawer retained in activeDrawers');
+
+  // 15.6: Real Socket.IO Network Integration Test for leave_room
+  const netClientA = await connectClient();
+  const netClientB = await connectClient();
+  const netRoomRealA = 'Net-Room-Alpha';
+  const netRoomRealB = 'Net-Room-Beta';
+  netRm.createRoom(netRoomRealA);
+  netRm.createRoom(netRoomRealB);
+
+  const netAlicePid = 'usr-net-alice-leave';
+  const netAliceSec = 'sec-net-alice-leave-token-1234';
+  const netBobPid = 'usr-net-bob-stay';
+  const netBobSec = 'sec-net-bob-stay-token-5678';
+
+  await new Promise((res) => {
+    netClientA.emit('join_room', {
+      roomId: netRoomRealA,
+      nickname: 'NetAlice',
+      playerId: netAlicePid,
+      reconnectSecret: netAliceSec
+    }, res);
+  });
+
+  await new Promise((res) => {
+    netClientB.emit('join_room', {
+      roomId: netRoomRealB,
+      nickname: 'NetBob',
+      playerId: netBobPid,
+      reconnectSecret: netBobSec
+    }, res);
+  });
+
+  const liveRoomA = netRm.getRoom(netRoomRealA)!;
+  const liveRoomB = netRm.getRoom(netRoomRealB)!;
+
+  assert(liveRoomA.players.length === 1, 'AUTH-15.6: NetAlice joined Net-Room-Alpha');
+  assert(liveRoomB.players.length === 1, 'AUTH-15.6: NetBob joined Net-Room-Beta');
+
+  // NetAlice maliciously emits leave_room with { roomId: 'Net-Room-Beta' }
+  netClientA.emit('leave_room', { roomId: netRoomRealB });
+  await new Promise((r) => setTimeout(r, 100));
+
+  // Verify Net-Room-Beta was NOT affected
+  assert(liveRoomB.players.length === 1, 'AUTH-15.6: Net-Room-Beta untouched by spoofed leave_room');
+  assert(liveRoomB.players[0].persistentId === netBobPid, 'AUTH-15.6: NetBob remains in Net-Room-Beta');
+  const bSysLeaves = liveRoomB.chatMessages.filter(m => m.type === 'system' && m.text.includes('غادر'));
+  assert(bSysLeaves.length === 0, 'AUTH-15.6: No fake leave system message in Net-Room-Beta');
+
+  // Verify NetAlice was safely removed from Net-Room-Alpha
+  assert(netRm.getRoom(netRoomRealA) === undefined, 'AUTH-15.6: Net-Room-Alpha cleaned up after solo player left');
+
+  netClientA.disconnect();
+  netClientB.disconnect();
 }
 
 // Teardown network sockets & server
