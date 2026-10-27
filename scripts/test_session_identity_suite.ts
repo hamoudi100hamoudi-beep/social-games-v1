@@ -3040,8 +3040,14 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
     const reconRoom = rm.createRoom(reconRoomId);
     const reconVoterPid = 'usr-voter-recon-pid';
     const reconTargetPid = 'usr-target-recon-pid';
-    const socketAId = 'sock-recon-a';
-    const socketBId = 'sock-recon-b';
+    const socketAId = 'sock-recon-voter-a';
+    const socketBId = 'sock-recon-voter-b';
+    const targetSocketId = 'sock-recon-target';
+
+    // Assert socket IDs are distinct to prevent collision
+    assert((socketAId as string) !== (targetSocketId as string), 'RL-17.5: socketAId and targetSocketId are distinct');
+    assert((socketBId as string) !== (targetSocketId as string), 'RL-17.5: socketBId and targetSocketId are distinct');
+    assert((socketAId as string) !== (socketBId as string), 'RL-17.5: socketAId and socketBId are distinct');
 
     rm.addPlayerToRoom(reconRoomId, {
       id: socketAId,
@@ -3055,7 +3061,7 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
     });
 
     rm.addPlayerToRoom(reconRoomId, {
-      id: socketBId,
+      id: targetSocketId,
       name: 'TargetRecon',
       avatar: '🎯',
       score: 0,
@@ -3064,6 +3070,8 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
       persistentId: reconTargetPid,
       isOffline: false
     });
+
+    assert(reconRoom.players.length === 2, 'RL-17.5: Recon room has exactly 2 distinct players');
 
     const socketA = { id: socketAId };
     const socketB = { id: socketBId };
@@ -3075,15 +3083,21 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
       assert(r?.success === true, `RL-17.5.A.${i}: Request ${i} on socket A succeeds`);
     }
 
-    // Reconnect: update player's socket id in roomManager to socketBId while keeping the same persistentId
+    // Reconnect: update voter's socket id in roomManager to socketBId while keeping the same persistentId, leaving target socket untouched
     const playerRecord = rm.getPlayerByPersistentId(reconVoterPid);
+    assert(playerRecord !== null && playerRecord.player.id === socketAId, 'RL-17.5: Voter player record found before reconnection');
+
     if (playerRecord) {
       (rm as any).players.delete(socketAId);
       playerRecord.player.id = socketBId;
       (rm as any).players.set(socketBId, playerRecord.player);
     }
 
-    // Send 4th request immediately from socket B (reconnected socket) WITHOUT advancing time
+    // Verify target player record is completely untouched and independent
+    const targetRecord = rm.getPlayerByPersistentId(reconTargetPid);
+    assert(targetRecord !== null && targetRecord.player.id === targetSocketId, 'RL-17.5: Target player record remains untouched and independent');
+
+    // Send 4th request immediately from socket B (reconnected voter socket) WITHOUT advancing time
     let persistentLimitRes: any = null;
     handleSubmitVoteKick(socketB, { targetPlayerId: reconTargetPid }, (r: any) => { persistentLimitRes = r; }, deps);
     assert(persistentLimitRes?.success === false && persistentLimitRes?.error === 'rate_limited', 'RL-17.5: Rate limit quota follows persistentId across socket reconnection without time advance');
