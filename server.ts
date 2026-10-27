@@ -13,6 +13,7 @@ import { registerSubmitGuessHandler } from './server/registerSubmitGuessHandler.
 import { registerSelectWordHandler } from './server/registerSelectWordHandler.js';
 import { registerSendMessageHandler } from './server/registerSendMessageHandler.js';
 import { registerLeaveRoomHandler } from './server/registerLeaveRoomHandler.js';
+import { registerDrawingIdentityHandlers } from './server/registerDrawingIdentityHandlers.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -287,30 +288,8 @@ async function startServer() {
       }
     });
 
-    socket.on('register_drawing_identity', (data: any) => {
-      try {
-        if (data && typeof data === 'object' && !Array.isArray(data)) {
-          const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
-          if (instanceId.length > 0) {
-            roomManager.registerDrawingIdentity(socket.id, instanceId);
-          }
-        }
-      } catch (err) {
-        console.error("Error registering drawing identity:", err);
-      }
-    });
-
-    socket.on('unregister_drawing_identity', (data: any) => {
-      try {
-        if (data && typeof data === 'object' && !Array.isArray(data)) {
-          const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
-          if (instanceId.length > 0) {
-            roomManager.unregisterDrawingIdentity(socket.id, instanceId);
-          }
-        }
-      } catch (err) {
-        console.error("Error unregistering drawing identity:", err);
-      }
+    registerDrawingIdentityHandlers(socket, {
+      roomManager,
     });
 
     socket.on('request_drawing_identities', () => {

@@ -9,6 +9,7 @@ import { registerSubmitGuessHandler, handleSubmitGuess } from '../server/registe
 import { registerSelectWordHandler, handleSelectWord } from '../server/registerSelectWordHandler.js';
 import { registerSendMessageHandler, handleSendMessage } from '../server/registerSendMessageHandler.js';
 import { registerLeaveRoomHandler, handleLeaveRoom } from '../server/registerLeaveRoomHandler.js';
+import { registerDrawingIdentityHandlers } from '../server/registerDrawingIdentityHandlers.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -331,30 +332,8 @@ netIo.on('connection', (socket) => {
     roomManager: netRm
   });
 
-  socket.on('register_drawing_identity', (data: any) => {
-    try {
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
-        if (instanceId.length > 0) {
-          netRm.registerDrawingIdentity(socket.id, instanceId);
-        }
-      }
-    } catch (err) {
-      console.error("Error registering drawing identity:", err);
-    }
-  });
-
-  socket.on('unregister_drawing_identity', (data: any) => {
-    try {
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
-        if (instanceId.length > 0) {
-          netRm.unregisterDrawingIdentity(socket.id, instanceId);
-        }
-      }
-    } catch (err) {
-      console.error("Error unregistering drawing identity:", err);
-    }
+  registerDrawingIdentityHandlers(socket, {
+    roomManager: netRm
   });
 
   socket.on('submit_vote_kick', (data: any, callback?: any) => {

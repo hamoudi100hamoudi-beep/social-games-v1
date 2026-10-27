@@ -2,6 +2,11 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { io as ioClient } from 'socket.io-client';
 import { RoomManager } from '../server/rooms.js';
+import {
+  registerDrawingIdentityHandlers,
+  handleRegisterDrawingIdentity,
+  handleUnregisterDrawingIdentity
+} from '../server/registerDrawingIdentityHandlers.js';
 
 console.log('====================================================');
 console.log('🛡️  PHASE SERVER-AUTH-FIX-3B: PAYLOAD VALIDATION SUITE');
@@ -22,35 +27,12 @@ function assert(condition: boolean, testName: string, details?: string) {
   }
 }
 
-// Attach the exact event handlers under test
+// Attach the event handlers under test
 function attachEventHandlers(socket: any, deps: { io: any; roomManager: RoomManager }) {
   const { io, roomManager } = deps;
 
-  socket.on('register_drawing_identity', (data: any) => {
-    try {
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
-        if (instanceId.length > 0) {
-          roomManager.registerDrawingIdentity(socket.id, instanceId);
-        }
-      }
-    } catch (err) {
-      console.error('Error registering drawing identity:', err);
-    }
-  });
-
-  socket.on('unregister_drawing_identity', (data: any) => {
-    try {
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
-        const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
-        if (instanceId.length > 0) {
-          roomManager.unregisterDrawingIdentity(socket.id, instanceId);
-        }
-      }
-    } catch (err) {
-      console.error('Error unregistering drawing identity:', err);
-    }
-  });
+  // Use production drawing identity handlers module
+  registerDrawingIdentityHandlers(socket, { roomManager });
 
   socket.on('submit_vote_kick', (data: any, callback?: any) => {
     try {
@@ -251,6 +233,15 @@ async function runTests() {
       assert(registeredWith !== null, 'REG-1.V1: register_drawing_identity succeeds for valid payload');
       assert((registeredWith as any)?.socketId === 'sock-reg-valid-1', 'REG-1.V1: passes correct socket.id');
       assert((registeredWith as any)?.instanceId === 'instance-alpha-99', 'REG-1.V1: trims instanceId properly');
+
+      // Direct call to exported production handleRegisterDrawingIdentity
+      let directRegWith: any = null;
+      handleRegisterDrawingIdentity(
+        { id: 'sock-direct-1' },
+        { instanceId: 'inst-direct-123' },
+        { roomManager: { registerDrawingIdentity: (s: string, id: string) => { directRegWith = { s, id }; } } }
+      );
+      assert(directRegWith?.s === 'sock-direct-1' && directRegWith?.id === 'inst-direct-123', 'REG-1.V2: Direct handleRegisterDrawingIdentity invocation works');
     }
   }
 
@@ -322,6 +313,15 @@ async function runTests() {
       assert(unregisteredWith !== null, 'UNREG-2.V1: unregister_drawing_identity succeeds for valid payload');
       assert((unregisteredWith as any)?.socketId === 'sock-unreg-valid-1', 'UNREG-2.V1: passes correct socket.id');
       assert((unregisteredWith as any)?.instanceId === 'instance-beta-88', 'UNREG-2.V1: trims instanceId properly');
+
+      // Direct call to exported production handleUnregisterDrawingIdentity
+      let directUnregWith: any = null;
+      handleUnregisterDrawingIdentity(
+        { id: 'sock-direct-2' },
+        { instanceId: 'inst-direct-456' },
+        { roomManager: { unregisterDrawingIdentity: (s: string, id: string) => { directUnregWith = { s, id }; } } }
+      );
+      assert(directUnregWith?.s === 'sock-direct-2' && directUnregWith?.id === 'inst-direct-456', 'UNREG-2.V2: Direct handleUnregisterDrawingIdentity invocation works');
     }
   }
 
