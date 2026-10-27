@@ -2406,23 +2406,50 @@ console.log('\n--- Test Group 14: CHAT-GUESS-HARDEN-1 Hardening Tests ---');
     assert(chatRoom.chatMessages.length === initialMsgCount, `AUTH-14.3.${i + 1}: Invalid chat payload ${JSON.stringify(payload)} rejected and not stored`);
   }
 
-  // Test 14.4: Chat message length validation (251 rejected, 250 accepted with trim)
+  // Test 14.4: Chat message length validation (251 rejected without store/broadcast, 250 accepted with store/broadcast and trim)
   const initialChatCount = chatRoom.chatMessages.length;
+  let broadcastCount = 0;
+  let lastBroadcastMsg: any = null;
+  const trackingIo = {
+    to: (roomId: string) => ({
+      emit: (event: string, data: any) => {
+        if (event === 'receive_message') {
+          broadcastCount++;
+          lastBroadcastMsg = data;
+        }
+      }
+    })
+  };
+
+  // 251 characters rejected: neither stored nor broadcast
   handleSendMessage(chatSocket, { text: 'ت'.repeat(251) }, {
-    io: { to: () => ({ emit: () => {} }) },
+    io: trackingIo as any,
     roomManager: rm,
     checkRateLimit: () => true,
     normalizeArabic
   });
-  assert(chatRoom.chatMessages.length === initialChatCount, 'AUTH-14.4: Chat message > 250 chars rejected');
+  assert(chatRoom.chatMessages.length === initialChatCount, 'AUTH-14.4: Chat message of length 251 rejected and not stored');
+  assert(broadcastCount === 0, 'AUTH-14.4: Chat message of length 251 is not broadcast');
+
+  // Exact 250 characters accepted: both stored and broadcast
+  const msg250 = 'ج'.repeat(250);
+  handleSendMessage(chatSocket, { text: msg250 }, {
+    io: trackingIo as any,
+    roomManager: rm,
+    checkRateLimit: () => true,
+    normalizeArabic
+  });
+  assert(chatRoom.chatMessages.length === initialChatCount + 1, 'AUTH-14.4: Chat message of exactly 250 characters accepted and stored');
+  assert(broadcastCount === 1, 'AUTH-14.4: Chat message of exactly 250 characters is broadcast');
+  assert(chatRoom.chatMessages[chatRoom.chatMessages.length - 1].text === msg250, 'AUTH-14.4: Stored message matches exact 250 characters');
 
   handleSendMessage(chatSocket, { text: '   مرحباً بك   ' }, {
-    io: { to: () => ({ emit: () => {} }) },
+    io: trackingIo as any,
     roomManager: rm,
     checkRateLimit: () => true,
     normalizeArabic
   });
-  assert(chatRoom.chatMessages.length === initialChatCount + 1, 'AUTH-14.4: Valid chat message accepted');
+  assert(chatRoom.chatMessages.length === initialChatCount + 2, 'AUTH-14.4: Valid chat message accepted');
   assert(chatRoom.chatMessages[chatRoom.chatMessages.length - 1].text === 'مرحباً بك', 'AUTH-14.4: Accepted message is correctly trimmed');
 
   // Test 14.5: Anti-cheat word leak check in chat

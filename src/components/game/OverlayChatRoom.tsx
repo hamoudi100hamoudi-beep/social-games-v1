@@ -355,6 +355,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                  </button>
                  <textarea
                    id="chat-textarea"
+                   maxLength={250}
                    value={chatInput}
                    onChange={(e) => {
                      setChatInput(e.target.value);
