@@ -7,6 +7,10 @@ import {
   handleRegisterDrawingIdentity,
   handleUnregisterDrawingIdentity
 } from '../server/registerDrawingIdentityHandlers.js';
+import {
+  registerVoteKickHandler,
+  handleSubmitVoteKick
+} from '../server/registerVoteKickHandler.js';
 
 console.log('====================================================');
 console.log('🛡️  PHASE SERVER-AUTH-FIX-3B: PAYLOAD VALIDATION SUITE');
@@ -27,133 +31,15 @@ function assert(condition: boolean, testName: string, details?: string) {
   }
 }
 
-// Attach the event handlers under test
+// Attach the event handlers under test using production modules
 function attachEventHandlers(socket: any, deps: { io: any; roomManager: RoomManager }) {
   const { io, roomManager } = deps;
 
   // Use production drawing identity handlers module
   registerDrawingIdentityHandlers(socket, { roomManager });
 
-  socket.on('submit_vote_kick', (data: any, callback?: any) => {
-    try {
-      if (!data || typeof data !== 'object' || Array.isArray(data)) {
-        if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
-        return;
-      }
-
-      const targetPlayerId = typeof data.targetPlayerId === 'string' ? data.targetPlayerId.trim() : '';
-      if (!targetPlayerId) {
-        if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
-        return;
-      }
-
-      const player = roomManager.getPlayer(socket.id);
-      if (!player || !player.roomId) {
-        if (typeof callback === 'function') callback({ error: 'player_not_found' });
-        return;
-      }
-
-      const roomId = player.roomId;
-      const room = roomManager.getRoom(roomId);
-      if (!room) {
-        if (typeof callback === 'function') callback({ error: 'room_not_found' });
-        return;
-      }
-
-      const targetPlayer = room.players.find(p => p.persistentId === targetPlayerId);
-      if (!targetPlayer) {
-        if (typeof callback === 'function') callback({ error: 'target_not_found' });
-        return;
-      }
-
-      if (!room.votekicks) room.votekicks = {};
-      if (!room.bannedUsers) room.bannedUsers = [];
-
-      const voters = room.votekicks[targetPlayerId] || [];
-      const selfId = player.persistentId || player.id;
-      const alreadyVoted = voters.includes(selfId);
-
-      const onlineCount = room.players.filter(p => !p.isOffline).length;
-
-      let requiredVotes = 2;
-      if (onlineCount <= 5) {
-        requiredVotes = 2;
-      } else if (onlineCount === 6) {
-        requiredVotes = 3;
-      } else if (onlineCount <= 8) {
-        requiredVotes = 4;
-      } else {
-        requiredVotes = 5;
-      }
-
-      if (alreadyVoted) {
-        const updatedVoters = voters.filter(vId => vId !== selfId);
-        room.votekicks[targetPlayerId] = updatedVoters;
-        const currentCount = updatedVoters.length;
-
-        if (typeof callback === 'function') callback({ success: true, voted: false, count: currentCount, required: requiredVotes });
-
-        roomManager.sendStateToPlayer(room, player);
-        roomManager.sendStateToPlayer(room, targetPlayer);
-        room.players.forEach(p => {
-          roomManager.sendStateToPlayer(room, p);
-        });
-        return;
-      }
-
-      voters.push(selfId);
-      room.votekicks[targetPlayerId] = voters;
-      const currentCount = voters.length;
-
-      const announceMsg = {
-        id: 'votekick-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-        text: `${player.name} voted to kick out ${targetPlayer.name}`,
-        voterName: player.name,
-        targetName: targetPlayer.name,
-        type: 'votekick_alert'
-      };
-      roomManager.saveChatMessage(roomId, announceMsg);
-      io.to(roomId).emit('receive_message', announceMsg);
-
-      if (currentCount >= requiredVotes) {
-        const banId = targetPlayer.persistentId || targetPlayer.id;
-        if (!room.bannedUsers.includes(banId)) {
-          room.bannedUsers.push(banId);
-        }
-
-        io.to(targetPlayer.id).emit('banned_from_room');
-        delete room.votekicks[targetPlayerId];
-
-        const socketToKick = io.sockets.sockets?.get ? io.sockets.sockets.get(targetPlayer.id) : null;
-        if (socketToKick) {
-          socketToKick.leave(roomId);
-          socketToKick.emit('banned_from_room');
-        }
-
-        const kickedName = targetPlayer.name;
-        const targetSocketId = targetPlayer.id;
-        roomManager.removePlayerFromRoom(roomId, targetSocketId);
-        roomManager.removePlayer(targetSocketId);
-
-        const kickedAnnounce = {
-          id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-          text: `${kickedName} غادر الغرفة`,
-          type: 'system'
-        };
-        roomManager.saveChatMessage(roomId, kickedAnnounce);
-        io.to(roomId).emit('receive_message', kickedAnnounce);
-      }
-
-      room.players.forEach(p => {
-        roomManager.sendStateToPlayer(room, p);
-      });
-
-      if (typeof callback === 'function') callback({ success: true, voted: true, count: currentCount, required: requiredVotes });
-    } catch (e) {
-      console.error('Error in submit_vote_kick event:', e);
-      if (typeof callback === 'function') callback({ error: String(e) });
-    }
-  });
+  // Use production vote kick handler module
+  registerVoteKickHandler(socket, { io, roomManager });
 }
 
 async function runTests() {
@@ -541,6 +427,18 @@ async function runTests() {
       assert(testRoom.bannedUsers?.includes(targetPid), 'VOTE-3.6: Target added to bannedUsers');
       assert(testRoom.players.find(p => p.persistentId === targetPid) === undefined, 'VOTE-3.6: Target evicted from room players');
       assert(testRoom.votekicks[targetPid] === undefined, 'VOTE-3.6: votekicks mapping cleaned up for evicted user');
+
+    // 3.7 Direct call to exported production handleSubmitVoteKick
+    {
+      let directRes: any = null;
+      handleSubmitVoteKick(
+        { id: "ghost-sock" },
+        { targetPlayerId: "pid-none" },
+        (res: any) => { directRes = res; },
+        { io: mockIo, roomManager: rm }
+      );
+      assert(directRes?.error === "player_not_found", "VOTE-3.7: Direct handleSubmitVoteKick invocation correctly executes production logic");
+    }
     }
   }
 

@@ -10,6 +10,7 @@ import { registerSelectWordHandler, handleSelectWord } from '../server/registerS
 import { registerSendMessageHandler, handleSendMessage } from '../server/registerSendMessageHandler.js';
 import { registerLeaveRoomHandler, handleLeaveRoom } from '../server/registerLeaveRoomHandler.js';
 import { registerDrawingIdentityHandlers } from '../server/registerDrawingIdentityHandlers.js';
+import { registerVoteKickHandler } from '../server/registerVoteKickHandler.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -336,125 +337,9 @@ netIo.on('connection', (socket) => {
     roomManager: netRm
   });
 
-  socket.on('submit_vote_kick', (data: any, callback?: any) => {
-    try {
-      if (!data || typeof data !== 'object' || Array.isArray(data)) {
-        if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
-        return;
-      }
-
-      const targetPlayerId = typeof data.targetPlayerId === 'string' ? data.targetPlayerId.trim() : '';
-      if (!targetPlayerId) {
-        if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
-        return;
-      }
-
-      const player = netRm.getPlayer(socket.id);
-      if (!player || !player.roomId) {
-        if (typeof callback === 'function') callback({ error: 'player_not_found' });
-        return;
-      }
-
-      const roomId = player.roomId;
-      const room = netRm.getRoom(roomId);
-      if (!room) {
-        if (typeof callback === 'function') callback({ error: 'room_not_found' });
-        return;
-      }
-
-      const targetPlayer = room.players.find(p => p.persistentId === targetPlayerId);
-      if (!targetPlayer) {
-        if (typeof callback === 'function') callback({ error: 'target_not_found' });
-        return;
-      }
-
-      if (!room.votekicks) room.votekicks = {};
-      if (!room.bannedUsers) room.bannedUsers = [];
-
-      const voters = room.votekicks[targetPlayerId] || [];
-      const selfId = player.persistentId || player.id;
-      const alreadyVoted = voters.includes(selfId);
-
-      const onlineCount = room.players.filter(p => !p.isOffline).length;
-
-      let requiredVotes = 2;
-      if (onlineCount <= 5) {
-        requiredVotes = 2;
-      } else if (onlineCount === 6) {
-        requiredVotes = 3;
-      } else if (onlineCount <= 8) {
-        requiredVotes = 4;
-      } else {
-        requiredVotes = 5;
-      }
-
-      if (alreadyVoted) {
-        const updatedVoters = voters.filter(vId => vId !== selfId);
-        room.votekicks[targetPlayerId] = updatedVoters;
-        const currentCount = updatedVoters.length;
-
-        if (typeof callback === 'function') callback({ success: true, voted: false, count: currentCount, required: requiredVotes });
-
-        netRm.sendStateToPlayer(room, player);
-        netRm.sendStateToPlayer(room, targetPlayer);
-        room.players.forEach(p => {
-          netRm.sendStateToPlayer(room, p);
-        });
-        return;
-      }
-
-      voters.push(selfId);
-      room.votekicks[targetPlayerId] = voters;
-      const currentCount = voters.length;
-
-      const announceMsg = {
-        id: 'votekick-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-        text: `${player.name} voted to kick out ${targetPlayer.name}`,
-        voterName: player.name,
-        targetName: targetPlayer.name,
-        type: 'votekick_alert'
-      };
-      netRm.saveChatMessage(roomId, announceMsg);
-      netIo.to(roomId).emit('receive_message', announceMsg);
-
-      if (currentCount >= requiredVotes) {
-        const banId = targetPlayer.persistentId || targetPlayer.id;
-        if (!room.bannedUsers.includes(banId)) {
-          room.bannedUsers.push(banId);
-        }
-
-        netIo.to(targetPlayer.id).emit('banned_from_room');
-        delete room.votekicks[targetPlayerId];
-
-        const socketToKick = netIo.sockets.sockets.get(targetPlayer.id);
-        if (socketToKick) {
-          socketToKick.leave(roomId);
-          socketToKick.emit('banned_from_room');
-        }
-
-        const kickedName = targetPlayer.name;
-        const targetSocketId = targetPlayer.id;
-        netRm.removePlayerFromRoom(roomId, targetSocketId);
-        netRm.removePlayer(targetSocketId);
-
-        const kickedAnnounce = {
-          id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-          text: `${kickedName} غادر الغرفة`,
-          type: 'system'
-        };
-        netRm.saveChatMessage(roomId, kickedAnnounce);
-        netIo.to(roomId).emit('receive_message', kickedAnnounce);
-      }
-
-      room.players.forEach(p => {
-        netRm.sendStateToPlayer(room, p);
-      });
-
-      if (typeof callback === 'function') callback({ success: true, voted: true, count: currentCount, required: requiredVotes });
-    } catch (e) {
-      console.error("Error in submit_vote_kick event:", e);
-      if (typeof callback === 'function') callback({ error: String(e) });
-    }
+  registerVoteKickHandler(socket, {
+    io: netIo,
+    roomManager: netRm
   });
 });
 
