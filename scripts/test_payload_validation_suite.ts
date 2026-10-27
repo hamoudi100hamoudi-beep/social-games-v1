@@ -7,6 +7,7 @@ import {
   handleRegisterDrawingIdentity,
   handleUnregisterDrawingIdentity
 } from '../server/registerDrawingIdentityHandlers.js';
+import { checkRateLimit } from '../server/rateLimit.js';
 import {
   registerVoteKickHandler,
   handleSubmitVoteKick
@@ -31,6 +32,8 @@ function assert(condition: boolean, testName: string, details?: string) {
   }
 }
 
+const voteKickLimits = new Map();
+
 // Attach the event handlers under test using production modules
 function attachEventHandlers(socket: any, deps: { io: any; roomManager: RoomManager }) {
   const { io, roomManager } = deps;
@@ -39,7 +42,7 @@ function attachEventHandlers(socket: any, deps: { io: any; roomManager: RoomMana
   registerDrawingIdentityHandlers(socket, { roomManager });
 
   // Use production vote kick handler module
-  registerVoteKickHandler(socket, { io, roomManager });
+  registerVoteKickHandler(socket, { io, roomManager, voteKickLimits, checkRateLimit });
 }
 
 async function runTests() {

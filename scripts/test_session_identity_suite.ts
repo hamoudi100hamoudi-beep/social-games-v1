@@ -11,6 +11,7 @@ import { registerSendMessageHandler, handleSendMessage } from '../server/registe
 import { registerLeaveRoomHandler, handleLeaveRoom } from '../server/registerLeaveRoomHandler.js';
 import { registerDrawingIdentityHandlers } from '../server/registerDrawingIdentityHandlers.js';
 import { registerVoteKickHandler, handleSubmitVoteKick } from '../server/registerVoteKickHandler.js';
+import { checkRateLimit } from '../server/rateLimit.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -337,9 +338,12 @@ netIo.on('connection', (socket) => {
     roomManager: netRm
   });
 
+  const netVoteKickLimits = new Map<string, number[]>();
   registerVoteKickHandler(socket, {
     io: netIo,
-    roomManager: netRm
+    roomManager: netRm,
+    voteKickLimits: netVoteKickLimits,
+    checkRateLimit
   });
 });
 
@@ -2981,48 +2985,82 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
     io: mockIo,
     roomManager: rm,
     voteKickLimits,
-    checkRateLimit: (map: Map<string, number[]>, key: string, max: number, windowMs: number) => {
-      const now = Date.now();
-      const ts = map.get(key) || [];
-      const recent = ts.filter(t => now - t < windowMs);
-      if (recent.length >= max) return false;
-      recent.push(now);
-      map.set(key, recent);
-      return true;
-    }
+    checkRateLimit
   };
 
   const mockSocket = { id: voterSockId };
 
-  // 17.1 First 3 requests succeed within window
-  for (let i = 1; i <= 3; i++) {
-    let res: any = null;
-    handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, (r: any) => { res = r; }, deps);
-    assert(res?.success === true, `RL-17.1.${i}: Request ${i} succeeds`);
-  }
+  // Deterministic fake timer
+  const originalDateNow = Date.now;
+  let fakeNow = 1000000;
+  Date.now = () => fakeNow;
 
-  // Record state after 3 successful requests
-  const votekicksBefore4th = JSON.stringify(room.votekicks || {});
-  const chatCountBefore4th = room.chatMessages.length;
-
-  // 17.2 4th request within window is rate_limited
-  let fourthRes: any = null;
-  handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, (r: any) => { fourthRes = r; }, deps);
-  assert(fourthRes?.success === false, 'RL-17.2: Fourth request within window returns success: false');
-  assert(fourthRes?.error === 'rate_limited', 'RL-17.2: Fourth request returns error: rate_limited');
-
-  // 17.3 Ensure state remains unchanged upon rate limit rejection
-  assert(JSON.stringify(room.votekicks || {}) === votekicksBefore4th, 'RL-17.3: votekicks state unchanged on rate limit');
-  assert(room.chatMessages.length === chatCountBefore4th, 'RL-17.3: chat messages unchanged on rate limit');
-
-  // 17.4 No callback or non-function callback does not throw
-  let threwNoCb = false;
   try {
-    handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, undefined, deps);
-  } catch (e) {
-    threwNoCb = true;
+    // 17.1 First 3 requests succeed within window
+    for (let i = 1; i <= 3; i++) {
+      let res: any = null;
+      handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, (r: any) => { res = r; }, deps);
+      assert(res?.success === true, `RL-17.1.${i}: Request ${i} succeeds`);
+    }
+
+    // Record state after 3 successful requests
+    const votekicksBefore4th = JSON.stringify(room.votekicks || {});
+    const chatCountBefore4th = room.chatMessages.length;
+
+    // 17.2 4th request within window is rate_limited
+    let fourthRes: any = null;
+    handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, (r: any) => { fourthRes = r; }, deps);
+    assert(fourthRes?.success === false, 'RL-17.2: Fourth request within window returns success: false');
+    assert(fourthRes?.error === 'rate_limited', 'RL-17.2: Fourth request returns error: rate_limited');
+
+    // 17.3 Ensure state remains unchanged upon rate limit rejection
+    assert(JSON.stringify(room.votekicks || {}) === votekicksBefore4th, 'RL-17.3: votekicks state unchanged on rate limit');
+    assert(room.chatMessages.length === chatCountBefore4th, 'RL-17.3: chat messages unchanged on rate limit');
+
+    // 17.4 Advance time by 2001ms (past window) -> new request allowed
+    fakeNow += 2001;
+    let afterWindowRes: any = null;
+    handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, (r: any) => { afterWindowRes = r; }, deps);
+    assert(afterWindowRes?.success === true, 'RL-17.4: Request succeeds after window expires');
+
+    // 17.5 PersistentId continuity across socket reconnection
+    const newVoterSockId = 'sock-voter-new-socket';
+    rm.addPlayerToRoom(roomId, {
+      id: newVoterSockId,
+      name: 'VoterRL',
+      avatar: '⚡',
+      score: 0,
+      wins: 0,
+      roomId: roomId,
+      persistentId: voterPid, // Same persistentId
+      isOffline: false
+    });
+    // Update player mapping in rm
+    const reconnectSocket = { id: newVoterSockId };
+
+    // Reset fake time for strict window test on persistentId
+    fakeNow += 5000;
+    // Consume 3 quick requests on new socket
+    for (let i = 1; i <= 3; i++) {
+      handleSubmitVoteKick(reconnectSocket, { targetPlayerId: targetPid }, () => {}, deps);
+    }
+    // 4th request on new socket using same persistentId should be rate limited
+    let persistentLimitRes: any = null;
+    handleSubmitVoteKick(reconnectSocket, { targetPlayerId: targetPid }, (r: any) => { persistentLimitRes = r; }, deps);
+    assert(persistentLimitRes?.success === false && persistentLimitRes?.error === 'rate_limited', 'RL-17.5: Rate limit quota follows persistentId across socket reconnection');
+
+    // 17.6 No callback or non-function callback does not throw
+    let threwNoCb = false;
+    try {
+      handleSubmitVoteKick(mockSocket, { targetPlayerId: targetPid }, undefined, deps);
+    } catch (e) {
+      threwNoCb = true;
+    }
+    assert(!threwNoCb, 'RL-17.6: Missing callback does not throw when rate limited');
+
+  } finally {
+    Date.now = originalDateNow;
   }
-  assert(!threwNoCb, 'RL-17.4: Missing callback does not throw when rate limited');
 }
 
 // Teardown network sockets & server

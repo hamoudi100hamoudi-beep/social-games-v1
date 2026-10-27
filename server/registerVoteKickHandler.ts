@@ -3,8 +3,8 @@ import { checkRateLimit } from './rateLimit.js';
 export interface VoteKickDependencies {
   io: any;
   roomManager: any;
-  voteKickLimits?: Map<string, number[]>;
-  checkRateLimit?: typeof checkRateLimit;
+  voteKickLimits: Map<string, number[]>;
+  checkRateLimit: typeof checkRateLimit;
 }
 
 /**
@@ -52,13 +52,11 @@ export function handleSubmitVoteKick(
     }
 
     // Rate limit check: 3 requests per 2000ms using persistentId || socket.id
-    if (voteKickLimits && checkLimitFn) {
-      const rateLimitKey = player.persistentId || socket.id;
-      const allowed = checkLimitFn(voteKickLimits, rateLimitKey, 3, 2000);
-      if (!allowed) {
-        if (typeof callback === 'function') callback({ success: false, error: 'rate_limited' });
-        return;
-      }
+    const rateLimitKey = player.persistentId || socket.id;
+    const allowed = checkLimitFn(voteKickLimits, rateLimitKey, 3, 2000);
+    if (!allowed) {
+      if (typeof callback === 'function') callback({ success: false, error: 'rate_limited' });
+      return;
     }
 
     if (!room.votekicks) room.votekicks = {};
