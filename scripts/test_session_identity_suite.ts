@@ -3205,6 +3205,125 @@ console.log('\n--- Test Group 18: Rate-Limit Stale-Key Cleanup & Map Isolation T
   }
 }
 
+// -----------------------------------------------------------------
+// 19. SERVER-AUTH-FIX-3F.1: request_round_sync Rate Limiting & Isolation Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 19: request_round_sync Rate Limiting & Isolation Tests ---');
+{
+  const rm = new RoomManager();
+  const roomId = 'Sync-Test-Room';
+  rm.createRoom(roomId);
+
+  const playerPid = 'usr-sync-player-1';
+  const socket1Id = 'sock-sync-1';
+  const socket2Id = 'sock-sync-2';
+
+  rm.addPlayerToRoom(roomId, {
+    id: socket1Id,
+    name: 'SyncUser',
+    avatar: '🔄',
+    score: 0,
+    wins: 0,
+    roomId: roomId,
+    persistentId: playerPid,
+    isOffline: false
+  });
+
+  const roundSyncLimits = new Map<string, number[]>();
+  const mapChat = new Map<string, number[]>();
+  const mapGuess = new Map<string, number[]>();
+  const mapVote = new Map<string, number[]>();
+
+  let stateEmissionsCount = 0;
+  let historyEmissionsCount = 0;
+
+  const mockSocket1 = {
+    id: socket1Id,
+    emit: (ev: string) => {
+      if (ev === 'draw_history_sync') historyEmissionsCount++;
+    }
+  };
+
+  const mockRm: any = {
+    getPlayer: (sId: string) => rm.getPlayer(sId),
+    getRoom: (rId: string) => rm.getRoom(rId),
+    sendStateToPlayer: () => { stateEmissionsCount++; },
+    syncActiveFreeDrawStrokesToSocket: () => {}
+  };
+
+  const handleRequestRoundSync = (sock: any) => {
+    try {
+      const player = mockRm.getPlayer(sock.id);
+      if (player && player.roomId) {
+        const r = mockRm.getRoom(player.roomId);
+        if (r) {
+          const rateLimitKey = player.persistentId || sock.id;
+          if (!checkRateLimit(roundSyncLimits, rateLimitKey, 1, 1000)) {
+            return;
+          }
+          mockRm.sendStateToPlayer(r, player);
+          sock.emit('draw_history_sync', []);
+        }
+      }
+    } catch (e) {}
+  };
+
+  const originalDateNow = Date.now;
+  let fakeNow = 3000000;
+  Date.now = () => fakeNow;
+
+  try {
+    // 19.1 Unregistered socket or player without room does not trigger sync work
+    const ghostSocket = { id: 'sock-ghost-sync', emit: () => {} };
+    handleRequestRoundSync(ghostSocket);
+    assert(stateEmissionsCount === 0 && historyEmissionsCount === 0, 'SYNC-19.1: Unregistered socket ignores request without emissions');
+
+    // 19.2 First valid request succeeds and is not blocked
+    handleRequestRoundSync(mockSocket1);
+    assert(stateEmissionsCount === 1 && historyEmissionsCount === 1, 'SYNC-19.2: First request from valid player succeeds with sync emissions');
+
+    // 19.3 Rapid second request within 1000ms window is ignored (rate-limited)
+    handleRequestRoundSync(mockSocket1);
+    assert(stateEmissionsCount === 1 && historyEmissionsCount === 1, 'SYNC-19.3: Rapid second request within 1000ms window is ignored without duplicate emissions');
+
+    // 19.4 Cooldown expiration past 1000ms permits next request
+    fakeNow += 1001;
+    handleRequestRoundSync(mockSocket1);
+    assert(stateEmissionsCount === 2 && historyEmissionsCount === 2, 'SYNC-19.4: Request after 1001ms cooldown window succeeds');
+
+    // 19.5 Persistent ID rate limit continuity across socket reconnection
+    const mockSocket2 = {
+      id: socket2Id,
+      emit: (ev: string) => {
+        if (ev === 'draw_history_sync') historyEmissionsCount++;
+      }
+    };
+
+    // Reconnect player to socket2Id
+    const playerRecord = rm.getPlayerByPersistentId(playerPid);
+    if (playerRecord) {
+      (rm as any).players.delete(socket1Id);
+      playerRecord.player.id = socket2Id;
+      (rm as any).players.set(socket2Id, playerRecord.player);
+    }
+
+    // Immediately send request on socket2Id WITHOUT advancing time
+    handleRequestRoundSync(mockSocket2);
+    assert(stateEmissionsCount === 2 && historyEmissionsCount === 2, 'SYNC-19.5: Rate limit window follows persistentId across socket reconnection without time advance');
+
+    // 19.6 Map isolation
+    checkRateLimit(mapChat, playerPid, 5, 2000);
+    checkRateLimit(mapGuess, playerPid, 5, 2000);
+    checkRateLimit(mapVote, playerPid, 3, 2000);
+
+    assert(roundSyncLimits.has(playerPid), 'SYNC-19.6: roundSyncLimits tracks player key');
+    assert(mapChat.has(playerPid) && mapGuess.has(playerPid) && mapVote.has(playerPid), 'SYNC-19.6: All maps track keys independently');
+
+  } finally {
+    Date.now = originalDateNow;
+  }
+}
+
 // Teardown network sockets & server
 client1.disconnect();
 clientAttacker.disconnect();

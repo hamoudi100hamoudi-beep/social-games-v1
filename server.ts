@@ -119,6 +119,7 @@ async function startServer() {
   const chatMessageLimits = new Map<string, number[]>();
   const guessLimits = new Map<string, number[]>();
   const voteKickLimits = new Map<string, number[]>();
+  const roundSyncLimits = new Map<string, number[]>();
 
   function relayFreeDrawMove(
     roomId: string,
@@ -233,6 +234,10 @@ async function startServer() {
         if (player && player.roomId) {
           const room = roomManager.getRoom(player.roomId);
           if (room) {
+            const rateLimitKey = player.persistentId || socket.id;
+            if (!checkRateLimit(roundSyncLimits, rateLimitKey, 1, 1000)) {
+              return;
+            }
             roomManager.sendStateToPlayer(room, player);
             // Always emit draw_history_sync to guarantee the client's loader disappears instantly
             socket.emit('draw_history_sync', getJsonSafeHistory(room.gameState.drawHistory || []));
