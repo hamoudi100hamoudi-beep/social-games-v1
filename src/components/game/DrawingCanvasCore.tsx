@@ -15,6 +15,7 @@ import {
   decodeBinaryDrawMessage
 } from '../../utils/drawBinaryHelper';
 import { selectEvictionIndexMinimax } from '../../utils/bucketCheckpointPolicy';
+import { evaluateStateTransitionReset, GameStateSnapshot } from '../../utils/gameStateSyncHelper';
 
 // --- Constants ---
 /* 
@@ -5636,18 +5637,34 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   checkAndTriggerInitialSyncRef.current = checkAndTriggerInitialSync;
 
+  // 🛡️ Baseline establishment tracker: distinguishes initial room hydration from genuine turn changes
+  const hasEstablishedBaselineRef = useRef(false);
+
   // Universal Room State Tracker: guarantees room membership recognition
   useEffect(() => {
     if (!socket) return;
-    const onRoomState = () => {
+    const onRoomState = (state: any) => {
       isServerRoomJoinedRef.current = true;
+      // If the authoritative state from the server already matches current props
+      // (e.g. room was truly in WAITING when player joined), establish the baseline
+      // immediately so any subsequent transition (e.g. WAITING -> CHOOSING) is recognized
+      // as a genuine turn transition rather than initial hydration.
+      if (!hasEstablishedBaselineRef.current && state && state.gameState) {
+        const sStatus = state.gameState.status ?? '';
+        const sDrawer = state.gameState.currentDrawerId ?? null;
+        const currentDrawer = currentDrawerId ?? null;
+        const currentStat = status ?? '';
+        if (sStatus === currentStat && sDrawer === currentDrawer) {
+          hasEstablishedBaselineRef.current = true;
+        }
+      }
       checkAndTriggerInitialSync();
     };
     socket.on('room_state_update', onRoomState);
     return () => {
       socket.off('room_state_update', onRoomState);
     };
-  }, [socket]);
+  }, [socket, currentDrawerId, status]);
 
   // Readiness effect: triggers initial history fetch once room and canvas are confirmed ready
   useEffect(() => {
@@ -5675,6 +5692,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const handleDisconnect = () => {
       console.log("[DrawingCanvasCore] System connection lost.");
       isServerRoomJoinedRef.current = false;
+      hasEstablishedBaselineRef.current = false;
       if (initialSyncFallbackTimerRef.current) {
         clearTimeout(initialSyncFallbackTimerRef.current);
         initialSyncFallbackTimerRef.current = null;
@@ -5698,34 +5716,43 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [socket]);
 
   // Automated Clean Reset State on turn / drawer change
-  const previousStateRef = useRef({ currentDrawerId, status });
+  const previousStateRef = useRef<GameStateSnapshot>({ currentDrawerId, status });
   useEffect(() => {
-    if (previousStateRef.current.currentDrawerId !== currentDrawerId || previousStateRef.current.status !== status) {
-      if (previousStateRef.current.status === 'DRAWING' || status !== 'DRAWING' || previousStateRef.current.currentDrawerId !== currentDrawerId) {
-        fastForwardFlushSpectatorQueue();
-      }
-      if (hasSyncedOnce && !isSyncing) {
-        console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
-        if (deferredReset && status === 'DRAWING') {
-          // Defer heavy canvas clear/fill out of the critical transition frame
-          isResetPendingRef.current = true;
-          if (pendingResetRafRef.current !== null) {
-            cancelAnimationFrame(pendingResetRafRef.current);
-          }
-          pendingResetRafRef.current = requestAnimationFrame(() => {
-            pendingResetRafRef.current = null;
-            if (isResetPendingRef.current) {
-              isResetPendingRef.current = false;
-              executeResetState();
-            }
-          });
-        } else {
-          flushPendingReset();
-          executeResetState();
+    const evaluation = evaluateStateTransitionReset(
+      previousStateRef.current,
+      { currentDrawerId, status },
+      hasEstablishedBaselineRef.current,
+      hasSyncedOnce,
+      isSyncing
+    );
+
+    hasEstablishedBaselineRef.current = evaluation.hasEstablishedBaseline;
+    previousStateRef.current = evaluation.nextRecordedState;
+
+    if (evaluation.shouldFlushSpectatorQueue) {
+      fastForwardFlushSpectatorQueue();
+    }
+
+    if (evaluation.shouldResetCanvas) {
+      console.log(`[DrawingCanvasCore] Game state changed. Drawer: ${currentDrawerId}, Status: ${status}. Resetting canvas.`);
+      if (deferredReset && status === 'DRAWING') {
+        // Defer heavy canvas clear/fill out of the critical transition frame
+        isResetPendingRef.current = true;
+        if (pendingResetRafRef.current !== null) {
+          cancelAnimationFrame(pendingResetRafRef.current);
         }
+        pendingResetRafRef.current = requestAnimationFrame(() => {
+          pendingResetRafRef.current = null;
+          if (isResetPendingRef.current) {
+            isResetPendingRef.current = false;
+            executeResetState();
+          }
+        });
+      } else {
+        flushPendingReset();
+        executeResetState();
       }
     }
-    previousStateRef.current = { currentDrawerId, status };
   }, [currentDrawerId, status, hasSyncedOnce, isSyncing, deferredReset]);
 
   // --- HTML Canvas Initialization ---
