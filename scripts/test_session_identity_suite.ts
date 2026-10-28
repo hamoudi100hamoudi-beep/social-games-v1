@@ -3519,6 +3519,84 @@ console.log('\n--- Test Group 20: get_rooms_info Validation & Bounding Tests ---
     'ROOMS-20.10: Registered socket handler delivers valid room stats');
 }
 
+// -----------------------------------------------------------------
+// 21. SERVER-AUTH-FIX-3F.3: Obsolete request_kick Elimination Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 21: Obsolete request_kick Elimination Tests ---');
+{
+  const kickClient = await connectClient();
+  const kickPid = 'usr-kick-target-021';
+  const kickSecret = 'sec-kick-target-secret-12345678';
+  const kickRoomId = 'Net-Room-Kick-Test';
+  netRm.createRoom(kickRoomId);
+
+  const joinRes: any = await new Promise((res) => {
+    kickClient.emit('join_room', {
+      roomId: kickRoomId,
+      nickname: 'KickTarget',
+      playerId: kickPid,
+      reconnectSecret: kickSecret
+    }, res);
+  });
+  assert(joinRes.success === true, 'KICK-21.1: Target player successfully joined test room');
+
+  // Verify baseline
+  const targetRecordBefore = netRm.getPlayerByPersistentId(kickPid);
+  assert(targetRecordBefore !== null, 'KICK-21.1: Target player exists in RoomManager');
+  assert(targetRecordBefore?.player.roomId === kickRoomId, 'KICK-21.1: Target player is in kick test room');
+
+  const roomBefore = netRm.getRoom(kickRoomId);
+  assert(roomBefore !== undefined, 'KICK-21.1: Kick test room exists');
+  const chatCountBefore = roomBefore?.chatMessages?.length || 0;
+  const playerCountBefore = roomBefore?.players.length || 0;
+
+  let broadcastReceived = false;
+  const onMsg = (msg: any) => {
+    if (msg && typeof msg.text === 'string' && msg.text.includes('AFK')) {
+      broadcastReceived = true;
+    }
+  };
+  kickClient.on('receive_message', onMsg);
+  clientAttacker.on('receive_message', onMsg);
+
+  // 21.1 Malformed arguments (null, undefined, primitives) do not trigger server exception or crash
+  const malformedPayloads = [null, undefined, 12345, 'malformed_string', true, false, [], {}];
+  for (let i = 0; i < malformedPayloads.length; i++) {
+    clientAttacker.emit('request_kick', malformedPayloads[i]);
+  }
+
+  // Allow socket messages to process
+  await new Promise<void>((resolve) => setTimeout(resolve, 100));
+
+  assert(clientAttacker.connected === true, 'KICK-21.2: Attacker client remains connected after emitting malformed request_kick payloads');
+  assert(kickClient.connected === true, 'KICK-21.2: Target client remains connected');
+
+  // 21.2 Legacy request_kick emission cannot remove a player from their room
+  // Attacker attempts to kick target
+  clientAttacker.emit('request_kick', { roomId: kickRoomId, nickname: 'KickTarget', playerId: kickPid });
+  // Target's own socket attempts to invoke legacy request_kick
+  kickClient.emit('request_kick', { roomId: kickRoomId, nickname: 'KickTarget', playerId: kickPid });
+
+  await new Promise<void>((resolve) => setTimeout(resolve, 100));
+
+  const targetRecordAfter = netRm.getPlayerByPersistentId(kickPid);
+  assert(targetRecordAfter !== null, 'KICK-21.3: Target player is NOT removed by legacy request_kick');
+  assert(targetRecordAfter?.player.roomId === kickRoomId, 'KICK-21.3: Target roomId is unchanged and remains in room');
+  
+  const roomAfter = netRm.getRoom(kickRoomId);
+  assert(roomAfter?.players.length === playerCountBefore, 'KICK-21.3: Room player count unchanged');
+  assert(roomAfter?.players.some((p: any) => p.persistentId === kickPid) === true, 'KICK-21.3: Target remains in room player list');
+
+  // 21.3 No fabricated AFK system message was broadcast or saved
+  assert(broadcastReceived === false, 'KICK-21.4: Zero fabricated AFK system messages broadcast');
+  const chatCountAfter = roomAfter?.chatMessages?.length || 0;
+  assert(chatCountAfter === chatCountBefore, 'KICK-21.4: No chat messages added to room chat history');
+
+  kickClient.off('receive_message', onMsg);
+  clientAttacker.off('receive_message', onMsg);
+  kickClient.disconnect();
+}
+
 // Teardown network sockets & server
 client1.disconnect();
 clientAttacker.disconnect();

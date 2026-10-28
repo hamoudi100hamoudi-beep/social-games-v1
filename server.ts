@@ -314,33 +314,6 @@ async function startServer() {
       normalizeArabic,
     });
 
-    socket.on('request_kick', ({ roomId, nickname, playerId }, callback) => {
-      try {
-        console.warn(`[REQUEST KICK/AFK] Player ${nickname} (${playerId}) requested kick from room ${roomId}`);
-        const player = roomManager.getPlayer(socket.id);
-        if (player && player.roomId) {
-          const rId = player.roomId;
-          const room = roomManager.getRoom(rId);
-          if (room) {
-            roomManager.removePlayerFromRoom(rId, socket.id);
-            
-            const leaveMsg = {
-              id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-              text: `تم طرد ${nickname} بسبب عدم النشاط (AFK)`,
-              type: 'system'
-            };
-            roomManager.saveChatMessage(rId, leaveMsg);
-            io.to(rId).emit('receive_message', leaveMsg);
-          }
-          roomManager.removePlayer(socket.id);
-        }
-        if (callback) callback({ success: true });
-      } catch (e) {
-        console.error("Error in request_kick event:", e);
-        if (callback) callback({ error: e instanceof Error ? e.message : String(e) });
-      }
-    });
-
     registerVoteKickHandler(socket, {
       io,
       roomManager,
