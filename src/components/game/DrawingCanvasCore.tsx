@@ -5339,6 +5339,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         initialSyncFallbackTimerRef.current = null;
         console.log("[DrawingCanvasCore] Received draw_history_sync event. Cancelled fallback sync timer.");
       }
+      if (syncRetryTimeoutRef.current) {
+        clearTimeout(syncRetryTimeoutRef.current);
+        syncRetryTimeoutRef.current = null;
+      }
+      syncRetryCountRef.current = 0;
 
       const safeCommands = Array.isArray(commands) ? commands : [];
       console.log("[DrawingCanvasCore] Received draw_history_sync event, payload length:", safeCommands.length);
@@ -5540,6 +5545,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     };
   }, []);
 
+  const syncRetryCountRef = useRef(0);
+  const syncRetryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const startSyncFlow = () => {
     if (initialSyncFallbackTimerRef.current) {
       clearTimeout(initialSyncFallbackTimerRef.current);
@@ -5568,11 +5576,33 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       fallbackSyncInFlightRef.current = false;
       historySyncInProgressRef.current = false;
       setIsSyncing(false);
-      setHasSyncedOnce(true);
-      hasSyncedOnceRef.current = true;
     }, 4000);
 
-    socket?.emit('request_round_sync');
+    socket?.emit('request_round_sync', (res: any) => {
+      if (res && res.success === false && res.error === 'rate_limited') {
+        console.warn("[DrawingCanvasCore] Sync request rate-limited by server.");
+        if (syncTimeoutRef.current) {
+          clearTimeout(syncTimeoutRef.current);
+          syncTimeoutRef.current = null;
+        }
+        fallbackSyncInFlightRef.current = false;
+        setIsSyncing(false);
+
+        const MAX_RETRIES = 2;
+        if (syncRetryCountRef.current < MAX_RETRIES) {
+          syncRetryCountRef.current += 1;
+          const retryDelay = res.retryAfterMs || 1000;
+          console.log(`[DrawingCanvasCore] Scheduling sync retry #${syncRetryCountRef.current} in ${retryDelay}ms...`);
+          if (syncRetryTimeoutRef.current) {
+            clearTimeout(syncRetryTimeoutRef.current);
+          }
+          syncRetryTimeoutRef.current = setTimeout(() => {
+            syncRetryTimeoutRef.current = null;
+            startSyncFlow();
+          }, retryDelay);
+        }
+      }
+    });
   };
 
   const checkAndTriggerInitialSync = () => {
@@ -5682,6 +5712,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         clearTimeout(initialSyncFallbackTimerRef.current);
         initialSyncFallbackTimerRef.current = null;
       }
+      if (syncRetryTimeoutRef.current) {
+        clearTimeout(syncRetryTimeoutRef.current);
+        syncRetryTimeoutRef.current = null;
+      }
+      syncRetryCountRef.current = 0;
       fallbackSyncInFlightRef.current = false;
       historySyncInProgressRef.current = false;
       hasSyncedOnceRef.current = false;
@@ -5697,6 +5732,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         clearTimeout(initialSyncFallbackTimerRef.current);
         initialSyncFallbackTimerRef.current = null;
       }
+      if (syncRetryTimeoutRef.current) {
+        clearTimeout(syncRetryTimeoutRef.current);
+        syncRetryTimeoutRef.current = null;
+      }
+      syncRetryCountRef.current = 0;
       fallbackSyncInFlightRef.current = false;
       historySyncInProgressRef.current = false;
       setIsSyncing(true);
@@ -5711,6 +5751,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
         syncTimeoutRef.current = null;
+      }
+      if (syncRetryTimeoutRef.current) {
+        clearTimeout(syncRetryTimeoutRef.current);
+        syncRetryTimeoutRef.current = null;
       }
     };
   }, [socket]);

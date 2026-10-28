@@ -11,6 +11,7 @@ import { registerSendMessageHandler, handleSendMessage } from '../server/registe
 import { registerLeaveRoomHandler, handleLeaveRoom } from '../server/registerLeaveRoomHandler.js';
 import { registerDrawingIdentityHandlers } from '../server/registerDrawingIdentityHandlers.js';
 import { registerVoteKickHandler, handleSubmitVoteKick } from '../server/registerVoteKickHandler.js';
+import { registerRequestRoundSyncHandler, handleRequestRoundSync } from '../server/registerRequestRoundSyncHandler.js';
 import { checkRateLimit } from '../server/rateLimit.js';
 
 console.log('====================================================');
@@ -3206,25 +3207,27 @@ console.log('\n--- Test Group 18: Rate-Limit Stale-Key Cleanup & Map Isolation T
 }
 
 // -----------------------------------------------------------------
-// 19. SERVER-AUTH-FIX-3F.1: request_round_sync Rate Limiting & Isolation Tests
+// 19. SERVER-AUTH-FIX-3F.1: request_round_sync Rate Limiting & Recovery Tests
 // -----------------------------------------------------------------
-console.log('\n--- Test Group 19: request_round_sync Rate Limiting & Isolation Tests ---');
+console.log('\n--- Test Group 19: request_round_sync Rate Limiting & Recovery Tests ---');
 {
   const rm = new RoomManager();
-  const roomId = 'Sync-Test-Room';
-  rm.createRoom(roomId);
+  const roomIdA = 'Sync-Test-Room-A';
+  const roomIdB = 'Sync-Test-Room-B';
+  rm.createRoom(roomIdA);
+  rm.createRoom(roomIdB);
 
   const playerPid = 'usr-sync-player-1';
   const socket1Id = 'sock-sync-1';
   const socket2Id = 'sock-sync-2';
 
-  rm.addPlayerToRoom(roomId, {
+  rm.addPlayerToRoom(roomIdA, {
     id: socket1Id,
     name: 'SyncUser',
     avatar: '🔄',
     score: 0,
     wins: 0,
-    roomId: roomId,
+    roomId: roomIdA,
     persistentId: playerPid,
     isOffline: false
   });
@@ -3236,36 +3239,30 @@ console.log('\n--- Test Group 19: request_round_sync Rate Limiting & Isolation T
 
   let stateEmissionsCount = 0;
   let historyEmissionsCount = 0;
+  let lastHistoryPayload: any = null;
 
   const mockSocket1 = {
     id: socket1Id,
-    emit: (ev: string) => {
-      if (ev === 'draw_history_sync') historyEmissionsCount++;
+    emit: (ev: string, data?: any) => {
+      if (ev === 'draw_history_sync') {
+        historyEmissionsCount++;
+        lastHistoryPayload = data;
+      }
     }
   };
 
-  const mockRm: any = {
-    getPlayer: (sId: string) => rm.getPlayer(sId),
-    getRoom: (rId: string) => rm.getRoom(rId),
-    sendStateToPlayer: () => { stateEmissionsCount++; },
-    syncActiveFreeDrawStrokesToSocket: () => {}
-  };
+  const getJsonSafeHistory = (h: any[]) => h || [];
 
-  const handleRequestRoundSync = (sock: any) => {
-    try {
-      const player = mockRm.getPlayer(sock.id);
-      if (player && player.roomId) {
-        const r = mockRm.getRoom(player.roomId);
-        if (r) {
-          const rateLimitKey = player.persistentId || sock.id;
-          if (!checkRateLimit(roundSyncLimits, rateLimitKey, 1, 1000)) {
-            return;
-          }
-          mockRm.sendStateToPlayer(r, player);
-          sock.emit('draw_history_sync', []);
-        }
-      }
-    } catch (e) {}
+  const deps = {
+    roomManager: {
+      getPlayer: (sId: string) => rm.getPlayer(sId),
+      getRoom: (rId: string) => rm.getRoom(rId),
+      sendStateToPlayer: () => { stateEmissionsCount++; },
+      syncActiveFreeDrawStrokesToSocket: () => {}
+    },
+    roundSyncLimits,
+    checkRateLimit,
+    getJsonSafeHistory
   };
 
   const originalDateNow = Date.now;
@@ -3275,31 +3272,68 @@ console.log('\n--- Test Group 19: request_round_sync Rate Limiting & Isolation T
   try {
     // 19.1 Unregistered socket or player without room does not trigger sync work
     const ghostSocket = { id: 'sock-ghost-sync', emit: () => {} };
-    handleRequestRoundSync(ghostSocket);
+    let ghostCbRes: any = null;
+    handleRequestRoundSync(ghostSocket, (r: any) => { ghostCbRes = r; }, deps);
     assert(stateEmissionsCount === 0 && historyEmissionsCount === 0, 'SYNC-19.1: Unregistered socket ignores request without emissions');
+    assert(ghostCbRes === null, 'SYNC-19.1: Callback not invoked for unregistered socket');
 
-    // 19.2 First valid request succeeds and is not blocked
-    handleRequestRoundSync(mockSocket1);
-    assert(stateEmissionsCount === 1 && historyEmissionsCount === 1, 'SYNC-19.2: First request from valid player succeeds with sync emissions');
+    // 19.2 Valid initial sync succeeds and invokes callback({ success: true })
+    let sync1Res: any = null;
+    handleRequestRoundSync(mockSocket1, (r: any) => { sync1Res = r; }, deps);
+    assert(stateEmissionsCount === 1 && historyEmissionsCount === 1, 'SYNC-19.2: First valid request produces sync emissions');
+    assert(sync1Res?.success === true, 'SYNC-19.2: First valid request invokes callback({ success: true })');
 
-    // 19.3 Rapid second request within 1000ms window is ignored (rate-limited)
-    handleRequestRoundSync(mockSocket1);
-    assert(stateEmissionsCount === 1 && historyEmissionsCount === 1, 'SYNC-19.3: Rapid second request within 1000ms window is ignored without duplicate emissions');
+    // 19.3 Rate-limited sync request within 1000ms window invokes callback({ success: false, error: 'rate_limited', retryAfterMs: 1000 })
+    let sync2Res: any = null;
+    handleRequestRoundSync(mockSocket1, (r: any) => { sync2Res = r; }, deps);
+    assert(stateEmissionsCount === 1 && historyEmissionsCount === 1, 'SYNC-19.3: Rate-limited request suppresses duplicate sync emissions');
+    assert(sync2Res?.success === false && sync2Res?.error === 'rate_limited' && sync2Res?.retryAfterMs === 1000,
+      'SYNC-19.3: Rate-limited request returns error: rate_limited via callback');
 
-    // 19.4 Cooldown expiration past 1000ms permits next request
+    // 19.4 Legacy callers without callback execute safely
+    let legacyThrew = false;
+    try {
+      handleRequestRoundSync(mockSocket1, undefined, deps); // rate limited call without cb
+    } catch (e) {
+      legacyThrew = true;
+    }
+    assert(!legacyThrew, 'SYNC-19.4: Legacy caller without callback executes safely when rate-limited');
+
     fakeNow += 1001;
-    handleRequestRoundSync(mockSocket1);
-    assert(stateEmissionsCount === 2 && historyEmissionsCount === 2, 'SYNC-19.4: Request after 1001ms cooldown window succeeds');
+    try {
+      handleRequestRoundSync(mockSocket1, undefined, deps); // allowed call without cb
+    } catch (e) {
+      legacyThrew = true;
+    }
+    assert(!legacyThrew, 'SYNC-19.4: Legacy caller without callback executes safely when allowed');
+    assert(stateEmissionsCount === 2 && historyEmissionsCount === 2, 'SYNC-19.4: Allowed legacy request produces emissions');
 
-    // 19.5 Persistent ID rate limit continuity across socket reconnection
+    // 19.5 Room-scoped key isolation: leaving Room A and joining Room B allows immediate sync in Room B
+    (rm as any).players.delete(socket1Id);
+    rm.addPlayerToRoom(roomIdB, {
+      id: socket1Id,
+      name: 'SyncUser',
+      avatar: '🔄',
+      score: 0,
+      wins: 0,
+      roomId: roomIdB,
+      persistentId: playerPid,
+      isOffline: false
+    });
+
+    let roomBSyncRes: any = null;
+    handleRequestRoundSync(mockSocket1, (r: any) => { roomBSyncRes = r; }, deps);
+    assert(roomBSyncRes?.success === true, 'SYNC-19.5: Room-scoped key allows immediate sync when joining new Room B');
+    assert(stateEmissionsCount === 3 && historyEmissionsCount === 3, 'SYNC-19.5: Sync emissions produced for Room B');
+
+    // 19.6 PersistentId rate-limit continuity across socket reconnection within SAME room
     const mockSocket2 = {
       id: socket2Id,
-      emit: (ev: string) => {
+      emit: (ev: string, data?: any) => {
         if (ev === 'draw_history_sync') historyEmissionsCount++;
       }
     };
 
-    // Reconnect player to socket2Id
     const playerRecord = rm.getPlayerByPersistentId(playerPid);
     if (playerRecord) {
       (rm as any).players.delete(socket1Id);
@@ -3307,17 +3341,23 @@ console.log('\n--- Test Group 19: request_round_sync Rate Limiting & Isolation T
       (rm as any).players.set(socket2Id, playerRecord.player);
     }
 
-    // Immediately send request on socket2Id WITHOUT advancing time
-    handleRequestRoundSync(mockSocket2);
-    assert(stateEmissionsCount === 2 && historyEmissionsCount === 2, 'SYNC-19.5: Rate limit window follows persistentId across socket reconnection without time advance');
+    let reconRes: any = null;
+    handleRequestRoundSync(mockSocket2, (r: any) => { reconRes = r; }, deps);
+    assert(reconRes?.success === false && reconRes?.error === 'rate_limited',
+      'SYNC-19.6: PersistentId rate limit quota maintained across socket reconnection in SAME room');
 
-    // 19.6 Map isolation
-    checkRateLimit(mapChat, playerPid, 5, 2000);
-    checkRateLimit(mapGuess, playerPid, 5, 2000);
-    checkRateLimit(mapVote, playerPid, 3, 2000);
+    // 19.7 Map isolation
+    checkRateLimit(mapChat, `${roomIdB}:${playerPid}`, 5, 2000);
+    checkRateLimit(mapGuess, `${roomIdB}:${playerPid}`, 5, 2000);
+    checkRateLimit(mapVote, `${roomIdB}:${playerPid}`, 3, 2000);
 
-    assert(roundSyncLimits.has(playerPid), 'SYNC-19.6: roundSyncLimits tracks player key');
-    assert(mapChat.has(playerPid) && mapGuess.has(playerPid) && mapVote.has(playerPid), 'SYNC-19.6: All maps track keys independently');
+    const roomBKey = `${roomIdB}:${playerPid}`;
+    assert(roundSyncLimits.has(roomBKey), 'SYNC-19.7: roundSyncLimits tracks room-scoped key');
+    assert(mapChat.has(roomBKey) && mapGuess.has(roomBKey) && mapVote.has(roomBKey), 'SYNC-19.7: All maps track keys independently');
+
+    // 19.8 Empty history payload [] is a valid history sync
+    assert(Array.isArray(lastHistoryPayload) && lastHistoryPayload.length === 0,
+      'SYNC-19.8: Valid empty history [] emitted on sync for fresh room');
 
   } finally {
     Date.now = originalDateNow;

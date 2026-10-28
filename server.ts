@@ -12,6 +12,7 @@ import { registerDrawBinaryHandler } from './server/registerDrawBinaryHandler.js
 import { registerSubmitGuessHandler } from './server/registerSubmitGuessHandler.js';
 import { registerSelectWordHandler } from './server/registerSelectWordHandler.js';
 import { registerSendMessageHandler } from './server/registerSendMessageHandler.js';
+import { registerRequestRoundSyncHandler } from './server/registerRequestRoundSyncHandler.js';
 import { registerLeaveRoomHandler } from './server/registerLeaveRoomHandler.js';
 import { registerDrawingIdentityHandlers } from './server/registerDrawingIdentityHandlers.js';
 import { registerVoteKickHandler } from './server/registerVoteKickHandler.js';
@@ -228,26 +229,11 @@ async function startServer() {
       getJsonSafeHistory,
     });
 
-    socket.on('request_round_sync', () => {
-      try {
-        const player = roomManager.getPlayer(socket.id);
-        if (player && player.roomId) {
-          const room = roomManager.getRoom(player.roomId);
-          if (room) {
-            const rateLimitKey = player.persistentId || socket.id;
-            if (!checkRateLimit(roundSyncLimits, rateLimitKey, 1, 1000)) {
-              return;
-            }
-            roomManager.sendStateToPlayer(room, player);
-            // Always emit draw_history_sync to guarantee the client's loader disappears instantly
-            socket.emit('draw_history_sync', getJsonSafeHistory(room.gameState.drawHistory || []));
-            socket.emit('draw_redo_sync', getJsonSafeHistory(room.gameState.redoStack || []));
-            roomManager.syncActiveFreeDrawStrokesToSocket(room, socket);
-          }
-        }
-      } catch (e) {
-        console.error("Error in request_round_sync:", e);
-      }
+    registerRequestRoundSyncHandler(socket, {
+      roomManager,
+      roundSyncLimits,
+      checkRateLimit,
+      getJsonSafeHistory,
     });
 
     registerLeaveRoomHandler(socket, {
