@@ -12,6 +12,8 @@ import { registerLeaveRoomHandler, handleLeaveRoom } from '../server/registerLea
 import { registerDrawingIdentityHandlers } from '../server/registerDrawingIdentityHandlers.js';
 import { registerVoteKickHandler, handleSubmitVoteKick } from '../server/registerVoteKickHandler.js';
 import { registerRequestRoundSyncHandler, handleRequestRoundSync } from '../server/registerRequestRoundSyncHandler.js';
+import { registerGetRoomsInfoHandler, handleGetRoomsInfo, MAX_REQUESTED_ROOM_IDS } from '../server/registerGetRoomsInfoHandler.js';
+import { getRoomConfig, ROOM_PRESETS } from '../src/types/game.js';
 import { checkRateLimit } from '../server/rateLimit.js';
 
 console.log('====================================================');
@@ -3362,6 +3364,159 @@ console.log('\n--- Test Group 19: request_round_sync Rate Limiting & Recovery Te
   } finally {
     Date.now = originalDateNow;
   }
+}
+
+// -----------------------------------------------------------------
+// 20. SERVER-AUTH-FIX-3F.2: get_rooms_info Validation & Bounding Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 20: get_rooms_info Validation & Bounding Tests ---');
+{
+  const rm = new RoomManager();
+  const deps = {
+    roomManager: rm,
+    getRoomConfig,
+    ROOM_PRESETS,
+  };
+
+  // 20.1 Callback-only Lobby request returns statistics for all preset rooms
+  let lobbyStats: any = null;
+  const lobbyResult = handleGetRoomsInfo((data: any) => { lobbyStats = data; }, undefined, deps);
+  assert(lobbyStats !== null, 'ROOMS-20.1: Callback invoked for callback-only Lobby request');
+  assert(lobbyResult === lobbyStats, 'ROOMS-20.1: handleGetRoomsInfo returns the same stats object passed to callback');
+  for (const preset of ROOM_PRESETS) {
+    const entry = lobbyStats[preset.id];
+    assert(entry !== undefined, `ROOMS-20.1: Preset "${preset.id}" is present in Lobby stats`);
+    assert(typeof entry.count === 'number' && typeof entry.max === 'number' && typeof entry.winningScore === 'number' && typeof entry.theme === 'string',
+      `ROOMS-20.1: Preset "${preset.id}" has valid schema { count, max, winningScore, theme }`);
+  }
+
+  // 20.2 Valid room-ID arrays return the expected statistics
+  let arrayStats: any = null;
+  handleGetRoomsInfo(['General #Test', 'Free Draw'], (data: any) => { arrayStats = data; }, deps);
+  assert(arrayStats !== null, 'ROOMS-20.2: Callback invoked for valid room-ID array');
+  assert(arrayStats['General #Test'] !== undefined && arrayStats['Free Draw'] !== undefined,
+    'ROOMS-20.2: Specified rooms returned in stats');
+  assert(Object.keys(arrayStats).length === 2, 'ROOMS-20.2: Exactly 2 rooms returned');
+
+  // 20.3 Non-string, null, arrays, objects, empty, whitespace, and overlong IDs handled without throwing
+  const malformedInputs = [
+    123,
+    null,
+    undefined,
+    [],
+    {},
+    '',
+    '   ',
+    'a'.repeat(101),
+    true,
+    false,
+  ];
+  let malformedStats: any = null;
+  let malformedThrew = false;
+  try {
+    handleGetRoomsInfo(malformedInputs as any, (data: any) => { malformedStats = data; }, deps);
+  } catch (e) {
+    malformedThrew = true;
+  }
+  assert(!malformedThrew, 'ROOMS-20.3: Malformed inputs handled without throwing');
+  assert(malformedStats !== null, 'ROOMS-20.3: Callback invoked even when all array items are invalid');
+  assert(Object.keys(malformedStats).length === 0, 'ROOMS-20.3: All malformed items skipped safely (empty stats)');
+
+  // 20.4 An invalid element does not wipe other valid elements in the same array
+  const mixedArray = [123, 'General #Test', null, 'Free Draw', 'a'.repeat(101), '   '];
+  let mixedStats: any = null;
+  handleGetRoomsInfo(mixedArray as any, (data: any) => { mixedStats = data; }, deps);
+  assert(mixedStats !== null, 'ROOMS-20.4: Mixed array callback invoked');
+  assert(mixedStats['General #Test'] !== undefined && mixedStats['Free Draw'] !== undefined,
+    'ROOMS-20.4: Valid IDs in mixed array are preserved and returned');
+  assert(Object.keys(mixedStats).length === 2, 'ROOMS-20.4: Invalid items in mixed array filtered out without wiping valid ones');
+
+  // 20.5 Oversized raw arrays are bounded to at most MAX_REQUESTED_ROOM_IDS (10)
+  assert(MAX_REQUESTED_ROOM_IDS === 10, 'ROOMS-20.5: MAX_REQUESTED_ROOM_IDS constant is 10');
+  const oversizedRooms: string[] = [];
+  for (let i = 0; i < 15; i++) {
+    const customId = `Bound-Room-${i}`;
+    rm.createRoom(customId);
+    oversizedRooms.push(customId);
+  }
+  let boundedStats: any = null;
+  handleGetRoomsInfo(oversizedRooms, (data: any) => { boundedStats = data; }, deps);
+  assert(Object.keys(boundedStats).length === 10, 'ROOMS-20.5: Exactly 10 rooms returned from 15-room input');
+  for (let i = 0; i < 10; i++) {
+    assert(boundedStats[`Bound-Room-${i}`] !== undefined, `ROOMS-20.5: Item ${i} included in bounded output`);
+  }
+  assert(boundedStats['Bound-Room-10'] === undefined && boundedStats['Bound-Room-11'] === undefined,
+    'ROOMS-20.5: Items beyond index 9 sliced off before processing');
+
+  // Huge array stress test (500 items)
+  const hugeArray = new Array(500).fill('General #Test');
+  let hugeStats: any = null;
+  let hugeThrew = false;
+  try {
+    handleGetRoomsInfo(hugeArray, (data: any) => { hugeStats = data; }, deps);
+  } catch (e) {
+    hugeThrew = true;
+  }
+  assert(!hugeThrew, 'ROOMS-20.5: 500-item array handled without throwing');
+  assert(Object.keys(hugeStats).length <= 10, 'ROOMS-20.5: Huge array bounded within 10 entries');
+
+  // 20.6 Duplicate IDs do not trigger duplicate processing
+  const duplicates = ['General #Test', 'general #test', '  General #Test  ', 'GENERAL #TEST'];
+  let dedupeStats: any = null;
+  handleGetRoomsInfo(duplicates, (data: any) => { dedupeStats = data; }, deps);
+  assert(Object.keys(dedupeStats).length === 1, 'ROOMS-20.6: Duplicate case-insensitive IDs collapsed to 1 entry');
+  assert(dedupeStats['General #Test'] !== undefined, 'ROOMS-20.6: First canonical key preserved');
+
+  // 20.7 Valid aliases and existing custom room IDs remain compatible
+  rm.createRoom('Custom-Verified-Room');
+  const aliasAndCustom = ['general', '10p', 'free', 'Custom-Verified-Room'];
+  let aliasStats: any = null;
+  handleGetRoomsInfo(aliasAndCustom, (data: any) => { aliasStats = data; }, deps);
+  assert(aliasStats['general'] !== undefined, 'ROOMS-20.7: Alias "general" supported');
+  assert(aliasStats['10p'] !== undefined, 'ROOMS-20.7: Alias "10p" supported');
+  assert(aliasStats['free'] !== undefined, 'ROOMS-20.7: Alias "free" supported');
+  assert(aliasStats['Custom-Verified-Room'] !== undefined, 'ROOMS-20.7: Existing custom room supported');
+
+  // 20.8 Missing or non-function callbacks do not throw
+  let noCbThrew = false;
+  try {
+    handleGetRoomsInfo(null, null, deps);
+    handleGetRoomsInfo(['General #Test'], null, deps);
+    handleGetRoomsInfo(['General #Test'], 'not-a-function', deps);
+    handleGetRoomsInfo(undefined, undefined, deps);
+  } catch (e) {
+    noCbThrew = true;
+  }
+  assert(!noCbThrew, 'ROOMS-20.8: Missing or non-function callbacks do not throw');
+
+  // 20.9 Special object-property names cannot mutate prototype
+  const prototypePayload = ['__proto__', 'constructor', 'prototype', 'toString', 'valueOf'];
+  let protoStats: any = null;
+  handleGetRoomsInfo(prototypePayload, (data: any) => { protoStats = data; }, deps);
+  assert(Object.getPrototypeOf(protoStats) === null, 'ROOMS-20.9: Result object has null prototype');
+  assert((({} as any).polluted === undefined), 'ROOMS-20.9: Object prototype is not polluted');
+  assert(!Object.prototype.hasOwnProperty('polluted'), 'ROOMS-20.9: Global Object prototype has no foreign properties');
+
+  // 20.10 Socket event registration integration via registerGetRoomsInfoHandler
+  let socketCallbackCalled = false;
+  let socketStatsData: any = null;
+  const mockRegisteredSocket: any = {
+    handlers: new Map<string, Function>(),
+    on(event: string, fn: Function) {
+      this.handlers.set(event, fn);
+    }
+  };
+  registerGetRoomsInfoHandler(mockRegisteredSocket, deps);
+  assert(mockRegisteredSocket.handlers.has('get_rooms_info'), 'ROOMS-20.10: get_rooms_info handler registered on socket');
+
+  const registeredFn = mockRegisteredSocket.handlers.get('get_rooms_info')!;
+  registeredFn(['General #Test'], (res: any) => {
+    socketCallbackCalled = true;
+    socketStatsData = res;
+  });
+  assert(socketCallbackCalled, 'ROOMS-20.10: Registered handler successfully invokes callback on socket emission');
+  assert(socketStatsData && socketStatsData['General #Test'] !== undefined,
+    'ROOMS-20.10: Registered socket handler delivers valid room stats');
 }
 
 // Teardown network sockets & server
