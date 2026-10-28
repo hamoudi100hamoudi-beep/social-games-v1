@@ -3117,6 +3117,94 @@ console.log('\n--- Test Group 17: Vote-Kick Rate Limiting Tests ---');
   }
 }
 
+// -----------------------------------------------------------------
+// 18. SERVER-AUTH-FIX-3D.1: Rate-Limit Stale-Key Cleanup & Map Isolation Tests
+// -----------------------------------------------------------------
+console.log('\n--- Test Group 18: Rate-Limit Stale-Key Cleanup & Map Isolation Tests ---');
+{
+  const originalDateNow = Date.now;
+  let fakeNow = 2000000; // > 10,000 to ensure initial time-gated sweep fires
+  Date.now = () => fakeNow;
+
+  try {
+    // A. Stale key never reused
+    {
+      const testMap = new Map<string, number[]>();
+      testMap.set('stale-user-1', [fakeNow - 5000, fakeNow - 4000]); // > 2000ms old
+
+      // Call checkRateLimit on a different key ('trigger-user')
+      const allowed = checkRateLimit(testMap, 'trigger-user', 5, 2000);
+      assert(allowed === true, 'CLEANUP-18.A: Trigger request allowed on fresh key');
+      assert(!testMap.has('stale-user-1'), 'CLEANUP-18.A: Stale key never reused was automatically pruned from map during sweep');
+    }
+
+    // B. Active entry retention
+    {
+      const testMap = new Map<string, number[]>();
+      // Insert an active key with 5 active timestamps (at max limit)
+      const activeTimestamps = [fakeNow - 1000, fakeNow - 800, fakeNow - 600, fakeNow - 400, fakeNow - 200];
+      testMap.set('active-user-1', [...activeTimestamps]);
+
+      // Trigger cleanup via a different key
+      checkRateLimit(testMap, 'trigger-user', 5, 2000);
+
+      assert(testMap.has('active-user-1'), 'CLEANUP-18.B: Active key retained during sweep');
+      assert(testMap.get('active-user-1')?.length === 5, 'CLEANUP-18.B: Active timestamps remain intact');
+
+      // Verify active user is still rate limited
+      const activeAllowed = checkRateLimit(testMap, 'active-user-1', 5, 2000);
+      assert(activeAllowed === false, 'CLEANUP-18.B: Active entry at limit remains rate-limited after sweep');
+    }
+
+    // C. Cleanup interval (time-gated throttling at 10,000ms)
+    {
+      const testMap = new Map<string, number[]>();
+      // First call triggers sweep at fakeNow (lastSweep = fakeNow)
+      checkRateLimit(testMap, 'trigger-user-1', 5, 2000);
+
+      // Insert a new stale key AFTER the first sweep
+      testMap.set('stale-user-2', [fakeNow - 5000]);
+
+      // Advance clock by only 1000ms (< 10000ms interval)
+      fakeNow += 1000;
+      checkRateLimit(testMap, 'trigger-user-2', 5, 2000);
+
+      // Stale key should NOT be pruned yet because 10,000ms interval has not elapsed
+      assert(testMap.has('stale-user-2'), 'CLEANUP-18.C: Sweep skipped within 10,000ms interval window');
+
+      // Advance clock past 10,000ms interval (now + 10,001ms)
+      fakeNow += 10001;
+      checkRateLimit(testMap, 'trigger-user-3', 5, 2000);
+
+      // Sweep should fire now and prune stale-user-2
+      assert(!testMap.has('stale-user-2'), 'CLEANUP-18.C: Subsequent request past 10,000ms interval triggers sweep and prunes stale key');
+    }
+
+    // D. Map isolation
+    {
+      const mapChat = new Map<string, number[]>();
+      const mapGuess = new Map<string, number[]>();
+      const mapVote = new Map<string, number[]>();
+
+      const sharedKey = 'usr-shared-identity';
+
+      // Insert stale timestamps into mapChat
+      mapChat.set(sharedKey, [fakeNow - 8000]);
+      // Insert active timestamps into mapGuess
+      mapGuess.set(sharedKey, [fakeNow - 100]);
+
+      // Trigger sweep on mapChat
+      checkRateLimit(mapChat, 'trigger-chat-key', 5, 2000);
+
+      assert(!mapChat.has(sharedKey), 'CLEANUP-18.D: Stale entry in mapChat deleted');
+      assert(mapGuess.has(sharedKey), 'CLEANUP-18.D: Active entry in mapGuess untouched by mapChat sweep');
+      assert(!mapVote.has(sharedKey), 'CLEANUP-18.D: mapVote remains completely isolated and empty');
+    }
+  } finally {
+    Date.now = originalDateNow;
+  }
+}
+
 // Teardown network sockets & server
 client1.disconnect();
 clientAttacker.disconnect();
