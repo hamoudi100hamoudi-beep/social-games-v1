@@ -75,6 +75,7 @@ export const ROOM_PRESETS: RoomConfig[] = [
     theme: 'General',
     maxPlayers: 5,
     winningScore: 30,
+    isExperimental: true,
   },
   {
     id: 'General #10P',
@@ -83,6 +84,7 @@ export const ROOM_PRESETS: RoomConfig[] = [
     theme: 'General',
     maxPlayers: 10,
     winningScore: 120,
+    isExperimental: true,
   },
   {
     id: 'Free Draw',
