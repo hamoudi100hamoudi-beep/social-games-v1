@@ -92,22 +92,28 @@ assert.strictEqual(checkCanonicalPipeline(roomExp), true, 'Experimental Draw use
 assert.strictEqual(checkCanonicalPipeline(roomFree), true, 'Free Draw uses canonical pipeline (Type 13 / Type 9)');
 console.log('✅ PASS: All competitive rooms and Free Draw utilize canonical draw pipeline on server');
 
-// 5. Safe Transition Preservation Verification (No Legacy Deletions)
-console.log('\n--- 5. Legacy Code & File Preservation Verification ---');
-const legacyFiles = [
+// 5. Active Architecture Preservation & Retired Component Verification (LEGACY-1C-B)
+console.log('\n--- 5. Active Architecture Preservation & Retired Component Verification ---');
+const activeArchitectureFiles = [
   'src/components/GameRoom.tsx',
-  'src/components/DrawingBoard.tsx',
   'src/components/game/DrawingCanvasCore.tsx',
   'src/components/experimental/ExperimentalGameRoom.tsx',
+  'src/components/experimental/ExperimentalDrawingBoard.tsx',
+  'src/components/experimental/IsolatedDrawingLayer.tsx',
 ];
 
-for (const relPath of legacyFiles) {
+for (const relPath of activeArchitectureFiles) {
   const fullPath = path.resolve(relPath);
-  assert(fs.existsSync(fullPath), `Legacy/existing file ${relPath} must exist and NOT be deleted`);
+  assert(fs.existsSync(fullPath), `Active file ${relPath} must exist`);
   const stat = fs.statSync(fullPath);
   assert(stat.size > 0, `File ${relPath} is non-empty (${stat.size} bytes)`);
   console.log(`✅ PASS: ${relPath} preserved intact (${stat.size} bytes)`);
 }
+
+// Explicitly assert that superseded legacy DrawingBoard.tsx has been retired
+const retiredDrawingBoard = path.resolve('src/components/DrawingBoard.tsx');
+assert(!fs.existsSync(retiredDrawingBoard), 'Superseded legacy DrawingBoard.tsx must be retired (does not exist)');
+console.log('✅ PASS: src/components/DrawingBoard.tsx verified cleanly retired (does not exist)');
 
 // 6. App.tsx Component Routing Verification
 console.log('\n--- 6. Client App.tsx Component Selection ---');

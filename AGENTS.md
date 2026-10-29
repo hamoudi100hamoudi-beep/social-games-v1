@@ -35,10 +35,10 @@ This document governs the physical rules and logical invariants of the Drawing a
 - **Location**: `src/components/game/DrawingCanvasCore.tsx`
 - **Rule**:
   - Visual layers: The canvas rendering flow isolates active, real-time drawings from finalized historic paths. Do not consolidate state dependencies directly into inline styles or components to avoid high frame skips.
-  - **Palette Selection in DrawingBoard**: The active selection ring/indicator is designed to be thinner (`border-[1.5px]`), slightly larger (`-inset-[3px]` outline) with an elegant Gold shade (`#D4AF37`) and subtle glow. Keep this presentation clean and visually distinct from standard yellow or drawing palette grids.
+  - **Palette Selection in ExperimentalDrawingBoard**: The active selection ring/indicator is designed to be thinner (`border-[1.5px]`), slightly larger (`-inset-[3px]` outline) with an elegant Gold shade (`#D4AF37`) and subtle glow. Keep this presentation clean and visually distinct from standard yellow or drawing palette grids.
 - **القاعدة**:
   - لوحة الرسم معزولة لضمان أداء 60 إطاراً بالثانية للأجهزة الضعيفة.
-  - تم تمييز لون تحديدPalette الألوان المحددة بحلقة ذهبية ممتازة (#D4AF37) أوسع وأنحف من المربعات العادية لمنع تدمير الرؤية البصرية للألوان وخاصة تداخله مع اللون الأصفر.
+  - تم تمييز لون تحديد Palette في ExperimentalDrawingBoard بحلقة ذهبية ممتازة (#D4AF37) أوسع وأنحف من المربعات العادية لمنع تدمير الرؤية البصرية للألوان وخاصة تداخله مع اللون الأصفر.
 
 ---
 
