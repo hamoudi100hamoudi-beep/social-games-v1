@@ -258,43 +258,6 @@ export const UnreadBadge = React.memo(
   ),
 );
 
-// 🎬 2️⃣ Cinematic Flow & Stagger Animation Variants
-const cinematicCardVariants = {
-  hidden: { opacity: 0, scale: 0.94, y: 40 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    y: 0,
-    transition: {
-      duration: 0.45,
-      ease: [0.16, 1, 0.3, 1],
-      staggerChildren: 0.06,
-      delayChildren: 0.05
-    }
-  },
-  exit: {
-    opacity: 0,
-    scale: 0.94,
-    y: -25,
-    transition: {
-      duration: 0.25,
-      ease: [0.7, 0, 0.84, 0]
-    }
-  }
-};
-
-const cinematicItemVariants = {
-  hidden: { opacity: 0, y: 15, scale: 0.97 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      duration: 0.4,
-      ease: [0.16, 1, 0.3, 1]
-    }
-  }
-};
 
 export default function GameRoom({
   nickname,
@@ -456,47 +419,6 @@ export default function GameRoom({
     isChatOpenRef.current = isChatOpen;
   }, [isChatOpen]);
 
-  const confettis = React.useMemo(() => {
-    if (gameState.status !== "PODIUM") return [];
-    const colors = [
-      'bg-yellow-400', 'bg-red-400', 'bg-green-400', 'bg-blue-400', 
-      'bg-pink-400', 'bg-orange-400', 'bg-purple-400', 'bg-teal-400', 'bg-amber-300'
-    ];
-    return Array.from({ length: 120 }).map((_, i) => {
-      const wave = Math.floor(i / 40); // 3 waves of 40 particles
-      const angleDeg = -90 + (Math.random() * 140 - 70); // -160deg to -20deg (upwards)
-      const angleRad = (angleDeg * Math.PI) / 180;
-      
-      const forceX = Math.random() * 45 + 10; // vw scale
-      const forceY = Math.random() * 40 + 55; // vh scale
-      
-      const tx = Math.sin(angleRad) * forceX;
-      const ty = -Math.cos(angleRad) * forceY;
-      
-      const size = Math.random() * 10 + 6;
-      // Delay: Wave 0 @ 2.2s, Wave 1 @ 5.7s, Wave 2 @ 9.2s...
-      const delay = 2.2 + wave * 3.5 + Math.random() * 0.4;
-      const duration = Math.random() * 1.5 + 2.5; // snappier explosion and fall
-      const color = colors[i % colors.length];
-      const isRound = Math.random() > 0.4;
-      const rotation = Math.random() * 720 + 360;
-      const drift = Math.random() * 20 - 10; // wind drift in vw
-      
-      return { 
-        id: i, 
-        tx: `${tx}vw`, 
-        ty: `${ty}vh`, 
-        drift: `${drift}vw`,
-        size, 
-        delay, 
-        duration, 
-        color, 
-        isRound, 
-        rotation: `${rotation}deg` 
-      };
-    });
-  }, [gameState.status]);
-
   const [selectedProfilePlayer, setSelectedProfilePlayer] = useState<any>(null);
   const lastActiveProfilePlayerRef = React.useRef<any>(null);
 
@@ -622,16 +544,6 @@ export default function GameRoom({
     }
     return gameState.currentDrawerId === socketId;
   }, [isFreeDraw, activeDrawers, gameState.currentDrawerId, currentPlayers, persistentPlayerId, socketId]);
-
-  const drawerPersistentId = React.useMemo(() => {
-    if (!gameState.currentDrawerId) return "lobby";
-    const drawerPlayer = currentPlayers.find(
-      (p) =>
-        p.persistentId === gameState.currentDrawerId ||
-        p.id === gameState.currentDrawerId,
-    );
-    return drawerPlayer?.persistentId || gameState.currentDrawerId;
-  }, [gameState.currentDrawerId, currentPlayers]);
 
   // Clean-up and auto-dismiss of overlays when phase/turn changes
   useEffect(() => {
