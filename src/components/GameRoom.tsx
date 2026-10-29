@@ -319,7 +319,6 @@ export default function GameRoom({
     currentDrawerId: null,
     currentWord: null,
     timeLeft: 0,
-    wordOptions: [],
   });
 
   const gameStateRef = React.useRef(gameState);
@@ -550,10 +549,7 @@ export default function GameRoom({
     if (gameState?.status !== "DRAWING") {
       setShowReportConfirm(false);
     }
-    if (gameState?.status === "CHOOSING" && amIDrawer) {
-      setSelectedProfilePlayer(null);
-    }
-  }, [gameState?.status, amIDrawer]);
+  }, [gameState?.status]);
 
   // 🔊 Sound Hooks
   const eventGate = useRoomEventGate();
@@ -1359,122 +1355,6 @@ export default function GameRoom({
     setShowSkipConfirm(false);
   };
 
-  const handleWordSelect = (word: string) => {
-    if (isFreeDraw) return;
-    socket?.emit("select_word", { word });
-  };
-
-  const renderWordOverlay = (isFullScreenMode: boolean = false) => {
-    if (gameState.status !== "DRAWING") return null;
-    if (amIDrawer && !isFullScreenMode) return null;
-    return (
-      <div 
-        className="absolute left-0 right-0 flex items-center justify-center z-[150] pointer-events-none"
-        style={{ top: 'clamp(6px, 1.6vw, 12px)' }}
-      >
-        {(() => {
-          const isDrawer = amIDrawer;
-          const hintsUsed = gameState.hintsUsed || 0;
-          const maskedArray = gameState.maskedWordArray || [];
-
-          if (isDrawer && gameState.currentWord) {
-            const isRTL = /[\u0600-\u06FF]/.test(gameState.currentWord);
-
-            return (
-              <div
-                className="flex items-center"
-                style={{ 
-                  flexDirection: isRTL ? "row-reverse" : "row",
-                  gap: 'clamp(4px, 1.6vw, 12px)'
-                }}
-              >
-                {gameState.currentWord
-                  .split("")
-                  .map((char: string, i: number) => {
-                    if (char === " ")
-                      return (
-                        <span 
-                          key={`space-${i}`} 
-                          style={{ width: 'clamp(10px, 3.2vw, 24px)' }} 
-                        />
-                      );
-                    const isRevealed = (
-                      gameState.revealedIndices || []
-                    ).includes(i);
-                    return (
-                      <div
-                        key={`char-${i}`}
-                        className="flex flex-col items-center justify-between"
-                        style={{ height: 'clamp(22px, 5.2vw, 42px)' }}
-                      >
-                        <span
-                          className={`leading-none font-black ${isRevealed ? "text-[#FBBF24]" : "text-[#0F172A]"}`}
-                          style={{ fontSize: 'clamp(14px, 3.2vw, 24px)' }}
-                        >
-                          {char}
-                        </span>
-                        <div
-                          className={`rounded-full mt-auto ${hintsUsed >= 1 ? (isRevealed ? "bg-[#FBBF24]" : "bg-[#0F172A]") : "opacity-0"}`}
-                          style={{
-                            width: 'clamp(7px, 1.9vw, 14px)',
-                            height: 'clamp(2.5px, 0.4vw, 3px)'
-                          }}
-                        />
-                      </div>
-                    );
-                  })}
-              </div>
-            );
-          } else {
-            if (!maskedArray || maskedArray.length === 0) return null;
-            const isRTL = gameState.isRTL || false;
-
-            return (
-              <div
-                className="flex items-center"
-                style={{ 
-                  flexDirection: isRTL ? "row-reverse" : "row",
-                  gap: 'clamp(4px, 1.6vw, 12px)'
-                }}
-              >
-                {maskedArray.map((item: any, i: number) => {
-                  if (item.isSpace)
-                    return (
-                      <span 
-                        key={`space-${i}`} 
-                        style={{ width: 'clamp(10px, 3.2vw, 24px)' }} 
-                      />
-                    );
-                  return (
-                    <div
-                      key={`char-${i}`}
-                      className="flex flex-col items-center justify-between"
-                      style={{ height: 'clamp(22px, 5.2vw, 42px)' }}
-                    >
-                      <span 
-                        className="leading-none font-black text-[#0F172A]"
-                        style={{ fontSize: 'clamp(14px, 3.2vw, 24px)' }}
-                      >
-                        {item.char || ""}
-                      </span>
-                      <div
-                        className={`rounded-full mt-auto ${item.char ? "bg-[#0F172A]" : "bg-slate-500"}`}
-                        style={{
-                          width: 'clamp(7px, 1.9vw, 14px)',
-                          height: 'clamp(2.5px, 0.4vw, 3px)'
-                        }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          }
-        })()}
-      </div>
-    );
-  };
-
   const roomCapacity = Math.max(currentPlayers.length, getRoomConfig(room).maxPlayers);
   const slots: PlayerSlot[] = Array.from({ length: roomCapacity }).map((_, index) => {
     if (index < currentPlayers.length) {
@@ -1697,9 +1577,6 @@ export default function GameRoom({
               </button>
             )}
 
-            {/* Hint/Word Overlay Overlay for spectator view (normal rooms only) */}
-            {!isDrawingMode && !isFreeDraw && renderWordOverlay()}
-
             {/* Unified Adaptive Drawing Canvas Container */}
             <div
               className={
@@ -1708,7 +1585,6 @@ export default function GameRoom({
                   : "w-full h-full relative flex flex-col"
               }
             >
-              {isDrawingMode && !isFreeDraw && renderWordOverlay(true)}
               
               {/* Free Draw Top Bar: Quick Chat button */}
               {isDrawingMode && isFreeDraw && (
@@ -2489,63 +2365,6 @@ export default function GameRoom({
         </CinematicModal>
       )}
 
-      {/* Global Overlays for CHOOSING state */}
-      {!isFreeDraw && gameState.status === "CHOOSING" && amIDrawer && (
-        <div className="fixed inset-0 z-[500] bg-black/70  flex items-center justify-center p-4 touch-none">
-          <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
-            <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 tracking-wide">
-              IT'S YOUR TURN!
-            </h2>
-            <p className="text-white/80 text-lg sm:text-xl mb-12">
-              Choose a word to draw
-            </p>
-
-            {gameState.wordOptions && gameState.wordOptions.length >= 2 && (
-              <div className="space-y-6">
-                <div className="flex flex-col items-center">
-                  <span
-                    className="text-white text-3xl font-bold mb-4"
-                    dir="auto"
-                  >
-                    {gameState.wordOptions[0]}
-                  </span>
-                  <button
-                    onClick={() => handleWordSelect(gameState.wordOptions[0])}
-                    className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 border-2 border-white/20 active:scale-95 transition-all text-xl"
-                  >
-                    <Pencil fill="currentColor" size={24} />
-                    DRAW
-                  </button>
-                </div>
-
-                <div className="flex items-center w-full relative py-2">
-                  <div className="flex-1 border-t border-white/20 h-px"></div>
-                  <span className="px-4 text-white/50 font-bold bg-transparent text-lg">
-                    OR
-                  </span>
-                  <div className="flex-1 border-t border-white/20 h-px"></div>
-                </div>
-
-                <div className="flex flex-col items-center">
-                  <span
-                    className="text-white text-3xl font-bold mb-4"
-                    dir="auto"
-                  >
-                    {gameState.wordOptions[1]}
-                  </span>
-                  <button
-                    onClick={() => handleWordSelect(gameState.wordOptions[1])}
-                    className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 border-2 border-white/20 active:scale-95 transition-all text-xl"
-                  >
-                    <Pencil fill="currentColor" size={24} />
-                    DRAW
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Dynamic Non-Intrusive Connection Status removed to allow silent background connection */}
       <AnimatePresence>
