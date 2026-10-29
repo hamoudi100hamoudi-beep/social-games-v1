@@ -154,5 +154,6 @@ export function getRoomConfig(roomId: string): RoomConfig {
     theme: 'General',
     maxPlayers: 5,
     winningScore: 30,
+    isExperimental: true,
   };
 }
