@@ -4782,7 +4782,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (remoteTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
           // 🛡️ Remote Raster/History Transaction Barrier:
           // Synchronize committed draining strokes to ctx & localCommandsRef BEFORE Bucket
-          if (propsRef.current.isFreeDraw) {
+          if (propsRef.current.isFreeDraw || propsRef.current.isExperimental) {
             flushCommittedDrainingStrokesBarrier();
           }
 
