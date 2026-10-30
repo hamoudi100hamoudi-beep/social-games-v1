@@ -4,11 +4,9 @@ import { User as UserIcon, EyeOff } from 'lucide-react';
 export interface FreeDrawPlayerSlot {
   id: string;
   name: string;
-  points?: number | null;
   isCurrent?: boolean;
   isEmpty?: boolean;
   avatar?: string;
-  wins?: number;
   isOffline?: boolean;
   persistentId?: string;
   isBlocked?: boolean;
