@@ -22,7 +22,6 @@ import {
   Zap,
   ArrowRight,
   ArrowLeft,
-  FastForward,
 } from "lucide-react";
 import { useSocket } from "./SocketProvider";
 import { motion, AnimatePresence } from "motion/react";
@@ -331,7 +330,6 @@ export default function GameRoom({
     [],
   );
 
-  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
   // --- Free Draw Room Engine ---
   const roomConfig = getRoomConfig(room);
@@ -556,7 +554,6 @@ export default function GameRoom({
   const canPlaySoundRef = React.useRef<boolean>(false);
   const prevPlayersLengthRef = React.useRef<number>(0);
   const prevGameStateStatusRef = React.useRef<string>("");
-  const prevHintsUsedRef = React.useRef<number>(0);
   const prevCorrectGuessersRef = React.useRef<string[]>([]);
 
   useEffect(() => {
@@ -589,17 +586,6 @@ export default function GameRoom({
     prevGameStateStatusRef.current = curr || "";
   }, [gameState.status, amIDrawer, eventGate, isFreeDraw]);
 
-  useEffect(() => {
-    if (isFreeDraw) return;
-    // Hint sounds
-    const currHints = gameState.hintsUsed || 0;
-    const prevHints = prevHintsUsedRef.current;
-    
-    if (eventGate.isLive() && canPlaySoundRef.current && currHints > prevHints && currHints > 0) {
-      soundManager.play("hintShow");
-    }
-    prevHintsUsedRef.current = currHints;
-  }, [gameState.hintsUsed, eventGate, isFreeDraw]);
 
   const isDrawingMode = isFreeDraw ? amIDrawer : (gameState.status === "DRAWING" && amIDrawer);
   const isDrawingModeRef = React.useRef<boolean>(isDrawingMode);
@@ -664,16 +650,6 @@ export default function GameRoom({
   };
 
   // 🛡️ Stabilized Drawing Layer Action Callbacks (Ensures areDrawingPropsEqual stays rock-solid)
-  const handleSkipTurnRequest = useCallback(() => {
-    if (isFreeDraw) return;
-    setShowSkipConfirm(true);
-  }, [isFreeDraw]);
-
-  const handleRequestHintAction = useCallback(() => {
-    if (isFreeDraw) return;
-    socket?.emit("request_hint");
-  }, [socket, isFreeDraw]);
-
   const handleStopFreeDrawAction = useCallback(() => {
     handleStopFreeDraw();
   }, [socket, persistentPlayerId, socketId]);
@@ -685,30 +661,6 @@ export default function GameRoom({
   const handleHistoryLengthChangeAction = useCallback((hasStrokes: boolean) => {
     setHasDrawHistory(hasStrokes);
   }, []);
-
-  const canSkipTurn = !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0);
-  const canRequestHint = !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0);
-
-  const hintsRemaining = useMemo(() => {
-    if (isFreeDraw || !isDrawingMode) return 0;
-    const word = gameState.currentWord || "";
-    const words = word.split(" ").filter((w: string) => w.length > 0);
-    let maxHints = 0;
-    if (words.length <= 1) {
-      const charCount = word.replace(/\s/g, "").length;
-      maxHints = charCount < 3 ? 1 : 2;
-      if (charCount >= 5) {
-        maxHints = 3;
-      }
-    } else {
-      maxHints = 1;
-      for (const w of words) {
-        if (w.length >= 5) maxHints += 2;
-        else if (w.length >= 3) maxHints += 1;
-      }
-    }
-    return Math.max(0, maxHints - (gameState.hintsUsed || 0));
-  }, [isFreeDraw, isDrawingMode, gameState.currentWord, gameState.hintsUsed]);
 
   // --- Prolonged Disconnect Timer (20 seconds) ---
   useEffect(() => {
@@ -936,7 +888,6 @@ export default function GameRoom({
         eventGate.hydrateGate(state.players);
         prevPlayersLengthRef.current = state.players.length;
         prevGameStateStatusRef.current = state.gameState?.status || "";
-        prevHintsUsedRef.current = state.gameState?.hintsUsed || 0;
         prevCorrectGuessersRef.current = state.gameState?.correctGuessers || [];
       } else {
         // 🔊 Player Join / Leave sounds: trigger immediately for all players (including the active drawer)
@@ -1346,15 +1297,6 @@ export default function GameRoom({
     }
   };
 
-  const handleSkipTurn = () => {
-    if (isFreeDraw) return;
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-    socket?.emit("skip_turn");
-    setShowSkipConfirm(false);
-  };
-
   const roomCapacity = Math.max(currentPlayers.length, getRoomConfig(room).maxPlayers);
   const slots: PlayerSlot[] = Array.from({ length: roomCapacity }).map((_, index) => {
     if (index < currentPlayers.length) {
@@ -1407,7 +1349,6 @@ export default function GameRoom({
   const activeStatesRef = React.useRef({
     isChatOpen,
     showReportConfirm,
-    showSkipConfirm,
     selectedProfilePlayer,
     showExitConfirm,
     showCooldownWarning
@@ -1417,7 +1358,6 @@ export default function GameRoom({
     activeStatesRef.current = {
       isChatOpen,
       showReportConfirm,
-      showSkipConfirm,
       selectedProfilePlayer,
       showExitConfirm,
       showCooldownWarning
@@ -1425,7 +1365,6 @@ export default function GameRoom({
   }, [
     isChatOpen,
     showReportConfirm,
-    showSkipConfirm,
     selectedProfilePlayer,
     showExitConfirm,
     showCooldownWarning
@@ -1453,8 +1392,6 @@ export default function GameRoom({
         if (textarea) textarea.blur();
       } else if (current.showReportConfirm) {
         setShowReportConfirm(false);
-      } else if (current.showSkipConfirm) {
-        setShowSkipConfirm(false);
       } else if (current.selectedProfilePlayer) {
         setSelectedProfilePlayer(null);
       } else if (current.showCooldownWarning) {
@@ -1615,11 +1552,11 @@ export default function GameRoom({
                 amIDrawer={amIDrawer}
                 currentDrawerId={gameState.currentDrawerId}
                 status={gameState.status}
-                canSkipTurn={canSkipTurn}
-                canRequestHint={canRequestHint}
-                hintsRemaining={hintsRemaining}
-                onSkipTurnRequest={handleSkipTurnRequest}
-                onRequestHintAction={handleRequestHintAction}
+                canSkipTurn={false}
+                canRequestHint={false}
+                hintsRemaining={0}
+                onSkipTurnRequest={undefined}
+                onRequestHintAction={undefined}
                 onExitFreeDrawAction={handleStopFreeDrawAction}
                 onSyncStateChangeAction={handleSyncStateChangeAction}
                 onHistoryLengthChangeAction={handleHistoryLengthChangeAction}
@@ -2223,49 +2160,6 @@ export default function GameRoom({
         />
       )}
 
-      {/* Skip Confirm Modal */}
-      {!isFreeDraw && !isFreeDrawIsolated && (
-        <CinematicModal
-          isOpen={showSkipConfirm}
-          onClose={() => setShowSkipConfirm(false)}
-          titleType="report"
-          titleText="SKIP"
-          buttons={[
-            {
-              id: "skip-confirm-no-btn",
-              text: <span className="text-white font-black">NO</span>,
-              onClick: () => setShowSkipConfirm(false),
-              variant: "primary",
-            },
-            {
-              id: "skip-confirm-yes-btn",
-              text: <span className="text-white font-black">YES</span>,
-              onClick: handleSkipTurn,
-              variant: "danger",
-            },
-          ]}
-        >
-          {/* Animated Skip Drawing Page & Creature Anchor */}
-          <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
-            {/* Inner Canvas Border */}
-            <div className="absolute inset-1 rounded-[14px] border border-dashed border-[#1AAACC]/20 pointer-events-none" />
-
-            {/* Playful Creature (FastForward triangles) leaping out of the drawing sheet */}
-            <div className="relative z-10 flex items-center justify-center animate-skip-escape">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center">
-                <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] ml-0.5" strokeWidth={2.8} />
-              </div>
-            </div>
-          </div>
-
-          <h3 id="skip-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
-            Do you want to skip your turn?
-          </h3>
-          <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
-            هل تريد تجاوز دورك في الرسم؟
-          </p>
-        </CinematicModal>
-      )}
 
       {/* AFK Popup Modal */}
       {(!isFreeDrawIsolated || isAfkPopupOpen) && (
