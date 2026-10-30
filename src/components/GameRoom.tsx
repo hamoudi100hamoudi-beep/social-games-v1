@@ -13,18 +13,15 @@ import {
   Pencil,
   Copy,
   Check,
-  Clock,
   WifiOff,
   Eye,
   EyeOff,
   LogOut,
-  Zap,
   ArrowRight,
   ArrowLeft,
 } from "lucide-react";
 import { useSocket } from "./SocketProvider";
 import { motion, AnimatePresence } from "motion/react";
-import { PlayersSidebar } from "./game/PlayersSidebar";
 import { FreeDrawPlayersList } from "./game/FreeDrawPlayersList";
 import { MiniBoardOverlay } from "./game/MiniBoardOverlay";
 import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
@@ -76,11 +73,6 @@ type PlayerSlot = {
   isNew?: boolean;
 };
 
-interface HitNotification {
-  id: string;
-  name: string;
-  isReport?: boolean;
-}
 
 
 // 🛡️ Isolated Micro-Badge Component (Re-renders ONLY itself when unread count changes, 0 re-renders for GameRoom/Canvas)
@@ -128,13 +120,11 @@ export default function GameRoom({
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const guessInputRef = React.useRef<HTMLInputElement>(null);
   const mainContainerRef = React.useRef<HTMLDivElement>(null);
   const iosKeyboardHeightCache = React.useRef<number>(350);
   const [maxViewportHeight, setMaxViewportHeight] = useState<number>(
     typeof window !== "undefined" ? window.innerHeight : 800,
   );
-  const [isInputFocused, setIsInputFocused] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const hasEmittedJoin = React.useRef(false);
   const [isRoomJoined, setIsRoomJoined] = useState(false);
@@ -151,7 +141,6 @@ export default function GameRoom({
   const joinTimeoutRef = React.useRef<any>(null);
 
   const [isAfkPopupOpen, setIsAfkPopupOpen] = useState(false);
-  const [showReportConfirm, setShowReportConfirm] = useState(false);
   const [isMuted, setIsMuted] = useState(soundManager.getMuted());
   const [afkCountdown, setAfkCountdown] = useState(90);
   const lastActiveRef = React.useRef(Date.now());
@@ -184,10 +173,6 @@ export default function GameRoom({
     gameStateRef.current = gameState;
   }, [gameState]);
 
-  const [showCorrectAnimation, setShowCorrectAnimation] = useState(false);
-  const [hitNotifications, setHitNotifications] = useState<HitNotification[]>(
-    [],
-  );
 
 
   // --- Free Draw Room Engine ---
@@ -223,16 +208,13 @@ export default function GameRoom({
       textarea.blur();
     }
   };
-  const [guessInput, setGuessInput] = useState("");
   const [chatInput, setChatInput] = useState("");
 
-  const [guesses, setGuesses] = useState<Message[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
 
   // 🛡️ High-Performance Synchronous Mirrors to buffer background updates during active drawing
   const chatMessagesRef = React.useRef<Message[]>([]);
-  const guessesRef = React.useRef<Message[]>([]);
   const currentPlayersRef = React.useRef<PlayerSlot[]>([]);
   const unreadCountRef = React.useRef<number>(0);
   const isChatOpenRef = React.useRef<boolean>(false);
@@ -259,9 +241,6 @@ export default function GameRoom({
     chatMessagesRef.current = chatMessages;
   }, [chatMessages]);
 
-  React.useEffect(() => {
-    guessesRef.current = guesses;
-  }, [guesses]);
 
   React.useEffect(() => {
     currentPlayersRef.current = currentPlayers;
@@ -401,19 +380,10 @@ export default function GameRoom({
     return gameState.currentDrawerId === socketId;
   }, [isFreeDraw, activeDrawers, gameState.currentDrawerId, currentPlayers, persistentPlayerId, socketId]);
 
-  // Clean-up and auto-dismiss of overlays when phase/turn changes
-  useEffect(() => {
-    if (gameState?.status !== "DRAWING") {
-      setShowReportConfirm(false);
-    }
-  }, [gameState?.status]);
-
   // 🔊 Sound Hooks
   const eventGate = useRoomEventGate();
   const canPlaySoundRef = React.useRef<boolean>(false);
   const prevPlayersLengthRef = React.useRef<number>(0);
-  const prevGameStateStatusRef = React.useRef<string>("");
-  const prevCorrectGuessersRef = React.useRef<string[]>([]);
 
   useEffect(() => {
     // Prevent sounds from playing immediately after joining (to avoid notification spam)
@@ -423,30 +393,7 @@ export default function GameRoom({
     return () => clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    if (isFreeDraw) return;
-    // Game Status sounds
-    const curr = gameState.status;
-    const prev = prevGameStateStatusRef.current;
-    
-    if (eventGate.isLive() && canPlaySoundRef.current && curr !== prev && curr) {
-      if (curr === "CHOOSING") {
-        if (amIDrawer) {
-          soundManager.play("wordSelectionShow");
-        } else {
-          soundManager.play("roundStart");
-        }
-      } else if (curr === "ROUND_END") {
-        soundManager.play("roundEnd");
-      } else if (curr === "PODIUM") {
-        soundManager.play("applause");
-      }
-    }
-    prevGameStateStatusRef.current = curr || "";
-  }, [gameState.status, amIDrawer, eventGate, isFreeDraw]);
-
-
-  const isDrawingMode = isFreeDraw ? amIDrawer : (gameState.status === "DRAWING" && amIDrawer);
+  const isDrawingMode = amIDrawer;
   const isDrawingModeRef = React.useRef<boolean>(isDrawingMode);
 
   // 🛡️ Free Draw Isolation: When drawing in Free Draw, isolate room shell to prevent re-render thrashing & DOM overdraw
@@ -468,9 +415,6 @@ export default function GameRoom({
         setUnreadCount(unreadCountRef.current);
       }
       updateUnreadBadges(unreadCountRef.current);
-      if (guessesRef.current.length > 0 && guessesRef.current !== guesses) {
-        setGuesses(guessesRef.current);
-      }
       if (currentPlayersRef.current.length > 0 && currentPlayersRef.current !== currentPlayers) {
         setCurrentPlayers(currentPlayersRef.current);
       }
@@ -478,20 +422,6 @@ export default function GameRoom({
   }, [isDrawingMode, updateUnreadBadges]);
 
 
-  const hasAlreadyReported = React.useMemo(() => {
-    if (!gameState.reports) return false;
-    return (
-      gameState.reports.includes(persistentPlayerId) ||
-      (socket?.id ? gameState.reports.includes(socket.id) : false)
-    );
-  }, [gameState.reports, persistentPlayerId, socket?.id]);
-
-  const canReport = !isFreeDraw && gameState.status === "DRAWING" && !amIDrawer && !hasAlreadyReported;
-
-  const handleReport = () => {
-    if (!canReport || isFreeDraw) return;
-    setShowReportConfirm(true);
-  };
 
   // 🛡️ Stabilized Drawing Layer Action Callbacks (Ensures areDrawingPropsEqual stays rock-solid)
   const handleStopFreeDrawAction = useCallback(() => {
@@ -723,16 +653,10 @@ export default function GameRoom({
       if (state.votekicks) {
         setVotekicks(state.votekicks);
       }
-      const isActiveRound =
-        state.gameState?.status === "DRAWING" ||
-        state.gameState?.status === "CHOOSING";
-
       const newPlayersMap = new Map();
       if (!eventGate.isLive()) {
         eventGate.hydrateGate(state.players);
         prevPlayersLengthRef.current = state.players.length;
-        prevGameStateStatusRef.current = state.gameState?.status || "";
-        prevCorrectGuessersRef.current = state.gameState?.correctGuessers || [];
       } else {
         // 🔊 Player Join / Leave sounds: trigger immediately for all players (including the active drawer)
         if (canPlaySoundRef.current && prevPlayersLengthRef.current > 0) {
@@ -756,9 +680,7 @@ export default function GameRoom({
         name: p.name,
         points: p.score || 0,
         wins: p.wins || 0,
-        isCurrent:
-          isActiveRound &&
-          state.gameState?.currentDrawerId === (p.persistentId || p.id),
+        isCurrent: false,
         isOffline: p.isOffline || false,
         avatar: p.avatar,
         isEmpty: false,
@@ -836,66 +758,6 @@ export default function GameRoom({
       }
     };
 
-    const onReceiveGuess = (msg: any) => {
-      if (isFreeDraw) return;
-      // 1. Synchronously buffer every guess into guessesRef (0% data loss)
-      if (!guessesRef.current.some((m) => m.id === msg.id)) {
-        const updated = [
-          ...guessesRef.current,
-          {
-            ...msg,
-            isSelf: msg.senderId === socket.id,
-          },
-        ].slice(-40);
-
-        guessesRef.current = updated;
-
-        // 🛡️ Only trigger React state update for the hidden guess list if NOT in active drawing mode
-        if (!isDrawingModeRef.current) {
-          setGuesses(updated);
-        }
-      }
-
-      // 2. Instant Drawer Feedback & Sounds (NEVER delayed)
-      if (msg.subType === "hit") {
-        if (msg.senderId === socket.id) {
-          if (guessInputRef.current) {
-            guessInputRef.current.blur();
-          }
-          setShowCorrectAnimation(true);
-          
-          // 🔊 Play distinct sound when I get the correct answer
-          if (eventGate.isLive() && canPlaySoundRef.current) soundManager.play('correctGuessSelf');
-          
-          setTimeout(() => setShowCorrectAnimation(false), 1500);
-        } else {
-          // 🔊 Play sound when someone else gets the correct answer (CRITICAL for active drawer)
-          if (eventGate.isLive() && canPlaySoundRef.current) soundManager.play('correctGuessOther');
-        }
-
-        const hitId = Date.now().toString() + Math.random().toString();
-        setHitNotifications((prev) => {
-          const next = [...prev, { id: hitId, name: msg.sender }];
-          return next.slice(-20); // allow up to 20 notifications at once for larger rooms
-        });
-
-        setTimeout(() => {
-          setHitNotifications((prev) => prev.filter((n) => n.id !== hitId));
-        }, 4500);
-      }
-
-      if (msg.subType === "report") {
-        const reportId = Date.now().toString() + Math.random().toString();
-        setHitNotifications((prev) => {
-          const next = [...prev, { id: reportId, name: msg.sender, isReport: true }];
-          return next.slice(-20);
-        });
-
-        setTimeout(() => {
-          setHitNotifications((prev) => prev.filter((n) => n.id !== reportId));
-        }, 4500);
-      }
-    };
 
     const onSessionExpired = (data: any) => {
       console.warn("[GameRoom] Session expired (AFK/Evicted). Returning to lobby.", data);
@@ -933,7 +795,6 @@ export default function GameRoom({
 
     socket.on("room_state_update", onRoomStateUpdate);
     socket.on("receive_message", onReceiveMessage);
-    socket.on("receive_guess", onReceiveGuess);
     socket.on("session_expired", onSessionExpired);
     socket.on("afk_warning", onAfkWarning);
     socket.on("banned_from_room", onBannedFromRoom);
@@ -950,7 +811,6 @@ export default function GameRoom({
       socket.off("disconnect", onDisconnect);
       socket.off("room_state_update", onRoomStateUpdate);
       socket.off("receive_message", onReceiveMessage);
-      socket.off("receive_guess", onReceiveGuess);
       socket.off("session_expired", onSessionExpired);
       socket.off("afk_warning", onAfkWarning);
       socket.off("banned_from_room", onBannedFromRoom);
@@ -1054,55 +914,6 @@ export default function GameRoom({
   }, []);
 
 
-  const hasGuessedCorrectly = React.useMemo(() => {
-    if (!gameState.correctGuessers || gameState.correctGuessers.length === 0) return false;
-    const sId = socketId || socket?.id || "";
-    const pId = persistentPlayerId || "";
-    return (
-      (sId ? gameState.correctGuessers.includes(sId) : false) ||
-      (pId ? gameState.correctGuessers.includes(pId) : false)
-    );
-  }, [gameState.correctGuessers, socketId, socket?.id, persistentPlayerId]);
-
-  const isInputDisabled =
-    isFreeDraw ||
-    gameState.status === "WAITING" ||
-    gameState.status === "ROUND_END" ||
-    gameState.status === "PODIUM" ||
-    gameState.status === "CHOOSING" ||
-    amIDrawer ||
-    hasGuessedCorrectly;
-
-  useEffect(() => {
-    if (isInputDisabled) {
-      if (guessInputRef.current) {
-        guessInputRef.current.blur();
-      }
-      setIsInputFocused(false);
-    }
-  }, [isInputDisabled]);
-
-  const handleIOSFocusBypass = () => {
-    if (typeof navigator !== 'undefined' && (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))) {
-      document.documentElement.style.setProperty("--keyboard-inset", `${iosKeyboardHeightCache.current}px`);
-      window.scrollTo(0, 0);
-      setTimeout(() => window.scrollTo(0, 0), 10);
-    }
-  };
-
-  const handleGuessSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (
-      isFreeDraw ||
-      !guessInput.trim() ||
-      hasGuessedCorrectly ||
-      amIDrawer
-    )
-      return;
-
-    socket?.emit("submit_guess", { guess: guessInput.trim() });
-    setGuessInput("");
-  };
 
   const handleChatSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1138,7 +949,7 @@ export default function GameRoom({
     };
   });
 
-  const morphMode = isInputFocused;
+  const morphMode = false;
 
 
   const getCurrentDrawerName = () => {
@@ -1153,7 +964,6 @@ export default function GameRoom({
   // --- Hardware Back Button Interceptor ---
   const activeStatesRef = React.useRef({
     isChatOpen,
-    showReportConfirm,
     selectedProfilePlayer,
     showExitConfirm,
     showCooldownWarning
@@ -1162,14 +972,12 @@ export default function GameRoom({
   useEffect(() => {
     activeStatesRef.current = {
       isChatOpen,
-      showReportConfirm,
       selectedProfilePlayer,
       showExitConfirm,
       showCooldownWarning
     };
   }, [
     isChatOpen,
-    showReportConfirm,
     selectedProfilePlayer,
     showExitConfirm,
     showCooldownWarning
@@ -1195,8 +1003,6 @@ export default function GameRoom({
         setIsChatOpen(false);
         const textarea = document.getElementById("chat-textarea");
         if (textarea) textarea.blur();
-      } else if (current.showReportConfirm) {
-        setShowReportConfirm(false);
       } else if (current.selectedProfilePlayer) {
         setSelectedProfilePlayer(null);
       } else if (current.showCooldownWarning) {
@@ -1369,121 +1175,7 @@ export default function GameRoom({
                 isRoomJoined={isRoomJoined}
               />
 
-              {/* Hit Notifications Overlay (Active only when drawing in fullscreen mode) */}
-              {isDrawingMode && !isFreeDraw && !isFreeDrawIsolated && (
-                <div className="absolute bottom-[90px] sm:bottom-[100px] left-1/2 -translate-x-1/2 z-[110] flex flex-col justify-end items-center pointer-events-none gap-0.5 overflow-visible h-auto max-h-56 w-full max-w-full">
-                  <AnimatePresence>
-                    {hitNotifications.map((hit) => {
-                      if (hit.isReport) {
-                        return (
-                          <motion.div
-                            layout
-                            key={hit.id}
-                            initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{
-                              opacity: 0,
-                              scale: 0.6,
-                              y: -10,
-                              transition: { duration: 0.3 },
-                            }}
-                            transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
-                            style={{
-                              textShadow:
-                                "1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(255,100,100,0.4)",
-                            }}
-                            className="flex items-center justify-center gap-1.5 text-red-500 font-bold text-[15px] whitespace-nowrap bg-transparent"
-                            dir="ltr"
-                          >
-                            <AlertTriangle size={16} className="text-red-500 shrink-0" />
-                            <span
-                              className="truncate max-w-[150px] sm:max-w-[200px] text-center"
-                              dir="ltr"
-                            >
-                              {hit.name}
-                            </span>
-                            <span>reported!</span>
-                          </motion.div>
-                        );
-                      }
-
-                      return (
-                        <motion.div
-                          layout
-                          key={hit.id}
-                          initial={{ opacity: 0, scale: 0.6, y: 10 }}
-                          animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{
-                            opacity: 0,
-                            scale: 0.6,
-                            y: -10,
-                            transition: { duration: 0.3 },
-                          }}
-                          transition={{ duration: 0.4, type: "spring", bounce: 0.4 }}
-                          style={{
-                            textShadow:
-                              "1px 1px 0 #fff, -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 0 2px 4px rgba(0,229,64,0.4)",
-                          }}
-                          className="flex items-center justify-center gap-1.5 text-[#00E540] font-bold text-[15px] whitespace-nowrap bg-transparent"
-                          dir="ltr"
-                        >
-                          <Check size={16} strokeWidth={4} />
-                          <span
-                            className="truncate max-w-[150px] sm:max-w-[200px] text-center"
-                            dir="ltr"
-                          >
-                            {hit.name}
-                          </span>
-                          <span>hit!</span>
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </div>
-              )}
             </div>
-
-            {/* Correct Guess Animation */}
-            {showCorrectAnimation && (
-              <div className="absolute inset-0 pointer-events-none z-[60] flex items-center justify-center">
-                <motion.div
-                  key="correct-guess-overlay"
-                  initial={{ scale: 0 }}
-                  animate={{
-                    scale: [0, 1.3, 1, 1, 1.15, 0],
-                  }}
-                  transition={{
-                    duration: 1.4,
-                    times: [0, 0.12, 0.20, 0.82, 0.90, 1],
-                    ease: ["easeOut", "easeInOut", "linear", "easeOut", "easeIn"],
-                  }}
-                  className="w-20 h-20 sm:w-24 sm:h-24 bg-[#00E540] rounded-full border-[3px] border-white flex items-center justify-center shadow-none"
-                >
-                  <motion.svg
-                    viewBox="0 0 50 50"
-                    className="w-14 h-14 sm:w-16 sm:h-16 text-white"
-                  >
-                    <motion.path
-                      d="M 12 26 L 21 35 L 39 16"
-                      fill="transparent"
-                      strokeWidth="6"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      initial={{ pathLength: 0 }}
-                      animate={{
-                        pathLength: [0, 1, 1, 0],
-                      }}
-                      transition={{
-                        duration: 1.4,
-                        times: [0, 0.20, 0.90, 1],
-                        ease: ["easeOut", "linear", "easeIn"],
-                      }}
-                    />
-                  </motion.svg>
-                </motion.div>
-              </div>
-            )}
 
             {!isFreeDrawIsolated && (
               <MiniBoardOverlay 
@@ -1504,56 +1196,23 @@ export default function GameRoom({
 
         {/* Left: Players Sidebar */}
         {!isFreeDrawIsolated && (
-          isFreeDraw ? (
-            <FreeDrawPlayersList
-              slots={slots}
-              morphMode={morphMode}
-              onPlayerClick={setSelectedProfilePlayer}
-            />
-          ) : (
-            <PlayersSidebar
-              slots={slots}
-              gameState={gameState}
-              morphMode={morphMode}
-              socketId={socketId}
-              onPlayerClick={setSelectedProfilePlayer}
-              isFreeDraw={isFreeDraw}
-              amIDrawer={amIDrawer}
-            />
-          )
+          <FreeDrawPlayersList
+            slots={slots}
+            morphMode={morphMode}
+            onPlayerClick={setSelectedProfilePlayer}
+          />
         )}
 
-        {/* Right: Actions & Guess Input */}
+        {/* Right: Actions Bar */}
         {!isFreeDrawIsolated && (
           <div
-            className={`flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-0 pl-1 sm:pb-3 sm:pr-3 sm:pt-0 sm:pl-1.5
-                        ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
-                       `}
+            className="flex flex-col relative bg-bg-panel-brand pb-2 pr-2 pt-0 pl-1 sm:pb-3 sm:pr-3 sm:pt-0 sm:pl-1.5 col-start-2 col-end-3 row-start-2 row-end-3"
           >
           <div className="flex-1 flex flex-col bg-bg-dark-brand rounded-xl sm:rounded-2xl shadow-inner border border-white/5 overflow-hidden relative">
             {/* Actions Bar */}
-            <div
-              className={`shrink-0 bg-[#0A1A38] ${isInputFocused ? "hidden" : "block"}`}
-            >
+            <div className="shrink-0 bg-[#0A1A38] block">
               <div className="overflow-hidden">
                 <div className="flex gap-2 sm:gap-4 p-2 sm:p-3 justify-around">
-                  {!isFreeDraw && (
-                    <button
-                      id="report-draw-btn"
-                      disabled={!canReport}
-                      onClick={handleReport}
-                      title={hasAlreadyReported ? "You reported this draw" : "Report drawing"}
-                      className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white transition-all border border-white/10 active:scale-95 cursor-pointer
-                        ${hasAlreadyReported 
-                          ? "bg-red-600 border border-red-500 opacity-90 cursor-not-allowed" 
-                          : canReport 
-                            ? "bg-orange-400 hover:bg-orange-500 cursor-pointer" 
-                            : "bg-slate-500/40 opacity-40 cursor-not-allowed"
-                        }`}
-                    >
-                      <AlertTriangle size={16} />
-                    </button>
-                  )}
                   <button 
                     onClick={toggleMute}
                     className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all border border-white/10 relative overflow-hidden ${
@@ -1583,346 +1242,6 @@ export default function GameRoom({
               </div>
             </div>
 
-            {/* Quick Feedback Area (interactive feed) - Only for Competitive/Normal */}
-            {!isFreeDraw && (
-              <div className="flex-1 overflow-y-auto overscroll-contain touch-pan-y p-3 flex flex-col-reverse font-sans min-h-0 bg-transparent">
-                <div className="flex flex-col-reverse gap-2">
-                  {[...guesses].reverse().map((msg) => {
-                    const isSystem = msg.type === "system";
-                    if (isSystem) {
-                      const subType = (msg as any).subType || "";
-                      const text = msg.text;
-
-                      // Close guess warning
-                      if (subType === "close") {
-                        const displayWord = (msg as any).word || "";
-                        return (
-                          <div
-                            key={msg.id}
-                            className="flex items-center gap-2 text-amber-500 font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                          >
-                            <Zap size={15} className="text-amber-500 fill-amber-500 shrink-0" />
-                            <span dir="auto" className="flex items-center gap-1">
-                              <span className="text-amber-500 font-extrabold">{displayWord}</span>
-                              <span className="text-amber-500/90 font-normal">is close!</span>
-                            </span>
-                          </div>
-                        );
-                      }
-
-                      // Drawing report warning log
-                      if (subType === "report") {
-                        return (
-                          <div
-                            key={msg.id}
-                            className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                          >
-                            <AlertTriangle
-                              size={14}
-                              className="text-[#EF4444] shrink-0 font-extrabold"
-                            />
-                            <span dir="auto" className="flex items-center gap-1">
-                              <span className="text-[#EF4444] font-extrabold">{msg.sender}</span>
-                              <span className="text-[#EF4444] font-normal">reported!</span>
-                            </span>
-                          </div>
-                        );
-                      }
-
-                      // Drawing canceled turn log
-                      if (subType === "canceled") {
-                        return (
-                          <div
-                            key={msg.id}
-                            className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                          >
-                            <AlertTriangle
-                              size={14}
-                              className="text-[#EF4444] shrink-0 font-extrabold"
-                            />
-                            <span dir="auto" className="text-[#EF4444] font-normal">Canceled turn</span>
-                          </div>
-                        );
-                      }
-
-                      // Hit / guessed correctly
-                      if (subType === "hit") {
-                        const isSelfGuesser = msg.senderId === socketId;
-                        const displayWord = (msg as any).word || "";
-                        return (
-                          <div
-                            key={msg.id}
-                            className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                          >
-                            <Check
-                              size={14}
-                              className="stroke-[3.5] text-[#00E540] shrink-0"
-                            />
-                            {isSelfGuesser ? (
-                              <span dir="auto" className="font-normal text-[#00E540]">
-                                You've found the answer: <span className="font-extrabold text-[#00E540]">{displayWord}</span>
-                              </span>
-                            ) : (
-                              <span dir="auto" className="font-normal text-[#00E540]">
-                                <span className="font-extrabold text-[#00E540]">{msg.sender || text.replace(" guessed the word!", "")}</span> hit!
-                              </span>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      // Round End break / Interval
-                      if (subType === "interval") {
-                        return (
-                          <div
-                            key={msg.id}
-                            className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                          >
-                            <Clock
-                              size={14}
-                              className="text-[#1AD2FF] shrink-0"
-                            />
-                            <span className="font-normal text-[#1AD2FF]">Interval...</span>
-                          </div>
-                        );
-                      }
-
-                      // Turn change
-                      if (subType === "turn") {
-                        const match = text.match(/^(Turn of\s+)(.+)$/i);
-                        return (
-                          <div
-                            key={msg.id}
-                            className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                          >
-                            <Pencil
-                              size={12}
-                              className="text-[#1AD2FF] shrink-0"
-                            />
-                            {match ? (
-                              <span dir="auto" className="text-[#1AD2FF]">
-                                Turn of <span className="font-extrabold text-[#1AD2FF]">{match[2]}</span>
-                              </span>
-                            ) : (
-                              <span dir="auto" className="text-[#1AD2FF]">{text}</span>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      // Game over
-                      if (subType === "game_over") {
-                        return (
-                          <div
-                            key={msg.id}
-                            className="flex items-start gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-1 animate-in fade-in slide-in-from-left-2 duration-200"
-                          >
-                            <Info
-                              size={14}
-                              className="text-[#1AD2FF] shrink-0 mt-0.5"
-                            />
-                            <span dir="auto" className="font-normal">{text}</span>
-                          </div>
-                        );
-                      }
-
-                      // Everybody hit
-                      if (subType === "all_guessed") {
-                        return (
-                          <div
-                            key={msg.id}
-                            className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                          >
-                            <Check
-                              size={14}
-                              className="stroke-[3.5] text-[#00E540] shrink-0"
-                            />
-                            <span className="font-normal">Everybody hit the answer!</span>
-                          </div>
-                        );
-                      }
-
-                      // Lost turn / Inactive
-                      if (
-                        subType === "lost_turn" ||
-                        text.toLowerCase().includes("lost the turn") ||
-                        text.toLowerCase().includes("lost your turn")
-                      ) {
-                        const isDrawerSelf = amIDrawer;
-                        const displayText = isDrawerSelf
-                          ? "You've lost your turn"
-                          : text;
-                        return (
-                          <div
-                            key={msg.id}
-                            className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
-                          >
-                            <AlertTriangle
-                              size={14}
-                              className="text-[#EF4444] shrink-0"
-                            />
-                            <span dir="auto" className="font-normal">{displayText}</span>
-                          </div>
-                        );
-                      }
-
-                      // Other reveals
-                      const isNobodyHit = text.toLowerCase().includes("nobody hit");
-                      let iconNode = (
-                        <Info size={14} className="shrink-0 text-[#1AD2FF]" />
-                      );
-                      let textColor = "#1AD2FF";
-
-                      if (
-                        !isNobodyHit && (
-                          text.toLowerCase().includes("hit") ||
-                          text.toLowerCase().includes("guessed") ||
-                          text.toLowerCase().includes("guessed the word")
-                        )
-                      ) {
-                        iconNode = (
-                          <Check
-                            size={14}
-                            className="stroke-[3.5] text-[#00E540] shrink-0"
-                          />
-                        );
-                        textColor = "#00E540";
-                      } else if (text.toLowerCase().includes("turn") || isNobodyHit) {
-                        iconNode = (
-                          <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
-                        );
-                        textColor = "#1AD2FF";
-                      } else if (text.toLowerCase().includes("interval")) {
-                        iconNode = (
-                          <Clock size={14} className="shrink-0 text-[#1AD2FF]" />
-                        );
-                        textColor = "#1AD2FF";
-                      } else if (
-                        text.toLowerCase().includes("timeout") ||
-                        text.toLowerCase().includes("time's up") ||
-                        text.toLowerCase().includes("answer was")
-                      ) {
-                        iconNode = (
-                          <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
-                        );
-                        textColor = "#1AD2FF";
-                      }
-
-                      return (
-                        <div
-                          key={msg.id}
-                          className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5"
-                          style={{ color: textColor }}
-                        >
-                          {iconNode}
-                          <span dir="auto">{text}</span>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div key={msg.id} className="text-sm sm:text-base">
-                        <div className="flex items-start gap-1">
-                          <span className="font-extrabold text-[#F3F4F6] shrink-0">
-                            {msg.sender}:
-                          </span>
-                          <span
-                            className={`${msg.isSelf ? "text-white" : "text-slate-300"} font-normal break-words`}
-                            dir="auto"
-                            style={{ unicodeBidi: "plaintext" }}
-                          >
-                            {msg.text}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div className="flex items-center gap-1.5 text-primary-brand font-normal text-sm sm:text-base">
-                    <Info size={14} />
-                    Waiting for players
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Guess Input Area - Only for Competitive/Normal */}
-            {!isFreeDraw && (
-              <div 
-                className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 shrink-0 mt-auto bg-transparent"
-                style={{ paddingBottom: 'calc(0.5rem + var(--keyboard-inset, 0px))' }}
-              >
-                <form onSubmit={handleGuessSubmit} className="relative">
-                  {!isInputFocused && (
-                    <div
-                      className={`absolute left-4 top-1/2 -translate-y-1/2 transition-opacity duration-200 pointer-events-none ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
-                    >
-                      <Pencil size={18} />
-                    </div>
-                  )}
-                  <input
-                    ref={guessInputRef}
-                    type="search"
-                    inputMode="text"
-                    enterKeyHint="send"
-                    id="guess-input"
-                    maxLength={250}
-                    dir="auto"
-                    autoComplete="one-time-code"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck="false"
-                    name="search"
-                    data-1p-ignore="true"
-                    data-lpignore="true"
-                    data-form-type="other"
-                    disabled={isInputDisabled}
-                    value={isInputDisabled ? "" : guessInput}
-                    onChange={(e) => setGuessInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        if (guessInput.trim() && !isInputDisabled) {
-                          handleGuessSubmit(e as any);
-                        }
-                      }
-                    }}
-                    onFocus={() => {
-                      if (isInputDisabled) {
-                        guessInputRef.current?.blur();
-                        return;
-                      }
-                      handleIOSFocusBypass();
-                      setIsInputFocused(true);
-                      setIsKeyboardOpen(true);
-                    }}
-                    onBlur={() => {
-                      setIsInputFocused(false);
-                    }}
-                    placeholder={
-                      gameState.status === "WAITING"
-                        ? "Waiting..."
-                        : gameState.status === "ROUND_END"
-                          ? gameState.roundEndReason === "skipped"
-                            ? "Skipped"
-                            : gameState.roundEndReason === "turn_lost"
-                              ? "Inactive"
-                              : "Interval"
-                          : gameState.status === "PODIUM"
-                            ? "Game Over"
-                            : gameState.status === "CHOOSING"
-                              ? "Waiting for the drawing"
-                              : amIDrawer
-                                ? "You are drawing!"
-                                : hasGuessedCorrectly
-                                  ? "You've found the answer!"
-                                  : "Answer here..."
-                    }
-                    className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused ? "pl-4" : "pl-11"} pr-4 py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
-                    style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
-                  />
-                </form>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1991,56 +1310,6 @@ export default function GameRoom({
         </CinematicModal>
       )}
 
-      {/* Report Confirmation Modal */}
-      {!isFreeDraw && (!isFreeDrawIsolated || showReportConfirm) && (
-        <CinematicModal
-          isOpen={showReportConfirm}
-          onClose={() => setShowReportConfirm(false)}
-          titleType="report"
-          titleText="REPORT"
-          buttons={[
-            {
-              id: "report-confirm-no-btn",
-              text: "NO",
-              onClick: () => setShowReportConfirm(false),
-              variant: "primary",
-            },
-            {
-              id: "report-confirm-yes-btn",
-              text: "YES",
-              onClick: () => {
-                setShowReportConfirm(false);
-                socket?.emit("report_draw");
-              },
-              variant: "danger",
-            },
-          ]}
-        >
-          {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-          <div className="w-18 h-18 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative">
-            <motion.div 
-              animate={{
-                rotate: [-4, 4, -4, 4, -4, 4, 0],
-                scale: [1, 1.05, 1, 1.05, 1]
-              }}
-              transition={{
-                delay: 1.5,
-                repeat: Infinity,
-                duration: 0.6,
-                repeatDelay: 1.8,
-                ease: "easeInOut"
-              }}
-            >
-              <AlertTriangle className="w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
-            </motion.div>
-          </div>
-
-          {/* Content Text unified with golden standard */}
-          <h3 id="report-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
-            Are you sure you wanna report this drawing?
-          </h3>
-        </CinematicModal>
-      )}
 
 
       {/* Dynamic Non-Intrusive Connection Status removed to allow silent background connection */}
