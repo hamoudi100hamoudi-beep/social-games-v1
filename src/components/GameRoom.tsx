@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { createPortal } from "react-dom";
 import { IsolatedDrawingLayer } from "./experimental/IsolatedDrawingLayer";
 import {
   Send,
@@ -83,146 +82,6 @@ interface HitNotification {
   isReport?: boolean;
 }
 
-const getMaxTimeForStatus = (status: string, fallbackMaxTime: number) => {
-  switch (status) {
-    case "DRAWING":
-    case "CHOOSING":
-      return 100;
-    case "ROUND_END":
-      return 8;
-    case "PODIUM":
-    case "WAITING":
-      return 15;
-    default:
-      return fallbackMaxTime > 0 ? fallbackMaxTime : 15;
-  }
-};
-
-const SmoothTimer = ({
-  status: propStatus,
-  initialTimeLeft: propInitialTimeLeft,
-  maxTime,
-  isFullScreen = false,
-  socket,
-  gameState,
-}: {
-  status?: string;
-  initialTimeLeft?: number;
-  maxTime: number;
-  isFullScreen?: boolean;
-  socket?: any;
-  gameState?: { status: string; timeLeft: number; currentWord?: string | null };
-}) => {
-  const currentStatus = propStatus || gameState?.status || "WAITING";
-  const currentInitialTimeLeft = propInitialTimeLeft ?? gameState?.timeLeft ?? 0;
-
-  const barRef = React.useRef<HTMLDivElement>(null);
-  const statusRef = React.useRef(currentStatus);
-  const maxTimeRef = React.useRef(maxTime);
-  const lastTimeLeftRef = React.useRef(currentInitialTimeLeft);
-  const lastColorClassRef = React.useRef<string>("");
-  const isMountedRef = React.useRef(false);
-
-  maxTimeRef.current = maxTime;
-
-  // Helper to compute and apply color class smoothly
-  const applyColor = (pct: number, status: string) => {
-    if (!barRef.current) return;
-    let timerColorClass = "bg-[#FBBF24] shadow-[0_0_8px_rgba(251,191,36,0.5)]";
-    if (status !== "DRAWING" && status !== "CHOOSING") {
-      timerColorClass = "bg-[#1AD2FF] shadow-[0_0_8px_rgba(26,210,255,0.5)]";
-    } else {
-      if (pct <= 20) {
-        timerColorClass = "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]";
-      } else if (pct <= 50) {
-        timerColorClass = "bg-[#F97316] shadow-[0_0_8px_rgba(249,115,22,0.5)]";
-      }
-    }
-
-    if (lastColorClassRef.current !== timerColorClass) {
-      lastColorClassRef.current = timerColorClass;
-      barRef.current.className = `h-full rounded-full transition-colors duration-500 ${timerColorClass}`;
-    }
-  };
-
-  // Synchronize CSS bar with target time
-  const syncBar = React.useCallback((timeLeft: number, status: string, isStatusChange: boolean = false) => {
-    const bar = barRef.current;
-    if (!bar) return;
-
-    const mTime = getMaxTimeForStatus(status, maxTimeRef.current);
-    const clampedTime = Math.max(0, Math.min(mTime, timeLeft));
-    const currentPct = (clampedTime / mTime) * 100;
-
-    applyColor(currentPct, status);
-
-    if (clampedTime <= 0) {
-      bar.style.transition = "width 0.25s linear";
-      bar.style.width = "0%";
-      lastTimeLeftRef.current = 0;
-      return;
-    }
-
-    const isBigDiscrepancy =
-      lastTimeLeftRef.current > 0 &&
-      Math.abs(lastTimeLeftRef.current - 1 - clampedTime) > 3;
-
-    if (isStatusChange || isBigDiscrepancy) {
-      bar.style.transition = "none";
-      bar.style.width = `${currentPct.toFixed(2)}%`;
-      // Force layout flush so browser commits the starting position before transition begins
-      void bar.offsetWidth;
-    }
-
-    // Target percentage for next 1-second interval
-    const targetPct = Math.max(0, ((clampedTime - 1) / mTime) * 100);
-    bar.style.transition = "width 1s linear";
-    bar.style.width = `${targetPct.toFixed(2)}%`;
-
-    lastTimeLeftRef.current = clampedTime;
-  }, []);
-
-  // Reset or initialize on status or phase change
-  React.useEffect(() => {
-    const statusChanged = currentStatus !== statusRef.current;
-    statusRef.current = currentStatus;
-    syncBar(currentInitialTimeLeft, currentStatus, statusChanged || !isMountedRef.current);
-    isMountedRef.current = true;
-  }, [currentStatus, currentInitialTimeLeft, syncBar]);
-
-  // Listen directly to timer_tick to drive the CSS transition once per second (0% CPU rAF loop)
-  React.useEffect(() => {
-    if (!socket) return;
-    const onTick = (data: { timeLeft: number; status: string }) => {
-      const statusChanged = data.status !== statusRef.current;
-      statusRef.current = data.status;
-      syncBar(data.timeLeft, data.status, statusChanged);
-    };
-
-    socket.on("timer_tick", onTick);
-    return () => {
-      socket.off("timer_tick", onTick);
-    };
-  }, [socket, syncBar]);
-
-  const effectiveMaxTime = getMaxTimeForStatus(currentStatus, maxTime || 100);
-  const initialPct = Math.max(0, Math.min(100, (currentInitialTimeLeft / effectiveMaxTime) * 100));
-
-  return (
-    <div
-      className={`w-full px-2 sm:px-3 py-1.5 shrink-0 flex items-center justify-center ${isFullScreen ? "bg-transparent" : "bg-game-primary-blue"}`}
-      dir="ltr"
-    >
-      <div className="w-full h-1.5 sm:h-2 bg-black/40 rounded-full overflow-hidden shadow-inner flex justify-start">
-        <div
-          ref={barRef}
-          className="h-full rounded-full transition-colors duration-500 bg-[#1AD2FF]"
-          style={{ width: `${initialPct.toFixed(2)}%` }}
-        />
-      </div>
-    </div>
-  );
-};
 
 // 🛡️ Isolated Micro-Badge Component (Re-renders ONLY itself when unread count changes, 0 re-renders for GameRoom/Canvas)
 export interface UnreadBadgeHandle {
@@ -618,21 +477,6 @@ export default function GameRoom({
     }
   }, [isDrawingMode, updateUnreadBadges]);
 
-  // ⏱️ Single Unified SmoothTimer Slot targets & active container
-  const [drawerTimerSlotEl, setDrawerTimerSlotEl] = useState<HTMLDivElement | null>(null);
-  const [spectatorTimerSlotEl, setSpectatorTimerSlotEl] = useState<HTMLDivElement | null>(null);
-
-  const handleDrawerSlotRef = React.useCallback((el: HTMLDivElement | null) => {
-    setDrawerTimerSlotEl((prev) => (prev !== el ? el : prev));
-  }, []);
-
-  const handleSpectatorSlotRef = React.useCallback((el: HTMLDivElement | null) => {
-    setSpectatorTimerSlotEl((prev) => (prev !== el ? el : prev));
-  }, []);
-
-  const activeTimerContainer = !isFreeDraw
-    ? (isDrawingMode && drawerTimerSlotEl ? drawerTimerSlotEl : spectatorTimerSlotEl)
-    : null;
 
   const hasAlreadyReported = React.useMemo(() => {
     if (!gameState.reports) return false;
@@ -953,26 +797,6 @@ export default function GameRoom({
       }
     };
 
-    const onTimerTick = (data: { timeLeft: number; status: string }) => {
-      // 1. Keep gameStateRef.current.timeLeft synchronously up to date without re-rendering GameRoom
-      if (gameStateRef.current) {
-        gameStateRef.current.timeLeft = data.timeLeft;
-      }
-
-      // 2. Only trigger GameRoom state update / re-render if the game phase status changed
-      // (e.g. WAITING -> CHOOSING -> DRAWING -> ROUND_END -> PODIUM)
-      // or if round countdown reached zero (boundary transition)
-      const statusChanged = data.status !== gameStateRef.current?.status;
-      const reachedZero = data.timeLeft <= 0 && (gameStateRef.current?.timeLeft ?? 0) > 0;
-
-      if (statusChanged || reachedZero) {
-        setGameState((prev: any) => ({
-          ...prev,
-          status: data.status,
-          timeLeft: data.timeLeft,
-        }));
-      }
-    };
 
     const onReceiveMessage = (msg: any) => {
       // 🔊 Play notification sound for system messages (chatMessage sound is completely removed)
@@ -1110,7 +934,6 @@ export default function GameRoom({
     socket.on("room_state_update", onRoomStateUpdate);
     socket.on("receive_message", onReceiveMessage);
     socket.on("receive_guess", onReceiveGuess);
-    socket.on("timer_tick", onTimerTick);
     socket.on("session_expired", onSessionExpired);
     socket.on("afk_warning", onAfkWarning);
     socket.on("banned_from_room", onBannedFromRoom);
@@ -1128,7 +951,6 @@ export default function GameRoom({
       socket.off("room_state_update", onRoomStateUpdate);
       socket.off("receive_message", onReceiveMessage);
       socket.off("receive_guess", onReceiveGuess);
-      socket.off("timer_tick", onTimerTick);
       socket.off("session_expired", onSessionExpired);
       socket.off("afk_warning", onAfkWarning);
       socket.off("banned_from_room", onBannedFromRoom);
@@ -1318,23 +1140,6 @@ export default function GameRoom({
 
   const morphMode = isInputFocused;
 
-  const getMaxTime = () => {
-    switch (gameState.status) {
-      case "DRAWING":
-      case "CHOOSING":
-        return 100;
-      case "ROUND_END":
-        return 8;
-      case "PODIUM":
-        return 15;
-      default:
-        return 15;
-    }
-  };
-  const timerPercentage = Math.max(
-    0,
-    Math.min(100, (gameState.timeLeft / getMaxTime()) * 100),
-  );
 
   const getCurrentDrawerName = () => {
     const player = currentPlayers.find(
@@ -1560,7 +1365,7 @@ export default function GameRoom({
                 onExitFreeDrawAction={handleStopFreeDrawAction}
                 onSyncStateChangeAction={handleSyncStateChangeAction}
                 onHistoryLengthChangeAction={handleHistoryLengthChangeAction}
-                drawerTimerSlotRef={handleDrawerSlotRef}
+                drawerTimerSlotRef={undefined}
                 isRoomJoined={isRoomJoined}
               />
 
@@ -1695,28 +1500,6 @@ export default function GameRoom({
             )}
           </div>
 
-          {/* Spectator Timer Slot (hidden in Free Draw mode) */}
-          {!isFreeDraw && (
-            <div
-              id="timer-slot-spectator"
-              ref={handleSpectatorSlotRef}
-              className="w-full shrink-0"
-            />
-          )}
-
-          {/* ⏱️ Single Unified SmoothTimer Instance: Moves cleanly between spectator & drawer slots */}
-          {activeTimerContainer &&
-            createPortal(
-              <SmoothTimer
-                key="single-unified-game-timer"
-                status={gameState.status}
-                initialTimeLeft={gameState.timeLeft}
-                maxTime={getMaxTime()}
-                isFullScreen={isDrawingMode}
-                socket={socket}
-              />,
-              activeTimerContainer
-            )}
         </div>
 
         {/* Left: Players Sidebar */}
