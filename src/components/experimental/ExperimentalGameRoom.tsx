@@ -740,6 +740,18 @@ export default function ExperimentalGameRoom({
     setHasDrawHistory(hasStrokes);
   }, []);
 
+  const handleAcknowledgeNewPlayer = useCallback((playerId: string) => {
+    eventGate.acknowledgeNewPlayer(playerId);
+    if (currentPlayersRef.current) {
+      currentPlayersRef.current = currentPlayersRef.current.map((p) =>
+        p.id === playerId ? { ...p, isNew: false } : p
+      );
+    }
+    setCurrentPlayers((prev) =>
+      prev.map((p) => (p.id === playerId ? { ...p, isNew: false } : p))
+    );
+  }, [eventGate]);
+
   const canSkipTurn = !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0);
   const canRequestHint = !isFreeDraw && isDrawingMode && gameState.status === "DRAWING" && !(gameState.correctGuessers && gameState.correctGuessers.length > 0);
 
@@ -1012,6 +1024,14 @@ export default function ExperimentalGameRoom({
         prevHintsUsedRef.current = state.gameState?.hintsUsed || 0;
         prevCorrectGuessersRef.current = state.gameState?.correctGuessers || [];
       } else {
+        // Remove players who were in currentPlayersRef.current but are no longer in state.players
+        const currentActiveIds = new Set((state.players || []).map((p: any) => p.id));
+        currentPlayersRef.current.forEach((prevP) => {
+          if (prevP && prevP.id && !prevP.isEmpty && !currentActiveIds.has(prevP.id)) {
+            eventGate.removePlayer(prevP.id);
+          }
+        });
+
         // 🔊 Player Join / Leave sounds: trigger immediately for all players (including the active drawer)
         if (canPlaySoundRef.current && prevPlayersLengthRef.current > 0) {
           if (state.players.length > prevPlayersLengthRef.current) {
@@ -1818,6 +1838,7 @@ export default function ExperimentalGameRoom({
           onPlayerClick={setSelectedProfilePlayer}
           isFreeDraw={isFreeDraw}
           amIDrawer={amIDrawer}
+          onAcknowledgeNewPlayer={handleAcknowledgeNewPlayer}
         />
 
         {/* Right: Actions & Guess Input - Suppressed during FULL DRAWING ISOLATION TEST for active drawer */}

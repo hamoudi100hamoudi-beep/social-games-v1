@@ -104,6 +104,7 @@ interface PlayersSidebarProps {
   onPlayerClick?: (player: PlayerSlot) => void;
   isFreeDraw?: boolean;
   amIDrawer?: boolean;
+  onAcknowledgeNewPlayer?: (playerId: string) => void;
 }
 
 interface FloatingPoints {
@@ -120,6 +121,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   onPlayerClick,
   isFreeDraw = false,
   amIDrawer = false,
+  onAcknowledgeNewPlayer,
 }) => {
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
@@ -134,10 +136,11 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   React.useEffect(() => {
     const currentActiveIds = new Set(slots.filter((s) => !s.isEmpty).map((s) => s.id));
 
-    // First mount: initialize known player set without triggering entrance animation
+    // First mount: establish baseline of existing players, but do NOT ignore players who arrived with isNew: true
     if (prevPlayerIdsRef.current === null) {
-      prevPlayerIdsRef.current = currentActiveIds;
-      return;
+      prevPlayerIdsRef.current = new Set(
+        slots.filter((s) => !s.isEmpty && !s.isNew).map((s) => s.id)
+      );
     }
 
     // Identify fresh players that actually just joined
@@ -152,14 +155,16 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
       }
     });
 
-    // Update set of known active players (preserve known IDs if array is transiently empty)
+    // Update set of known active players (sync with currently active IDs, preserve if array is empty)
     if (currentActiveIds.size > 0) {
-      const merged = new Set(prevPlayerIdsRef.current);
-      currentActiveIds.forEach((id) => merged.add(id));
-      prevPlayerIdsRef.current = merged;
+      prevPlayerIdsRef.current = currentActiveIds;
     }
 
     if (freshNewIds.length > 0) {
+      freshNewIds.forEach((id) => {
+        onAcknowledgeNewPlayer?.(id);
+      });
+
       const uniqueNew = freshNewIds.filter((id) => !newlyJoinedIds.has(id));
       if (uniqueNew.length > 0) {
         setNewlyJoinedIds((prev) => {
@@ -179,7 +184,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
         return () => clearTimeout(timer);
       }
     }
-  }, [slots]);
+  }, [slots, onAcknowledgeNewPlayer]);
 
   const stableSlots = React.useMemo(() => {
     return [...slots].sort((a, b) => a.id.localeCompare(b.id));
@@ -327,52 +332,58 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                 }
               }}
             >
-              {/* Avatar with Gartic Trophy */}
-              <div className="relative shrink-0 mr-1.5 sm:mr-2.5">
-                 <div className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-[3px] transition-colors duration-200
-                   ${slot.isEmpty ? 'bg-black/20 border-white/10' : `bg-bg-dark-brand ${borderClass}`}
-                   ${(!slot.isEmpty && newlyJoinedIds.has(slot.id)) ? 'animate-avatar-pop' : ''}`}>
-                   {slot.isEmpty ? (
-                     <UserIcon size={20} className="text-white/30" />
-                   ) : (
-                     <span className="text-2xl sm:text-3xl translate-y-[1px]">{slot.avatar}</span>
+              {/* Container grouping Avatar and Info (Name + Points) together */}
+              <div
+                className={`flex items-center min-w-0 flex-1 overflow-visible ${
+                  !slot.isEmpty && newlyJoinedIds.has(slot.id) ? 'animate-avatar-pop origin-left' : ''
+                }`}
+              >
+                {/* Avatar with Gartic Trophy */}
+                <div className="relative shrink-0 mr-1.5 sm:mr-2.5">
+                   <div className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-[3px] transition-colors duration-200
+                     ${slot.isEmpty ? 'bg-black/20 border-white/10' : `bg-bg-dark-brand ${borderClass}`}`}>
+                     {slot.isEmpty ? (
+                       <UserIcon size={20} className="text-white/30" />
+                     ) : (
+                       <span className="text-2xl sm:text-3xl translate-y-[1px]">{slot.avatar}</span>
+                     )}
+                     {slot.isBlocked && (
+                       <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center pointer-events-none">
+                         <EyeOff className="w-5 h-5 text-white/90" strokeWidth={2.5} />
+                       </div>
+                     )}
+                   </div>
+                   
+                   {/* Trophy cup for wins (Gartic style) */}
+                   {!slot.isEmpty && (
+                     <TrophyContainer wins={slot.wins ?? 0} />
                    )}
-                   {slot.isBlocked && (
-                     <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center pointer-events-none">
-                       <EyeOff className="w-5 h-5 text-white/90" strokeWidth={2.5} />
-                     </div>
+
+                   {/* Status/Role Icon badge */}
+                   {!slot.isEmpty && isCorrectGuesser && (
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#00E540] rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-15 transition-all scale-in animate-scale-in">
+                          <Check size={10} strokeWidth={4} className="text-black font-extrabold" />
+                      </div>
                    )}
+                   {!slot.isEmpty && isDrawer && !isCorrectGuesser && (
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-primary-brand rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-15">
+                          <Pencil size={10} strokeWidth={3} className="text-bg-dark-brand" />
+                      </div>
+                    )}
                  </div>
                  
-                 {/* Trophy cup for wins (Gartic style) */}
-                 {!slot.isEmpty && (
-                   <TrophyContainer wins={slot.wins ?? 0} />
-                 )}
-
-                 {/* Status/Role Icon badge */}
-                 {!slot.isEmpty && isCorrectGuesser && (
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-[#00E540] rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-15 transition-all scale-in animate-scale-in">
-                        <Check size={10} strokeWidth={4} className="text-black font-extrabold" />
+                 {/* Info */}
+                 <div className="flex-1 min-w-0 flex flex-col justify-center pr-1 text-left">
+                    <div className={`font-bold text-[13px] sm:text-[15.5px] truncate transition-colors duration-200 leading-tight ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
+                       {slot.name}
                     </div>
-                 )}
-                 {!slot.isEmpty && isDrawer && !isCorrectGuesser && (
-                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-primary-brand rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-15">
-                        <Pencil size={10} strokeWidth={3} className="text-bg-dark-brand" />
-                    </div>
-                  )}
-               </div>
-               
-               {/* Info */}
-               <div className="flex-1 min-w-0 flex flex-col justify-center pr-1 text-left">
-                  <div className={`font-bold text-[13px] sm:text-[15.5px] truncate transition-colors duration-200 leading-tight ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
-                     {slot.name}
-                  </div>
-                  {!slot.isEmpty && !isFreeDraw && (
-                    <div className={`text-[11px] sm:text-[13px] font-bold transition-colors duration-200 mt-0.5 leading-none ${ptsClass}`}>
-                      {slot.points} pts
-                    </div>
-                  )}
-               </div>
+                    {!slot.isEmpty && !isFreeDraw && (
+                      <div className={`text-[11px] sm:text-[13px] font-bold transition-colors duration-200 mt-0.5 leading-none ${ptsClass}`}>
+                        {slot.points} pts
+                      </div>
+                    )}
+                 </div>
+              </div>
 
                {/* Bouncy floating score popups - disabled for drawer during DRAWING */}
                {!isDrawerActive && slotPopups.length > 0 && (

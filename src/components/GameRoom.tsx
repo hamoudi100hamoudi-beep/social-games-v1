@@ -63,7 +63,7 @@ interface Message {
 type PlayerSlot = {
   id: string;
   name: string;
-  points?: number | null;
+  points: number | null;
   isCurrent: boolean;
   isEmpty?: boolean;
   avatar: string;
@@ -436,6 +436,18 @@ export default function GameRoom({
     setHasDrawHistory(hasStrokes);
   }, []);
 
+  const handleAcknowledgeNewPlayer = useCallback((playerId: string) => {
+    eventGate.acknowledgeNewPlayer(playerId);
+    if (currentPlayersRef.current) {
+      currentPlayersRef.current = currentPlayersRef.current.map((p) =>
+        p.id === playerId ? { ...p, isNew: false } : p
+      );
+    }
+    setCurrentPlayers((prev) =>
+      prev.map((p) => (p.id === playerId ? { ...p, isNew: false } : p))
+    );
+  }, [eventGate]);
+
   // --- Prolonged Disconnect Timer (20 seconds) ---
   useEffect(() => {
     const isDisconnectedOrRejoining = hasJoinedRoomOnce && (!isConnected || !isRoomJoined);
@@ -658,6 +670,14 @@ export default function GameRoom({
         eventGate.hydrateGate(state.players);
         prevPlayersLengthRef.current = state.players.length;
       } else {
+        // Remove players who were in currentPlayersRef.current but are no longer in state.players
+        const currentActiveIds = new Set((state.players || []).map((p: any) => p.id));
+        currentPlayersRef.current.forEach((prevP) => {
+          if (prevP && prevP.id && !prevP.isEmpty && !currentActiveIds.has(prevP.id)) {
+            eventGate.removePlayer(prevP.id);
+          }
+        });
+
         // 🔊 Player Join / Leave sounds: trigger immediately for all players (including the active drawer)
         if (canPlaySoundRef.current && prevPlayersLengthRef.current > 0) {
           if (state.players.length > prevPlayersLengthRef.current) {
@@ -678,6 +698,8 @@ export default function GameRoom({
       const mapped = state.players.map((p) => ({
         id: p.id,
         name: p.name,
+        points: p.score || 0,
+        wins: p.wins || 0,
         isCurrent: false,
         isOffline: p.isOffline || false,
         avatar: p.avatar,
@@ -685,6 +707,23 @@ export default function GameRoom({
         persistentId: p.persistentId,
         isNew: newPlayersMap.get(p.id) || false,
       }));
+
+      mapped.sort((a, b) => {
+        // If points are different, sort by points descending
+        if (b.points !== a.points) {
+          return b.points - a.points;
+        }
+
+        // When points are equal, sort deterministically by server join order (index in state.players)
+        const indexA_server = state.players.findIndex((p) => p.id === a.id);
+        const indexB_server = state.players.findIndex((p) => p.id === b.id);
+        if (indexA_server !== -1 && indexB_server !== -1 && indexA_server !== indexB_server) {
+          return indexA_server - indexB_server;
+        }
+
+        // Ultimate deterministic fallback: player id
+        return a.id.localeCompare(b.id);
+      });
 
       currentPlayersRef.current = mapped;
 
@@ -923,6 +962,7 @@ export default function GameRoom({
     return {
       id: `empty-${index}`,
       name: "Empty",
+      points: null,
       isCurrent: false,
       isEmpty: true,
       avatar: "",
@@ -1161,7 +1201,7 @@ export default function GameRoom({
               <MiniBoardOverlay 
                 gameState={gameState} 
                 amIDrawer={amIDrawer} 
-                currentPlayers={currentPlayers as any}
+                currentPlayers={currentPlayers}
                 getCurrentDrawerName={getCurrentDrawerName}
                 isFreeDraw={isFreeDraw}
                 onStartFreeDraw={handleStartFreeDraw}
@@ -1180,6 +1220,7 @@ export default function GameRoom({
             slots={slots}
             morphMode={morphMode}
             onPlayerClick={setSelectedProfilePlayer}
+            onAcknowledgeNewPlayer={handleAcknowledgeNewPlayer}
           />
         )}
 

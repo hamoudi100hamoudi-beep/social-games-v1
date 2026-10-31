@@ -4,9 +4,11 @@ import { User as UserIcon, EyeOff } from 'lucide-react';
 export interface FreeDrawPlayerSlot {
   id: string;
   name: string;
+  points?: number | null;
   isCurrent?: boolean;
   isEmpty?: boolean;
   avatar?: string;
+  wins?: number;
   isOffline?: boolean;
   persistentId?: string;
   isBlocked?: boolean;
@@ -17,12 +19,14 @@ interface FreeDrawPlayersListProps {
   slots: FreeDrawPlayerSlot[];
   morphMode?: boolean;
   onPlayerClick?: (player: FreeDrawPlayerSlot) => void;
+  onAcknowledgeNewPlayer?: (playerId: string) => void;
 }
 
 export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
   slots,
   morphMode = false,
   onPlayerClick,
+  onAcknowledgeNewPlayer,
 }) => {
   const [newlyJoinedIds, setNewlyJoinedIds] = React.useState<Set<string>>(new Set());
   const prevPlayerIdsRef = React.useRef<Set<string> | null>(null);
@@ -31,10 +35,11 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
   React.useEffect(() => {
     const currentActiveIds = new Set(slots.filter((s) => !s.isEmpty).map((s) => s.id));
 
-    // First mount: initialize known player set without triggering entrance animation
+    // First mount: establish baseline of existing players, but do NOT ignore players who arrived with isNew: true
     if (prevPlayerIdsRef.current === null) {
-      prevPlayerIdsRef.current = currentActiveIds;
-      return;
+      prevPlayerIdsRef.current = new Set(
+        slots.filter((s) => !s.isEmpty && !s.isNew).map((s) => s.id)
+      );
     }
 
     // Identify fresh players that actually just joined
@@ -49,14 +54,16 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
       }
     });
 
-    // Update set of known active players
+    // Update set of known active players (sync with currently active IDs, preserve if array is empty)
     if (currentActiveIds.size > 0) {
-      const merged = new Set(prevPlayerIdsRef.current);
-      currentActiveIds.forEach((id) => merged.add(id));
-      prevPlayerIdsRef.current = merged;
+      prevPlayerIdsRef.current = currentActiveIds;
     }
 
     if (freshNewIds.length > 0) {
+      freshNewIds.forEach((id) => {
+        onAcknowledgeNewPlayer?.(id);
+      });
+
       const uniqueNew = freshNewIds.filter((id) => !newlyJoinedIds.has(id));
       if (uniqueNew.length > 0) {
         setNewlyJoinedIds((prev) => {
@@ -76,7 +83,7 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
         return () => clearTimeout(timer);
       }
     }
-  }, [slots]);
+  }, [slots, onAcknowledgeNewPlayer]);
 
   // Keep DOM elements keyed stably so that CSS top transitions execute smoothly upon player join/leave
   const stableSlots = React.useMemo(() => {
@@ -144,34 +151,40 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
                 }
               }}
             >
-              {/* Avatar */}
-              <div className="relative shrink-0 mr-1.5 sm:mr-2.5">
-                <div
-                  className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-[3px] transition-colors duration-200
-                    ${slot.isEmpty ? 'bg-black/20 border-white/10' : 'bg-bg-dark-brand border-[#94A3B8]'}
-                    ${!slot.isEmpty && newlyJoinedIds.has(slot.id) ? 'animate-avatar-pop' : ''}`}
-                >
-                  {slot.isEmpty ? (
-                    <UserIcon size={20} className="text-white/30" />
-                  ) : (
-                    <span className="text-2xl sm:text-3xl translate-y-[1px]">{slot.avatar}</span>
-                  )}
-                  {slot.isBlocked && (
-                    <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center pointer-events-none">
-                      <EyeOff className="w-5 h-5 text-white/90" strokeWidth={2.5} />
-                    </div>
-                  )}
+              {/* Container grouping Avatar and Name together */}
+              <div
+                className={`flex items-center min-w-0 flex-1 overflow-visible ${
+                  !slot.isEmpty && newlyJoinedIds.has(slot.id) ? 'animate-avatar-pop origin-left' : ''
+                }`}
+              >
+                {/* Avatar */}
+                <div className="relative shrink-0 mr-1.5 sm:mr-2.5">
+                  <div
+                    className={`relative w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center border-[3px] transition-colors duration-200
+                      ${slot.isEmpty ? 'bg-black/20 border-white/10' : 'bg-bg-dark-brand border-[#94A3B8]'}`}
+                  >
+                    {slot.isEmpty ? (
+                      <UserIcon size={20} className="text-white/30" />
+                    ) : (
+                      <span className="text-2xl sm:text-3xl translate-y-[1px]">{slot.avatar}</span>
+                    )}
+                    {slot.isBlocked && (
+                      <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center pointer-events-none">
+                        <EyeOff className="w-5 h-5 text-white/90" strokeWidth={2.5} />
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Info: Name only */}
-              <div className="flex-1 min-w-0 flex flex-col justify-center pr-1 text-left">
-                <div
-                  className={`font-bold text-[13px] sm:text-[15.5px] truncate transition-colors duration-200 leading-tight ${
-                    slot.isEmpty ? 'text-white/40' : 'text-white'
-                  }`}
-                >
-                  {slot.name}
+                {/* Info: Name only */}
+                <div className="flex-1 min-w-0 flex flex-col justify-center pr-1 text-left">
+                  <div
+                    className={`font-bold text-[13px] sm:text-[15.5px] truncate transition-colors duration-200 leading-tight ${
+                      slot.isEmpty ? 'text-white/40' : 'text-white'
+                    }`}
+                  >
+                    {slot.name}
+                  </div>
                 </div>
               </div>
             </div>
