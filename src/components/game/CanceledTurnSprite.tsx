@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 
 interface CanceledTurnSpriteProps {
   className?: string;
+  animationKey?: number;
 }
 
 const COLS = 5;
@@ -67,11 +68,23 @@ const ANIMATION_SEQUENCE: FrameStep[] = [
   { frame: 24, delay: 0 },             // Frame 25 (stops and freezes here permanently)
 ];
 
-export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ className = "" }) => {
-  const [frameIndex, setFrameIndex] = useState(0);
+export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ className = "", animationKey }) => {
+  const isStatic = animationKey === 0;
+  const [frameIndex, setFrameIndex] = useState(isStatic ? 24 : 0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (animationKey === 0) {
+      setFrameIndex(24);
+      return;
+    }
+
+    setFrameIndex(ANIMATION_SEQUENCE[0].frame);
     let isMounted = true;
 
     const scheduleNextStep = (stepIndex: number) => {
@@ -104,7 +117,7 @@ export const CanceledTurnSprite: React.FC<CanceledTurnSpriteProps> = ({ classNam
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, [animationKey]);
 
   const col = frameIndex % COLS;
   const row = Math.floor(frameIndex / COLS);

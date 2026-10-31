@@ -3,6 +3,7 @@ import React, { useEffect, useState, useRef } from "react";
 interface AllGuessedSpriteProps {
   className?: string;
   mode?: "all_guessed" | "no_one_guessed" | "success" | "failed";
+  animationKey?: number;
 }
 
 const COLS = 5;
@@ -140,17 +141,31 @@ const FAILED_LOOP_SEQUENCE: { frame: number; delay: number }[] = [
 export const AllGuessedSprite: React.FC<AllGuessedSpriteProps> = ({
   className = "",
   mode = "all_guessed",
+  animationKey,
 }) => {
   const isFailedMode = mode === "no_one_guessed" || mode === "failed";
-  const [currentFrame, setCurrentFrame] = useState(0);
+  const staticFrame = isFailedMode ? 34 : 21;
+  const isStatic = animationKey === 0;
+  const [currentFrame, setCurrentFrame] = useState(isStatic ? staticFrame : 0);
   const stepRef = useRef(0);
   const inLoopRef = useRef(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (animationKey === 0) {
+      setCurrentFrame(staticFrame);
+      return;
+    }
+
     let isMounted = true;
     stepRef.current = 0;
     inLoopRef.current = false;
+    setCurrentFrame(0);
 
     const runStep = () => {
       if (!isMounted) return;
@@ -219,7 +234,7 @@ export const AllGuessedSprite: React.FC<AllGuessedSpriteProps> = ({
         clearTimeout(timerRef.current);
       }
     };
-  }, [isFailedMode]);
+  }, [animationKey, isFailedMode, staticFrame]);
 
   const col = currentFrame % COLS;
   const row = Math.floor(currentFrame / COLS);

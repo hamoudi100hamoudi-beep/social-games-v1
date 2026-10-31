@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserIcon, Check, Pencil, EyeOff } from 'lucide-react';
 
-const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
+const TrophyContainer: React.FC<{ wins: number; isCelebrating?: boolean }> = ({ wins, isCelebrating = false }) => {
   if (wins <= 0) return null;
   const [imgError, setImgError] = React.useState(false);
   const [imgLoaded, setImgLoaded] = React.useState(false);
@@ -12,7 +12,6 @@ const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
   return (
     <div 
       id="gartic-trophy-container"
-      key={wins}
       className="absolute -left-1 -bottom-3.5 z-20 flex items-center justify-center select-none overflow-visible"
     >
       <style>{`
@@ -41,7 +40,7 @@ const TrophyContainer: React.FC<{ wins: number }> = ({ wins }) => {
       )}
 
       {isReady && (
-        <div className="w-[26px] h-[26px] sm:w-[30px] sm:h-[30px] flex items-center justify-center relative animate-trophy-celebrate">
+        <div className={`w-[26px] h-[26px] sm:w-[30px] sm:h-[30px] flex items-center justify-center relative ${isCelebrating ? 'animate-trophy-celebrate' : ''}`}>
           {!imgError ? (
             <img 
               src="/trophy.webp" 
@@ -131,6 +130,80 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
 
   const [newlyJoinedIds, setNewlyJoinedIds] = React.useState<Set<string>>(new Set());
   const prevPlayerIdsRef = React.useRef<Set<string> | null>(null);
+
+  // Stable wins tracking per player (persistentId || id) to celebrate ONLY real win increases
+  const prevWinsRef = React.useRef<Map<string, number> | null>(null);
+  const [celebratingKeys, setCelebratingKeys] = React.useState<Set<string>>(new Set());
+  const celebrationTimersRef = React.useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Track win increases per player and trigger celebration ONLY on real wins
+  React.useEffect(() => {
+    // First mount: establish baseline without triggering any celebration
+    if (prevWinsRef.current === null) {
+      const initialWins = new Map<string, number>();
+      slots.forEach((s) => {
+        if (!s.isEmpty) {
+          const key = s.persistentId || s.id;
+          initialWins.set(key, s.wins ?? 0);
+        }
+      });
+      prevWinsRef.current = initialWins;
+      return;
+    }
+
+    // Subsequent updates: detect players whose wins ACTUALLY increased
+    const freshWinsKeys: string[] = [];
+    const updatedWins = new Map(prevWinsRef.current);
+
+    slots.forEach((s) => {
+      if (!s.isEmpty) {
+        const key = s.persistentId || s.id;
+        const currentWins = s.wins ?? 0;
+        const prevWins = prevWinsRef.current?.get(key);
+
+        if (prevWins !== undefined && currentWins > prevWins) {
+          freshWinsKeys.push(key);
+        }
+        updatedWins.set(key, currentWins);
+      }
+    });
+
+    prevWinsRef.current = updatedWins;
+
+    if (freshWinsKeys.length > 0) {
+      setCelebratingKeys((prev) => {
+        const next = new Set(prev);
+        freshWinsKeys.forEach((k) => next.add(k));
+        return next;
+      });
+
+      freshWinsKeys.forEach((key) => {
+        const existingTimer = celebrationTimersRef.current.get(key);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+
+        const timer = setTimeout(() => {
+          setCelebratingKeys((prev) => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
+          celebrationTimersRef.current.delete(key);
+        }, 800);
+
+        celebrationTimersRef.current.set(key, timer);
+      });
+    }
+  }, [slots]);
+
+  // Clean up all celebration timers on unmount
+  React.useEffect(() => {
+    return () => {
+      celebrationTimersRef.current.forEach((t) => clearTimeout(t));
+      celebrationTimersRef.current.clear();
+    };
+  }, []);
 
   // Track player joins dynamically and trigger pop animation cleanly ONLY for real joins
   React.useEffect(() => {
@@ -356,7 +429,10 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                    
                    {/* Trophy cup for wins (Gartic style) */}
                    {!slot.isEmpty && (
-                     <TrophyContainer wins={slot.wins ?? 0} />
+                     <TrophyContainer
+                       wins={slot.wins ?? 0}
+                       isCelebrating={celebratingKeys.has(slot.persistentId || slot.id)}
+                     />
                    )}
 
                    {/* Status/Role Icon badge */}

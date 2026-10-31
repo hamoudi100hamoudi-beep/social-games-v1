@@ -642,6 +642,13 @@ export default function ExperimentalGameRoom({
   const prevHintsUsedRef = React.useRef<number>(0);
   const prevCorrectGuessersRef = React.useRef<string[]>([]);
 
+  // 🎬 Real Event Signal: Independent monotonic counter for real ROUND_END events
+  const [roundEndAnimationKey, setRoundEndAnimationKey] = useState<number>(0);
+  const lastRoundEndEventRef = useRef<{ status: string; reason: string }>({
+    status: "",
+    reason: "",
+  });
+
   useEffect(() => {
     // Prevent sounds from playing immediately after joining (to avoid notification spam)
     const timer = setTimeout(() => {
@@ -1023,6 +1030,12 @@ export default function ExperimentalGameRoom({
         prevGameStateStatusRef.current = state.gameState?.status || "";
         prevHintsUsedRef.current = state.gameState?.hintsUsed || 0;
         prevCorrectGuessersRef.current = state.gameState?.correctGuessers || [];
+
+        // Baseline for round end events: do not treat initial state as a new event!
+        lastRoundEndEventRef.current = {
+          status: state.gameState?.status || "",
+          reason: state.gameState?.roundEndReason || "",
+        };
       } else {
         // Remove players who were in currentPlayersRef.current but are no longer in state.players
         const currentActiveIds = new Set((state.players || []).map((p: any) => p.id));
@@ -1041,6 +1054,25 @@ export default function ExperimentalGameRoom({
           }
         }
         prevPlayersLengthRef.current = state.players.length;
+
+        // Detect real ROUND_END event transitions after initial hydration
+        const incomingStatus = state.gameState?.status || "";
+        const incomingReason = state.gameState?.roundEndReason || "";
+        const prevRound = lastRoundEndEventRef.current;
+
+        if (incomingStatus === "ROUND_END") {
+          const isNewRoundEnd =
+            prevRound.status !== "ROUND_END" ||
+            (incomingReason && incomingReason !== prevRound.reason);
+
+          if (isNewRoundEnd) {
+            setRoundEndAnimationKey((k) => k + 1);
+          }
+        }
+        lastRoundEndEventRef.current = {
+          status: incomingStatus,
+          reason: incomingReason,
+        };
 
         // Calculate isNew for each player before the state updater
         state.players.forEach((p) => {
@@ -1802,6 +1834,7 @@ export default function ExperimentalGameRoom({
               activeDrawersCount={activeDrawers.length}
               hasEnteredFreeDraw={hasEnteredFreeDraw}
               hasDrawHistory={hasDrawHistory}
+              roundEndAnimationKey={roundEndAnimationKey}
             />
           </div>
 

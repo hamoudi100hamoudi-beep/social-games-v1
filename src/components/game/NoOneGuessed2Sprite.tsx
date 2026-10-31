@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 
 interface NoOneGuessed2SpriteProps {
   className?: string;
+  animationKey?: number;
 }
 
 const COLS = 4;
@@ -51,11 +52,24 @@ if (typeof window !== "undefined") {
 
 export const NoOneGuessed2Sprite: React.FC<NoOneGuessed2SpriteProps> = ({
   className = "",
+  animationKey,
 }) => {
-  const [frameIndex, setFrameIndex] = useState(0);
+  const isStatic = animationKey === 0;
+  const [frameIndex, setFrameIndex] = useState(isStatic ? 26 : 0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (animationKey === 0) {
+      setFrameIndex(26);
+      return;
+    }
+
+    setFrameIndex(ANIMATION_SEQUENCE[0].frame);
     let isMounted = true;
 
     const playStep = (stepIndex: number) => {
@@ -92,7 +106,7 @@ export const NoOneGuessed2Sprite: React.FC<NoOneGuessed2SpriteProps> = ({
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, [animationKey]);
 
   const col = frameIndex % COLS;
   const row = Math.floor(frameIndex / COLS);

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 
 interface SkippedSpriteProps {
   className?: string;
+  animationKey?: number;
 }
 
 const TOTAL_FRAMES = 20;
@@ -9,11 +10,23 @@ const COLS = 5;
 const ROWS = 4;
 const FRAME_DELAY = 90; // Animation on "twos" (~11-12fps) for crisp, stepped timing
 
-export const SkippedSprite: React.FC<SkippedSpriteProps> = ({ className = "" }) => {
-  const [frameIndex, setFrameIndex] = useState(0);
+export const SkippedSprite: React.FC<SkippedSpriteProps> = ({ className = "", animationKey }) => {
+  const isStatic = animationKey === 0;
+  const [frameIndex, setFrameIndex] = useState(isStatic ? TOTAL_FRAMES - 1 : 0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (animationKey === 0) {
+      setFrameIndex(TOTAL_FRAMES - 1);
+      return;
+    }
+
+    setFrameIndex(0);
     let isMounted = true;
 
     const scheduleNextFrame = (currentFrame: number) => {
@@ -45,7 +58,7 @@ export const SkippedSprite: React.FC<SkippedSpriteProps> = ({ className = "" }) 
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, [animationKey]);
 
   const col = frameIndex % COLS;
   const row = Math.floor(frameIndex / COLS);

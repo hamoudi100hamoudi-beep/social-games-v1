@@ -30,6 +30,7 @@ interface MiniBoardOverlayProps {
   activeDrawersCount?: number;
   hasEnteredFreeDraw?: boolean;
   hasDrawHistory?: boolean;
+  roundEndAnimationKey?: number;
 }
 
 export function MiniBoardOverlay({
@@ -42,9 +43,25 @@ export function MiniBoardOverlay({
   activeDrawersCount = 0,
   hasEnteredFreeDraw = false,
   hasDrawHistory = false,
+  roundEndAnimationKey,
 }: MiniBoardOverlayProps) {
   // We use this z-index to overlay inside the DrawingBoard
   const containerClass = "absolute inset-0 z-[40] flex flex-col items-center justify-between bg-white pointer-events-auto p-2 sm:p-4 select-none font-sans overflow-y-auto min-h-0";
+
+  const prevRoundEndKeyRef = React.useRef<number | null>(null);
+  const activeAnimationKeyRef = React.useRef<number>(0);
+
+  // Baseline on mount: do not trigger animation if already in ROUND_END when mounting
+  if (prevRoundEndKeyRef.current === null) {
+    prevRoundEndKeyRef.current = roundEndAnimationKey ?? 0;
+    activeAnimationKeyRef.current = 0;
+  } else if (
+    roundEndAnimationKey !== undefined &&
+    roundEndAnimationKey > prevRoundEndKeyRef.current
+  ) {
+    prevRoundEndKeyRef.current = roundEndAnimationKey;
+    activeAnimationKeyRef.current = roundEndAnimationKey;
+  }
 
   const wasPodium = React.useRef(false);
   const playPodiumAnimations = React.useRef(false);
@@ -179,7 +196,7 @@ export function MiniBoardOverlay({
                     <GameTitle text="SKIPPED!" type="miniboard" className="text-[17px] sm:text-[22px]" />
                   </div>
                   <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
-                    <SkippedSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" />
+                    <SkippedSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" animationKey={activeAnimationKeyRef.current} />
                   </div>
                   <div className="pb-0.5 sm:pb-1">
                     <h3 className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5" dir="auto">
@@ -200,7 +217,7 @@ export function MiniBoardOverlay({
                     <GameTitle text="INACTIVE" type="miniboard" className="text-[17px] sm:text-[22px]" />
                   </div>
                   <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
-                    <TurnLostSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" />
+                    <TurnLostSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" animationKey={activeAnimationKeyRef.current} />
                   </div>
                   <div className="pb-0.5 sm:pb-1">
                     <h3 className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5" dir="auto">
@@ -222,7 +239,7 @@ export function MiniBoardOverlay({
                   </div>
 
                   <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
-                    <CanceledTurnSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" />
+                    <CanceledTurnSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" animationKey={activeAnimationKeyRef.current} />
                   </div>
 
                   <div className="pb-0.5 sm:pb-1">
@@ -266,25 +283,29 @@ export function MiniBoardOverlay({
                 <div className="flex-1 flex items-center justify-center my-1 sm:my-2 w-full max-h-[120px] sm:max-h-[160px]">
                   {reason === "all_guessed" ? (
                     gameState?.isFastAllGuessed ? (
-                      <AllGuessedRareSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" />
+                      <AllGuessedRareSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" animationKey={activeAnimationKeyRef.current} />
                     ) : (
                       <AllGuessedSprite
                         mode="all_guessed"
                         className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]"
+                        animationKey={activeAnimationKeyRef.current}
                       />
                     )
                   ) : hasSucceeded ? (
                     <PartialGuessedSprite
                       className="h-[110px] sm:h-[150px] max-w-[130px] sm:max-w-[180px]"
+                      animationKey={activeAnimationKeyRef.current}
                     />
                   ) : gameState?.noOneGuessedVariant === 2 ? (
                     <NoOneGuessed2Sprite
                       className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]"
+                      animationKey={activeAnimationKeyRef.current}
                     />
                   ) : (
                     <AllGuessedSprite
                       mode="no_one_guessed"
                       className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]"
+                      animationKey={activeAnimationKeyRef.current}
                     />
                   )}
                 </div>

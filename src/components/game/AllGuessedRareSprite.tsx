@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 
 interface AllGuessedRareSpriteProps {
   className?: string;
+  animationKey?: number;
 }
 
 const TOTAL_FRAMES = 12; // 12 frames (index 0 to 11)
@@ -27,11 +28,23 @@ if (typeof window !== "undefined") {
 
 export const AllGuessedRareSprite: React.FC<AllGuessedRareSpriteProps> = ({
   className = "",
+  animationKey,
 }) => {
   const [frameIndex, setFrameIndex] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (animationKey === 0) {
+      setFrameIndex(0);
+      return;
+    }
+
+    setFrameIndex(0);
     let isMounted = true;
 
     const scheduleNextFrame = (currentFrame: number, direction: 1 | -1) => {
@@ -73,7 +86,7 @@ export const AllGuessedRareSprite: React.FC<AllGuessedRareSpriteProps> = ({
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, [animationKey]);
 
   const col = frameIndex % COLS;
   const row = Math.floor(frameIndex / COLS);

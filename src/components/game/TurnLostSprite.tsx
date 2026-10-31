@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 
 interface TurnLostSpriteProps {
   className?: string;
+  animationKey?: number;
 }
 
 const TOTAL_FRAMES = 21;
@@ -23,11 +24,22 @@ const getFrameDelay = (frameIndex: number): number => {
   }
 };
 
-export const TurnLostSprite: React.FC<TurnLostSpriteProps> = ({ className = "" }) => {
+export const TurnLostSprite: React.FC<TurnLostSpriteProps> = ({ className = "", animationKey }) => {
   const [frameIndex, setFrameIndex] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (animationKey === 0) {
+      setFrameIndex(0);
+      return;
+    }
+
+    setFrameIndex(0);
     let isMounted = true;
 
     const scheduleNextFrame = (currentFrame: number) => {
@@ -43,10 +55,10 @@ export const TurnLostSprite: React.FC<TurnLostSpriteProps> = ({ className = "" }
     const img = new Image();
     img.src = '/turn_lost.webp';
     if (img.complete) {
-      scheduleNextFrame(frameIndex);
+      scheduleNextFrame(0);
     } else {
-      img.onload = () => { if (isMounted) scheduleNextFrame(frameIndex); };
-      img.onerror = () => { if (isMounted) scheduleNextFrame(frameIndex); };
+      img.onload = () => { if (isMounted) scheduleNextFrame(0); };
+      img.onerror = () => { if (isMounted) scheduleNextFrame(0); };
     }
 
     return () => {
@@ -55,7 +67,7 @@ export const TurnLostSprite: React.FC<TurnLostSpriteProps> = ({ className = "" }
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, [animationKey]);
 
   const col = frameIndex % COLS;
   const row = Math.floor(frameIndex / COLS);

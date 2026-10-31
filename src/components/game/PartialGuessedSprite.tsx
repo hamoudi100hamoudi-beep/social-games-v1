@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 
 interface PartialGuessedSpriteProps {
   className?: string;
+  animationKey?: number;
 }
 
 const TOTAL_FRAMES = 22;
@@ -9,11 +10,22 @@ const COLS = 4;
 const ROWS = 6;
 const FRAME_DELAY = 95; // ~10.5 fps for smooth, expressive animation pacing
 
-export const PartialGuessedSprite: React.FC<PartialGuessedSpriteProps> = ({ className = "" }) => {
+export const PartialGuessedSprite: React.FC<PartialGuessedSpriteProps> = ({ className = "", animationKey }) => {
   const [frameIndex, setFrameIndex] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (animationKey === 0) {
+      setFrameIndex(0);
+      return;
+    }
+
+    setFrameIndex(0);
     let isMounted = true;
 
     const scheduleNextFrame = (currentFrame: number) => {
@@ -43,7 +55,7 @@ export const PartialGuessedSprite: React.FC<PartialGuessedSpriteProps> = ({ clas
         clearTimeout(timerRef.current);
       }
     };
-  }, []);
+  }, [animationKey]);
 
   const col = frameIndex % COLS;
   const row = Math.floor(frameIndex / COLS);
