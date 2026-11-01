@@ -24,6 +24,7 @@ import {
   isBucketCommand,
   countBucketsBeforeIndex
 } from '../../utils/canvasCommandHelpers';
+import { drawShape } from '../../utils/canvasPathRenderer';
 
 // --- Constants ---
 /* 
@@ -2485,7 +2486,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else {
         if (currentPathRef.current.length > 0) {
           const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
-          drawShape(tempCtx, startXRef.current, startYRef.current, lastPt.x, lastPt.y, activeTool, activeColor, activeWidth, activeOpacity);
+          drawShape(tempCtx, startXRef.current, startYRef.current, lastPt.x, lastPt.y, activeTool, activeColor, activeWidth, activeOpacity, false);
         }
       }
     }
@@ -2497,7 +2498,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (isShape) {
           const startPt = session.path[0];
           const lastPt = session.path[session.path.length - 1];
-          drawShape(tempCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+          drawShape(tempCtx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
         } else {
           drawEntirePath(tempCtx, session.path, session.tool, session.color, session.width, session.opacity);
         }
@@ -2826,69 +2827,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     return flushedCount;
-  };
-
-  const drawShape = (
-    activeCtx: CanvasRenderingContext2D,
-    x0: number, y0: number,
-    x1: number, y1: number,
-    drawTool: ToolType,
-    drawColor: string,
-    drawWidth: number,
-    drawOpacity: number
-  ) => {
-    const isZeroLength = Math.abs(x1 - x0) < 0.5 && Math.abs(y1 - y0) < 0.5;
-    if (isZeroLength) {
-      return;
-    }
-
-    activeCtx.save();
-    activeCtx.lineWidth = drawWidth;
-    activeCtx.lineCap = 'round';
-    activeCtx.lineJoin = 'round';
-    activeCtx.globalAlpha = drawOpacity;
-
-    if (drawTool === 'eraser') {
-      if ((propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser) && activeCtx !== tempCtxRef.current) {
-        activeCtx.globalCompositeOperation = 'destination-out';
-        activeCtx.strokeStyle = 'rgba(0,0,0,1)';
-        activeCtx.fillStyle = 'rgba(0,0,0,1)';
-      } else {
-        activeCtx.strokeStyle = '#ffffff';
-        activeCtx.fillStyle = '#ffffff';
-      }
-    } else {
-      activeCtx.strokeStyle = drawColor;
-      activeCtx.fillStyle = drawColor;
-    }
-
-    activeCtx.beginPath();
-
-    if (drawTool === 'line') {
-      activeCtx.moveTo(x0, y0);
-      activeCtx.lineTo(x1, y1);
-      activeCtx.stroke();
-    } else if (drawTool === 'strokeRect') {
-      activeCtx.strokeRect(x0, y0, x1 - x0, y1 - y0);
-    } else if (drawTool === 'fillRect') {
-      activeCtx.fillRect(x0, y0, x1 - x0, y1 - y0);
-    } else if (drawTool === 'strokeCircle') {
-      const centerX = (x0 + x1) / 2;
-      const centerY = (y0 + y1) / 2;
-      const radiusX = Math.abs(x1 - x0) / 2;
-      const radiusY = Math.abs(y1 - y0) / 2;
-      activeCtx.ellipse(centerX, centerY, Math.max(0.1, radiusX), Math.max(0.1, radiusY), 0, 0, Math.PI * 2);
-      activeCtx.stroke();
-    } else if (drawTool === 'fillCircle') {
-      const centerX = (x0 + x1) / 2;
-      const centerY = (y0 + y1) / 2;
-      const radiusX = Math.abs(x1 - x0) / 2;
-      const radiusY = Math.abs(y1 - y0) / 2;
-      activeCtx.ellipse(centerX, centerY, Math.max(0.1, radiusX), Math.max(0.1, radiusY), 0, 0, Math.PI * 2);
-      activeCtx.fill();
-    }
-
-    activeCtx.restore();
   };
 
   // --- Handlers & Commands Replays ---
@@ -3231,7 +3169,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (isShape) {
               const startPt = path[0];
               const lastPt = path[path.length - 1];
-              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
             } else {
               drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
             }
@@ -3554,7 +3492,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 if (isShape) {
                   const startPt = path[0];
                   const lastPt = path[path.length - 1];
-                  drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+                  drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
                 } else {
                   drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
                 }
@@ -3674,7 +3612,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           if (isShape && scaledPoints.length >= 2) {
             const startPt = scaledPoints[0];
             const lastPt = scaledPoints[scaledPoints.length - 1];
-            drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, cmdTool, cmdColor, cmdWidth, cmdOpacity);
+            drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, cmdTool, cmdColor, cmdWidth, cmdOpacity, false);
           } else {
             drawEntirePath(ctx, scaledPoints, cmdTool, cmdColor, cmdWidth, cmdOpacity);
           }
@@ -3720,7 +3658,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           const sY = data.startY * LOGICAL_HEIGHT;
           const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
           const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
-          drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity);
+          drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity, false);
         }
         path.length = 0;
         delete replaySessions[instId];
@@ -3901,7 +3839,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (isShape) {
               const startPt = path[0];
               const lastPt = path[path.length - 1];
-              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
             } else {
               drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
             }
@@ -4334,7 +4272,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             if (isShape) {
               const startPt = path[0];
               const lastPt = path[path.length - 1];
-              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
             } else {
               drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
             }
@@ -4430,7 +4368,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           if (isShape && scaledPoints.length >= 2) {
             const startPt = scaledPoints[0];
             const lastPt = scaledPoints[scaledPoints.length - 1];
-            drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, remoteTool, remoteColor, remoteWidth, remoteOpacity);
+            drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, remoteTool, remoteColor, remoteWidth, remoteOpacity, false);
           } else {
             drawEntirePath(ctx, scaledPoints, remoteTool, remoteColor, remoteWidth, remoteOpacity);
           }
@@ -4699,7 +4637,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             const sY = data.startY * LOGICAL_HEIGHT;
             const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
             const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
-            drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity);
+            drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity, false);
             committed = true;
           }
         }
@@ -5184,7 +5122,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                   if (isShape) {
                     const startPt = path[0];
                     const lastPt = path[path.length - 1];
-                    drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity);
+                    drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
                   } else {
                     drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity);
                   }
@@ -6194,7 +6132,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     });
 
     tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-    drawShape(tempCtx, rawX, rawY, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity);
+    drawShape(tempCtx, rawX, rawY, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity, false);
   };
 
   const processShapeMove = (rawX: number, rawY: number) => {
@@ -6208,7 +6146,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeOpacity = propsRef.current.opacity;
 
     tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-    drawShape(tempCtx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity);
+    drawShape(tempCtx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity, false);
   };
 
   const finishShapeDrawing = (rawX: number, rawY: number) => {
@@ -6236,7 +6174,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     commitFreeDrawPendingCache(instanceId, shapeStrokeId);
 
     // Draw shape to the primary canvas context (hardware-clipped naturally at canvas bounds)
-    drawShape(ctx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity);
+    drawShape(ctx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity, false);
 
     // Send complete stroke object for shapes (straight lines, rectangles, circles, etc.)
     const normalizedPoints = [

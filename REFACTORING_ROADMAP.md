@@ -8,12 +8,12 @@
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
 | **المرحلة الحالية النشطة** | `PHASE 4` | `DRAWINGCANVASCORE REFACTOR` (تفكيك ملف DrawingCanvasCore بأمان وتدرج) |
-| **آخر مهمة مكتملة ومثبتة** | `PHASE 4B-1` | استخراج دوال فحص الأوامر الست (Command Helpers) بنجاح إلى `src/utils/canvasCommandHelpers.ts` (مزامنة في الالتزام: `8ba2d7a73ff404a28454c3cf6716e71915d7357e`) |
-| **المهمة السابقة المباشرة** | `SEC-2D` | تحسين وبث حالة `start_free_draw / stop_free_draw` وجعلها Idempotent لمنع عواصف بث الحالة |
-| **المهمة التالية المجدولة** | `PHASE 4B-2` | تدقيق إمكانية فصل محرك الأشكال والمسارات (`drawShape` و `drawEntirePath`) |
-| **الملفات المتأثرة مؤخراً** | `src/utils/canvasCommandHelpers.ts` | `src/components/game/DrawingCanvasCore.tsx` و `REFACTORING_ROADMAP.md` |
-| **مرجع GitHub المتزامن** | `8ba2d7a73ff404a28454c3cf6716e71915d7357e` | الفرع: `main` (يتضمن استخراج Command Helpers وكافة مهام الأمان السابقة) |
-| **حالة المزامنة مع GitHub** | `Synchronized with GitHub` | تم رفع وتثبيت `PHASE 4B-1` في الالتزام `8ba2d7a73ff404a28454c3cf6716e71915d7357e` |
+| **آخر مهمة مكتملة ومثبتة** | `PHASE 4B-3A` | استخراج محرك رسم الأشكال `drawShape` بنجاح إلى `src/utils/canvasPathRenderer.ts` (Completed Locally — Pending GitHub Sync) |
+| **المهمة السابقة المباشرة** | `PHASE 4B-2` | تدقيق محرك الأشكال والمسارات والتحقق من التبعيات |
+| **المهمة التالية المجدولة** | `PHASE 4B-3B` | استخراج محرك المسارات والمنحنيات `drawEntirePath` والثابت `SPLINE_CUSP_COS` |
+| **الملفات المتأثرة مؤخراً** | `src/utils/canvasPathRenderer.ts` | `src/components/game/DrawingCanvasCore.tsx` و `REFACTORING_ROADMAP.md` |
+| **مرجع GitHub المتزامن** | `8ba2d7a73ff404a28454c3cf6716e71915d7357e` | الفرع: `main` (يتضمن استخراج Command Helpers في PHASE 4B-1) |
+| **حالة المزامنة مع GitHub** | `Completed Locally — Pending GitHub Sync` | تم رفع وتثبيت `PHASE 4B-1` على GitHub؛ وتعديلات `PHASE 4B-3A` مكتملة محلياً فقط |
 | **المخاطر المفتوحة النشطة** | تدقيق `maxHttpBufferSize` وفصل محركات الكانفاس | ضبط `maxHttpBufferSize` مؤجل لتدقيق مستقل؛ وفصل الكانفاس يُدار بتدرج صارم |
 
 > ⚠️ **تنبيه للمطورين والذكاء الاصطناعي**: هذا الملف هو **المرجع الحصري والدائم** لتنظيم وتتبع كل المهام المعمارية والأمنية وهيكلة الكود في المشروع. يجب مراجعته بدقة وتحديث هذا الجدول بعد إنهاء كل مهمة لتوثيق المنجز والمتبقي مع الحفاظ على صرامة الدستور المعماري.
@@ -173,8 +173,10 @@
 - [x] **PHASE 4A — حصر المسؤوليات والاعتماديات**: (مكتملة) رسم خريطة تدفق البيانات والـ Refs والحالات وتحديد الترتيب التدريجي للفصل.
 - [~] **PHASE 4B — فصل محركات وخوارزميات الرسم المستقلة**:
   - [x] **PHASE 4B-1 — استخراج دوال فحص وتصنيف الأوامر (Command Helpers)**: تم استخراج الدوال الست (`getCommandSignature`, `isClearCommand`, `findLatestClearIndex`, `isCommandHeavy`, `isBucketCommand`, `countBucketsBeforeIndex`) بنجاح إلى `src/utils/canvasCommandHelpers.ts` (مزامنة في الالتزام: `8ba2d7a73ff404a28454c3cf6716e71915d7357e`).
-  - [ ] **PHASE 4B-2 — تدقيق محرك الأشكال والمسارات (`drawShape` و `drawEntirePath`)**: (المهمة الحالية) فحص الاعتماديات، الكود الكامل، والتأثير على الأداء.
-  - [ ] **PHASE 4B-3 — خوارزمية الدلو والملء بالفيضان (`Flood Fill`)**: دراسة فصل خوارزمية السد الرقعي بعد ضمان حدوده.
+  - [x] **PHASE 4B-2 — تدقيق محرك الأشكال والمسارات (`drawShape` و `drawEntirePath`)**: (مكتملة) فحص الاعتماديات، الكود الكامل، والتأثير على الأداء وإثبات استقلالية أدوات الأشكال.
+  - [x] **PHASE 4B-3A — استخراج محرك رسم الأشكال (`drawShape`)**: استخراج الدالة بنجاح إلى `src/utils/canvasPathRenderer.ts` وتحديث مواضع الاستدعاء الـ14 بمعامل صريح.
+  - [ ] **PHASE 4B-3B — استخراج محرك المسارات والمنحنيات (`drawEntirePath`)**: دراسة واستخراج خوارزمية Spline المتقدمة والثابت `SPLINE_CUSP_COS`.
+  - [ ] **PHASE 4B-4 — خوارزمية الدلو والملء بالفيضان (`Flood Fill`)**: دراسة فصل خوارزمية السد الرقعي بعد ضمان حدوده.
 - [ ] **PHASE 4C — فصل وظائف الكانفاس والتحكم بالعرض (Viewport & Transform)**:
   - دراسة عزل منطق الزوم بالأصابع، والسحب، وإعادة ضبط أبعاد الكانفاس ونسب العرض.
 - [ ] **PHASE 4D — فصل مسار الإدخال والتصيير (Pointer & Stroke Pipeline)**:
