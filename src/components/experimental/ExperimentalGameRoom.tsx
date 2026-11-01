@@ -118,8 +118,9 @@ const SmoothTimer = ({
 
   const barRef = React.useRef<HTMLDivElement>(null);
   const statusRef = React.useRef(currentStatus);
+  const lastSyncedStatusRef = React.useRef(currentStatus);
   const maxTimeRef = React.useRef(maxTime);
-  const lastTimeLeftRef = React.useRef(currentInitialTimeLeft);
+  const lastTimeLeftRef = React.useRef<number | null>(null);
   const lastColorClassRef = React.useRef<string>("");
   const isMountedRef = React.useRef(false);
   const rafIdRef = React.useRef<number | null>(null);
@@ -130,6 +131,7 @@ const SmoothTimer = ({
     return () => {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
       }
     };
   }, []);
@@ -150,62 +152,73 @@ const SmoothTimer = ({
 
     if (lastColorClassRef.current !== timerColorClass) {
       lastColorClassRef.current = timerColorClass;
-      barRef.current.className = `h-full rounded-full transition-colors duration-500 ${timerColorClass}`;
+      barRef.current.className = `w-full h-full rounded-full ${timerColorClass}`;
     }
   };
 
-  // Synchronize CSS bar with target time
+  // Synchronize CSS bar with target time using transform: scaleX() and transform-origin: right center
   const syncBar = React.useCallback((timeLeft: number, status: string, isStatusChange: boolean = false) => {
     const bar = barRef.current;
     if (!bar) return;
 
     const mTime = getMaxTimeForStatus(status, maxTimeRef.current);
     const clampedTime = Math.max(0, Math.min(mTime, timeLeft));
-    const currentPct = (clampedTime / mTime) * 100;
+    const currentScale = Math.max(0, Math.min(1, clampedTime / mTime));
+    const currentPct = currentScale * 100;
 
     applyColor(currentPct, status);
+
+    const isRealStatusChange = isStatusChange || status !== lastSyncedStatusRef.current;
+    lastSyncedStatusRef.current = status;
 
     if (clampedTime <= 0) {
       if (rafIdRef.current !== null) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      bar.style.transition = "width 0.25s linear";
-      bar.style.width = "0%";
+      bar.style.transition = isRealStatusChange ? "none" : "transform 0.25s linear";
+      bar.style.transform = "scaleX(0)";
       lastTimeLeftRef.current = 0;
       return;
     }
 
-    const isBigDiscrepancy =
-      lastTimeLeftRef.current > 0 &&
-      Math.abs(lastTimeLeftRef.current - 1 - clampedTime) > 3;
+    // Suppress duplicate ticks for the exact same second during an active phase
+    if (!isRealStatusChange && lastTimeLeftRef.current !== null && lastTimeLeftRef.current === clampedTime) {
+      return;
+    }
+
+    const isTimeJump =
+      lastTimeLeftRef.current !== null &&
+      (clampedTime > lastTimeLeftRef.current || Math.abs(lastTimeLeftRef.current - 1 - clampedTime) > 2);
 
     if (rafIdRef.current !== null) {
       cancelAnimationFrame(rafIdRef.current);
       rafIdRef.current = null;
     }
 
-    if (isStatusChange || isBigDiscrepancy) {
+    if (isRealStatusChange || isTimeJump || lastTimeLeftRef.current === null) {
+      // 1. Immediately snap to current ratio without transition
       bar.style.transition = "none";
-      bar.style.width = `${currentPct.toFixed(2)}%`;
+      bar.style.transform = `scaleX(${currentScale.toFixed(4)})`;
       lastTimeLeftRef.current = clampedTime;
 
-      // Non-blocking rAF schedule: eliminates forced synchronous layout reflow (void bar.offsetWidth)
-      // during the critical phase transition window (CHOOSING -> DRAWING).
+      // 2. Double rAF ensures the browser flushes the initial transform before starting the CSS transition
       rafIdRef.current = requestAnimationFrame(() => {
-        rafIdRef.current = null;
-        if (!barRef.current) return;
-        const targetPct = Math.max(0, ((clampedTime - 1) / mTime) * 100);
-        barRef.current.style.transition = "width 1s linear";
-        barRef.current.style.width = `${targetPct.toFixed(2)}%`;
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = null;
+          if (!barRef.current) return;
+          const targetScale = Math.max(0, (clampedTime - 1) / mTime);
+          barRef.current.style.transition = "transform 1s linear, background-color 0.5s ease, box-shadow 0.5s ease";
+          barRef.current.style.transform = `scaleX(${targetScale.toFixed(4)})`;
+        });
       });
       return;
     }
 
-    // Target percentage for next 1-second interval
-    const targetPct = Math.max(0, ((clampedTime - 1) / mTime) * 100);
-    bar.style.transition = "width 1s linear";
-    bar.style.width = `${targetPct.toFixed(2)}%`;
+    // Normal 1-second countdown interval
+    const targetScale = Math.max(0, (clampedTime - 1) / mTime);
+    bar.style.transition = "transform 1s linear, background-color 0.5s ease, box-shadow 0.5s ease";
+    bar.style.transform = `scaleX(${targetScale.toFixed(4)})`;
 
     lastTimeLeftRef.current = clampedTime;
   }, []);
@@ -234,18 +247,21 @@ const SmoothTimer = ({
   }, [socket, syncBar]);
 
   const effectiveMaxTime = getMaxTimeForStatus(currentStatus, maxTime || 100);
-  const initialPct = Math.max(0, Math.min(100, (currentInitialTimeLeft / effectiveMaxTime) * 100));
+  const initialClamped = Math.max(0, Math.min(effectiveMaxTime, currentInitialTimeLeft));
+  const initialScale = Math.max(0, Math.min(1, initialClamped / effectiveMaxTime));
 
   return (
     <div
       className={`w-full px-2 sm:px-3 py-1.5 shrink-0 flex items-center justify-center ${isFullScreen ? "bg-transparent" : "bg-game-primary-blue"}`}
-      dir="ltr"
     >
-      <div className="w-full h-1.5 sm:h-2 bg-black/40 rounded-full overflow-hidden shadow-inner flex justify-start">
+      <div className="w-full h-1.5 sm:h-2 bg-black/40 rounded-full overflow-hidden shadow-inner relative">
         <div
           ref={barRef}
-          className="h-full rounded-full transition-colors duration-500 bg-[#1AD2FF]"
-          style={{ width: `${initialPct.toFixed(2)}%` }}
+          className="w-full h-full rounded-full bg-[#1AD2FF]"
+          style={{
+            transformOrigin: "left center",
+            transform: `scaleX(${initialScale.toFixed(4)})`,
+          }}
         />
       </div>
     </div>
