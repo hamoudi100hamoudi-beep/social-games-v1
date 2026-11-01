@@ -16,6 +16,14 @@ import {
 } from '../../utils/drawBinaryHelper';
 import { selectEvictionIndexMinimax } from '../../utils/bucketCheckpointPolicy';
 import { evaluateStateTransitionReset, GameStateSnapshot } from '../../utils/gameStateSyncHelper';
+import {
+  getCommandSignature,
+  isClearCommand,
+  findLatestClearIndex,
+  isCommandHeavy,
+  isBucketCommand,
+  countBucketsBeforeIndex
+} from '../../utils/canvasCommandHelpers';
 
 // --- Constants ---
 /* 
@@ -1207,16 +1215,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     historyCheckpointsRef.current = keep;
   };
 
-  const getCommandSignature = (cmd: any): string => {
-    if (!cmd) return "";
-    const instId = cmd.instanceId || cmd.instId || (cmd.data && typeof cmd.data === 'object' ? (cmd.data.instanceId || cmd.data.instId) : "");
-    let sId = cmd.strokeId !== undefined ? cmd.strokeId : -1;
-    if (sId === -1 && cmd.data && typeof cmd.data === 'object' && cmd.data.strokeId !== undefined) {
-      sId = cmd.data.strokeId;
-    }
-    return `${instId}_${sId}`;
-  };
-
   const ensureCheckpointCanvas = (slot: 'base' | 'tail'): HTMLCanvasElement => {
     const cpRef = slot === 'base' ? baseCheckpointRef : tailCheckpointRef;
     if (!cpRef.current.canvas) {
@@ -1267,26 +1265,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (slot === 'all') {
       clearHistoryCheckpoints();
     }
-  };
-
-  const isClearCommand = (c: any): boolean => {
-    if (!c) return false;
-    if (c.event === 'draw_clear') return true;
-    if (c.event === 'draw_binary' && c.data) {
-      const byte0 = c.data instanceof ArrayBuffer 
-        ? new Uint8Array(c.data)[0] 
-        : (ArrayBuffer.isView(c.data) ? (c.data as Uint8Array)[0] : (Array.isArray(c.data) ? c.data[0] : 0));
-      return byte0 === 5;
-    }
-    return false;
-  };
-
-  const findLatestClearIndex = (commands: any[], upToIndex?: number): number => {
-    const end = upToIndex !== undefined ? Math.min(commands.length - 1, upToIndex) : commands.length - 1;
-    for (let i = end; i >= 0; i--) {
-      if (isClearCommand(commands[i])) return i;
-    }
-    return -1;
   };
 
   const isCheckpointValid = (
@@ -1356,48 +1334,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (baseCheckpointRef.current.index > targetIndex) {
       invalidateCheckpoint('base');
     }
-  };
-
-  const isCommandHeavy = (cmd: any): boolean => {
-    if (!cmd || !cmd.data) return false;
-    if (cmd.data instanceof ArrayBuffer) {
-      const byte0 = new Uint8Array(cmd.data)[0];
-      return byte0 === 4 || byte0 === 5;
-    }
-    if (ArrayBuffer.isView(cmd.data)) {
-      const byte0 = (cmd.data as Uint8Array)[0];
-      return byte0 === 4 || byte0 === 5;
-    }
-    return false;
-  };
-
-  const isBucketCommand = (cmd: any): boolean => {
-    if (!cmd) return false;
-    if (cmd.event === 'draw_action' && (cmd.tool === 'bucket' || cmd.data?.tool === 'bucket')) return true;
-    if (cmd.data) {
-      let byte0 = 0;
-      if (cmd.data instanceof ArrayBuffer) {
-        byte0 = new Uint8Array(cmd.data)[0];
-      } else if (ArrayBuffer.isView(cmd.data)) {
-        byte0 = (cmd.data as Uint8Array)[0];
-      } else if (Array.isArray(cmd.data)) {
-        byte0 = cmd.data[0];
-      }
-      if (byte0 === 4) return true;
-    }
-    return false;
-  };
-
-  const countBucketsBeforeIndex = (commands: any[], k: number, lastClearIndex: number): number => {
-    const start = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
-    const end = Math.min(k, commands.length);
-    let count = 0;
-    for (let i = start; i < end; i++) {
-      if (isBucketCommand(commands[i])) {
-        count++;
-      }
-    }
-    return count;
   };
 
   // 🛡️ Adaptive Checkpoint Pre-Bucket Capture (Free Draw Exp):
