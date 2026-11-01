@@ -1726,6 +1726,10 @@ const words = word.split(" ").filter(w => w.length > 0);
     }
 
     const playerName = player ? (player.name || 'لاعب') : 'لاعب';
+    if (existing && existing.socketId === socketId && existing.playerName === playerName) {
+      return;
+    }
+
     targetRoom.drawingIdentities[trimmedId] = { socketId, playerName };
 
     if (this.io) {
