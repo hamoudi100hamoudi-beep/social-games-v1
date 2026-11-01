@@ -1253,14 +1253,25 @@ const words = word.split(" ").filter(w => w.length > 0);
     const player = this.players.get(socketId);
     const pId = player?.persistentId || socketId;
     if (!room.activeDrawers) room.activeDrawers = [];
+
+    let hasChanged = false;
+
     if (!room.activeDrawers.includes(pId)) {
       room.activeDrawers.push(pId);
+      hasChanged = true;
     }
     if (!room.activeDrawers.includes(socketId)) {
       room.activeDrawers.push(socketId);
+      hasChanged = true;
     }
-    room.gameState.status = "DRAWING";
-    this.broadcastState(room);
+    if (room.gameState.status !== "DRAWING") {
+      room.gameState.status = "DRAWING";
+      hasChanged = true;
+    }
+
+    if (hasChanged) {
+      this.broadcastState(room);
+    }
   }
 
   public stopFreeDraw(roomId: string, socketId: string) {
@@ -1268,10 +1279,15 @@ const words = word.split(" ").filter(w => w.length > 0);
     if (!room || !room.isFreeDraw) return;
     const player = this.players.get(socketId);
     const pId = player?.persistentId || socketId;
-    if (room.activeDrawers) {
-      room.activeDrawers = room.activeDrawers.filter((id) => id !== pId && id !== socketId);
+
+    if (!room.activeDrawers || room.activeDrawers.length === 0) return;
+
+    const prevLength = room.activeDrawers.length;
+    room.activeDrawers = room.activeDrawers.filter((id) => id !== pId && id !== socketId);
+
+    if (room.activeDrawers.length !== prevLength) {
+      this.broadcastState(room);
     }
-    this.broadcastState(room);
   }
 
   public saveChatMessage(roomId: string, message: any) {
