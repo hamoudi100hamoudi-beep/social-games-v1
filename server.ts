@@ -172,6 +172,8 @@ async function startServer() {
     });
     
     socket.on('get_room_info', (roomId, callback) => {
+      let roomInfo = { count: 0, max: 5, winningScore: 30, theme: 'General' };
+
       try {
         const room = roomManager.getRoom(roomId);
         const config = getRoomConfig(roomId);
@@ -179,10 +181,17 @@ async function startServer() {
         const max = room?.maxPlayers ?? config.maxPlayers;
         const winningScore = room?.winningScore ?? config.winningScore;
         const theme = room?.theme ?? config.theme;
-        if (callback) callback({ count, max, winningScore, theme });
+        roomInfo = { count, max, winningScore, theme };
       } catch (e) {
-        console.error(e);
-        if (callback) callback({ count: 0, max: 5, winningScore: 30, theme: 'General' });
+        console.error("Error computing room info for get_room_info:", e);
+      }
+
+      if (typeof callback === 'function') {
+        try {
+          callback(roomInfo);
+        } catch (cbErr) {
+          console.error("Error executing get_room_info callback:", cbErr);
+        }
       }
     });
 
