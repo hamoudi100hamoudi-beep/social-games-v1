@@ -122,6 +122,10 @@ async function startServer() {
   const guessLimits = new Map<string, number[]>();
   const voteKickLimits = new Map<string, number[]>();
   const roundSyncLimits = new Map<string, number[]>();
+  const drawRepairLimits = new Map<string, number[]>();
+
+  const DRAW_REPAIR_LIMIT = 20;
+  const DRAW_REPAIR_WINDOW_MS = 1000;
 
   function relayFreeDrawMove(
     roomId: string,
@@ -239,13 +243,31 @@ async function startServer() {
     socket.on('draw_repair_req', (data) => {
       try {
         const player = roomManager.getPlayer(socket.id);
-        const roomId = player ? player.roomId : null;
-        if (roomId && data && data.instId !== undefined && data.strokeId !== undefined) {
-          const canonicalStroke = roomManager.getCanonicalFreeDrawStroke(roomId, String(data.instId), Number(data.strokeId));
-          if (canonicalStroke) {
-            // Send canonical Type 9 stroke ONLY to the requesting socket
-            socket.emit('draw_binary', canonicalStroke);
-          }
+        if (!player || !player.roomId) return;
+        const roomId = player.roomId;
+
+        // 1. Strict Input Validation (silent rejection)
+        if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+
+        if (typeof data.instId !== 'string') return;
+        const trimmedInstId = data.instId.trim();
+        if (trimmedInstId.length < 1 || trimmedInstId.length > 7 || !/^[a-zA-Z0-9]+$/.test(trimmedInstId)) {
+          return;
+        }
+
+        if (typeof data.strokeId !== 'number' || !Number.isInteger(data.strokeId)) return;
+        if (data.strokeId < 0 || data.strokeId > 65535) return;
+
+        // 2. Per-player room rate limiting
+        const rateLimitKey = `${roomId}:${player.persistentId || socket.id}`;
+        if (!checkRateLimit(drawRepairLimits, rateLimitKey, DRAW_REPAIR_LIMIT, DRAW_REPAIR_WINDOW_MS)) {
+          return;
+        }
+
+        // 3. Retrieve canonical Type 9 stroke from cache and emit ONLY to requesting socket
+        const canonicalStroke = roomManager.getCanonicalFreeDrawStroke(roomId, trimmedInstId, data.strokeId);
+        if (canonicalStroke) {
+          socket.emit('draw_binary', canonicalStroke);
         }
       } catch (err) {
         console.error("Error handling draw_repair_req:", err);
