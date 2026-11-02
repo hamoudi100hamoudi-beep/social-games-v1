@@ -2085,8 +2085,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   };
 
   // --- Logical Coordinate Conversion ---
-  const getLogicalCoords = (clientX: number, clientY: number, canvas: HTMLCanvasElement, clamp: boolean = true) => {
-    const rect = canvas.getBoundingClientRect();
+  const getLogicalCoords = (
+    clientX: number,
+    clientY: number,
+    canvas: HTMLCanvasElement,
+    clamp: boolean = true,
+    rectOverride?: DOMRect
+  ) => {
+    const rect = rectOverride ?? canvas.getBoundingClientRect();
     return calculateLogicalCoordinates(clientX, clientY, rect, LOGICAL_WIDTH, LOGICAL_HEIGHT, clamp);
   };
 
@@ -6012,7 +6018,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       return;
     }
 
-    const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+    const canvasRect = canvas.getBoundingClientRect();
+    const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false, canvasRect);
     const isInside = rawCoords.x >= 0 && rawCoords.x <= LOGICAL_WIDTH && rawCoords.y >= 0 && rawCoords.y <= LOGICAL_HEIGHT;
     const activeTool = propsRef.current.tool;
 
@@ -6030,7 +6037,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             : [];
           if (rawEvents.length > 0) {
             for (let i = 0; i < rawEvents.length; i++) {
-              const pt = getLogicalCoords(rawEvents[i].clientX, rawEvents[i].clientY, canvas, false);
+              const pt = getLogicalCoords(rawEvents[i].clientX, rawEvents[i].clientY, canvas, false, canvasRect);
               processStrokeMove(pt.x, pt.y);
             }
           } else {
@@ -6161,7 +6168,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           const raw = getLogicalCoords(e.clientX, e.clientY, canvas, false);
           processShapeMove(raw.x, raw.y);
         } else if (activeTool === 'pencil' || activeTool === 'eraser') {
-          const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false);
+          const canvasRect = canvas.getBoundingClientRect();
+          const rawCoords = getLogicalCoords(e.clientX, e.clientY, canvas, false, canvasRect);
           const isInside = rawCoords.x >= 0 && rawCoords.x <= LOGICAL_WIDTH && rawCoords.y >= 0 && rawCoords.y <= LOGICAL_HEIGHT;
           const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
           if (isDrawingRef.current) {
@@ -6172,7 +6180,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 : [];
               if (rawEvents.length > 0) {
                 for (let i = 0; i < rawEvents.length; i++) {
-                  const pt = getLogicalCoords(rawEvents[i].clientX, rawEvents[i].clientY, canvas, false);
+                  const pt = getLogicalCoords(rawEvents[i].clientX, rawEvents[i].clientY, canvas, false, canvasRect);
                   processStrokeMove(pt.x, pt.y);
                 }
               } else {
