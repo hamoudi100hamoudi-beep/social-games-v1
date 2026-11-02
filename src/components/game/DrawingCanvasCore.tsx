@@ -27,6 +27,7 @@ import {
 import { drawShape, drawEntirePath, SPLINE_CUSP_COS } from '../../utils/canvasPathRenderer';
 import type { TargetRGBA } from '../../utils/canvasFloodFill';
 import { executeRasterFloodFill } from '../../utils/canvasFloodFill';
+import { computeCanvasFitScale } from '../../utils/canvasViewportMath';
 
 // --- Constants ---
 /* 
@@ -1465,9 +1466,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const measureAndCenter = (width: number, height: number) => {
       if (width === 0 || height === 0) return;
       
-      const targetScale = readOnly
-        ? Math.min(width / LOGICAL_WIDTH, height / LOGICAL_HEIGHT)
-        : height / LOGICAL_HEIGHT;
+      const targetScale = computeCanvasFitScale(
+        width,
+        height,
+        LOGICAL_WIDTH,
+        LOGICAL_HEIGHT,
+        readOnly
+      );
       
       baseScaleRef.current = targetScale;
       
@@ -2017,9 +2022,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const container = containerRef.current;
       if (!container) return;
       const rect = container.getBoundingClientRect();
-      const targetScale = propsRef.current.readOnly
-         ? Math.min(rect.width / LOGICAL_WIDTH, rect.height / LOGICAL_HEIGHT)
-         : rect.height / LOGICAL_HEIGHT;
+      const targetScale = computeCanvasFitScale(
+        rect.width,
+        rect.height,
+        LOGICAL_WIDTH,
+        LOGICAL_HEIGHT,
+        propsRef.current.readOnly
+      );
 
       const canvasDisplayWidth = LOGICAL_WIDTH * targetScale;
       const canvasDisplayHeight = LOGICAL_HEIGHT * targetScale;
