@@ -1549,25 +1549,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }
 
-      // Immediately cancel any active solo-touch stroke if user introduces a second touch (pinch zoom start)
+      // Smoothly finalize and commit active solo-touch stroke when user introduces a second touch (pinch zoom start)
       if (e.touches.length >= 2 && isDrawingRef.current) {
         touchDrawingActiveFromOutsideRef.current = false;
-        isDrawingRef.current = false;
-        
-        if (tempCtxRef.current) {
-          tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        const activeTool = propsRef.current.tool;
+        const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+        if (isShape) {
+          const canvas = canvasRef.current;
+          if (canvas && currentPathRef.current.length > 0) {
+            const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
+            finishShapeDrawing(lastPt.x, lastPt.y);
+          } else {
+            finishShapeDrawing(startXRef.current, startYRef.current);
+          }
+        } else if (activeTool === 'pencil' || activeTool === 'eraser') {
+          finishCurrentStroke();
         }
-        moveBatchRef.current = [];
-        networkStrokePointsRef.current = [];
-        emitDrawCommand('draw_end', {
-          tool: propsRef.current.tool,
-          color: propsRef.current.color,
-          width: propsRef.current.thickness,
-          opacity: propsRef.current.opacity,
-          isShape: false,
-          isCancelled: true
-        });
-        emitDrawCommand('draw_cancel', {});
       }
 
       if (e.touches.length === 1 && !propsRef.current.readOnly) {
@@ -5452,29 +5449,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const processStrokeMove = (logicalX: number, logicalY: number) => {
     if (!isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
-      isDrawingRef.current = false;
-      hasFreeDrawPendingUndoCacheRef.current = false;
-      const tempCtx = tempCtxRef.current;
-      if (tempCtx) {
-        tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      if (isDrawingRef.current) {
+        const activeTool = propsRef.current.tool;
+        const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+        if (isShape) {
+          const canvas = canvasRef.current;
+          if (canvas && currentPathRef.current.length > 0) {
+            const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
+            finishShapeDrawing(lastPt.x, lastPt.y);
+          } else {
+            finishShapeDrawing(startXRef.current, startYRef.current);
+          }
+        } else if (activeTool === 'pencil' || activeTool === 'eraser') {
+          finishCurrentStroke();
+        }
       }
-      moveBatchRef.current = [];
-      networkStrokePointsRef.current = [];
-      lastNetworkPointRef.current = null;
-      lastNetworkDirXRef.current = 0;
-      lastNetworkDirYRef.current = 0;
-      lastNetworkSegmentLenRef.current = 0;
-      consecutiveTurnsRef.current = 0;
-      canonicalStrokeRef.current = [];
-      emitDrawCommand('draw_end', {
-        tool: propsRef.current.tool,
-        color: propsRef.current.color,
-        width: propsRef.current.thickness,
-        opacity: propsRef.current.opacity,
-        isShape: false,
-        isCancelled: true
-      });
-      emitDrawCommand('draw_cancel', {});
       return;
     }
 
@@ -5999,22 +5988,23 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
 
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
-      isDrawingRef.current = false;
+      if (isDrawingRef.current) {
+        const activeTool = propsRef.current.tool;
+        const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+        if (isShape) {
+          const canvas = canvasRef.current;
+          if (canvas && currentPathRef.current.length > 0) {
+            const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
+            finishShapeDrawing(lastPt.x, lastPt.y);
+          } else {
+            finishShapeDrawing(startXRef.current, startYRef.current);
+          }
+        } else if (activeTool === 'pencil' || activeTool === 'eraser') {
+          finishCurrentStroke();
+        }
+      }
       exitedOutsideWhilePointerDownRef.current = false;
       lastOutsidePointerRef.current = null;
-      
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
-      moveBatchRef.current = [];
-      networkStrokePointsRef.current = [];
-      emitDrawCommand('draw_end', {
-        tool: propsRef.current.tool,
-        color: propsRef.current.color,
-        width: propsRef.current.thickness,
-        opacity: propsRef.current.opacity,
-        isShape: false,
-        isCancelled: true
-      });
-      emitDrawCommand('draw_cancel', {});
       return;
     }
 
@@ -6081,6 +6071,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     e.stopPropagation();
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
+      return;
+    }
     activePointerIdRef.current = null;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
@@ -6108,7 +6101,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const handlePointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     e.stopPropagation();
-    activePointerIdRef.current = null;
+    if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
+      return;
+    }
     handlePointerUp(e);
   };
 
@@ -6131,6 +6126,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (isShape && e.target === containerRef.current) {
           const canvas = canvasRef.current;
           if (!canvas) return;
+          activePointerIdRef.current = e.pointerId;
           try {
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           } catch (err) {}
@@ -6139,6 +6135,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         } else if ((activeTool === 'pencil' || activeTool === 'eraser') && e.target === containerRef.current) {
           const canvas = canvasRef.current;
           if (!canvas) return;
+          activePointerIdRef.current = e.pointerId;
           try {
             (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
           } catch (err) {}
@@ -6157,6 +6154,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }}
       onPointerMove={(e) => {
         if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
+          return;
+        }
+        if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
           return;
         }
 
@@ -6208,6 +6208,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 entryY = entryCoords.y;
               }
               lastOutsidePointerRef.current = null;
+              if (activePointerIdRef.current === null) {
+                activePointerIdRef.current = e.pointerId;
+              }
               startPencilOrEraserStroke(entryX, entryY);
               processStrokeMove(rawCoords.x, rawCoords.y);
             } else {
@@ -6217,9 +6220,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }}
       onPointerUp={(e) => {
+        if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
+          return;
+        }
         try {
           (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
         } catch (err) {}
+        activePointerIdRef.current = null;
         exitedOutsideWhilePointerDownRef.current = false;
         lastOutsidePointerRef.current = null;
         if (isDrawingRef.current) {
@@ -6236,9 +6243,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }}
       onPointerCancel={(e) => {
+        if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
+          return;
+        }
         try {
           (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
         } catch (err) {}
+        activePointerIdRef.current = null;
         exitedOutsideWhilePointerDownRef.current = false;
         lastOutsidePointerRef.current = null;
         if (isDrawingRef.current) {
