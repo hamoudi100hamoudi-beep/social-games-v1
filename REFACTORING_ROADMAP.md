@@ -8,13 +8,13 @@
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
 | **المرحلة الحالية النشطة** | `PHASE 4` | `DRAWINGCANVASCORE REFACTOR` (تفكيك ملف DrawingCanvasCore بأمان وتدرج) |
-| **المهمة الحالية قيد التنفيذ** | `PHASE 4C-2` | استخراج دالة مقياس الملاءمة الأساسي `computeCanvasFitScale` إلى `src/utils/canvasViewportMath.ts` |
-| **آخر مهمة مكتملة ومثبتة** | `PHASE 4C-1` | تدقيق معماري لوظائف الكانفاس والتحكم بالعرض (`Read-Only Viewport & Transform Architecture Audit`) مكتمل |
-| **المهمة السابقة المباشرة** | `PHASE 4B-4A` | استخراج النواة الحسابية لمحرك الدلو (متزامنة مع GitHub: `eed7d7d38b328f79771863c2d061ae6ba2d7a1f8`) |
-| **المهمة التالية المجدولة** | استكمال تفكيك دوال Viewport Math النقية المتبقية | تحديد الخطوة التالية في دوال التحويلات الهندسية بأمان |
+| **المهمة الحالية قيد التنفيذ** | `PHASE 4C-4` | استخراج الحساب الرياضي `calculateLogicalCoordinates` إلى `src/utils/canvasViewportMath.ts` (منفذة محلياً) |
+| **آخر مهمة مكتملة ومثبتة** | `PHASE 4C-3` | تدقيق معماري مركز (Read-Only) لتحويل الإحداثيات المنطقية وحصر مواضع الاستدعاء الـ 26 |
+| **المهمة السابقة المباشرة** | `PHASE 4C-2` | استخراج دالة مقياس الملاءمة الأساسي `computeCanvasFitScale` (متزامنة مع GitHub: `e8a41ef6b9b3f6d900868cd6bc061dd00048376b`) |
+| **المهمة التالية المجدولة** | مراجعة واعتماد PHASE 4C-4 واختبارها يدوياً | التحقق التجريبي من سلاسة الرسم وإحداثيات الحواف قبل مزامنة GitHub |
 | **الملفات المتأثرة مؤخراً** | `src/utils/canvasViewportMath.ts` | `src/components/game/DrawingCanvasCore.tsx` و `REFACTORING_ROADMAP.md` |
-| **مرجع GitHub المتزامن** | `eed7d7d38b328f79771863c2d061ae6ba2d7a1f8` | الفرع: `main` (متضمن استخراج النواة الحسابية للدلو في PHASE 4B-4A بعد الاختبار اليدوي الناجح) |
-| **حالة المزامنة مع GitHub** | `Synced through 4B-4A — 4C-2 Local` | تم رفع وتثبيت 4B-4A على GitHub بعد نجاح التجربة اليدوية للمستخدم؛ وتعديلات 4C-2 منفذة محلياً |
+| **مرجع GitHub المتزامن** | `e8a41ef6b9b3f6d900868cd6bc061dd00048376b` | الفرع: `main` (متضمن استخراج `computeCanvasFitScale` في PHASE 4C-2 بعد الاختبار اليدوي الناجح من قِبل المستخدم) |
+| **حالة المزامنة مع GitHub** | `Synced through PHASE 4C-2 — 4C-4 Local` | التعديلات حتى 4C-2 متطابقة ومثبتة على GitHub؛ و 4C-4 منفذة ومختبرة محلياً |
 | **المخاطر المفتوحة النشطة** | تدقيق `maxHttpBufferSize` وفصل محركات الكانفاس | ضبط `maxHttpBufferSize` مؤجل لتدقيق مستقل؛ وفصل الكانفاس يُدار بتدرج صارم |
 
 > ⚠️ **تنبيه للمطورين والذكاء الاصطناعي**: هذا الملف هو **المرجع الحصري والدائم** لتنظيم وتتبع كل المهام المعمارية والأمنية وهيكلة الكود في المشروع. يجب مراجعته بدقة وتحديث هذا الجدول بعد إنهاء كل مهمة لتوثيق المنجز والمتبقي مع الحفاظ على صرامة الدستور المعماري.
@@ -33,8 +33,8 @@
 ## 📍 2. الحالة المرجعية الحالية للنظام (Current Reference State)
 
 * **آخر نقطة مزامنة معروفة على GitHub**:
-  * الالتزام (Commit): `eed7d7d38b328f79771863c2d061ae6ba2d7a1f8`
-  * الفرع: `main` (يتضمن استخراج Command Helpers في PHASE 4B-1، و drawShape في PHASE 4B-3A، و drawEntirePath في PHASE 4B-3B، واستخراج النواة الحسابية للدلو في PHASE 4B-4A بعد الاختبار اليدوي الناجح)
+  * الالتزام (Commit): `e8a41ef6b9b3f6d900868cd6bc061dd00048376b`
+  * الفرع: `main` (يتضمن استخراج Command Helpers في PHASE 4B-1، و drawShape في PHASE 4B-3A، و drawEntirePath في PHASE 4B-3B، واستخراج النواة الحسابية للدلو في PHASE 4B-4A، واستخراج دالة مقياس الملاءمة computeCanvasFitScale في PHASE 4C-2 بعد الاختبار اليدوي الناجح)
   * **تنبيه حاسم**: مصدر الحقيقة البرمجي هو الملفات الفعلية في بيئة العمل، ويجب فحص الكود المحلي دائماً قبل أي تعديل.
 
 * **البنية التكنولوجية الأساسية (الموثقة من واقع `package.json` الفعلي)**:
@@ -181,7 +181,10 @@
   - [x] **PHASE 4B-4A — استخراج النواة الحسابية لمحرك الدلو (`executeRasterFloodFill`)**: تم نقل النواة ودالة مقارنة الألوان وإزاحات الجوار ونوع `TargetRGBA` بنجاح إلى `src/utils/canvasFloodFill.ts` مع الحفاظ على مصفوفات الذاكرة المعاد استخدامها ومسار Batch Replay (متزامنة في الالتزام: `eed7d7d38b328f79771863c2d061ae6ba2d7a1f8` — تم الاختبار اليدوي من قِبل المستخدم وتأكيد عمل اللعبة بشكل طبيعي).
 - [~] **PHASE 4C — فصل وظائف الكانفاس والتحكم بالعرض (Viewport & Transform)**:
   - [x] **PHASE 4C-1 — تدقيق معماري لوظائف الكانفاس والتحكم بالعرض (Read-Only Viewport & Transform Architecture Audit)**: (مكتملة) دراسة عزل منطق الزوم بالأصابع، والسحب، وتدفق تحويل الإحداثيات وتأكيد محلية التحويلات بنسبة 100%.
-  - [x] **PHASE 4C-2 — استخراج حساب مقياس الملاءمة الأساسي (`computeCanvasFitScale`)**: تم استخراج معادلة حساب `targetScale` للوحة في وضعي العرض والرسم بنجاح إلى `src/utils/canvasViewportMath.ts` وتحديث موضعي الاستدعاء في `measureAndCenter` و `resetZoom` (منفذة محلياً — لا تشمل `getLogicalCoords` أو مستمعات الإيماءات).
+  - [x] **PHASE 4C-2 — استخراج حساب مقياس الملاءمة الأساسي (`computeCanvasFitScale`)**: تم استخراج معادلة حساب `targetScale` للوحة في وضعي العرض والرسم بنجاح إلى `src/utils/canvasViewportMath.ts` وتحديث موضعي الاستدعاء في `measureAndCenter` و `resetZoom` (مكتملة ومختبرة يدوياً ومتزامنة في الالتزام: `e8a41ef6b9b3f6d900868cd6bc061dd00048376b`).
+  - [x] **PHASE 4C-3 — Focused Read-Only Review of Logical Coordinate Conversion**: (مكتملة) تدقيق معماري شامل لحسابات `getLogicalCoords` وتدفق الإحداثيات وتأكيد ثبات مواضع الاستدعاء الـ 26.
+  - [x] **PHASE 4C-4 — استخراج الحساب الرياضي لتحويل الإحداثيات (`calculateLogicalCoordinates`)**: تم استخراج الدالة النقية لحساب الإحداثيات المنطقية إلى `src/utils/canvasViewportMath.ts` وتفويض الحساب إليها من داخل الغلاف المحلي `getLogicalCoords`، مع بقاء كافة مواضع الاستدعاء الـ 26 دون أي تغيير (منفذة محلياً — Pending GitHub Sync).
+  - 💡 **ملاحظة مستقبلية (Future Consideration)**: `Coalesced Pointer Events — Review possible per-event DOMRect reuse.`
 - [ ] **PHASE 4D — فصل مسار الإدخال والتصيير (Pointer & Stroke Pipeline)**:
   - عزل مستمعات الفأرة واللمس ومعالجة النقاط قبل إرسالها إلى المحرك الثنائي.
 - [ ] **PHASE 4E — فصل إدارة السجل والتراجع (History & Undo Controller)**:

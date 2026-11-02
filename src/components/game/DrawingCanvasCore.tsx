@@ -27,7 +27,7 @@ import {
 import { drawShape, drawEntirePath, SPLINE_CUSP_COS } from '../../utils/canvasPathRenderer';
 import type { TargetRGBA } from '../../utils/canvasFloodFill';
 import { executeRasterFloodFill } from '../../utils/canvasFloodFill';
-import { computeCanvasFitScale } from '../../utils/canvasViewportMath';
+import { computeCanvasFitScale, calculateLogicalCoordinates } from '../../utils/canvasViewportMath';
 
 // --- Constants ---
 /* 
@@ -2087,14 +2087,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // --- Logical Coordinate Conversion ---
   const getLogicalCoords = (clientX: number, clientY: number, canvas: HTMLCanvasElement, clamp: boolean = true) => {
     const rect = canvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return { x: 0, y: 0 };
-    let x = ((clientX - rect.left) / rect.width) * LOGICAL_WIDTH;
-    let y = ((clientY - rect.top) / rect.height) * LOGICAL_HEIGHT;
-    if (clamp) {
-      x = Math.max(0, Math.min(LOGICAL_WIDTH, x));
-      y = Math.max(0, Math.min(LOGICAL_HEIGHT, y));
-    }
-    return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+    return calculateLogicalCoordinates(clientX, clientY, rect, LOGICAL_WIDTH, LOGICAL_HEIGHT, clamp);
   };
 
   // --- Dynamic Drawing Functions ---
