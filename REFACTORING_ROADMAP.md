@@ -246,9 +246,11 @@
 * **الملف المستهدف**: `src/components/experimental/ExperimentalGameRoom.tsx` (الحجم الفعلي: 2,953 سطراً).
 * **تصنيف المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
 * **الأهداف التنفيذية**:
-  1. **استخراج مؤقت اللعبة `SmoothTimer`** (168 سطراً، السطور 101-269) إلى مكون مستقل:
-     - الملف المقترح: `src/components/game/SmoothTimer.tsx`.
-     - الاعتماديات: يستقبل Props فقط (`currentStatus`, `currentInitialTimeLeft`, `maxTime`, `isFullScreen`, `onZero`) ويستمع فقط لنبضات `timer_tick`. لا يتدخل في حالة الغرفة أو الرسم.
+  1. **استخراج مؤقت اللعبة `SmoothTimer` وإصلاح انكماش الشريط الأزرق** (`BATCH-6A-1` - مكتملة برمجياً `BUILD_VERIFIED`):
+     - تم الاستخراج إلى `src/components/game/SmoothTimer.tsx` مع دالة `getMaxTimeForStatus`.
+     - تم إصلاح عدم انتظام انكماش الشريط الأزرق في حالتي `ROUND_END` و `PODIUM` عبر توقيت نهائي معتمد من السيرفر (`phaseEndsAt` و `phaseRemainingMs`) وانتقال CSS انسيابي واحد متصل (`transform ${remMs}ms linear`) محمي ضد المقاطعة عبر `activeFixedPhaseKeyRef`.
+     - الحفاظ الصارم على مؤقت الرسم الديناميكي (100 ثانية) وخصم النقاط دون أي مساس.
+     - اجتياز كامل لـ `tsc --noEmit` و `npm run build` بنجاح. بانتظار التحقق اليدوي للمستخدم.
   2. **استخراج النوافذ المنبثقة المستقلة (`CinematicModal` Instances)**:
      - يوجد 11 نافذة مضمنة داخل JSX تستهلك أكثر من 500 سطر دون إدارة حالة حساسة:
        - نافذة الخروج: `ExitConfirmModal`

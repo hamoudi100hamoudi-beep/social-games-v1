@@ -543,13 +543,15 @@ export class RoomManager {
         this.transitionToRoundEnd(room, "all_guessed");
       }
     } else if (gameState.status === "ROUND_END") {
-      gameState.timeLeft--;
-      if (gameState.timeLeft <= 0) {
+      const remainingMs = gameState.phaseEndsAt ? Math.max(0, gameState.phaseEndsAt - Date.now()) : 0;
+      gameState.timeLeft = Math.ceil(remainingMs / 1000);
+      if (remainingMs <= 0 || gameState.timeLeft <= 0) {
         this.transitionToChoosing(room);
       }
     } else if (gameState.status === "PODIUM") {
-      gameState.timeLeft--;
-      if (gameState.timeLeft <= 0) {
+      const remainingMs = gameState.phaseEndsAt ? Math.max(0, gameState.phaseEndsAt - Date.now()) : 0;
+      gameState.timeLeft = Math.ceil(remainingMs / 1000);
+      if (remainingMs <= 0 || gameState.timeLeft <= 0) {
         // Reset scores (the win was already added in transitionToPodium)
         room.players.forEach((p) => (p.score = 0));
 
@@ -559,11 +561,18 @@ export class RoomManager {
     }
 
     if (this.io && gameState.status !== "WAITING") {
+      const isFixedPhase = gameState.status === "ROUND_END" || gameState.status === "PODIUM";
+      const phaseRemainingMs = isFixedPhase && gameState.phaseEndsAt
+        ? Math.max(0, gameState.phaseEndsAt - Date.now())
+        : undefined;
+
       this.io
         .to(room.id)
         .emit("timer_tick", {
           timeLeft: gameState.timeLeft,
           status: gameState.status,
+          phaseRemainingMs,
+          phaseEndsAt: gameState.phaseEndsAt,
         });
     }
   }
@@ -573,6 +582,8 @@ export class RoomManager {
     const lastDrawerBeforeWaiting = room.gameState.currentDrawerId;
 
     room.gameState.status = "WAITING";
+    delete room.gameState.phaseEndsAt;
+    delete room.gameState.phaseRemainingMs;
     room.gameState.currentDrawerId = null;
     room.gameState.currentWord = null;
     room.gameState.wordOptions = [];
@@ -648,6 +659,8 @@ export class RoomManager {
       `[Room ${room.id}] Transitioning to CHOOSING. Drawer: ${nextDrawerId}`,
     );
     room.gameState.status = "CHOOSING";
+    delete room.gameState.phaseEndsAt;
+    delete room.gameState.phaseRemainingMs;
     room.gameState.currentDrawerId = nextDrawerId;
     room.gameState.currentWord = null;
     room.gameState.wordOptions = selectedWords;
@@ -690,6 +703,7 @@ export class RoomManager {
     console.log(`[Room ${room.id}] Transitioning to PODIUM`);
     room.gameState.status = "PODIUM";
     room.gameState.timeLeft = 15;
+    room.gameState.phaseEndsAt = Date.now() + 15000;
 
     // Increment winner's wins immediately
     const sorted = [...room.players].sort((a, b) => b.score - a.score);
@@ -740,6 +754,7 @@ export class RoomManager {
     room.gameState.roundEndReason = reason;
     room.gameState.roundEndWord = room.gameState.currentWord || undefined;
     room.gameState.timeLeft = 8;
+    room.gameState.phaseEndsAt = Date.now() + 8000;
 
     const word = room.gameState.currentWord || "";
 
@@ -869,6 +884,8 @@ export class RoomManager {
 
     room.gameState.currentWord = trimmedWord;
     room.gameState.status = "DRAWING";
+    delete room.gameState.phaseEndsAt;
+    delete room.gameState.phaseRemainingMs;
     room.gameState.wordOptions = [];
     room.gameState.drawingStartTime = Date.now();
     room.gameState.isFastAllGuessed = false;
@@ -1184,7 +1201,13 @@ const words = word.split(" ").filter(w => w.length > 0);
         (Boolean(room.isFreeDraw) && Boolean(room.activeDrawers?.includes(p.id) || (p.persistentId && room.activeDrawers?.includes(p.persistentId))));
       const isRTL = /[\u0600-\u06FF]/.test(word);
       const { drawHistory, ...publicGameState } = room.gameState;
-      const hasHistory = Boolean(room.gameState.drawHistory && room.gameState.drawHistory.length > 0);
+      const isFixedPhase = room.gameState.status === "ROUND_END" || room.gameState.status === "PODIUM";
+      const phaseRemainingMs = isFixedPhase && room.gameState.phaseEndsAt
+        ? Math.max(0, room.gameState.phaseEndsAt - Date.now())
+        : undefined;
+
+      const hasDrawHistory = Boolean(room.gameState.drawHistory && room.gameState.drawHistory.length > 0);
+
       this.io.to(p.id).emit("room_state_update", {
         roomId: room.id,
         players: room.players,
@@ -1192,10 +1215,12 @@ const words = word.split(" ").filter(w => w.length > 0);
         isFreeDraw: !!room.isFreeDraw,
         activeDrawers: room.activeDrawers || [],
         drawingIdentities: room.drawingIdentities || {},
-        hasDrawHistory: hasHistory,
+        hasDrawHistory,
         gameState: {
           ...publicGameState,
-          hasDrawHistory: hasHistory,
+          phaseRemainingMs,
+          phaseEndsAt: room.gameState.phaseEndsAt,
+          hasDrawHistory,
           currentWord: isDrawer ? room.gameState.currentWord : null,
           wordOptions: isDrawer ? room.gameState.wordOptions : [],
           maskedWordArray: maskedWordArray,

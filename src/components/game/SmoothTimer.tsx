@@ -24,14 +24,28 @@ export interface SmoothTimerProps {
   maxTime: number;
   isFullScreen?: boolean;
   socket?: any;
-  gameState?: { status: string; timeLeft: number; currentWord?: string | null };
+  gameState?: {
+    status: string;
+    timeLeft: number;
+    currentWord?: string | null;
+    phaseRemainingMs?: number;
+    phaseEndsAt?: number;
+  };
+  phaseRemainingMs?: number;
+  phaseEndsAt?: number;
 }
 
 /**
  * ⏱️ SmoothTimer — High-performance game countdown timer bar.
- * Uses transform: scaleX() with double-rAF initialization to guarantee zero-flicker transitions
- * and updates CSS smoothly once per second via direct socket timer_tick events without triggering
- * React component re-renders.
+ * 
+ * Features two specialized execution paths:
+ * 1. Fixed-Duration Phases (ROUND_END: 8s, PODIUM: 15s):
+ *    Uses server-authoritative phase deadline to launch a single unbroken CSS transition
+ *    directly in the browser compositor (scaleX(0) over remaining ms). Ignores subsequent
+ *    1-second ticks for the same phase to prevent phase-mismatch stutters.
+ * 2. Dynamic Countdown Phases (DRAWING: 100s, CHOOSING: 15/100s):
+ *    Uses 1-second interval ticking with isTimeJump detection to support dynamic score deductions
+ *    and round extensions.
  */
 export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
   status: propStatus,
@@ -40,6 +54,8 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
   isFullScreen = false,
   socket,
   gameState,
+  phaseRemainingMs: propPhaseRemainingMs,
+  phaseEndsAt: propPhaseEndsAt,
 }) => {
   const currentStatus = propStatus || gameState?.status || "WAITING";
   const currentInitialTimeLeft = propInitialTimeLeft ?? gameState?.timeLeft ?? 0;
@@ -52,6 +68,9 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
   const lastColorClassRef = React.useRef<string>("");
   const isMountedRef = React.useRef(false);
   const rafIdRef = React.useRef<number | null>(null);
+
+  // Tracks active fixed-duration phase key (e.g. "ROUND_END_1700000000000") to prevent re-triggering
+  const activeFixedPhaseKeyRef = React.useRef<string | null>(null);
 
   maxTimeRef.current = maxTime;
 
@@ -84,8 +103,67 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
     }
   };
 
-  // Synchronize CSS bar with target time using transform: scaleX() and transform-origin: left center
-  const syncBar = React.useCallback((timeLeft: number, status: string, isStatusChange: boolean = false) => {
+  /**
+   * 🚀 Fixed-Phase Path (ROUND_END: 8s, PODIUM: 15s):
+   * Launches a SINGLE continuous CSS transition from current scale to 0 over phaseRemainingMs.
+   */
+  const startFixedPhaseTransition = (
+    targetRemainingMs: number | undefined,
+    targetEndsAt: number | undefined,
+    status: string
+  ) => {
+    const bar = barRef.current;
+    if (!bar) return;
+
+    const totalDurationMs = status === "ROUND_END" ? 8000 : 15000;
+
+    let remMs = targetRemainingMs;
+    if (remMs === undefined && targetEndsAt) {
+      remMs = Math.max(0, targetEndsAt - Date.now());
+    }
+    if (remMs === undefined) {
+      const tl = currentInitialTimeLeft > 0 ? currentInitialTimeLeft : (status === "ROUND_END" ? 8 : 15);
+      remMs = tl * 1000;
+    }
+    remMs = Math.max(0, Math.min(totalDurationMs, remMs));
+
+    const startScale = Math.max(0, Math.min(1, remMs / totalDurationMs));
+
+    if (rafIdRef.current !== null) {
+      cancelAnimationFrame(rafIdRef.current);
+      rafIdRef.current = null;
+    }
+
+    applyColor(startScale * 100, status);
+
+    if (remMs <= 0) {
+      bar.style.transition = "none";
+      bar.style.transform = "scaleX(0)";
+      lastTimeLeftRef.current = 0;
+      return;
+    }
+
+    // 1. Immediately snap to starting ratio without transition
+    bar.style.transition = "none";
+    bar.style.transform = `scaleX(${startScale.toFixed(4)})`;
+    lastTimeLeftRef.current = Math.ceil(remMs / 1000);
+
+    // 2. Double rAF ensures browser flushes initial position before launching continuous CSS transition
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        if (!barRef.current) return;
+        barRef.current.style.transition = `transform ${remMs}ms linear, background-color 0.5s ease, box-shadow 0.5s ease`;
+        barRef.current.style.transform = "scaleX(0)";
+      });
+    });
+  };
+
+  /**
+   * ⏱️ Dynamic Countdown Path (DRAWING: 100s, CHOOSING: 15/100s):
+   * Updates CSS bar by 1-second increments with isTimeJump support for word deductions.
+   */
+  const syncDynamicBar = React.useCallback((timeLeft: number, status: string, isStatusChange: boolean = false) => {
     const bar = barRef.current;
     if (!bar) return;
 
@@ -125,12 +203,10 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
     }
 
     if (isRealStatusChange || isTimeJump || lastTimeLeftRef.current === null) {
-      // 1. Immediately snap to current ratio without transition
       bar.style.transition = "none";
       bar.style.transform = `scaleX(${currentScale.toFixed(4)})`;
       lastTimeLeftRef.current = clampedTime;
 
-      // 2. Double rAF ensures the browser flushes the initial transform before starting the CSS transition
       rafIdRef.current = requestAnimationFrame(() => {
         rafIdRef.current = requestAnimationFrame(() => {
           rafIdRef.current = null;
@@ -151,28 +227,91 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
     lastTimeLeftRef.current = clampedTime;
   }, []);
 
-  // Reset or initialize on status or phase change
+  // Sync on React render or phase change
   React.useEffect(() => {
+    const isFixed = currentStatus === "ROUND_END" || currentStatus === "PODIUM";
     const statusChanged = currentStatus !== statusRef.current;
     statusRef.current = currentStatus;
-    syncBar(currentInitialTimeLeft, currentStatus, statusChanged || !isMountedRef.current);
-    isMountedRef.current = true;
-  }, [currentStatus, currentInitialTimeLeft, syncBar]);
 
-  // Listen directly to timer_tick to drive the CSS transition once per second (0% CPU rAF loop)
+    if (isFixed) {
+      const endsAt = propPhaseEndsAt ?? gameState?.phaseEndsAt;
+      const phaseKey = endsAt ? `${currentStatus}_${endsAt}` : currentStatus;
+
+      // Prevent restarting the continuous transition if already running for this exact phase instance
+      if (activeFixedPhaseKeyRef.current === phaseKey) {
+        return;
+      }
+
+      activeFixedPhaseKeyRef.current = phaseKey;
+      lastSyncedStatusRef.current = currentStatus;
+      const remMs = propPhaseRemainingMs ?? gameState?.phaseRemainingMs;
+      startFixedPhaseTransition(remMs, endsAt, currentStatus);
+    } else {
+      activeFixedPhaseKeyRef.current = null;
+      syncDynamicBar(currentInitialTimeLeft, currentStatus, statusChanged || !isMountedRef.current);
+    }
+
+    isMountedRef.current = true;
+  }, [
+    currentStatus,
+    currentInitialTimeLeft,
+    propPhaseRemainingMs,
+    propPhaseEndsAt,
+    gameState?.phaseRemainingMs,
+    gameState?.phaseEndsAt,
+    syncDynamicBar,
+  ]);
+
+  // Listen directly to timer_tick events
   React.useEffect(() => {
     if (!socket) return;
-    const onTick = (data: { timeLeft: number; status: string }) => {
-      const statusChanged = data.status !== statusRef.current;
-      statusRef.current = data.status;
-      syncBar(data.timeLeft, data.status, statusChanged);
+    const onTick = (data: {
+      timeLeft: number;
+      status: string;
+      phaseRemainingMs?: number;
+      phaseEndsAt?: number;
+    }) => {
+      const isFixed = data.status === "ROUND_END" || data.status === "PODIUM";
+
+      if (isFixed) {
+        const phaseKey = data.phaseEndsAt ? `${data.status}_${data.phaseEndsAt}` : data.status;
+
+        // If continuous transition is already active for this phase instance, DO NOT restart or interrupt
+        if (activeFixedPhaseKeyRef.current === phaseKey) {
+          return;
+        }
+
+        activeFixedPhaseKeyRef.current = phaseKey;
+        statusRef.current = data.status;
+        lastSyncedStatusRef.current = data.status;
+        startFixedPhaseTransition(data.phaseRemainingMs, data.phaseEndsAt, data.status);
+      } else {
+        activeFixedPhaseKeyRef.current = null;
+        const statusChanged = data.status !== statusRef.current;
+        statusRef.current = data.status;
+        syncDynamicBar(data.timeLeft, data.status, statusChanged);
+      }
     };
 
     socket.on("timer_tick", onTick);
     return () => {
       socket.off("timer_tick", onTick);
     };
-  }, [socket, syncBar]);
+  }, [socket, syncDynamicBar]);
+
+  // Force resync if tab becomes visible after background throttling during a fixed phase
+  React.useEffect(() => {
+    const onVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        (statusRef.current === "ROUND_END" || statusRef.current === "PODIUM")
+      ) {
+        activeFixedPhaseKeyRef.current = null;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
 
   const effectiveMaxTime = getMaxTimeForStatus(currentStatus, maxTime || 100);
   const initialClamped = Math.max(0, Math.min(effectiveMaxTime, currentInitialTimeLeft));

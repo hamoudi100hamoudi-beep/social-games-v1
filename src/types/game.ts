@@ -18,6 +18,8 @@ export interface GameState {
   isDrawingActive?: boolean; // GATEKEEPER FLAG FOR UNDO SAFETY
   lastStrokeIndex?: number | null;
   redoStack?: any[];
+  phaseEndsAt?: number; // Exact timestamp in ms when current phase ends (for ROUND_END and PODIUM)
+  phaseRemainingMs?: number; // Remaining duration in ms computed by server for client smooth transition
 }
 
 export interface Player {

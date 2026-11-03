@@ -1689,6 +1689,9 @@ export default function ExperimentalGameRoom({
                 maxTime={getMaxTime()}
                 isFullScreen={isDrawingMode}
                 socket={socket}
+                gameState={gameState}
+                phaseRemainingMs={gameState.phaseRemainingMs}
+                phaseEndsAt={gameState.phaseEndsAt}
               />,
               activeTimerContainer
             )}

@@ -120,14 +120,21 @@
   - دالة الحساب النقي: `getMaxTimeForStatus(status: string, fallbackMaxTime: number)`.
   - المكون المستقل: `SmoothTimer` مع تغليفه بـ `React.memo` لمنع إعادة تصيير شريط المؤقت مع حالات الروم غير المرتبطة.
 * **الاعتماديات والواجهات (Dependencies & Props)**:
-  - Props: `status?: string`, `initialTimeLeft?: number`, `maxTime: number`, `isFullScreen?: boolean`, `socket?: any`, `gameState?: { status: string; timeLeft: number }`.
+  - Props: `status?: string`, `initialTimeLeft?: number`, `maxTime: number`, `isFullScreen?: boolean`, `socket?: any`, `gameState?: { status: string; timeLeft: number }`, `phaseRemainingMs?: number`, `phaseEndsAt?: number`.
   - استماع الحدث: يستمع محلياً إلى `socket.on("timer_tick")` مع تنظيف صريح `socket.off("timer_tick")` عند unmount.
   - الحفاظ على دورة `double-rAF` اللحظية لمنع وميض الشريط عند الانتقال بين الجولات.
+  - **إصلاح عدم انتظام انكماش الشريط الأزرق (ROUND_END و PODIUM)**:
+    - تم اعتماد توقيت نهائي موثوق من السيرفر (`phaseEndsAt` و `phaseRemainingMs`) لحالتي `ROUND_END` (8 ثوانٍ) و `PODIUM` (15 ثانية).
+    - تنفيذ انتقال CSS انسيابي واحد متصل من المقياس المتبقي الفعلي حتى الصفر (`transform ${remMs}ms linear`) عبر `startFixedPhaseTransition`.
+    - حماية دورة الحركة عبر `activeFixedPhaseKeyRef` لمنع نبضات `timer_tick` اللاحقة أو إعادة تصيير React من مقاطعة أو إعادة تشغيل الحركة الجارية.
+    - حماية مسار مؤقت الرسم التنافسي (100 ثانية) و `CHOOSING` عبر `syncDynamicBar` دون أي تعديل على سلوك خصم الثواني عند التخمين الصحيح.
+    - استهلاك صفري لموارد المعالج والبطارية دون أي حلقات rAF مستمرة أو setIntervals في المتصفح.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
 * **نتائج الفحص والتحقق**:
   - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
   - `npm run build`: تم البناء بنجاح (Build succeeded).
   - الفحص اليدوي: معلق لتأكيد المستخدم عبر الرابط المباشر.
+* **ملاحظة معمارية مسجلة**: تم رصد ترتيب استدعاء `reachedZero` في `ExperimentalGameRoom.tsx` عند تصفير المؤقت؛ وسُجلت كنقطة مستقلة للتحسين المستقبلي دون تعديل حالياً حفاظاً على استقرار اللعبة.
 * **الدفعة التالية المجدولة**: `BATCH-6A-2 — Shared Action Modals Extraction`.
 
 ---
