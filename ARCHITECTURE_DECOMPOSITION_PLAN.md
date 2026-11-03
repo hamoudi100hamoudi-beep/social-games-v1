@@ -184,7 +184,7 @@
 ---
 
 ### 🟢 الدفعة 4: `BATCH-5A-1` — استخراج أدوات المطابقة العربية وقواميس الكلمات للسيرفر
-* **الحالة**: `BUILD_VERIFIED` (تم استخراج الدوال وقاموس الكلمات بنجاح واجتياز فحص الأنواع والبناء مع تطابق بصمة SHA-256 للقاموس بنسبة 100%)
+* **الحالة**: `SYNCED` (تم استخراج الدوال وقاموس الكلمات بنجاح، واجتياز فحص الأنواع والبناء مع تطابق بصمة SHA-256 للقاموس بنسبة 100%، واجتياز الاختبار اليدوي للمستخدم ومزامنة التعديلات إلى GitHub main في الالتزام: `4a6960cddced706b067b9f25fda6380d960cd9f4`).
 * **الملف المصدر**: `server/rooms.ts` (السطور 5–27، 167–206، و 208–283؛ تقليص صافي قدره 138 سطراً).
 * **الملفات الجديدة المنشأة**:
   - `server/utils/arabicFuzzyMatch.ts` (يتضمن `getLevenshteinDistance`, `normalizeArabic`, `isCloseGuess`).
@@ -192,26 +192,27 @@
 * **التوافق التكامي مع المستهلكين الخارجيين**:
   - تم احتفاظ تصدير `normalizeArabic` من `server/rooms.ts` عبر `export { normalizeArabic } from "./utils/arabicFuzzyMatch.js";` لضمان عدم انكسار المستهلكين الأربعة (`server.ts`, `registerSendMessageHandler.ts`, `test_leave_room_integrity.ts`, `test_session_identity_suite.ts`).
 * **حفظ حدود الدفعة التالية**:
-  - السطور 29–166 (`decodeZigZag`, `readVarIntFromBuffer`, `decodeType13BufferSafely`, `createType2Buffer`, `createType1Buffer`) تُركت كاملة في `server/rooms.ts` دون تعديل، وهي محفوظة للدفعة `BATCH-5A-2`.
+  - السطور 9–145 (`decodeZigZag`, `readVarIntFromBuffer`, `decodeType13BufferSafely`, `createType2Buffer`, `createType1Buffer`) تُركت كاملة في `server/rooms.ts` دون تعديل، وهي محفوظة للدفعة `BATCH-5A-2`.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
 * **نتائج الفحص والتحقق**:
   - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
   - `npm run build` (`compile_applet`): تم البناء بنجاح (Build succeeded).
-  - **بصمة القاموس SHA-256**: `ea34bcba277e9acdbe94c502fa386c33a922f911f49643894be8809c6b9c0d2f` (متطابقة 100% مع مصفوفة `server/rooms.ts` الأصلية).
+  - **بصمة القاموس SHA-256**: `ea34bcba277e9acdbe94c502fa386c33a922f911f49643894be8809c6b9c0d2f` (متطابقة 100% مع مصفوفة `server/rooms.ts` الأصلية بـ 463 عنصراً).
+  - **الاختبار اليدوي**: اختبر المستخدم اللعبة يدوياً وأكد أن السلوك طبيعي وتمت المزامنة لفرع main.
 * **الدفعة التنفيذية التالية المجدولة**: `BATCH-5A-2 — Pure Binary Helpers Extraction`.
 
 ---
 
 ### 🟢 الدفعة 5: `BATCH-5A-2` — استخراج أدوات معالجة الحزم الثنائية للسيرفر (Pure Binary Helpers)
 * **الحالة**: `PLANNED`
-* **الملف المصدر**: `server/rooms.ts` (السطور 29–166).
+* **الملف المصدر**: `server/rooms.ts` (السطور 9–11، 13–26، 28–107، 109–120، 122–145؛ بإجمالي ~137 سطراً).
 * **الملف الجديد المتوقع**: `server/utils/binaryBufferHelpers.ts`.
 * **الأجزاء المستخرجة**: `decodeZigZag`, `readVarIntFromBuffer`, `decodeType13BufferSafely`, `createType2Buffer`, `createType1Buffer`.
-* **الاعتماديات**: معالجة Buffers نقية في الذاكرة.
+* **الاعتماديات**: معالجة Buffers نقية في الذاكرة لبروتوكول الرسم الثنائي.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
 * **شروط قبول الدفعة**:
-  - عدم تغيير أي بايت في بروتوكول الضغط وفك الضغط.
-  - اجتياز الفحص الثابت والبناء.
+  - عدم تغيير أي بايت في بروتوكول الضغط وفك الضغط وإبقاء إعادة التصدير من `server/rooms.ts` للحفاظ على التوافق مع `server.ts` وسكريبتات الاختبار.
+  - اجتياز الفحص الثابت `tsc --noEmit` والبناء `npm run build`.
 
 ---
 
