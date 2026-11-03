@@ -33,8 +33,10 @@ import { MiniBoardOverlay } from "../game/MiniBoardOverlay";
 import { OverlayChatRoom, ChatMessage } from "../game/OverlayChatRoom";
 import CinematicModal from "../game/CinematicModal";
 import SmoothTimer from "../game/SmoothTimer";
-import ExitSprite from "../game/ExitSprite";
-import AfkWarningSprite from "../game/AfkWarningSprite";
+import ExitConfirmModal from "../game/modals/ExitConfirmModal";
+import SkipConfirmModal from "../game/modals/SkipConfirmModal";
+import ReportConfirmModal from "../game/modals/ReportConfirmModal";
+import AfkWarningModal from "../game/modals/AfkWarningModal";
 import { safeLocalStorage } from "../../utils/storage";
 import { getPlayerIdentity } from "../../utils/playerAuth";
 import { soundManager } from "../../utils/soundManager";
@@ -1461,40 +1463,15 @@ export default function ExperimentalGameRoom({
         )}
 
         {/* Exit Confirmation Dialog */}
-        <CinematicModal
+        <ExitConfirmModal
           isOpen={showExitConfirm}
           onClose={() => setShowExitConfirm(false)}
-          titleType="exit"
-          titleText="EXIT"
-          buttons={[
-            {
-              id: "exit-confirm-no-btn",
-              text: "NO",
-              onClick: () => setShowExitConfirm(false),
-              variant: "primary",
-            },
-            {
-              id: "exit-confirm-yes-btn",
-              text: "YES",
-              onClick: () => {
-                setShowExitConfirm(false);
-                socket?.emit("leave_room", { roomId: room });
-                onLeave?.();
-              },
-              variant: "danger",
-            },
-          ]}
-        >
-          {/* Animated Exit Character Sprite */}
-          <div className="w-full flex items-center justify-center mb-3 sm:mb-5 mt-1">
-            <ExitSprite className="w-26 sm:w-36 h-auto drop-shadow-sm" />
-          </div>
-
-          {/* Question */}
-          <h3 id="exit-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
-            Do you want to leave the game?
-          </h3>
-        </CinematicModal>
+          onConfirmExit={() => {
+            setShowExitConfirm(false);
+            socket?.emit("leave_room", { roomId: room });
+            onLeave?.();
+          }}
+        />
 
         {/* Top Area (Drawing / Waiting) */}
         {/* 
@@ -2134,141 +2111,29 @@ export default function ExperimentalGameRoom({
       )}
 
       {/* Skip Confirm Modal */}
-      <CinematicModal
+      <SkipConfirmModal
         isOpen={showSkipConfirm}
         onClose={() => setShowSkipConfirm(false)}
-        titleType="report"
-        titleText="SKIP"
-        buttons={[
-          {
-            id: "skip-confirm-no-btn",
-            text: <span className="text-white font-black">NO</span>,
-            onClick: () => setShowSkipConfirm(false),
-            variant: "primary",
-          },
-          {
-            id: "skip-confirm-yes-btn",
-            text: <span className="text-white font-black">YES</span>,
-            onClick: handleSkipTurn,
-            variant: "danger",
-          },
-        ]}
-      >
-        {/* Animated Skip Drawing Page & Creature Anchor */}
-        <div className="w-28 h-18 sm:w-32 sm:h-20 bg-white rounded-2xl border-2 border-[#1AAACC]/35 relative overflow-hidden flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 shrink-0 select-none">
-          {/* Inner Canvas Border */}
-          <div className="absolute inset-1 rounded-[14px] border border-dashed border-[#1AAACC]/20 pointer-events-none" />
-
-          {/* Playful Creature (FastForward triangles) leaping out of the drawing sheet */}
-          <div className="relative z-10 flex items-center justify-center animate-skip-escape">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#1AAACC]/15 border border-[#1AAACC]/30 flex items-center justify-center">
-              <FastForward className="w-6 h-6 sm:w-7 sm:h-7 text-[#1AAACC] ml-0.5" strokeWidth={2.8} />
-            </div>
-          </div>
-        </div>
-
-        <h3 id="skip-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
-          Do you want to skip your turn?
-        </h3>
-        <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
-          هل تريد تجاوز دورك في الرسم؟
-        </p>
-      </CinematicModal>
+        onConfirmSkip={handleSkipTurn}
+      />
 
       {/* AFK Popup Modal */}
-      <CinematicModal
+      <AfkWarningModal
         isOpen={isAfkPopupOpen}
-        titleType="inactive"
-        titleText="INACTIVE"
-        buttons={[
-          {
-            id: "afk-return-btn",
-            text: "موافق",
-            onClick: handleIHaveReturned,
-            variant: "neutral",
-            icon: <Check strokeWidth={4} size={18} />,
-          },
-        ]}
-      >
-        {/* Animated Warning Sprite */}
-        <div className="flex justify-center mb-3 sm:mb-4 mt-1">
-          <AfkWarningSprite className="w-24 sm:w-34 aspect-[256/326]" />
-        </div>
-
-        {/* Question & Subtext in the same line (RTL reading order) */}
-        <h3 
-          id="afk-title" 
-          dir="rtl"
-          className="text-sm sm:text-base font-black text-[#2E2882] leading-snug mb-3 sm:mb-4 px-1 text-center"
-        >
-          <span>هل ما زلت هنا؟ </span>
-          <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
-        </h3>
-
-        {/* Compact Remainder Countdown Badge */}
-        <div 
-          dir="rtl"
-          className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 sm:mb-4 text-xs sm:text-sm font-black text-[#EF4444] select-none"
-        >
-          <span className="flex h-2 w-2 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]"></span>
-          </span>
-          <span>
-            سيتم فصل الاتصال بعد: <span className="font-extrabold font-mono text-xs sm:text-sm">{afkCountdown}</span> ثانية
-          </span>
-        </div>
-      </CinematicModal>
+        afkCountdown={afkCountdown}
+        onConfirmStay={handleIHaveReturned}
+      />
 
       {/* Report Confirmation Modal */}
       {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
-        <CinematicModal
+        <ReportConfirmModal
           isOpen={showReportConfirm}
           onClose={() => setShowReportConfirm(false)}
-          titleType="report"
-          titleText="REPORT"
-          buttons={[
-            {
-              id: "report-confirm-no-btn",
-              text: "NO",
-              onClick: () => setShowReportConfirm(false),
-              variant: "primary",
-            },
-            {
-              id: "report-confirm-yes-btn",
-              text: "YES",
-              onClick: () => {
-                setShowReportConfirm(false);
-                socket?.emit("report_draw");
-              },
-              variant: "danger",
-            },
-          ]}
-        >
-          {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-          <div className="w-18 h-18 sm:w-24 sm:h-24 flex items-center justify-center mx-auto mb-3 sm:mb-4 mt-1 relative">
-            <motion.div 
-              animate={{
-                rotate: [-4, 4, -4, 4, -4, 4, 0],
-                scale: [1, 1.05, 1, 1.05, 1]
-              }}
-              transition={{
-                delay: 1.5,
-                repeat: Infinity,
-                duration: 0.6,
-                repeatDelay: 1.8,
-                ease: "easeInOut"
-              }}
-            >
-              <AlertTriangle className="w-16 h-16 sm:w-20 sm:h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
-            </motion.div>
-          </div>
-
-          {/* Content Text unified with golden standard */}
-          <h3 id="report-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
-            Are you sure you wanna report this drawing?
-          </h3>
-        </CinematicModal>
+          onConfirmReport={() => {
+            setShowReportConfirm(false);
+            socket?.emit("report_draw");
+          }}
+        />
       )}
 
       {/* Global Overlays for CHOOSING state */}

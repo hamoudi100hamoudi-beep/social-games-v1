@@ -123,10 +123,18 @@
   - Props: `status?: string`, `initialTimeLeft?: number`, `maxTime: number`, `isFullScreen?: boolean`, `socket?: any`, `gameState?: { status: string; timeLeft: number }`, `phaseRemainingMs?: number`, `phaseEndsAt?: number`.
   - استماع الحدث: يستمع محلياً إلى `socket.on("timer_tick")` مع تنظيف صريح `socket.off("timer_tick")` عند unmount.
   - الحفاظ على دورة `double-rAF` اللحظية لمنع وميض الشريط عند الانتقال بين الجولات.
-  - **إصلاح عدم انتظام انكماش الشريط الأزرق (ROUND_END و PODIUM)**:
-    - تم اعتماد توقيت نهائي موثوق من السيرفر (`phaseEndsAt` و `phaseRemainingMs`) لحالتي `ROUND_END` (8 ثوانٍ) و `PODIUM` (15 ثانية).
+  - **إصلاح عدم انتظام انكماش الشريط الأزرق وتوقيت الانتقال النهائي (ROUND_END و PODIUM)**:
+    - تم اعتماد توقيت نهائي موثوق من السيرفر (`phaseEndsAt` و `phaseRemainingMs`) لحالتي `ROUND_END` (8000ms بالضبط) و `PODIUM` (15000ms بالضبط).
     - تنفيذ انتقال CSS انسيابي واحد متصل من المقياس المتبقي الفعلي حتى الصفر (`transform ${remMs}ms linear`) عبر `startFixedPhaseTransition`.
     - حماية دورة الحركة عبر `activeFixedPhaseKeyRef` لمنع نبضات `timer_tick` اللاحقة أو إعادة تصيير React من مقاطعة أو إعادة تشغيل الحركة الجارية.
+    - **مؤقت الموعد النهائي الدقيق بالسيرفر (Precise Single-Shot Deadline Timer)**:
+      - إضافة `phaseDeadlineTimers: Map<string, NodeJS.Timeout>` داخل `RoomManager` لإطلاق الانتقال بدقة الميلي ثانية عند انتهاء المرحلة (`transitionToChoosing` أو `transitionToWaiting`).
+      - دوال حماية صريحة: `clearPhaseDeadlineTimer` و `schedulePhaseDeadline` مع فحص مطابقة الحالة والموعد النهائي لمنع المؤقتات القديمة أو تكرار الانتقال.
+      - الاحتفاظ بحلقة `processRoomTick` كآلية احتياطية دون أي تعارض أو إرسال مكرر.
+      - تنظيف تلقائي للمؤقت عند حذف الغرفة أو الخروج من المرحلة أو بدء جولة جديدة.
+    - **استئناف فوري دقيق عند العودة من الخلفية (Background Visibility Resumption)**:
+      - تخزين لقطة موثوقة `lastFixedPhaseSnapshotRef` تتحدث مع كل نبضة دون إعادة تشغيل الحركة.
+      - عند `visibilitychange` (العودة إلى الواجهة)، يُحسب الوقت المتبقي الفعلي من الموعد النهائي ويعاد إطلاق حركة CSS مرة واحدة دون أي حلقات مستمرة أو polling.
     - حماية مسار مؤقت الرسم التنافسي (100 ثانية) و `CHOOSING` عبر `syncDynamicBar` دون أي تعديل على سلوك خصم الثواني عند التخمين الصحيح.
     - استهلاك صفري لموارد المعالج والبطارية دون أي حلقات rAF مستمرة أو setIntervals في المتصفح.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
@@ -140,21 +148,24 @@
 ---
 
 ### 🟢 الدفعة 2: `BATCH-6A-2` — استخراج نوافذ الإجراءات التفاعلية الأساسية (Action Modals)
-* **الحالة**: `PLANNED`
-* **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx`.
-* **الملفات الجديدة المتوقعة**:
+* **الحالة**: `BUILD_VERIFIED` (تم استخراج النوافذ الأربع بنجاح واجتياز بناء التطبيق الكامل بدون أي أخطاء)
+* **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (تم تقليص أسطر الـ JSX المضمنة للنوافذ بحدود 115 سطراً).
+* **الملفات الجديدة المنشأة**:
   - `src/components/game/modals/ExitConfirmModal.tsx` (نافذة تأكيد الخروج).
   - `src/components/game/modals/SkipConfirmModal.tsx` (نافذة تأكيد تخطي الدور).
   - `src/components/game/modals/ReportConfirmModal.tsx` (نافذة تأكيد الإبلاغ عن الرسم).
-  - `src/components/game/modals/AfkWarningModal.tsx` (نافذة تحذير الخمول وتأكيد التواجد).
+  - `src/components/game/modals/AfkWarningModal.tsx` (نافذة تحذير الخمول وتأكيد التواجد مع العداد التنازلي).
 * **الاعتماديات والواجهات**:
-  - تعتمد فقط على مكون `CinematicModal` الحالي.
-  - تستقبل فقط: `isOpen: boolean`, `onClose: () => void`, و `onConfirm: () => void` (أو `secondsLeft` لنافذة الخمول).
+  - جميع المكونات مصممة كـ Presentation Components نقية تعتمد على Props صريحة (`isOpen`, `onClose`, `onConfirmExit`, `onConfirmSkip`, `onConfirmReport`, `onConfirmStay`, `afkCountdown`).
+  - جميع التفاعلات وإرسال المقابس والحالات تبقى داخل `ExperimentalGameRoom.tsx`.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
-* **شروط قبول الدفعة**:
-  - عدم نقل أي منطق شبكي أو إدارة غرف إلى داخل النوافذ؛ تبقى كـ Pure Presentation Components.
-  - تقليص نحو 280 سطراً من `ExperimentalGameRoom.tsx`.
-  - اجتياز الفحص الثابت والبناء.
+* **نتائج الفحص والتحقق**:
+  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
+  - `npm run build` (`compile_applet`): تم البناء بنجاح بدون أي أخطاء.
+* **ملاحظة معمارية مفتوحة مسجلة (`TIMER-FREEZE-1`)**:
+  - تم تسجيل ملاحظة مفتوحة باسم `TIMER-FREEZE-1`: أثناء تجارب تجاوز الدور (SKIP)، ينكمش مؤقت الجولات العادية بصورة سليمة، لكن في بعض حالات الانضمام أو التغيير السريع عبر البورتال (`createPortal`) قد يتوقف الترانزيشن مؤقتاً عند تغيير العائل في شجرة DOM. تبقى هذه النقطة مسجلة كـ Open Issue ليتم التعامل معها مستقبلاً دون المساس بمكونات المؤقت أو كود الخادم في هذه المرحلة.
+* **الدفعة التالية المجدولة**: `BATCH-6A-3 — Profile & Alert Modals Extraction`.
+
 
 ---
 

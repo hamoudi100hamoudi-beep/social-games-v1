@@ -72,6 +72,14 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
   // Tracks active fixed-duration phase key (e.g. "ROUND_END_1700000000000") to prevent re-triggering
   const activeFixedPhaseKeyRef = React.useRef<string | null>(null);
 
+  // Stores the latest reliable fixed phase timestamp to allow instant, accurate resumption upon returning from background
+  const lastFixedPhaseSnapshotRef = React.useRef<{
+    status: "ROUND_END" | "PODIUM";
+    phaseEndsAt: number;
+    totalDurationMs: number;
+    receivedPerfNow: number;
+  } | null>(null);
+
   maxTimeRef.current = maxTime;
 
   React.useEffect(() => {
@@ -234,7 +242,16 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
     statusRef.current = currentStatus;
 
     if (isFixed) {
-      const endsAt = propPhaseEndsAt ?? gameState?.phaseEndsAt;
+      const totalDurationMs = currentStatus === "ROUND_END" ? 8000 : 15000;
+      const endsAt = propPhaseEndsAt ?? gameState?.phaseEndsAt ?? (Date.now() + (propPhaseRemainingMs ?? gameState?.phaseRemainingMs ?? currentInitialTimeLeft * 1000));
+
+      lastFixedPhaseSnapshotRef.current = {
+        status: currentStatus as "ROUND_END" | "PODIUM",
+        phaseEndsAt: endsAt,
+        totalDurationMs,
+        receivedPerfNow: performance.now(),
+      };
+
       const phaseKey = endsAt ? `${currentStatus}_${endsAt}` : currentStatus;
 
       // Prevent restarting the continuous transition if already running for this exact phase instance
@@ -247,6 +264,7 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
       const remMs = propPhaseRemainingMs ?? gameState?.phaseRemainingMs;
       startFixedPhaseTransition(remMs, endsAt, currentStatus);
     } else {
+      lastFixedPhaseSnapshotRef.current = null;
       activeFixedPhaseKeyRef.current = null;
       syncDynamicBar(currentInitialTimeLeft, currentStatus, statusChanged || !isMountedRef.current);
     }
@@ -274,6 +292,17 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
       const isFixed = data.status === "ROUND_END" || data.status === "PODIUM";
 
       if (isFixed) {
+        const totalDurationMs = data.status === "ROUND_END" ? 8000 : 15000;
+        const endsAt = data.phaseEndsAt || (data.phaseRemainingMs ? Date.now() + data.phaseRemainingMs : Date.now() + data.timeLeft * 1000);
+
+        // Always keep the snapshot fresh on every tick even when animation is running
+        lastFixedPhaseSnapshotRef.current = {
+          status: data.status as "ROUND_END" | "PODIUM",
+          phaseEndsAt: endsAt,
+          totalDurationMs,
+          receivedPerfNow: performance.now(),
+        };
+
         const phaseKey = data.phaseEndsAt ? `${data.status}_${data.phaseEndsAt}` : data.status;
 
         // If continuous transition is already active for this phase instance, DO NOT restart or interrupt
@@ -286,6 +315,7 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
         lastSyncedStatusRef.current = data.status;
         startFixedPhaseTransition(data.phaseRemainingMs, data.phaseEndsAt, data.status);
       } else {
+        lastFixedPhaseSnapshotRef.current = null;
         activeFixedPhaseKeyRef.current = null;
         const statusChanged = data.status !== statusRef.current;
         statusRef.current = data.status;
@@ -299,16 +329,45 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
     };
   }, [socket, syncDynamicBar]);
 
-  // Force resync if tab becomes visible after background throttling during a fixed phase
+  // Instant accurate resumption when returning from background tab during a fixed phase
   React.useEffect(() => {
     const onVisibilityChange = () => {
-      if (
-        document.visibilityState === "visible" &&
-        (statusRef.current === "ROUND_END" || statusRef.current === "PODIUM")
-      ) {
-        activeFixedPhaseKeyRef.current = null;
+      if (document.visibilityState !== "visible") return;
+
+      const currentStatus = statusRef.current;
+      if (currentStatus !== "ROUND_END" && currentStatus !== "PODIUM") {
+        return;
       }
+
+      const snapshot = lastFixedPhaseSnapshotRef.current;
+      if (!snapshot || snapshot.status !== currentStatus) {
+        activeFixedPhaseKeyRef.current = null;
+        return;
+      }
+
+      // Compute precise remaining time from authoritative deadline
+      const remainingMs = Math.max(0, snapshot.phaseEndsAt - Date.now());
+      const phaseKey = `${snapshot.status}_${snapshot.phaseEndsAt}`;
+
+      if (remainingMs <= 50) {
+        if (rafIdRef.current !== null) {
+          cancelAnimationFrame(rafIdRef.current);
+          rafIdRef.current = null;
+        }
+        if (barRef.current) {
+          barRef.current.style.transition = "none";
+          barRef.current.style.transform = "scaleX(0)";
+        }
+        lastTimeLeftRef.current = 0;
+        activeFixedPhaseKeyRef.current = phaseKey;
+        return;
+      }
+
+      // Re-initialize CSS transition once from the exact remaining ratio down to 0
+      activeFixedPhaseKeyRef.current = phaseKey;
+      startFixedPhaseTransition(remainingMs, snapshot.phaseEndsAt, snapshot.status);
     };
+
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);

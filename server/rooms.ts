@@ -288,6 +288,7 @@ export class RoomManager {
   private rooms: Map<string, Room> = new Map();
   private players: Map<string, Player> = new Map();
   private evictionTimers: Map<string, NodeJS.Timeout> = new Map();
+  private phaseDeadlineTimers: Map<string, NodeJS.Timeout> = new Map();
   private io: Server | null = null;
   private tickInterval: NodeJS.Timeout | null = null;
   private clientCapabilities: Map<string, { supportsType13?: boolean }> = new Map();
@@ -316,6 +317,60 @@ export class RoomManager {
       }
     }
     return null;
+  }
+
+  private clearPhaseDeadlineTimer(roomId: string) {
+    const existing = this.phaseDeadlineTimers.get(roomId);
+    if (existing) {
+      clearTimeout(existing);
+      this.phaseDeadlineTimers.delete(roomId);
+    }
+  }
+
+  private schedulePhaseDeadline(
+    room: Room,
+    expectedStatus: "ROUND_END" | "PODIUM",
+    expectedDeadline: number
+  ) {
+    this.clearPhaseDeadlineTimer(room.id);
+
+    const remainingMs = Math.max(0, expectedDeadline - Date.now());
+
+    const timer = setTimeout(() => {
+      this.phaseDeadlineTimers.delete(room.id);
+
+      // Verify room still exists in this.rooms
+      const currentRoom = this.rooms.get(room.id);
+      if (!currentRoom || currentRoom !== room) {
+        return;
+      }
+
+      // Verify state has not changed (prevents stale timers from acting on a new state)
+      if (room.gameState.status !== expectedStatus) {
+        return;
+      }
+      if (room.gameState.phaseEndsAt !== expectedDeadline) {
+        return;
+      }
+
+      // Check if callback fired slightly early due to event loop jitter
+      const remainingNow = expectedDeadline - Date.now();
+      if (remainingNow > 20) {
+        this.schedulePhaseDeadline(room, expectedStatus, expectedDeadline);
+        return;
+      }
+
+      // Authoritative transition execution
+      if (expectedStatus === "ROUND_END") {
+        this.transitionToChoosing(room);
+      } else if (expectedStatus === "PODIUM") {
+        // Reset scores (the win was already added in transitionToPodium)
+        room.players.forEach((p) => (p.score = 0));
+        this.transitionToWaiting(room);
+      }
+    }, remainingMs);
+
+    this.phaseDeadlineTimers.set(room.id, timer);
   }
 
   public verifyPlayerSecret(persistentId: string, secret: unknown): boolean {
@@ -546,12 +601,14 @@ export class RoomManager {
       const remainingMs = gameState.phaseEndsAt ? Math.max(0, gameState.phaseEndsAt - Date.now()) : 0;
       gameState.timeLeft = Math.ceil(remainingMs / 1000);
       if (remainingMs <= 0 || gameState.timeLeft <= 0) {
+        this.clearPhaseDeadlineTimer(room.id);
         this.transitionToChoosing(room);
       }
     } else if (gameState.status === "PODIUM") {
       const remainingMs = gameState.phaseEndsAt ? Math.max(0, gameState.phaseEndsAt - Date.now()) : 0;
       gameState.timeLeft = Math.ceil(remainingMs / 1000);
       if (remainingMs <= 0 || gameState.timeLeft <= 0) {
+        this.clearPhaseDeadlineTimer(room.id);
         // Reset scores (the win was already added in transitionToPodium)
         room.players.forEach((p) => (p.score = 0));
 
@@ -579,6 +636,7 @@ export class RoomManager {
 
   private transitionToWaiting(room: Room) {
     console.log(`[Room ${room.id}] Transitioning to WAITING`);
+    this.clearPhaseDeadlineTimer(room.id);
     const lastDrawerBeforeWaiting = room.gameState.currentDrawerId;
 
     room.gameState.status = "WAITING";
@@ -599,6 +657,7 @@ export class RoomManager {
   }
 
   private transitionToChoosing(room: Room, previousDrawerId?: string | null) {
+    this.clearPhaseDeadlineTimer(room.id);
     if (room.players.length < 2) {
       return this.transitionToWaiting(room);
     }
@@ -704,6 +763,7 @@ export class RoomManager {
     room.gameState.status = "PODIUM";
     room.gameState.timeLeft = 15;
     room.gameState.phaseEndsAt = Date.now() + 15000;
+    this.schedulePhaseDeadline(room, "PODIUM", room.gameState.phaseEndsAt);
 
     // Increment winner's wins immediately
     const sorted = [...room.players].sort((a, b) => b.score - a.score);
@@ -755,6 +815,7 @@ export class RoomManager {
     room.gameState.roundEndWord = room.gameState.currentWord || undefined;
     room.gameState.timeLeft = 8;
     room.gameState.phaseEndsAt = Date.now() + 8000;
+    this.schedulePhaseDeadline(room, "ROUND_END", room.gameState.phaseEndsAt);
 
     const word = room.gameState.currentWord || "";
 
@@ -882,6 +943,7 @@ export class RoomManager {
     if (!Array.isArray(wordOptions) || wordOptions.length === 0) return;
     if (!wordOptions.includes(trimmedWord)) return;
 
+    this.clearPhaseDeadlineTimer(room.id);
     room.gameState.currentWord = trimmedWord;
     room.gameState.status = "DRAWING";
     delete room.gameState.phaseEndsAt;
@@ -2193,6 +2255,7 @@ const words = word.split(" ").filter(w => w.length > 0);
         }
 
         if (room.players.length === 0) {
+          this.clearPhaseDeadlineTimer(roomId);
           // Immediately purge drawing history, redo stack, and chat to free memory
           if (room.gameState) {
             room.gameState.drawHistory = [];
