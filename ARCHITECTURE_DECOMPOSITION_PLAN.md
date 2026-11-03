@@ -113,21 +113,22 @@
 ## 🗂️ 5. سجل حزم ودفعات التفكيك (Decomposition Batches Register)
 
 ### 🟢 الدفعة 1: `BATCH-6A-1` — استخراج مؤقت اللعبة `SmoothTimer`
-* **الحالة**: `PLANNED`
-* **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (السطور 86-270).
-* **الملف الجديد المتوقع**: `src/components/game/SmoothTimer.tsx`.
+* **الحالة**: `BUILD_VERIFIED` (تم الاستخراج البرمجي واجتياز الفحص الثابت والبناء بنجاح؛ بانتظار التحقق اليدوي للمستخدم `MANUALLY_VERIFIED` ثم المزامنة `SYNCED`)
+* **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (تم تقليص 184 سطراً، ليصبح 2,769 سطراً).
+* **الملف الجديد المنشأ**: `src/components/game/SmoothTimer.tsx` (201 سطر).
 * **الأجزاء المستخرجة**:
-  - دالة الحساب النقي: `getMaxTimeForStatus(status: string, defaultMax: number)`.
-  - المكون المستقل: `SmoothTimer`.
+  - دالة الحساب النقي: `getMaxTimeForStatus(status: string, fallbackMaxTime: number)`.
+  - المكون المستقل: `SmoothTimer` مع تغليفه بـ `React.memo` لمنع إعادة تصيير شريط المؤقت مع حالات الروم غير المرتبطة.
 * **الاعتماديات والواجهات (Dependencies & Props)**:
   - Props: `status?: string`, `initialTimeLeft?: number`, `maxTime: number`, `isFullScreen?: boolean`, `socket?: any`, `gameState?: { status: string; timeLeft: number }`.
-  - استماع الحدث: يستمع محلياً إلى `socket.on("timer_tick")` لتحديث شريط الـ CSS بدقة دون إعادة تصيير شجرة الروم.
+  - استماع الحدث: يستمع محلياً إلى `socket.on("timer_tick")` مع تنظيف صريح `socket.off("timer_tick")` عند unmount.
+  - الحفاظ على دورة `double-rAF` اللحظية لمنع وميض الشريط عند الانتقال بين الجولات.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
-* **شروط قبول الدفعة**:
-  - بقاء السلوك الزمني والانسيابي لشريط التحريك بنسبة 100%.
-  - الحفاظ على ارتكاز التناقص من اليسار `transformOrigin: "left center"` وتقنية `double-rAF`.
-  - اجتياز `tsc --noEmit` وبناء `npm run build`.
-* **ملاحظات للتحقق المركزي**: تم التأكد برمجياً من أن المكون يعتمد فقط على Props ومستمع `timer_tick` ولا يتدخل في حالة الرسم أو الدردشة.
+* **نتائج الفحص والتحقق**:
+  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
+  - `npm run build`: تم البناء بنجاح (Build succeeded).
+  - الفحص اليدوي: معلق لتأكيد المستخدم عبر الرابط المباشر.
+* **الدفعة التالية المجدولة**: `BATCH-6A-2 — Shared Action Modals Extraction`.
 
 ---
 
