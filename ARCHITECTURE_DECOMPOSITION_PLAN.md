@@ -168,45 +168,43 @@
 ---
 
 ### 🟢 الدفعة 3: `BATCH-6A-3` — استخراج نوافذ الملف الشخصي والتنبيهات (Profile & Alert Modals)
-* **الحالة**: `BUILD_VERIFIED` (تم استخراج مكونات البروفايل والتنبيهات بنجاح واجتياز فحص الأنواع والبناء بالكامل)
+* **الحالة**: `SYNCED` (تم استخراج مكونات البروفايل والتنبيهات واجتياز الفحص والبناء واختبار المستخدم الميداني والمزامنة مع GitHub في الالتزام: `241cd8bb30f2eb360a5a766d30ab96765a8c625e`).
 * **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (تم تقليص أسطر الـ JSX المضمنة للنوافذ بحدود 250 سطراً).
 * **الملفات الجديدة المنشأة**:
   - `src/components/game/modals/PlayerProfileModal.tsx` (نافذة الملف الشخصي للاعب، الحظر/إلغاء الحظر، والتصويت بالطرد).
   - `src/components/game/modals/RoomAlertModals.tsx` (مكون جامع للنوافذ الست: Cooldown Warning, Banned/Kicked, Nickname Taken, Room Full, Auth Store Full, Join Timeout).
 * **الاعتماديات والواجهات (Props Interface)**:
   - `PlayerProfileModal`: يستقبل `isOpen`, `playerToRender`, `isSelf`, `alreadyVoted`, `isBlocked`, `onClose`, `onToggleBlock`, `onToggleVoteKick`.
-  - `RoomAlertModals`: يستقبل شروط الفتح كـ boolean وكولباكات المغادرة الفردية (`onLeaveFromBanned`, `onLeaveFromNicknameTaken`, `onLeaveFromRoomFull`, `onLeaveFromAuthStoreFull`, `onLeaveFromJoinTimeout`) التي تنفذ مسح التخزين المحلي `safeLocalStorage.removeItem("gartic_player_room")` واستدعاء `onLeave?.()`.
-* **الاعتماديات التي بقيت داخل ExperimentalGameRoom**:
-  - كائنات الحالة: `selectedProfilePlayer`, `votekicks`, `blockedUsers`, `showCooldownWarning`, `isBanned`, `isNicknameTaken`, `isRoomFull`, `isAuthStoreFull`, `isJoinTimedOut`.
-  - منطق الاتصال وانبعاث المقابس `socket.emit("submit_vote_kick")` وإدارة الحظر المحلي ومسح التخزين المحلي.
-* **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
+  - `RoomAlertModals`: يستقبل شروط الفتح كـ boolean وكولباكات المغادرة الفردية التي تنفذ مسح التخزين المحلي `safeLocalStorage.removeItem("gartic_player_room")` واستدعاء `onLeave?.()`.
 * **نتائج الفحص والتحقق**:
   - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
   - `npm run build` (`compile_applet`): تم البناء بنجاح (Build succeeded).
-  - **حالة الاختبار اليدوي**: معلق لتأكيد المستخدم المباشر على البيئة التفاعلية.
   - **حالة القضية المعلقة**: الملاحظة المعمارية المفتوحة `TIMER-FREEZE-1` تبقى مفتوحة ومؤجلة دون المساس بمكونات المؤقت أو البورتال.
-* **الدفعة التنفيذية التالية المجدولة**: `BATCH-5A-1 — Arabic Fuzzy Matching & Word Dictionary Extraction`.
 
 ---
 
 ### 🟢 الدفعة 4: `BATCH-5A-1` — استخراج أدوات المطابقة العربية وقواميس الكلمات للسيرفر
-* **الحالة**: `PLANNED`
-* **الملف المصدر**: `server/rooms.ts` (السطور 5-284).
-* **الملفات الجديدة المتوقعة**:
-  - `server/utils/arabicFuzzyMatch.ts` (`getLevenshteinDistance`, `normalizeArabic`, `isCloseGuess`).
-  - `server/data/wordsDictionary.ts` (`ALL_WORDS` ومصفوفات الكلمات).
-* **الاعتماديات**: دوال نقية 100% لا تعتمد على أي مكتبات خارجية أو دورة حياة Socket.IO.
+* **الحالة**: `BUILD_VERIFIED` (تم استخراج الدوال وقاموس الكلمات بنجاح واجتياز فحص الأنواع والبناء مع تطابق بصمة SHA-256 للقاموس بنسبة 100%)
+* **الملف المصدر**: `server/rooms.ts` (السطور 5–27، 167–206، و 208–283؛ تقليص صافي قدره 138 سطراً).
+* **الملفات الجديدة المنشأة**:
+  - `server/utils/arabicFuzzyMatch.ts` (يتضمن `getLevenshteinDistance`, `normalizeArabic`, `isCloseGuess`).
+  - `server/data/wordsDictionary.ts` (يتضمن القاموس `ALL_WORDS` بـ 463 كلمة بالضبط مع تطابق تام للبصمة الرقمية `ea34bcba277e9acdbe94c502fa386c33a922f911f49643894be8809c6b9c0d2f`).
+* **التوافق التكامي مع المستهلكين الخارجيين**:
+  - تم احتفاظ تصدير `normalizeArabic` من `server/rooms.ts` عبر `export { normalizeArabic } from "./utils/arabicFuzzyMatch.js";` لضمان عدم انكسار المستهلكين الأربعة (`server.ts`, `registerSendMessageHandler.ts`, `test_leave_room_integrity.ts`, `test_session_identity_suite.ts`).
+* **حفظ حدود الدفعة التالية**:
+  - السطور 29–166 (`decodeZigZag`, `readVarIntFromBuffer`, `decodeType13BufferSafely`, `createType2Buffer`, `createType1Buffer`) تُركت كاملة في `server/rooms.ts` دون تعديل، وهي محفوظة للدفعة `BATCH-5A-2`.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
-* **شروط قبول الدفعة**:
-  - تطابق تام للمخرجات واجتياز اختبارات المطابقة النصية.
-  - تقليص 280 سطراً من `server/rooms.ts`.
-  - اجتياز الفحص الثابت وبناء السيرفر.
+* **نتائج الفحص والتحقق**:
+  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
+  - `npm run build` (`compile_applet`): تم البناء بنجاح (Build succeeded).
+  - **بصمة القاموس SHA-256**: `ea34bcba277e9acdbe94c502fa386c33a922f911f49643894be8809c6b9c0d2f` (متطابقة 100% مع مصفوفة `server/rooms.ts` الأصلية).
+* **الدفعة التنفيذية التالية المجدولة**: `BATCH-5A-2 — Pure Binary Helpers Extraction`.
 
 ---
 
 ### 🟢 الدفعة 5: `BATCH-5A-2` — استخراج أدوات معالجة الحزم الثنائية للسيرفر (Pure Binary Helpers)
 * **الحالة**: `PLANNED`
-* **الملف المصدر**: `server/rooms.ts` (السطور 29-166).
+* **الملف المصدر**: `server/rooms.ts` (السطور 29–166).
 * **الملف الجديد المتوقع**: `server/utils/binaryBufferHelpers.ts`.
 * **الأجزاء المستخرجة**: `decodeZigZag`, `readVarIntFromBuffer`, `decodeType13BufferSafely`, `createType2Buffer`, `createType1Buffer`.
 * **الاعتماديات**: معالجة Buffers نقية في الذاكرة.
