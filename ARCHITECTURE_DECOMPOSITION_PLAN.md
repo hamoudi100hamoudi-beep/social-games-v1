@@ -148,7 +148,7 @@
 ---
 
 ### 🟢 الدفعة 2: `BATCH-6A-2` — استخراج نوافذ الإجراءات التفاعلية الأساسية (Action Modals)
-* **الحالة**: `BUILD_VERIFIED` (تم استخراج النوافذ الأربع بنجاح واجتياز بناء التطبيق الكامل بدون أي أخطاء)
+* **الحالة**: `SYNCED` (تم استخراج النوافذ الأربع واجتياز البناء واختبار المستخدم وتأكيد المزامنة)
 * **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (تم تقليص أسطر الـ JSX المضمنة للنوافذ بحدود 115 سطراً).
 * **الملفات الجديدة المنشأة**:
   - `src/components/game/modals/ExitConfirmModal.tsx` (نافذة تأكيد الخروج).
@@ -164,24 +164,28 @@
   - `npm run build` (`compile_applet`): تم البناء بنجاح بدون أي أخطاء.
 * **ملاحظة معمارية مفتوحة مسجلة (`TIMER-FREEZE-1`)**:
   - تم تسجيل ملاحظة مفتوحة باسم `TIMER-FREEZE-1`: أثناء تجارب تجاوز الدور (SKIP)، ينكمش مؤقت الجولات العادية بصورة سليمة، لكن في بعض حالات الانضمام أو التغيير السريع عبر البورتال (`createPortal`) قد يتوقف الترانزيشن مؤقتاً عند تغيير العائل في شجرة DOM. تبقى هذه النقطة مسجلة كـ Open Issue ليتم التعامل معها مستقبلاً دون المساس بمكونات المؤقت أو كود الخادم في هذه المرحلة.
-* **الدفعة التالية المجدولة**: `BATCH-6A-3 — Profile & Alert Modals Extraction`.
-
 
 ---
 
 ### 🟢 الدفعة 3: `BATCH-6A-3` — استخراج نوافذ الملف الشخصي والتنبيهات (Profile & Alert Modals)
-* **الحالة**: `PLANNED`
-* **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx`.
-* **الملفات الجديدة المتوقعة**:
-  - `src/components/game/modals/PlayerProfileModal.tsx` (نافذة بروفايل اللاعب والتصويت بالطرد).
-  - `src/components/game/modals/RoomAlertModals.tsx` (تجميع لنوافذ الأخطاء والتنبيهات: Banned, NicknameTaken, RoomFull, Cooldown, AuthStoreFull, JoinTimedOut).
-* **الاعتماديات والواجهات**:
-  - واجهات Props نقية تستقبل كائن اللاعب أو رسائل الخطأ وكولباك الإغلاق.
+* **الحالة**: `BUILD_VERIFIED` (تم استخراج مكونات البروفايل والتنبيهات بنجاح واجتياز فحص الأنواع والبناء بالكامل)
+* **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (تم تقليص أسطر الـ JSX المضمنة للنوافذ بحدود 250 سطراً).
+* **الملفات الجديدة المنشأة**:
+  - `src/components/game/modals/PlayerProfileModal.tsx` (نافذة الملف الشخصي للاعب، الحظر/إلغاء الحظر، والتصويت بالطرد).
+  - `src/components/game/modals/RoomAlertModals.tsx` (مكون جامع للنوافذ الست: Cooldown Warning, Banned/Kicked, Nickname Taken, Room Full, Auth Store Full, Join Timeout).
+* **الاعتماديات والواجهات (Props Interface)**:
+  - `PlayerProfileModal`: يستقبل `isOpen`, `playerToRender`, `isSelf`, `alreadyVoted`, `isBlocked`, `onClose`, `onToggleBlock`, `onToggleVoteKick`.
+  - `RoomAlertModals`: يستقبل شروط الفتح كـ boolean وكولباكات المغادرة الفردية (`onLeaveFromBanned`, `onLeaveFromNicknameTaken`, `onLeaveFromRoomFull`, `onLeaveFromAuthStoreFull`, `onLeaveFromJoinTimeout`) التي تنفذ مسح التخزين المحلي `safeLocalStorage.removeItem("gartic_player_room")` واستدعاء `onLeave?.()`.
+* **الاعتماديات التي بقيت داخل ExperimentalGameRoom**:
+  - كائنات الحالة: `selectedProfilePlayer`, `votekicks`, `blockedUsers`, `showCooldownWarning`, `isBanned`, `isNicknameTaken`, `isRoomFull`, `isAuthStoreFull`, `isJoinTimedOut`.
+  - منطق الاتصال وانبعاث المقابس `socket.emit("submit_vote_kick")` وإدارة الحظر المحلي ومسح التخزين المحلي.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
-* **شروط قبول الدفعة**:
-  - توحيد واجهات التنبيهات دون تكرار كود `CinematicModal`.
-  - تقليص نحو 300 سطر إضافي من الروم.
-  - اجتياز الفحص الثابت والبناء.
+* **نتائج الفحص والتحقق**:
+  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
+  - `npm run build` (`compile_applet`): تم البناء بنجاح (Build succeeded).
+  - **حالة الاختبار اليدوي**: معلق لتأكيد المستخدم المباشر على البيئة التفاعلية.
+  - **حالة القضية المعلقة**: الملاحظة المعمارية المفتوحة `TIMER-FREEZE-1` تبقى مفتوحة ومؤجلة دون المساس بمكونات المؤقت أو البورتال.
+* **الدفعة التنفيذية التالية المجدولة**: `BATCH-5A-1 — Arabic Fuzzy Matching & Word Dictionary Extraction`.
 
 ---
 
