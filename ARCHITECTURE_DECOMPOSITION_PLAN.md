@@ -192,16 +192,17 @@
 
 ---
 
-### 🟡 الدفعة 7: `BATCH-7A-2` — استخراج واجهات Lobby المستقلة
-* **الحالة**: `[ ] PLANNED`
-* **الملف المصدر**: `src/components/Lobby.tsx`.
-* **الملفات الجديدة المتوقعة**:
-  - `src/components/lobby/RoomInfoModal.tsx`.
-  - `src/components/lobby/AvatarCarousel.tsx`.
+### 🟢 الدفعة 7: `BATCH-7A-2` — استخراج واجهات Lobby المستقلة
+* **الحالة**: `[x] COMPLETED`
+* **الملف المصدر**: `src/components/Lobby.tsx` (تقليص صافي قدره 80 سطراً).
+* **الملفات الجديدة المنشأة**:
+  - `src/components/lobby/RoomInfoModal.tsx` (واجهة نافذة معلومات الغرفة عبر `CinematicModal`).
+  - `src/components/lobby/AvatarCarousel.tsx` (محدد الأفاتار الدائري والتنقل بالأسهم والتكيف مع لوحة المفاتيح).
 * **درجة المخاطر**: **الفئة B (متوسطة المخاطر)**.
-* **شروط قبول الدفعة**: الحفاظ على سلوك تخزين الأفاتار في `safeLocalStorage` وتجاوز قيود تركيز iOS.
+* **الحفاظ على السلوك**: الحفاظ على ملكية الحالة وتخزين الأفاتار في `safeLocalStorage`، وتجاوز قيود تركيز iOS، وبقاء حظر التمرير الخارجي و `preventScroll` وتراكب شبكة الإيموجي في `Lobby.tsx`.
 
 ---
+
 
 ### 🟡 الدفعة 8: `BATCH-6B-1` — استخراج شاشات مراحل اللعب في الروم (Stage Overlays)
 * **الحالة**: `[ ] PLANNED`

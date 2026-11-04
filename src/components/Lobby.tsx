@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Users, Settings, Plus, Play, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check, WifiOff, AlertTriangle } from 'lucide-react';
+import { Users, Plus, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check, WifiOff, AlertTriangle } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 import { motion, AnimatePresence } from 'motion/react';
 import CinematicModal from './game/CinematicModal';
 import CustomEmojiModal from './game/CustomEmojiModal';
+import RoomInfoModal from './lobby/RoomInfoModal';
+import AvatarCarousel from './lobby/AvatarCarousel';
 import { safeLocalStorage } from '../utils/storage';
 import GameTitle from './game/GameTitle';
 import { ROOM_PRESETS, getRoomConfig } from '../types/game';
+
 
 interface LobbyProps {
   onPlay: (nickname: string, room: string, avatar: string) => void;
@@ -486,46 +489,14 @@ export default function Lobby({ onPlay }: LobbyProps) {
             {/* Content body wrapper */}
             <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'space-y-3' : 'space-y-4'}`}>
               {/* Avatar Selector */}
-              <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'gap-1.5' : 'gap-2'}`}>
+              <AvatarCarousel
+                selectedEmoji={selectedEmoji}
+                isKeyboardOpen={isKeyboardOpen}
+                onPrevAvatar={handlePrevAvatar}
+                onNextAvatar={handleNextAvatar}
+                onOpenGrid={() => setShowAvatarGrid(true)}
+              />
 
-                
-                <div className="flex items-center justify-between w-full relative max-w-[280px] sm:max-w-[320px]">
-                  <button 
-                    onClick={handlePrevAvatar}
-                    className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-10 h-10' : 'w-11 h-11'}`}
-                  >
-                    <ChevronLeft strokeWidth={3.5} className="w-5 h-5" />
-                  </button>
-                  
-                  <div className="relative group cursor-pointer" onClick={() => setShowAvatarGrid(true)}>
-                    <div className={`rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-transform select-none overflow-hidden ${
-                      isKeyboardOpen 
-                        ? "w-[85px] h-[85px]" 
-                        : "w-[85px] h-[85px] [@media(min-height:600px)]:w-32 [@media(min-height:600px)]:h-32 sm:w-36 sm:h-36"
-                    }`}>
-                      <span className={`leading-none flex items-center justify-center select-none ${
-                        isKeyboardOpen 
-                          ? "text-[55px] translate-y-1" 
-                          : "text-[55px] [@media(min-height:600px)]:text-[80px] sm:text-[96px] translate-y-1 sm:translate-y-2"
-                      }`}>{selectedEmoji}</span>
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full">
-                         <LayoutGrid className="text-white" size={isKeyboardOpen ? 24 : 28} />
-                      </div>
-                    </div>
-                    {/* Small grid badge */}
-                    <div className={`absolute -bottom-1 -right-1 bg-[#38BDF8] rounded-full border-2 border-white text-white shadow-md transition-all hover:scale-110 active:scale-95 ${isKeyboardOpen ? 'p-1.5' : 'p-2'}`}>
-                      <LayoutGrid size={isKeyboardOpen ? 14 : 16} strokeWidth={3} />
-                    </div>
-                  </div>
-                  
-                  <button 
-                    onClick={handleNextAvatar}
-                    className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-10 h-10' : 'w-11 h-11'}`}
-                  >
-                    <ChevronRight strokeWidth={3.5} className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
               
               <div className={`w-full max-w-[280px] sm:max-w-[320px] ${isKeyboardOpen ? 'space-y-1' : 'space-y-2'}`}>
                 <label className={`font-black text-[#8C8AA7] uppercase tracking-wide ${isKeyboardOpen ? 'text-[11px]' : 'text-xs'}`}>NICKNAME</label>
@@ -673,63 +644,15 @@ export default function Lobby({ onPlay }: LobbyProps) {
       )}
 
       {/* Room Info Modal */}
-      <CinematicModal
+      <RoomInfoModal
         isOpen={!!selectedRoom}
+        selectedRoom={selectedRoom}
+        roomStats={roomStats}
+        joinError={joinError}
         onClose={() => setSelectedRoom(null)}
-        titleType="report"
-        titleText="INFO"
-        buttons={[
-          {
-            id: "room-info-play-btn",
-            text: <span className="text-white font-black">PLAY</span>,
-            onClick: handlePlay,
-            variant: "danger",
-            icon: <Play className="w-5 h-5" fill="currentColor" strokeWidth={3} />,
-          },
-        ]}
-      >
-        {selectedRoom && (() => {
-          const config = getRoomConfig(selectedRoom);
-          const currentCount = roomStats[selectedRoom]?.count ?? 0;
-          const max = roomStats[selectedRoom]?.max ?? config.maxPlayers;
-          const toWin = roomStats[selectedRoom]?.winningScore ?? config.winningScore;
-          const theme = roomStats[selectedRoom]?.theme ?? config.theme;
-          const roomDisplayName = config.tag ? `${config.name} ${config.tag}` : (config.name || selectedRoom);
+        onPlay={handlePlay}
+      />
 
-          return (
-            <div className="flex flex-col items-center">
-              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-full bg-[#FB923C]/10 flex items-center justify-center mb-3 mt-1 relative shrink-0">
-                <Settings size={36} className="text-[#FB923C] animate-spin-slow" strokeWidth={3} />
-              </div>
-              
-              <h3 className="text-xl sm:text-2xl font-black text-[#2E2882] mb-4 text-center leading-tight">{roomDisplayName}</h3>
-
-              {joinError && (
-                <div className="mb-3 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl text-center">
-                  {joinError}
-                </div>
-              )}
-
-              <div className="grid grid-cols-3 gap-2 sm:gap-3 w-full mb-3 py-1">
-                <div className="text-center flex flex-col items-center justify-center">
-                  <div className="text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1">Players</div>
-                  <div className="text-[#2E2882] font-black text-lg sm:text-xl">{currentCount}/{max}</div>
-                </div>
-                <div className="text-center flex flex-col items-center justify-center">
-                  <div className="text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1">Theme</div>
-                  <div className="text-[#2E2882] font-black text-base sm:text-lg leading-snug truncate max-w-full">{theme}</div>
-                </div>
-                <div className="text-center flex flex-col items-center justify-center">
-                  <div className="text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1">To Win</div>
-                  <div className="text-[#FB923C] font-black text-base sm:text-lg leading-snug">
-                    {config.isFreeDraw ? "مفتوح" : `${toWin} pts`}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })()}
-      </CinematicModal>
 
       {/* AFK Warning Modal */}
       <CinematicModal
