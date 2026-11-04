@@ -6,13 +6,16 @@ interface ExitConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirmExit: () => void;
+  spriteClassName?: string;
 }
 
 export default function ExitConfirmModal({
   isOpen,
   onClose,
   onConfirmExit,
+  spriteClassName = "w-26 sm:w-36 h-auto drop-shadow-sm",
 }: ExitConfirmModalProps) {
+
   return (
     <CinematicModal
       isOpen={isOpen}
@@ -36,7 +39,7 @@ export default function ExitConfirmModal({
     >
       {/* Animated Exit Character Sprite */}
       <div className="w-full flex items-center justify-center mb-3 sm:mb-5 mt-1">
-        <ExitSprite className="w-26 sm:w-36 h-auto drop-shadow-sm" />
+        <ExitSprite className={spriteClassName} />
       </div>
 
       {/* Question */}

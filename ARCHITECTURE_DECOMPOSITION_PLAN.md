@@ -25,19 +25,15 @@
 
 ---
 
-## 🏷️ 2. قاموس حالات دورة حياة التفكيك (Status Lifecycle Dictionary)
+## 🏷️ 2. قاموس حالات دورة حياة التفكيك المبسط (Simplified Status Dictionary)
 
-تلتزم جميع عناصر ودفعات هذا السجل بالحالات المعيارية التالية حصراً:
+تلتزم جميع دفعات التفكيك بالحالات المعيارية الأربع التالية حصراً:
 
-* `AUDITED`: تمت دراسة الكود وحصر أسطره واعتمادياته ومخاطره برمجياً.
-* `PLANNED`: تم اعتمادها كدفعة محددة في الخطة المستقبلية مع تحديد مدخلاتها ومخرجاتها.
-* `IN_PROGRESS`: يجري استخراج كودها البرمجي حالياً.
-* `IMPLEMENTED`: تم استخراج الكود وإنشاء/تعديل الملفات محلياً.
-* `BUILD_VERIFIED`: اجتازت فحص `tsc --noEmit` وبناء `npm run build` بنجاح.
-* `MANUALLY_VERIFIED`: تم اختبارها يدوياً من قِبل المستخدم على جهاز فعلي وتأكيد سلامة السلوك.
-* `SYNCED`: تم تأكيد دمجها ومزامنتها على فرع `main` في GitHub مع توثيق الـ Commit Hash.
-* `BLOCKED`: محظورة تقنياً وتنتظر اكتمال متطلب سابق إلزامي.
-* `DEFERRED`: مؤجلة عمداً بقرار معماري لتقديم أولويات أخرى أكثر أماناً وإلحاحاً.
+* `[x] COMPLETED`: المهمة مكتملة ومحققة معمارياً في الكود.
+* `[~] IN PROGRESS`: المهمة قيد التنفيذ والعمل الفعلي حالياً.
+* `[ ] PLANNED`: مهمة معتمدة في الخطة المستقبلية ولم تبدأ بعد.
+* `[—] DEFERRED`: مؤجلة عمداً بقرار معماري لوجود بوابات سابقة إلزامية.
+
 
 ---
 
@@ -112,9 +108,9 @@
 
 ## 🗂️ 5. سجل حزم ودفعات التفكيك (Decomposition Batches Register)
 
-### 🟢 الدفعة 1: `BATCH-6A-1` — استخراج مؤقت اللعبة `SmoothTimer`
-* **الحالة**: `BUILD_VERIFIED` (تم الاستخراج البرمجي واجتياز الفحص الثابت والبناء بنجاح؛ بانتظار التحقق اليدوي للمستخدم `MANUALLY_VERIFIED` ثم المزامنة `SYNCED`)
-* **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (تم تقليص 184 سطراً، ليصبح 2,769 سطراً).
+#### 🟢 الدفعة 1: `BATCH-6A-1` — استخراج مؤقت اللعبة `SmoothTimer`
+* **الحالة**: `[x] COMPLETED`
+* **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (تم تقليص 184 سطراً).
 * **الملف الجديد المنشأ**: `src/components/game/SmoothTimer.tsx` (201 سطر).
 * **الأجزاء المستخرجة**:
   - دالة الحساب النقي: `getMaxTimeForStatus(status: string, fallbackMaxTime: number)`.
@@ -123,32 +119,13 @@
   - Props: `status?: string`, `initialTimeLeft?: number`, `maxTime: number`, `isFullScreen?: boolean`, `socket?: any`, `gameState?: { status: string; timeLeft: number }`, `phaseRemainingMs?: number`, `phaseEndsAt?: number`.
   - استماع الحدث: يستمع محلياً إلى `socket.on("timer_tick")` مع تنظيف صريح `socket.off("timer_tick")` عند unmount.
   - الحفاظ على دورة `double-rAF` اللحظية لمنع وميض الشريط عند الانتقال بين الجولات.
-  - **إصلاح عدم انتظام انكماش الشريط الأزرق وتوقيت الانتقال النهائي (ROUND_END و PODIUM)**:
-    - تم اعتماد توقيت نهائي موثوق من السيرفر (`phaseEndsAt` و `phaseRemainingMs`) لحالتي `ROUND_END` (8000ms بالضبط) و `PODIUM` (15000ms بالضبط).
-    - تنفيذ انتقال CSS انسيابي واحد متصل من المقياس المتبقي الفعلي حتى الصفر (`transform ${remMs}ms linear`) عبر `startFixedPhaseTransition`.
-    - حماية دورة الحركة عبر `activeFixedPhaseKeyRef` لمنع نبضات `timer_tick` اللاحقة أو إعادة تصيير React من مقاطعة أو إعادة تشغيل الحركة الجارية.
-    - **مؤقت الموعد النهائي الدقيق بالسيرفر (Precise Single-Shot Deadline Timer)**:
-      - إضافة `phaseDeadlineTimers: Map<string, NodeJS.Timeout>` داخل `RoomManager` لإطلاق الانتقال بدقة الميلي ثانية عند انتهاء المرحلة (`transitionToChoosing` أو `transitionToWaiting`).
-      - دوال حماية صريحة: `clearPhaseDeadlineTimer` و `schedulePhaseDeadline` مع فحص مطابقة الحالة والموعد النهائي لمنع المؤقتات القديمة أو تكرار الانتقال.
-      - الاحتفاظ بحلقة `processRoomTick` كآلية احتياطية دون أي تعارض أو إرسال مكرر.
-      - تنظيف تلقائي للمؤقت عند حذف الغرفة أو الخروج من المرحلة أو بدء جولة جديدة.
-    - **استئناف فوري دقيق عند العودة من الخلفية (Background Visibility Resumption)**:
-      - تخزين لقطة موثوقة `lastFixedPhaseSnapshotRef` تتحدث مع كل نبضة دون إعادة تشغيل الحركة.
-      - عند `visibilitychange` (العودة إلى الواجهة)، يُحسب الوقت المتبقي الفعلي من الموعد النهائي ويعاد إطلاق حركة CSS مرة واحدة دون أي حلقات مستمرة أو polling.
-    - حماية مسار مؤقت الرسم التنافسي (100 ثانية) و `CHOOSING` عبر `syncDynamicBar` دون أي تعديل على سلوك خصم الثواني عند التخمين الصحيح.
-    - استهلاك صفري لموارد المعالج والبطارية دون أي حلقات rAF مستمرة أو setIntervals في المتصفح.
+  - تنفيذ انتقال CSS انسيابي واحد متصل من المقياس المتبقي الفعلي حتى الصفر لحالتي `ROUND_END` و `PODIUM`.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
-* **نتائج الفحص والتحقق**:
-  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
-  - `npm run build`: تم البناء بنجاح (Build succeeded).
-  - الفحص اليدوي: معلق لتأكيد المستخدم عبر الرابط المباشر.
-* **ملاحظة معمارية مسجلة**: تم رصد ترتيب استدعاء `reachedZero` في `ExperimentalGameRoom.tsx` عند تصفير المؤقت؛ وسُجلت كنقطة مستقلة للتحسين المستقبلي دون تعديل حالياً حفاظاً على استقرار اللعبة.
-* **الدفعة التالية المجدولة**: `BATCH-6A-2 — Shared Action Modals Extraction`.
 
 ---
 
 ### 🟢 الدفعة 2: `BATCH-6A-2` — استخراج نوافذ الإجراءات التفاعلية الأساسية (Action Modals)
-* **الحالة**: `SYNCED` (تم استخراج النوافذ الأربع واجتياز البناء واختبار المستخدم وتأكيد المزامنة)
+* **الحالة**: `[x] COMPLETED`
 * **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (تم تقليص أسطر الـ JSX المضمنة للنوافذ بحدود 115 سطراً).
 * **الملفات الجديدة المنشأة**:
   - `src/components/game/modals/ExitConfirmModal.tsx` (نافذة تأكيد الخروج).
@@ -157,18 +134,13 @@
   - `src/components/game/modals/AfkWarningModal.tsx` (نافذة تحذير الخمول وتأكيد التواجد مع العداد التنازلي).
 * **الاعتماديات والواجهات**:
   - جميع المكونات مصممة كـ Presentation Components نقية تعتمد على Props صريحة (`isOpen`, `onClose`, `onConfirmExit`, `onConfirmSkip`, `onConfirmReport`, `onConfirmStay`, `afkCountdown`).
-  - جميع التفاعلات وإرسال المقابس والحالات تبقى داخل `ExperimentalGameRoom.tsx`.
+  - جميع التفاعلات وإرسال المقابس والحالات تبقى داخل منسق الروم.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
-* **نتائج الفحص والتحقق**:
-  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
-  - `npm run build` (`compile_applet`): تم البناء بنجاح بدون أي أخطاء.
-* **ملاحظة معمارية مفتوحة مسجلة (`TIMER-FREEZE-1`)**:
-  - تم تسجيل ملاحظة مفتوحة باسم `TIMER-FREEZE-1`: أثناء تجارب تجاوز الدور (SKIP)، ينكمش مؤقت الجولات العادية بصورة سليمة، لكن في بعض حالات الانضمام أو التغيير السريع عبر البورتال (`createPortal`) قد يتوقف الترانزيشن مؤقتاً عند تغيير العائل في شجرة DOM. تبقى هذه النقطة مسجلة كـ Open Issue ليتم التعامل معها مستقبلاً دون المساس بمكونات المؤقت أو كود الخادم في هذه المرحلة.
 
 ---
 
 ### 🟢 الدفعة 3: `BATCH-6A-3` — استخراج نوافذ الملف الشخصي والتنبيهات (Profile & Alert Modals)
-* **الحالة**: `SYNCED` (تم استخراج مكونات البروفايل والتنبيهات واجتياز الفحص والبناء واختبار المستخدم الميداني والمزامنة مع GitHub في الالتزام: `241cd8bb30f2eb360a5a766d30ab96765a8c625e`).
+* **الحالة**: `[x] COMPLETED`
 * **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx` (تم تقليص أسطر الـ JSX المضمنة للنوافذ بحدود 250 سطراً).
 * **الملفات الجديدة المنشأة**:
   - `src/components/game/modals/PlayerProfileModal.tsx` (نافذة الملف الشخصي للاعب، الحظر/إلغاء الحظر، والتصويت بالطرد).
@@ -176,67 +148,52 @@
 * **الاعتماديات والواجهات (Props Interface)**:
   - `PlayerProfileModal`: يستقبل `isOpen`, `playerToRender`, `isSelf`, `alreadyVoted`, `isBlocked`, `onClose`, `onToggleBlock`, `onToggleVoteKick`.
   - `RoomAlertModals`: يستقبل شروط الفتح كـ boolean وكولباكات المغادرة الفردية التي تنفذ مسح التخزين المحلي `safeLocalStorage.removeItem("gartic_player_room")` واستدعاء `onLeave?.()`.
-* **نتائج الفحص والتحقق**:
-  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
-  - `npm run build` (`compile_applet`): تم البناء بنجاح (Build succeeded).
-  - **حالة القضية المعلقة**: الملاحظة المعمارية المفتوحة `TIMER-FREEZE-1` تبقى مفتوحة ومؤجلة دون المساس بمكونات المؤقت أو البورتال.
+* **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
 
 ---
 
 ### 🟢 الدفعة 4: `BATCH-5A-1` — استخراج أدوات المطابقة العربية وقواميس الكلمات للسيرفر
-* **الحالة**: `SYNCED` (تم استخراج الدوال وقاموس الكلمات بنجاح، واجتياز فحص الأنواع والبناء مع تطابق بصمة SHA-256 للقاموس بنسبة 100%، واجتياز الاختبار اليدوي للمستخدم ومزامنة التعديلات إلى GitHub main في الالتزام: `4a6960cddced706b067b9f25fda6380d960cd9f4`).
-* **الملف المصدر**: `server/rooms.ts` (السطور 5–27، 167–206، و 208–283؛ تقليص صافي قدره 138 سطراً).
+* **الحالة**: `[x] COMPLETED`
+* **الملف المصدر**: `server/rooms.ts` (تقليص صافي قدره 138 سطراً).
 * **الملفات الجديدة المنشأة**:
   - `server/utils/arabicFuzzyMatch.ts` (يتضمن `getLevenshteinDistance`, `normalizeArabic`, `isCloseGuess`).
-  - `server/data/wordsDictionary.ts` (يتضمن القاموس `ALL_WORDS` بـ 463 كلمة بالضبط مع تطابق تام للبصمة الرقمية `ea34bcba277e9acdbe94c502fa386c33a922f911f49643894be8809c6b9c0d2f`).
+  - `server/data/wordsDictionary.ts` (يتضمن القاموس `ALL_WORDS` بـ 463 كلمة بالضبط).
 * **التوافق التكامي مع المستهلكين الخارجيين**:
-  - تم احتفاظ تصدير `normalizeArabic` من `server/rooms.ts` عبر `export { normalizeArabic } from "./utils/arabicFuzzyMatch.js";` لضمان عدم انكسار المستهلكين الأربعة (`server.ts`, `registerSendMessageHandler.ts`, `test_leave_room_integrity.ts`, `test_session_identity_suite.ts`).
-* **حفظ حدود الدفعة التالية**:
-  - السطور 9–145 (`decodeZigZag`, `readVarIntFromBuffer`, `decodeType13BufferSafely`, `createType2Buffer`, `createType1Buffer`) تُركت كاملة في `server/rooms.ts` دون تعديل، وهي محفوظة للدفعة `BATCH-5A-2`.
+  - احتفاظ تصدير `normalizeArabic` من `server/rooms.ts` عبر `export { normalizeArabic } from "./utils/arabicFuzzyMatch.js";`.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
-* **نتائج الفحص والتحقق**:
-  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
-  - `npm run build` (`compile_applet`): تم البناء بنجاح (Build succeeded).
-  - **بصمة القاموس SHA-256**: `ea34bcba277e9acdbe94c502fa386c33a922f911f49643894be8809c6b9c0d2f` (متطابقة 100% مع مصفوفة `server/rooms.ts` الأصلية بـ 463 عنصراً).
-  - **الاختبار اليدوي**: اختبر المستخدم اللعبة يدوياً وأكد أن السلوك طبيعي وتمت المزامنة لفرع main.
-* **الدفعة التنفيذية التالية المجدولة**: `BATCH-5A-2 — Pure Binary Helpers Extraction`.
 
 ---
 
 ### 🟢 الدفعة 5: `BATCH-5A-2` — استخراج أدوات معالجة الحزم الثنائية للسيرفر (Pure Binary Helpers)
-* **الحالة**: `BUILD_VERIFIED` (تم استخراج الدوال الخمس بنجاح، وتطابق التوقيعات 100%، واجتياز اختباري بروتوكول الرسم الثنائي واختبار الأنواع وبناء التطبيق بنجاح)
-* **الملف المصدر**: `server/rooms.ts` (السطور 9–145 سابقاً؛ تقليص صافي قدره 116 سطراً).
+* **الحالة**: `[x] COMPLETED`
+* **الملف المصدر**: `server/rooms.ts` (تقليص صافي قدره 116 سطراً).
 * **الملف الجديد المنشأ**: `server/utils/binaryBufferHelpers.ts` (137 سطراً).
 * **الأجزاء المستخرجة**:
   - `decodeZigZag(z: number): number`
   - `readVarIntFromBuffer(buf: Buffer, cursor: { offset: number }): number`
-  - `decodeType13BufferSafely(buf: Buffer): { success: boolean; instId?: string; count?: number; points?: { x: number; y: number }[]; error?: string }`
+  - `decodeType13BufferSafely(buf: Buffer)`
   - `createType2Buffer(instId: string, points: { x: number; y: number }[]): Buffer`
   - `createType1Buffer(instId: string, tool: number, r: number, g: number, b: number, width: number, opacity: number, p0_x: number, p0_y: number): Buffer`
 * **التوافق التكاملي مع المستهلكين الخارجيين**:
-  - تم استيراد الدوال الخمس وإعادة تصديرها من `server/rooms.ts` عبر `export { decodeZigZag, readVarIntFromBuffer, decodeType13BufferSafely, createType2Buffer, createType1Buffer } from "./utils/binaryBufferHelpers.js";`.
-  - حافظ المستهلكون الخارجيون (`server.ts`, `server/registerDrawBinaryHandler.ts`, `scripts/test_type13_hardening.ts`, `scripts/test_experimental_draw_trial.ts`) على مساراتهم الأصلية دون أي تعديل.
+  - إعادة تصدير الدوال الخمس من `server/rooms.ts` للحفاظ على مسارات المستهلكين دون أي تعديل.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
-* **نتائج الفحص والتحقق**:
-  - `npx tsx scripts/test_type13_hardening.ts`: نجاح تام 100% (جميع الاختبارات الثمانية لاختبار Type 13 Hardening اجتازت بنجاح).
-  - `npx tsx scripts/test_experimental_draw_trial.ts`: نجاح تام 100% (جميع الاختبارات الستة اجتازت بنجاح).
-  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
-  - `npm run build` (`compile_applet`): تم البناء بنجاح (Build succeeded).
-* **الدفعة التنفيذية التالية المجدولة**: `BATCH-7A-1 — Reusing Extracted Modals in GameRoom.tsx`.
 
 ---
 
-### 🟡 الدفعة 6: `BATCH-7A-1` — إعادة استخدام النوافذ المستخرجة في `GameRoom.tsx`
-* **الحالة**: `PLANNED`
-* **الملف المصدر**: `src/components/GameRoom.tsx` (السطور 1080-1740).
-* **الهدف**: استبدال كتل النوافذ المكررة بالنوافذ الجاهزة المستخرجة في `BATCH-6A-2` و `BATCH-6A-3`.
+### 🟢 الدفعة 6: `BATCH-7A-1` — إعادة استخدام النوافذ المستخرجة في `GameRoom.tsx`
+* **الحالة**: `[x] COMPLETED`
+* **الملف المصدر**: `src/components/GameRoom.tsx` (تقليص صافي قدره 350 سطراً).
+* **المكونات المعاد استخدامها**:
+  - `src/components/game/modals/ExitConfirmModal.tsx` (مع خاصية `spriteClassName="w-26 sm:w-36 h-auto"` للحفاظ على المظهر).
+  - `src/components/game/modals/AfkWarningModal.tsx` (مع الحفاظ على شرط `(!isFreeDrawIsolated || isAfkPopupOpen)`).
+  - `src/components/game/modals/PlayerProfileModal.tsx` (مع الحفاظ على حسابات الهوية والحظر والتصويت).
+  - `src/components/game/modals/RoomAlertModals.tsx` (لتنبيهات Cooldown و Banned و Nickname Taken و Room Full و Auth Store Full و Join Timeout).
 * **درجة المخاطر**: **الفئة A/B (منخفضة إلى متوسطة)**.
-* **شروط قبول الدفعة**: تقليص 400 سطر من `GameRoom.tsx` دون أي تغيير في السلوك، واجتياز البناء.
 
 ---
 
 ### 🟡 الدفعة 7: `BATCH-7A-2` — استخراج واجهات Lobby المستقلة
-* **الحالة**: `PLANNED`
+* **الحالة**: `[ ] PLANNED`
 * **الملف المصدر**: `src/components/Lobby.tsx`.
 * **الملفات الجديدة المتوقعة**:
   - `src/components/lobby/RoomInfoModal.tsx`.
@@ -247,7 +204,7 @@
 ---
 
 ### 🟡 الدفعة 8: `BATCH-6B-1` — استخراج شاشات مراحل اللعب في الروم (Stage Overlays)
-* **الحالة**: `PLANNED`
+* **الحالة**: `[ ] PLANNED`
 * **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx`.
 * **الملفات الجديدة المتوقعة**:
   - `src/components/experimental/ChoosingWordOverlay.tsx` (شاشة اختيار الكلمات).

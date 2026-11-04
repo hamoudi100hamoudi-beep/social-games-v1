@@ -3,19 +3,15 @@ import { IsolatedDrawingLayer } from "./experimental/IsolatedDrawingLayer";
 import {
   Send,
   MessageSquare,
-  AlertTriangle,
   Volume2,
   VolumeX,
   Info,
   X,
-  User as UserIcon,
   UserMinus,
   Pencil,
   Copy,
-  Check,
   WifiOff,
   Eye,
-  EyeOff,
   LogOut,
   ArrowRight,
   ArrowLeft,
@@ -25,9 +21,10 @@ import { motion, AnimatePresence } from "motion/react";
 import { FreeDrawPlayersList } from "./game/FreeDrawPlayersList";
 import { MiniBoardOverlay } from "./game/MiniBoardOverlay";
 import { OverlayChatRoom, ChatMessage } from "./game/OverlayChatRoom";
-import CinematicModal from "./game/CinematicModal";
-import ExitSprite from "./game/ExitSprite";
-import AfkWarningSprite from "./game/AfkWarningSprite";
+import ExitConfirmModal from "./game/modals/ExitConfirmModal";
+import AfkWarningModal from "./game/modals/AfkWarningModal";
+import PlayerProfileModal from "./game/modals/PlayerProfileModal";
+import RoomAlertModals from "./game/modals/RoomAlertModals";
 import { safeLocalStorage } from "../utils/storage";
 import { getPlayerIdentity } from "../utils/playerAuth";
 import { soundManager } from "../utils/soundManager";
@@ -35,6 +32,7 @@ import { useRoomEventGate } from "../hooks/useRoomEventGate";
 import { getRoomConfig } from "../types/game";
 import { isMobileDebugActive } from "../utils/erudaManager";
 import { FreeDrawMobileDebug } from "./game/FreeDrawMobileDebug";
+
 
 // 🧪 DIAGNOSTIC TEST: FREE DRAW ISOLATION TEST
 // Isolates Free Draw drawing completely from non-essential Room Shell DOM, background panels, modals, and unneeded re-renders.
@@ -1084,40 +1082,17 @@ export default function GameRoom({
         )}
 
         {/* Exit Confirmation Dialog */}
-        <CinematicModal
+        <ExitConfirmModal
           isOpen={showExitConfirm}
           onClose={() => setShowExitConfirm(false)}
-          titleType="exit"
-          titleText="EXIT"
-          buttons={[
-            {
-              id: "exit-confirm-no-btn",
-              text: "NO",
-              onClick: () => setShowExitConfirm(false),
-              variant: "primary",
-            },
-            {
-              id: "exit-confirm-yes-btn",
-              text: "YES",
-              onClick: () => {
-                setShowExitConfirm(false);
-                socket?.emit("leave_room", { roomId: room });
-                onLeave?.();
-              },
-              variant: "danger",
-            },
-          ]}
-        >
-          {/* Animated Exit Character Sprite */}
-          <div className="w-full flex items-center justify-center mb-3 sm:mb-5 mt-1">
-            <ExitSprite className="w-26 sm:w-36 h-auto" />
-          </div>
+          onConfirmExit={() => {
+            setShowExitConfirm(false);
+            socket?.emit("leave_room", { roomId: room });
+            onLeave?.();
+          }}
+          spriteClassName="w-26 sm:w-36 h-auto"
+        />
 
-          {/* Question */}
-          <h3 id="exit-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
-            Do you want to leave the game?
-          </h3>
-        </CinematicModal>
 
         {/* Top Area (Drawing / Waiting) */}
         {/* 
@@ -1286,50 +1261,13 @@ export default function GameRoom({
 
       {/* AFK Popup Modal */}
       {(!isFreeDrawIsolated || isAfkPopupOpen) && (
-        <CinematicModal
+        <AfkWarningModal
           isOpen={isAfkPopupOpen}
-          titleType="inactive"
-          titleText="INACTIVE"
-          buttons={[
-            {
-              id: "afk-return-btn",
-              text: "موافق",
-              onClick: handleIHaveReturned,
-              variant: "neutral",
-              icon: <Check strokeWidth={4} size={18} />,
-            },
-          ]}
-        >
-          {/* Animated Warning Sprite */}
-          <div className="flex justify-center mb-3 sm:mb-4 mt-1">
-            <AfkWarningSprite className="w-24 sm:w-34 aspect-[256/326]" />
-          </div>
-
-          {/* Question & Subtext in the same line (RTL reading order) */}
-          <h3 
-            id="afk-title" 
-            dir="rtl"
-            className="text-sm sm:text-base font-black text-[#2E2882] leading-snug mb-3 sm:mb-4 px-1 text-center"
-          >
-            <span>هل ما زلت هنا؟ </span>
-            <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
-          </h3>
-
-          {/* Compact Remainder Countdown Badge */}
-          <div 
-            dir="rtl"
-            className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 sm:mb-4 text-xs sm:text-sm font-black text-[#EF4444] select-none"
-          >
-            <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#EF4444] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]"></span>
-            </span>
-            <span>
-              سيتم فصل الاتصال بعد: <span className="font-extrabold font-mono text-xs sm:text-sm">{afkCountdown}</span> ثانية
-            </span>
-          </div>
-        </CinematicModal>
+          afkCountdown={afkCountdown}
+          onConfirmStay={handleIHaveReturned}
+        />
       )}
+
 
 
 
@@ -1412,363 +1350,73 @@ export default function GameRoom({
       </AnimatePresence>
 
       {/* Profile Modal */}
-      <CinematicModal
-        isOpen={!!selectedProfilePlayer}
-        onClose={() => setSelectedProfilePlayer(null)}
-        titleType="profile"
-        titleText="PROFILE"
-      >
-        {(() => {
-          const playerToRender = selectedProfilePlayer || lastActiveProfilePlayerRef.current;
-          if (!playerToRender) return null;
+      {(() => {
+        const playerToRender = selectedProfilePlayer || lastActiveProfilePlayerRef.current;
+        const targetId = playerToRender ? (playerToRender.persistentId || playerToRender.id) : "";
+        const isSelf = playerToRender ? (playerToRender.persistentId === persistentPlayerId || playerToRender.id === socket?.id) : false;
+        const alreadyVoted = playerToRender ? ((votekicks[targetId] || []).includes(persistentPlayerId)) : false;
+        const isBlocked = playerToRender ? blockedUsers.includes(targetId) : false;
 
-          const isSelf = playerToRender.persistentId === persistentPlayerId || playerToRender.id === socket?.id;
-          const targetId = playerToRender.persistentId || playerToRender.id;
-          const votesList = votekicks[targetId] || [];
-          const alreadyVoted = votesList.includes(persistentPlayerId);
-          const isBlocked = blockedUsers.includes(targetId);
+        return (
+          <PlayerProfileModal
+            isOpen={!!selectedProfilePlayer}
+            playerToRender={playerToRender}
+            isSelf={isSelf}
+            alreadyVoted={alreadyVoted}
+            isBlocked={isBlocked}
+            onClose={() => setSelectedProfilePlayer(null)}
+            onToggleBlock={handleToggleBlock}
+            onToggleVoteKick={handleToggleVoteKick}
+          />
+        );
+      })()}
 
-          return (
-            <>
-              {/* Avatar Emoji Frame with Comfortable Dimensions */}
-              <div className="w-24 h-24 sm:w-30 sm:h-30 rounded-full bg-[#ECEBFC] border-2 border-white/80 flex items-center justify-center mx-auto mb-3 sm:mb-4 relative select-none shrink-0">
-                <span className="text-[56px] sm:text-[70px] leading-none mb-0.5">{playerToRender.avatar || "👤"}</span>
-              </div>
-
-              {/* Player Name Card */}
-              <div className="w-full">
-                <h3 id="profile-modal-name" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center truncate px-2">
-                  {playerToRender.name}
-                </h3>
-              </div>
-
-              {isSelf ? (
-                <div 
-                  className="py-3 px-4 bg-white rounded-[18px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm"
-                >
-                  هذا هو حسابك الشخصي
-                </div>
-              ) : (
-                <div className="flex flex-col gap-2.5 sm:gap-3 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  {/* Block / Unblock Action Button (Mute) */}
-                  <div>
-                    <button
-                      id="profile-modal-block-btn"
-                      onClick={() => {
-                        handleToggleBlock();
-                        setSelectedProfilePlayer(null);
-                      }}
-                      className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
-                        isBlocked 
-                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95"
-                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95"
-                      }`}
-                    >
-                      <EyeOff className="w-5 h-5" />
-                      {isBlocked ? "UNBLOCK" : "BLOCK"}
-                    </button>
-                  </div>
-
-                  {/* Votekick Action Button */}
-                  <div>
-                    <button
-                      id="profile-modal-kick-btn"
-                      onClick={() => {
-                        handleToggleVoteKick();
-                        setSelectedProfilePlayer(null);
-                      }}
-                      className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
-                        alreadyVoted
-                          ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95"
-                          : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95"
-                      }`}
-                    >
-                      <UserIcon className="w-5 h-5" />
-                      {alreadyVoted ? "REMOVE VOTE" : "VOTEKICK"}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          );
-        })()}
-      </CinematicModal>
-
-      {/* Cooldown Warning Modal */}
-      <CinematicModal
-        isOpen={showCooldownWarning}
-        onClose={() => setShowCooldownWarning(false)}
-        titleType="report"
-        titleText="SLOW DOWN"
-        buttons={[
-          {
-            id: "cooldown-warning-ok-btn",
-            text: "OK",
-            onClick: () => setShowCooldownWarning(false),
-            variant: "custom",
-            className: "w-full py-4 px-5 font-black text-base rounded-[22px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-3 select-none bg-[#1AAACC] text-white hover:bg-[#1691ae] border-2 border-white/40 active:scale-95",
-          },
-        ]}
-      >
-        {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
-          <motion.div 
-            animate={{
-              rotate: [-4, 4, -4, 4, -4, 4, 0],
-              scale: [1, 1.05, 1, 1.05, 1]
-            }}
-            transition={{
-              delay: 1.5,
-              repeat: Infinity,
-              duration: 0.6,
-              repeatDelay: 1.8,
-              ease: "easeInOut"
-            }}
-          >
-            <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
-          </motion.div>
-        </div>
-
-        {/* Alert Message */}
-        <h3 id="cooldown-warning-title" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
-          You voted recently. Please waiting to votekick again
-        </h3>
-        <p id="cooldown-warning-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
-          لقد قمت بالتصويت مؤخراً. يرجى الانتظار للمحاولة مرة أخرى.
-        </p>
-      </CinematicModal>
-
-      {/* Kicked Out / Hard Block Screen */}
-      <CinematicModal
-        isOpen={isBanned}
-        titleType="report"
-        titleText="KICKED"
-        buttons={[
-          {
-            id: "kicked-out-exit-btn",
-            text: "OK",
-            onClick: () => {
-              if (typeof window !== "undefined") {
-                safeLocalStorage.removeItem("gartic_player_room");
-              }
-              onLeave?.();
-            },
-            variant: "danger",
-          },
-        ]}
-      >
-        {/* Red warning triangle with elegant bell vibration/shaking loop animation */}
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-6 mt-4 relative">
-          <motion.div 
-            animate={{
-              rotate: [-4, 4, -4, 4, -4, 4, 0],
-              scale: [1, 1.05, 1, 1.05, 1]
-            }}
-            transition={{
-              delay: 1.5,
-              repeat: Infinity,
-              duration: 0.6,
-              repeatDelay: 1.8,
-              ease: "easeInOut"
-            }}
-          >
-            <AlertTriangle className="w-20 h-20 text-[#EF4444] fill-[#EF4444]/5" strokeWidth={2.5} />
-          </motion.div>
-        </div>
-
-        {/* Content Text in standard theme colors */}
-        <h3 id="kicked-out-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
-          You were kicked out by voting
-        </h3>
-        <p id="kicked-out-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
-          تم طردك من هذه الغرفة بناءً على تصويت اللاعبين الآخرين.
-        </p>
-      </CinematicModal>
-
-      {/* Nickname Taken Warning Modal */}
-      <CinematicModal
-        isOpen={isNicknameTaken}
-        overlayClassName="bg-slate-950/100"
-        onClose={() => {
+      {/* Room Alert Modals */}
+      <RoomAlertModals
+        showCooldownWarning={showCooldownWarning}
+        onCloseCooldownWarning={() => setShowCooldownWarning(false)}
+        shouldRenderCooldown={true}
+        isBanned={isBanned}
+        onLeaveFromBanned={() => {
+          if (typeof window !== "undefined") {
+            safeLocalStorage.removeItem("gartic_player_room");
+          }
+          onLeave?.();
+        }}
+        isNicknameTaken={isNicknameTaken}
+        onLeaveFromNicknameTaken={() => {
           setIsNicknameTaken(false);
           if (typeof window !== "undefined") {
             safeLocalStorage.removeItem("gartic_player_room");
           }
           onLeave?.();
         }}
-        titleType="report"
-        titleText="ERROR"
-        buttons={[
-          {
-            id: "nickname-taken-exit-btn",
-            text: "OK",
-            onClick: () => {
-              setIsNicknameTaken(false);
-              if (typeof window !== "undefined") {
-                safeLocalStorage.removeItem("gartic_player_room");
-              }
-              onLeave?.();
-            },
-            variant: "danger",
-          },
-        ]}
-      >
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
-          <motion.div 
-            animate={{
-              rotate: [-4, 4, -4, 4, -4, 4, 0],
-              scale: [1, 1.05, 1, 1.05, 1]
-            }}
-            transition={{
-              delay: 1.5,
-              repeat: Infinity,
-              duration: 0.6,
-              repeatDelay: 1.8,
-              ease: "easeInOut"
-            }}
-          >
-            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
-          </motion.div>
-        </div>
-
-        <h3 id="nickname-taken-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
-          Name already in use
-        </h3>
-        <p id="nickname-taken-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
-          يوجد شخص آخر في الغرفة بنفس الاسم، غيره لتتمكن من الدخول
-        </p>
-      </CinematicModal>
-
-      {/* Room Full Warning Modal */}
-      <CinematicModal
-        isOpen={isRoomFull}
-        onClose={() => {
+        isRoomFull={isRoomFull}
+        onLeaveFromRoomFull={() => {
           setIsRoomFull(false);
           if (typeof window !== "undefined") {
             safeLocalStorage.removeItem("gartic_player_room");
           }
           onLeave?.();
         }}
-        titleType="report"
-        titleText="ERROR"
-        buttons={[
-          {
-            id: "room-full-exit-btn",
-            text: "OK",
-            onClick: () => {
-              setIsRoomFull(false);
-              if (typeof window !== "undefined") {
-                safeLocalStorage.removeItem("gartic_player_room");
-              }
-              onLeave?.();
-            },
-            variant: "danger",
-          },
-        ]}
-      >
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
-          <motion.div 
-            animate={{
-              rotate: [-4, 4, -4, 4, -4, 4, 0],
-              scale: [1, 1.05, 1, 1.05, 1]
-            }}
-            transition={{
-              delay: 1.5,
-              repeat: Infinity,
-              duration: 0.6,
-              repeatDelay: 1.8,
-              ease: "easeInOut"
-            }}
-          >
-            <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
-          </motion.div>
-        </div>
-
-        <h3 id="room-full-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
-          This room is full
-        </h3>
-        <p id="room-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
-          هذه الغرفة ممتلئة بالكامل
-        </p>
-      </CinematicModal>
-
-      {/* Server Full (Auth Store Full) Warning Modal */}
-      <CinematicModal
-        isOpen={isAuthStoreFull}
-        onClose={() => {
+        isAuthStoreFull={isAuthStoreFull}
+        onLeaveFromAuthStoreFull={() => {
           setIsAuthStoreFull(false);
           if (typeof window !== "undefined") {
             safeLocalStorage.removeItem("gartic_player_room");
           }
           onLeave?.();
         }}
-        titleType="report"
-        titleText="SERVER FULL"
-        buttons={[
-          {
-            id: "auth-store-full-exit-btn",
-            text: "OK",
-            onClick: () => {
-              setIsAuthStoreFull(false);
-              if (typeof window !== "undefined") {
-                safeLocalStorage.removeItem("gartic_player_room");
-              }
-              onLeave?.();
-            },
-            variant: "danger",
-          },
-        ]}
-      >
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
-          <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
-        </div>
-
-        <h3 id="auth-store-full-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
-          Server Capacity Reached
-        </h3>
-        <p id="auth-store-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
-          بلغ الخادم طاقته الاستيعابية القصوى حالياً، يرجى المحاولة بعد قليل
-        </p>
-      </CinematicModal>
-
-      {/* Join Room Timeout Modal */}
-      <CinematicModal
-        isOpen={isJoinTimedOut}
-        onClose={() => {
+        isJoinTimedOut={isJoinTimedOut}
+        onLeaveFromJoinTimeout={() => {
           setIsJoinTimedOut(false);
           if (typeof window !== "undefined") {
             safeLocalStorage.removeItem("gartic_player_room");
           }
           onLeave?.();
         }}
-        titleType="report"
-        titleText="TIMEOUT"
-        buttons={[
-          {
-            id: "join-timeout-exit-btn",
-            text: "OK",
-            onClick: () => {
-              setIsJoinTimedOut(false);
-              if (typeof window !== "undefined") {
-                safeLocalStorage.removeItem("gartic_player_room");
-              }
-              onLeave?.();
-            },
-            variant: "danger",
-          },
-        ]}
-      >
-        <div className="w-24 h-24 flex items-center justify-center mx-auto mb-5 mt-3 relative">
-          <AlertTriangle className="w-20 h-20 text-[#FB923C] fill-[#FB923C]/5" strokeWidth={2.5} />
-        </div>
+      />
 
-        <h3 id="join-timeout-desc" className="text-[19px] sm:text-[21px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
-          Connection Timeout
-        </h3>
-        <p id="join-timeout-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
-          تعذر الاتصال بالغرفة في الوقت المحدد، يرجى المحاولة مرة أخرى
-        </p>
-      </CinematicModal>
 
       {/* 🛠️ Free Draw Mobile Debug Console & Diagnostics Controller */}
       {isFreeDraw && <FreeDrawMobileDebug />}
