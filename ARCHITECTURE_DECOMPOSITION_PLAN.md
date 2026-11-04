@@ -204,14 +204,17 @@
 ---
 
 
-### 🟡 الدفعة 8: `BATCH-6B-1` — استخراج شاشات مراحل اللعب في الروم (Stage Overlays)
-* **الحالة**: `[ ] PLANNED`
+### 🟢 الدفعة 8: `BATCH-6B-1` — استخراج شاشة اختيار الكلمات للرسام (`ChoosingWordOverlay`)
+* **الحالة**: `[x] COMPLETED`
 * **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx`.
-* **الملفات الجديدة المتوقعة**:
-  - `src/components/experimental/ChoosingWordOverlay.tsx` (شاشة اختيار الكلمات).
-  - `src/components/experimental/PodiumOverlay.tsx` (شاشة منصة التتويج).
+* **الملف الجديد المنشأ**: `src/components/experimental/ChoosingWordOverlay.tsx`.
+* **الأجزاء المستخرجة**:
+  - واجهة العرض الكاملة لشاشة اختيار الكلمات للرسام (`IT'S YOUR TURN!`) وخياري الكلمات وزر الرسم الفردي ومؤشر `Pencil`.
+  - بقاء ملكية المقابس وحالة اللعبة `gameState` داخل `ExperimentalGameRoom.tsx`.
+  - بقاء مكون `MiniBoardOverlay.tsx` مسؤولاً بالكامل عن شاشات `WAITING` و `CHOOSING (Guesser)` و `ROUND_END` و `PODIUM`.
+  - استخراج منصة التتويج (`PodiumOverlay`) ليس جزءاً من هذه الدفعة لضمان وحدة دورة حياة شاشات اللوحة المصغرة.
 * **درجة المخاطر**: **الفئة B (متوسطة المخاطر)**.
-* **شروط قبول الدفعة**: الحفاظ الصارم على أبعاد الكانفاس واستجابة لوحة المفاتيح.
+* **شروط قبول الدفعة**: الحفاظ الصارم على أبعاد الكانفاس واستجابة لوحة المفاتيح وسلوك الاختيار الفوري.
 
 ---
 

@@ -288,14 +288,16 @@
 
 ---
 
-### 🟡 PHASE 6B — EXPERIMENTAL GAMEROOM: STAGE OVERLAYS (Category B)
-* **الملف المستهدف**: `src/components/experimental/ExperimentalGameRoom.tsx`.
+### 🟢 PHASE 6B — EXPERIMENTAL GAMEROOM: CHOOSING WORD OVERLAY EXTRACTION (Category B)
+* **الحالة**: `[x] COMPLETED`
+* **الملف المستهدف**: `src/components/experimental/ExperimentalGameRoom.tsx` (تقليص صافي قدره 50 سطراً من الـ JSX المضمن).
+* **الملف الجديد المنشأ**: `src/components/experimental/ChoosingWordOverlay.tsx` (64 سطراً).
 * **تصنيف المخاطر**: **الفئة B (متوسطة المخاطر - Medium Risk)**.
 * **الأهداف التنفيذية**:
-  - عزل شاشة اختيار الكلمات `ChoosingWordOverlay.tsx` (حالة `CHOOSING`).
-  - عزل شاشة منصة التتويج والنتائج `PodiumOverlay.tsx` (حالة `PODIUM`).
-  - عزل شاشة نهاية الجولة المتحركة `RoundEndOverlay.tsx` (حالة `ROUND_END`).
-* **الضوابط**: الحفاظ الصارم على منطق النافذة المرئية `--keyboard-inset` وعدم كسر تخطيط الدردشة والكانفاس.
+  - استخراج شاشة اختيار الكلمات للرسام `ChoosingWordOverlay.tsx` كواجهة عرض نقية (حالة `CHOOSING`).
+  - بقاء ملكية أحداث المقابس وحالة اللعبة في `ExperimentalGameRoom.tsx`.
+  - بقاء المكون المشترك `MiniBoardOverlay.tsx` مسؤولاً عن شاشات: `WAITING`، `CHOOSING (Guesser View)`، `ROUND_END`، و `PODIUM`. استخراج منصة التتويج ليس جزءاً من هذه الدفعة.
+* **الضوابط**: الحفاظ الصارم على منطق النافذة المرئية و `--keyboard-inset` ونسبة أبعاد الكانفاس `aspect-[740/430]`.
 
 ---
 
