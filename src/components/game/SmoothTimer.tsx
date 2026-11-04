@@ -71,6 +71,7 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
 
   // Tracks active fixed-duration phase key (e.g. "ROUND_END_1700000000000") to prevent re-triggering
   const activeFixedPhaseKeyRef = React.useRef<string | null>(null);
+  const transitionCancelledRef = React.useRef<boolean>(false);
 
   // Stores the latest reliable fixed phase timestamp to allow instant, accurate resumption upon returning from background
   const lastFixedPhaseSnapshotRef = React.useRef<{
@@ -81,6 +82,21 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
   } | null>(null);
 
   maxTimeRef.current = maxTime;
+
+  // Attach transitioncancel listener to detect browser-cancelled CSS transitions (e.g. on modal mount)
+  React.useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const handleTransitionCancel = (e: TransitionEvent) => {
+      if (e.propertyName === 'transform') {
+        transitionCancelledRef.current = true;
+      }
+    };
+    bar.addEventListener('transitioncancel', handleTransitionCancel);
+    return () => {
+      bar.removeEventListener('transitioncancel', handleTransitionCancel);
+    };
+  }, []);
 
   React.useEffect(() => {
     return () => {
@@ -112,6 +128,53 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
   };
 
   /**
+   * 🛡️ Health check to detect if CSS transition stalled or was cancelled by DOM modal mounts/recalcs.
+   */
+  const checkTransitionHealth = React.useCallback((
+    status: string,
+    targetEndsAt?: number,
+    targetRemainingMs?: number
+  ): boolean => {
+    if (transitionCancelledRef.current) {
+      return false;
+    }
+
+    const bar = barRef.current;
+    if (!bar) return true;
+
+    const totalDurationMs = status === "ROUND_END" ? 8000 : 15000;
+    let remMs = targetRemainingMs;
+    if (remMs === undefined && targetEndsAt) {
+      remMs = Math.max(0, targetEndsAt - Date.now());
+    }
+    if (remMs === undefined || remMs <= 300) {
+      return true;
+    }
+
+    const expectedScale = Math.max(0, Math.min(1, remMs / totalDurationMs));
+
+    try {
+      const transform = window.getComputedStyle(bar).transform;
+      if (transform && transform !== 'none' && transform.startsWith('matrix')) {
+        const values = transform.slice(7, -1).split(',');
+        if (values.length >= 1) {
+          const currentScale = parseFloat(values[0].trim());
+          if (!isNaN(currentScale)) {
+            // If the bar visual scale is lagging behind expected scale by more than 0.08 (8%), it has stalled
+            if (currentScale - expectedScale > 0.08) {
+              return false;
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore errors reading computed style
+    }
+
+    return true;
+  }, []);
+
+  /**
    * 🚀 Fixed-Phase Path (ROUND_END: 8s, PODIUM: 15s):
    * Launches a SINGLE continuous CSS transition from current scale to 0 over phaseRemainingMs.
    */
@@ -120,6 +183,7 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
     targetEndsAt: number | undefined,
     status: string
   ) => {
+    transitionCancelledRef.current = false;
     const bar = barRef.current;
     if (!bar) return;
 
@@ -254,8 +318,14 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
 
       const phaseKey = endsAt ? `${currentStatus}_${endsAt}` : currentStatus;
 
-      // Prevent restarting the continuous transition if already running for this exact phase instance
+      // Prevent restarting the continuous transition if already running for this exact phase instance,
+      // UNLESS a health check detects the transition was cancelled or stalled by DOM mutations.
       if (activeFixedPhaseKeyRef.current === phaseKey) {
+        if (!checkTransitionHealth(currentStatus, endsAt, propPhaseRemainingMs ?? gameState?.phaseRemainingMs)) {
+          transitionCancelledRef.current = false;
+          const remMs = propPhaseRemainingMs ?? gameState?.phaseRemainingMs;
+          startFixedPhaseTransition(remMs, endsAt, currentStatus);
+        }
         return;
       }
 
@@ -278,6 +348,7 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
     gameState?.phaseRemainingMs,
     gameState?.phaseEndsAt,
     syncDynamicBar,
+    checkTransitionHealth,
   ]);
 
   // Listen directly to timer_tick events
@@ -305,8 +376,13 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
 
         const phaseKey = data.phaseEndsAt ? `${data.status}_${data.phaseEndsAt}` : data.status;
 
-        // If continuous transition is already active for this phase instance, DO NOT restart or interrupt
+        // If continuous transition is already active for this phase instance, check if healthy.
+        // If healthy, DO NOT restart or interrupt. If stalled/cancelled, self-recover smoothly.
         if (activeFixedPhaseKeyRef.current === phaseKey) {
+          if (!checkTransitionHealth(data.status, endsAt, data.phaseRemainingMs)) {
+            transitionCancelledRef.current = false;
+            startFixedPhaseTransition(data.phaseRemainingMs, data.phaseEndsAt, data.status);
+          }
           return;
         }
 
@@ -327,7 +403,7 @@ export const SmoothTimer: React.FC<SmoothTimerProps> = React.memo(({
     return () => {
       socket.off("timer_tick", onTick);
     };
-  }, [socket, syncDynamicBar]);
+  }, [socket, syncDynamicBar, checkTransitionHealth]);
 
   // Instant accurate resumption when returning from background tab during a fixed phase
   React.useEffect(() => {
