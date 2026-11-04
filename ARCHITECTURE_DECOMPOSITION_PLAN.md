@@ -204,15 +204,25 @@
 ---
 
 ### 🟢 الدفعة 5: `BATCH-5A-2` — استخراج أدوات معالجة الحزم الثنائية للسيرفر (Pure Binary Helpers)
-* **الحالة**: `PLANNED`
-* **الملف المصدر**: `server/rooms.ts` (السطور 9–11، 13–26، 28–107، 109–120، 122–145؛ بإجمالي ~137 سطراً).
-* **الملف الجديد المتوقع**: `server/utils/binaryBufferHelpers.ts`.
-* **الأجزاء المستخرجة**: `decodeZigZag`, `readVarIntFromBuffer`, `decodeType13BufferSafely`, `createType2Buffer`, `createType1Buffer`.
-* **الاعتماديات**: معالجة Buffers نقية في الذاكرة لبروتوكول الرسم الثنائي.
+* **الحالة**: `BUILD_VERIFIED` (تم استخراج الدوال الخمس بنجاح، وتطابق التوقيعات 100%، واجتياز اختباري بروتوكول الرسم الثنائي واختبار الأنواع وبناء التطبيق بنجاح)
+* **الملف المصدر**: `server/rooms.ts` (السطور 9–145 سابقاً؛ تقليص صافي قدره 116 سطراً).
+* **الملف الجديد المنشأ**: `server/utils/binaryBufferHelpers.ts` (137 سطراً).
+* **الأجزاء المستخرجة**:
+  - `decodeZigZag(z: number): number`
+  - `readVarIntFromBuffer(buf: Buffer, cursor: { offset: number }): number`
+  - `decodeType13BufferSafely(buf: Buffer): { success: boolean; instId?: string; count?: number; points?: { x: number; y: number }[]; error?: string }`
+  - `createType2Buffer(instId: string, points: { x: number; y: number }[]): Buffer`
+  - `createType1Buffer(instId: string, tool: number, r: number, g: number, b: number, width: number, opacity: number, p0_x: number, p0_y: number): Buffer`
+* **التوافق التكاملي مع المستهلكين الخارجيين**:
+  - تم استيراد الدوال الخمس وإعادة تصديرها من `server/rooms.ts` عبر `export { decodeZigZag, readVarIntFromBuffer, decodeType13BufferSafely, createType2Buffer, createType1Buffer } from "./utils/binaryBufferHelpers.js";`.
+  - حافظ المستهلكون الخارجيون (`server.ts`, `server/registerDrawBinaryHandler.ts`, `scripts/test_type13_hardening.ts`, `scripts/test_experimental_draw_trial.ts`) على مساراتهم الأصلية دون أي تعديل.
 * **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
-* **شروط قبول الدفعة**:
-  - عدم تغيير أي بايت في بروتوكول الضغط وفك الضغط وإبقاء إعادة التصدير من `server/rooms.ts` للحفاظ على التوافق مع `server.ts` وسكريبتات الاختبار.
-  - اجتياز الفحص الثابت `tsc --noEmit` والبناء `npm run build`.
+* **نتائج الفحص والتحقق**:
+  - `npx tsx scripts/test_type13_hardening.ts`: نجاح تام 100% (جميع الاختبارات الثمانية لاختبار Type 13 Hardening اجتازت بنجاح).
+  - `npx tsx scripts/test_experimental_draw_trial.ts`: نجاح تام 100% (جميع الاختبارات الستة اجتازت بنجاح).
+  - `tsc --noEmit`: ناجح بنسبة 100% (0 أخطاء).
+  - `npm run build` (`compile_applet`): تم البناء بنجاح (Build succeeded).
+* **الدفعة التنفيذية التالية المجدولة**: `BATCH-7A-1 — Reusing Extracted Modals in GameRoom.tsx`.
 
 ---
 
