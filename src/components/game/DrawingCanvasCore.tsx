@@ -21,6 +21,10 @@ import {
   isBucketCheckpointExpEnabled,
   MAX_HISTORY_CHECKPOINTS
 } from '../../utils/canvasCheckpointManager';
+import {
+  CanvasUndoCache
+} from '../../utils/canvasUndoCache';
+export type { FreeDrawUndoCacheMeta } from '../../utils/canvasUndoCache';
 import { evaluateStateTransitionReset, GameStateSnapshot } from '../../utils/gameStateSyncHelper';
 import {
   getCommandSignature,
@@ -690,139 +694,32 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const localRedoStackRef = useRef<any[]>([]);
   const prevCommandsCountRef = useRef<number>(-1);
 
-  // 🛡️ Free Draw 1-Step Undo/Redo Canvas Caches (Prevents O(N) full replays in long sessions)
-  const freeDrawUndoCacheCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const freeDrawRedoCacheCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const freeDrawPendingUndoCacheCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const hasFreeDrawUndoCacheRef = useRef<boolean>(false);
-  const hasFreeDrawRedoCacheRef = useRef<boolean>(false);
-  const hasFreeDrawPendingUndoCacheRef = useRef<boolean>(false);
-
   // 🛡️ Single-Flight Undo Guard (Locks concurrent/queued repeat invocations during undo processing)
   const undoInProgressRef = useRef<boolean>(false);
-
-  // 🛡️ Free Draw Single Undo Cache Historical Metadata (Guarantees cache authenticity before restoration)
-  interface FreeDrawUndoCacheMeta {
-    baseHistoryLength: number;
-    targetInstanceId: string;
-    targetStrokeId: number;
-    prevAnchorSignature: string | null;
-  }
-  const freeDrawUndoCacheMetaRef = useRef<FreeDrawUndoCacheMeta | null>(null);
 
   // ⚡ Local hint tracking for Full-Canvas Opaque Bucket fast replay
   const lastBucketHintRef = useRef<{ hint: string; color: string; opacity: number } | null>(null);
 
-  // Free Draw Cache Lifecycle Helpers
-  const ensureCacheCanvas = (cacheRef: React.MutableRefObject<HTMLCanvasElement | null>, targetCanvas: HTMLCanvasElement) => {
-    if (!cacheRef.current) {
-      cacheRef.current = document.createElement('canvas');
-    }
-    if (cacheRef.current.width !== targetCanvas.width || cacheRef.current.height !== targetCanvas.height) {
-      cacheRef.current.width = targetCanvas.width;
-      cacheRef.current.height = targetCanvas.height;
-    }
-    return cacheRef.current;
-  };
+  // 🛡️ Canvas Undo/Redo Bitmap Cache Manager (Phase 4E / Sub-Batch 4E-1B)
+  const undoCacheRef = useRef<CanvasUndoCache | null>(null);
+  if (!undoCacheRef.current) {
+    undoCacheRef.current = new CanvasUndoCache({
+      getCanvas: () => canvasRef.current,
+      getCommands: () => localCommandsRef.current,
+      getConfig: () => ({
+        isFreeDraw: propsRef.current.isFreeDraw,
+        enableBitmapUndoCache: propsRef.current.enableBitmapUndoCache,
+        readOnly: propsRef.current.readOnly
+      })
+    });
+  }
+  const undoCache = undoCacheRef.current;
 
-  const copyCanvasContent = (source: HTMLCanvasElement, target: HTMLCanvasElement) => {
-    if (target.width !== source.width || target.height !== source.height) {
-      target.width = source.width;
-      target.height = source.height;
-    }
-    const tCtx = target.getContext('2d');
-    if (tCtx) {
-      tCtx.globalCompositeOperation = 'copy';
-      tCtx.drawImage(source, 0, 0);
-      tCtx.globalCompositeOperation = 'source-over';
-    }
-  };
-
-  const restoreCanvasFromCache = (cache: HTMLCanvasElement, target: HTMLCanvasElement): boolean => {
-    if (cache.width !== target.width || cache.height !== target.height) {
-      return false;
-    }
-    const targetCtx = target.getContext('2d');
-    if (!targetCtx) return false;
-    targetCtx.save();
-    targetCtx.setTransform(1, 0, 0, 1, 0, 0);
-    targetCtx.globalCompositeOperation = 'copy';
-    targetCtx.drawImage(cache, 0, 0);
-    targetCtx.restore();
-    return true;
-  };
-
-  const stageFreeDrawPendingCache = () => {
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
-    if (!useCache || propsRef.current.readOnly) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const pendingCanvas = ensureCacheCanvas(freeDrawPendingUndoCacheCanvasRef, canvas);
-    copyCanvasContent(canvas, pendingCanvas);
-    hasFreeDrawPendingUndoCacheRef.current = true;
-  };
-
-  const commitFreeDrawPendingCache = (targetInstId?: string, targetStrId?: number) => {
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
-    if (!useCache) return;
-    if (hasFreeDrawPendingUndoCacheRef.current && freeDrawPendingUndoCacheCanvasRef.current && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
-      copyCanvasContent(freeDrawPendingUndoCacheCanvasRef.current, undoCanvas);
-      hasFreeDrawUndoCacheRef.current = true;
-      hasFreeDrawPendingUndoCacheRef.current = false;
-      hasFreeDrawRedoCacheRef.current = false;
-
-      if (targetInstId !== undefined && targetStrId !== undefined) {
-        const list = localCommandsRef.current;
-        const baseLen = list.length;
-        const prevSig = baseLen > 0 ? getCommandSignature(list[baseLen - 1]) : null;
-        freeDrawUndoCacheMetaRef.current = {
-          baseHistoryLength: baseLen,
-          targetInstanceId: targetInstId,
-          targetStrokeId: targetStrId,
-          prevAnchorSignature: prevSig
-        };
-      } else {
-        freeDrawUndoCacheMetaRef.current = null;
-      }
-    }
-  };
-
-  const captureDirectFreeDrawUndoCache = (targetInstId?: string, targetStrId?: number) => {
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
-    if (!useCache) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
-    copyCanvasContent(canvas, undoCanvas);
-    hasFreeDrawUndoCacheRef.current = true;
-    hasFreeDrawPendingUndoCacheRef.current = false;
-    hasFreeDrawRedoCacheRef.current = false;
-
-    if (targetInstId !== undefined && targetStrId !== undefined) {
-      const list = localCommandsRef.current;
-      const baseLen = list.length;
-      const prevSig = baseLen > 0 ? getCommandSignature(list[baseLen - 1]) : null;
-      freeDrawUndoCacheMetaRef.current = {
-        baseHistoryLength: baseLen,
-        targetInstanceId: targetInstId,
-        targetStrokeId: targetStrId,
-        prevAnchorSignature: prevSig
-      };
-    } else {
-      freeDrawUndoCacheMetaRef.current = null;
-    }
-  };
-
-  const invalidateFreeDrawCaches = () => {
-    const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
-    if (!useCache) return;
-    hasFreeDrawUndoCacheRef.current = false;
-    hasFreeDrawRedoCacheRef.current = false;
-    hasFreeDrawPendingUndoCacheRef.current = false;
-    freeDrawUndoCacheMetaRef.current = null;
-  };
+  // Thin convenience delegates preserving local call sites
+  const stageFreeDrawPendingCache = () => undoCache.stagePending();
+  const commitFreeDrawPendingCache = (targetInstId?: string, targetStrId?: number) => undoCache.commitPending(targetInstId, targetStrId);
+  const captureDirectFreeDrawUndoCache = (targetInstId?: string, targetStrId?: number) => undoCache.captureDirect(targetInstId, targetStrId);
+  const invalidateFreeDrawCaches = () => undoCache.invalidateIfEnabled();
 
   // 🛡️ Canvas Checkpoint Manager (Phase 4E / Sub-Batch 4E-1A)
   const checkpointManagerRef = useRef<CanvasCheckpointManager | null>(null);
@@ -2060,9 +1957,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     prevCommandsCountRef.current = -1;
 
     // Reinitialize Free Draw Caches
-    hasFreeDrawUndoCacheRef.current = false;
-    hasFreeDrawRedoCacheRef.current = false;
-    hasFreeDrawPendingUndoCacheRef.current = false;
+    undoCache.invalidateAll();
 
     if (ctx && tempCtx) {
       saveSnapshot(); 
@@ -2201,45 +2096,26 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       return false;
     }
 
-    // 1. Verify single-step cache exists
-    if (!hasFreeDrawUndoCacheRef.current || !freeDrawUndoCacheCanvasRef.current) {
-      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'missing_cache'; }
-      return false;
-    }
-    const meta = freeDrawUndoCacheMetaRef.current;
-    if (!meta) {
-      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'missing_metadata'; }
-      return false;
-    }
-
-    // 2. Strict Metadata & Chain Integrity Verification:
-    // Ensure the cache was captured specifically for this target command at its exact historical offset
-    if (meta.targetInstanceId !== targetInst || meta.targetStrokeId !== targetStrId) {
-      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'target_mismatch'; }
-      return false;
-    }
-    if (meta.baseHistoryLength !== targetIndex) {
-      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'base_history_length_mismatch'; }
-      return false;
-    }
-
-    if (targetIndex > 0) {
-      const prevCmd = list[targetIndex - 1];
-      if (getCommandSignature(prevCmd) !== meta.prevAnchorSignature) {
-        if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'anchor_mismatch'; }
-        return false;
+    // 1 & 2. Strict Metadata & Chain Integrity Verification:
+    const isValidFastPath = undoCache.canRestoreFastPath(
+      targetInst,
+      targetStrId,
+      targetIndex,
+      (reason) => {
+        if (diag) {
+          diag.fastPath = 'miss';
+          diag.fastPathMissReason = reason;
+        }
       }
-    }
-    const targetCmd = list[targetIndex];
-    if (getCommandSignature(targetCmd) !== `${targetInst}_${targetStrId}`) {
-      if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'command_signature_mismatch'; }
+    );
+    if (!isValidFastPath) {
       return false;
     }
 
     // 3. Pre-flight Cache Restoration (Non-destructive check & restore):
     // MUST succeed before mutating list or redo stack to prevent double-removal on failure
     const restoreStart = diag ? performance.now() : 0;
-    const restored = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
+    const restored = undoCache.restoreFromUndoCache();
     if (!restored) {
       if (diag) { diag.fastPath = 'miss'; diag.fastPathMissReason = 'bitmap_restoration_failure'; }
       return false;
@@ -2326,9 +2202,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     // 6. Invalidate single-step cache once consumed
-    hasFreeDrawUndoCacheRef.current = false;
-    hasFreeDrawRedoCacheRef.current = false;
-    freeDrawUndoCacheMetaRef.current = null;
+    undoCache.invalidateCommittedCaches();
 
     saveSnapshot();
     syncHistoryButtons();
@@ -2440,9 +2314,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (!fastPathSucceeded) {
           // 🛡️ Double-Removal Guard: If list length changed unexpectedly, do not splice again
           if (list.length !== listLengthBefore) {
-            hasFreeDrawUndoCacheRef.current = false;
-            hasFreeDrawRedoCacheRef.current = false;
-            freeDrawUndoCacheMetaRef.current = null;
+            undoCache.invalidateCommittedCaches();
             replayFreeDrawHistorySafely(list, diag);
           } else {
             // Fallback: Safe Mid-History Replay
@@ -2462,9 +2334,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 }
               }
             }
-            hasFreeDrawUndoCacheRef.current = false;
-            hasFreeDrawRedoCacheRef.current = false;
-            freeDrawUndoCacheMetaRef.current = null;
+            undoCache.invalidateCommittedCaches();
             replayFreeDrawHistorySafely(list, diag);
           }
         }
@@ -2512,18 +2382,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // 🛡️ Fast-Path: Single Previous-State Canvas Cache (For both local player and spectators)
       let restoredViaCache = false;
       const useCache = Boolean(propsRef.current.enableBitmapUndoCache);
-      if (useCache && hasFreeDrawUndoCacheRef.current && freeDrawUndoCacheCanvasRef.current && canvasRef.current) {
-        const canvas = canvasRef.current;
-        const redoCanvas = ensureCacheCanvas(freeDrawRedoCacheCanvasRef, canvas);
-        copyCanvasContent(canvas, redoCanvas);
-        hasFreeDrawRedoCacheRef.current = true;
+      if (useCache && undoCache.hasUndoCache() && canvasRef.current) {
+        undoCache.captureCurrentAsRedoCache();
 
-        restoredViaCache = restoreCanvasFromCache(freeDrawUndoCacheCanvasRef.current, canvas);
+        restoredViaCache = undoCache.restoreFromUndoCache();
         if (restoredViaCache) {
           if (tempCtxRef.current) {
             tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
           }
-          hasFreeDrawUndoCacheRef.current = false;
+          undoCache.consumeUndo();
         }
       }
 
@@ -2643,8 +2510,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           isReplayingRef.current = false;
         }
 
-        hasFreeDrawUndoCacheRef.current = true;
-        hasFreeDrawRedoCacheRef.current = false;
+        undoCache.markUndoValid();
+        undoCache.consumeRedo();
 
         if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
           if (decoded.event === 'draw_action') {
@@ -2690,18 +2557,15 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     // 🛡️ Fast-Path: Single Redo-State Canvas Cache (For both local player and spectators)
     let restoredViaCache = false;
     const useCache = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableBitmapUndoCache);
-    if (useCache && hasFreeDrawRedoCacheRef.current && freeDrawRedoCacheCanvasRef.current && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const undoCanvas = ensureCacheCanvas(freeDrawUndoCacheCanvasRef, canvas);
-      copyCanvasContent(canvas, undoCanvas);
-      hasFreeDrawUndoCacheRef.current = true;
+    if (useCache && undoCache.hasRedoCache() && canvasRef.current) {
+      undoCache.captureCurrentAsUndoCachePreservingRedo();
 
-      restoredViaCache = restoreCanvasFromCache(freeDrawRedoCacheCanvasRef.current, canvas);
+      restoredViaCache = undoCache.restoreFromRedoCache();
       if (restoredViaCache) {
         if (tempCtxRef.current) {
           tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
         }
-        hasFreeDrawRedoCacheRef.current = false;
+        undoCache.consumeRedo();
       }
     }
 
@@ -3919,10 +3783,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
 
           // 6. Invalidate single-step undo/redo caches:
-          hasFreeDrawUndoCacheRef.current = false;
-          hasFreeDrawRedoCacheRef.current = false;
-          hasFreeDrawPendingUndoCacheRef.current = false;
-          freeDrawUndoCacheMetaRef.current = null;
+          undoCache.invalidateAll();
 
           // 7. Safely reconstruct canvas from history:
           replayFreeDrawHistorySafely(list, remoteDiag);
@@ -4091,9 +3952,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           executeRedrawTempLayer();
         }
 
-        hasFreeDrawUndoCacheRef.current = false;
-        hasFreeDrawRedoCacheRef.current = false;
-        hasFreeDrawPendingUndoCacheRef.current = false;
+        undoCache.invalidateAll();
 
         localCommandsRef.current = [...commands];
         prevCommandsCountRef.current = -1;
@@ -4863,7 +4722,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     lastNetworkPointRef.current = null;
     drawerNetworkPointCountRef.current = 0;
 
-    hasFreeDrawPendingUndoCacheRef.current = false;
+    undoCache.discardPending();
 
     emitDrawCommand('draw_cancel', {
       strokeId: currentLocalStrokeIdRef.current
@@ -5200,10 +5059,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         } else {
           // Entire gesture stayed outside canvas without entering: discard pending undo cache cleanly
-          hasFreeDrawPendingUndoCacheRef.current = false;
+          undoCache.discardPending();
         }
       } else {
-        hasFreeDrawPendingUndoCacheRef.current = false;
+        undoCache.discardPending();
       }
 
       emitDrawCommand('draw_end', {
