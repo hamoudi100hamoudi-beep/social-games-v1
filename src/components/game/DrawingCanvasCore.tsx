@@ -390,6 +390,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // Local drawing track refs
   const isDrawingRef = useRef(false);
+  const hasDrawnMeaningfulStrokeRef = useRef(false);
+  const strokeStartCssPosRef = useRef<{ x: number; y: number } | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
   const startXRef = useRef(0);
   const startYRef = useRef(0);
@@ -1549,21 +1551,25 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
       }
 
-      // Smoothly finalize and commit active solo-touch stroke when user introduces a second touch (pinch zoom start)
+      // Smoothly finalize genuine strokes or cancel accidental touches when user introduces a second touch (pinch zoom start)
       if (e.touches.length >= 2 && isDrawingRef.current) {
         touchDrawingActiveFromOutsideRef.current = false;
         const activeTool = propsRef.current.tool;
         const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
-        if (isShape) {
-          const canvas = canvasRef.current;
-          if (canvas && currentPathRef.current.length > 0) {
-            const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
-            finishShapeDrawing(lastPt.x, lastPt.y);
-          } else {
-            finishShapeDrawing(startXRef.current, startYRef.current);
+        if (hasDrawnMeaningfulStrokeRef.current) {
+          if (isShape) {
+            const canvas = canvasRef.current;
+            if (canvas && currentPathRef.current.length > 0) {
+              const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
+              finishShapeDrawing(lastPt.x, lastPt.y);
+            } else {
+              finishShapeDrawing(startXRef.current, startYRef.current);
+            }
+          } else if (activeTool === 'pencil' || activeTool === 'eraser') {
+            finishCurrentStroke();
           }
-        } else if (activeTool === 'pencil' || activeTool === 'eraser') {
-          finishCurrentStroke();
+        } else {
+          cancelCurrentProvisionalStroke();
         }
       }
 
@@ -1620,6 +1626,25 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (bucketTimeoutRef.current) {
           clearTimeout(bucketTimeoutRef.current);
           bucketTimeoutRef.current = null;
+        }
+        if (isDrawingRef.current) {
+          const activeTool = propsRef.current.tool;
+          const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
+          if (hasDrawnMeaningfulStrokeRef.current) {
+            if (isShape) {
+              const canvas = canvasRef.current;
+              if (canvas && currentPathRef.current.length > 0) {
+                const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
+                finishShapeDrawing(lastPt.x, lastPt.y);
+              } else {
+                finishShapeDrawing(startXRef.current, startYRef.current);
+              }
+            } else if (activeTool === 'pencil' || activeTool === 'eraser') {
+              finishCurrentStroke();
+            }
+          } else {
+            cancelCurrentProvisionalStroke();
+          }
         }
       }
 
@@ -2504,6 +2529,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     // Reset local/remote paths & sessions
     isDrawingRef.current = false;
+    hasDrawnMeaningfulStrokeRef.current = false;
+    strokeStartCssPosRef.current = null;
     activePointerIdRef.current = null;
     exitedOutsideWhilePointerDownRef.current = false;
     lastOutsidePointerRef.current = null;
@@ -5377,6 +5404,36 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   // --- Drawing Pointer Events Hooks & Stroke Pipeline ---
 
+  const cancelCurrentProvisionalStroke = () => {
+    if (!isDrawingRef.current) return;
+    isDrawingRef.current = false;
+    hasDrawnMeaningfulStrokeRef.current = false;
+    strokeStartCssPosRef.current = null;
+
+    if (throttleTimeoutRef.current) {
+      clearTimeout(throttleTimeoutRef.current);
+      throttleTimeoutRef.current = null;
+    }
+
+    const tempCtx = tempCtxRef.current;
+    if (tempCtx) {
+      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    }
+
+    currentPathRef.current = [];
+    moveBatchRef.current = [];
+    networkStrokePointsRef.current = [];
+    canonicalStrokeRef.current = [];
+    lastNetworkPointRef.current = null;
+    drawerNetworkPointCountRef.current = 0;
+
+    hasFreeDrawPendingUndoCacheRef.current = false;
+
+    emitDrawCommand('draw_cancel', {
+      strokeId: currentLocalStrokeIdRef.current
+    });
+  };
+
   const startPencilOrEraserStroke = (logicalX: number, logicalY: number) => {
     if (propsRef.current.readOnly) return;
     if (isDrawingRef.current) return;
@@ -5393,6 +5450,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeOpacity = propsRef.current.opacity;
 
     isDrawingRef.current = true;
+    hasDrawnMeaningfulStrokeRef.current = false;
+    strokeStartCssPosRef.current = { x: logicalX, y: logicalY };
     startXRef.current = logicalX;
     startYRef.current = logicalY;
 
@@ -5448,20 +5507,33 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
   const processStrokeMove = (logicalX: number, logicalY: number) => {
     if (!isDrawingRef.current) return;
+
+    if (!hasDrawnMeaningfulStrokeRef.current && strokeStartCssPosRef.current) {
+      const dx = logicalX - strokeStartCssPosRef.current.x;
+      const dy = logicalY - strokeStartCssPosRef.current.y;
+      if (dx * dx + dy * dy >= 25.0) {
+        hasDrawnMeaningfulStrokeRef.current = true;
+      }
+    }
+
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
       if (isDrawingRef.current) {
         const activeTool = propsRef.current.tool;
         const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
-        if (isShape) {
-          const canvas = canvasRef.current;
-          if (canvas && currentPathRef.current.length > 0) {
-            const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
-            finishShapeDrawing(lastPt.x, lastPt.y);
-          } else {
-            finishShapeDrawing(startXRef.current, startYRef.current);
+        if (hasDrawnMeaningfulStrokeRef.current) {
+          if (isShape) {
+            const canvas = canvasRef.current;
+            if (canvas && currentPathRef.current.length > 0) {
+              const lastPt = currentPathRef.current[currentPathRef.current.length - 1];
+              finishShapeDrawing(lastPt.x, lastPt.y);
+            } else {
+              finishShapeDrawing(startXRef.current, startYRef.current);
+            }
+          } else if (activeTool === 'pencil' || activeTool === 'eraser') {
+            finishCurrentStroke();
           }
-        } else if (activeTool === 'pencil' || activeTool === 'eraser') {
-          finishCurrentStroke();
+        } else {
+          cancelCurrentProvisionalStroke();
         }
       }
       return;
@@ -5581,6 +5653,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
 
     isDrawingRef.current = false;
+    hasDrawnMeaningfulStrokeRef.current = false;
+    strokeStartCssPosRef.current = null;
 
     if (throttleTimeoutRef.current) {
       clearTimeout(throttleTimeoutRef.current);
@@ -5727,6 +5801,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     startXRef.current = rawX;
     startYRef.current = rawY;
     isDrawingRef.current = true;
+    hasDrawnMeaningfulStrokeRef.current = false;
+    strokeStartCssPosRef.current = { x: rawX, y: rawY };
     currentPathRef.current = [{ x: rawX, y: rawY }];
 
     if (localRedoStackRef.current.length > 0) {
@@ -5764,6 +5840,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCtx = tempCtxRef.current;
     if (!tempCanvas || !tempCtx || !isDrawingRef.current) return;
 
+    if (!hasDrawnMeaningfulStrokeRef.current && strokeStartCssPosRef.current) {
+      const dx = rawX - strokeStartCssPosRef.current.x;
+      const dy = rawY - strokeStartCssPosRef.current.y;
+      if (dx * dx + dy * dy >= 25.0) {
+        hasDrawnMeaningfulStrokeRef.current = true;
+      }
+    }
+
     const activeTool = propsRef.current.tool;
     const activeColor = propsRef.current.color;
     const activeWidth = propsRef.current.thickness;
@@ -5781,6 +5865,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     if (!canvas || !tempCanvas || !ctx || !tempCtx || !isDrawingRef.current) return;
 
     isDrawingRef.current = false;
+    hasDrawnMeaningfulStrokeRef.current = false;
+    strokeStartCssPosRef.current = null;
 
     if (throttleTimeoutRef.current) {
       clearTimeout(throttleTimeoutRef.current);
