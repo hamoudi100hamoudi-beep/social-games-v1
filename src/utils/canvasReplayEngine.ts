@@ -355,3 +355,48 @@ export function replaySingleCommand(
 
   return 'none';
 }
+
+/**
+ * Finalizes and renders all leftover mid-stroke paths accumulated in replaySessions
+ * (e.g. drawers who disconnected mid-stroke or incomplete historical strokes).
+ */
+export function renderLeftoverReplaySessions(
+  ctx: CanvasRenderingContext2D,
+  replayPaths: Record<string, { x: number; y: number }[]>,
+  replaySessions: Record<string, ReplaySession>,
+  options: ReplayRenderOptions,
+  onItemError?: (error: unknown) => void,
+  clearPathsAfterRender?: boolean
+): void {
+  Object.keys(replaySessions).forEach((instId) => {
+    try {
+      const session = replaySessions[instId];
+      const path = replayPaths[instId];
+      if (session && path && path.length > 0) {
+        const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
+        if (isShape) {
+          const startPt = path[0];
+          const lastPt = path[path.length - 1];
+          drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
+        } else {
+          drawEntirePath(
+            ctx,
+            path,
+            session.tool,
+            session.color,
+            session.width,
+            session.opacity,
+            Boolean(options.isFreeDraw || options.enableDestinationOutEraser)
+          );
+        }
+      }
+      if (clearPathsAfterRender && path) {
+        path.length = 0;
+      }
+    } catch (itemErr) {
+      if (onItemError) {
+        onItemError(itemErr);
+      }
+    }
+  });
+}

@@ -25,7 +25,7 @@ import {
   CanvasUndoCache
 } from '../../utils/canvasUndoCache';
 export type { FreeDrawUndoCacheMeta } from '../../utils/canvasUndoCache';
-import { replaySingleCommand, ReplayRenderOptions } from '../../utils/canvasReplayEngine';
+import { replaySingleCommand, renderLeftoverReplaySessions, ReplayRenderOptions } from '../../utils/canvasReplayEngine';
 import { evaluateStateTransitionReset, GameStateSnapshot } from '../../utils/gameStateSyncHelper';
 import {
   getCommandSignature,
@@ -2178,24 +2178,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
 
       const leftoverFastStart = diag ? performance.now() : 0;
-      Object.keys(replaySessions).forEach((instId) => {
-        try {
-          const session = replaySessions[instId];
-          const path = replayPaths[instId];
-          if (session && path && path.length > 0) {
-            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-            if (isShape) {
-              const startPt = path[0];
-              const lastPt = path[path.length - 1];
-              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
-            } else {
-              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser));
-            }
-          }
-        } catch (itemErr) {
-          // Ignore
-        }
-      });
+      renderLeftoverReplaySessions(ctx, replayPaths, replaySessions, replayOptionsRef.current);
       if (diag) {
         diag.replayOtherDurationMs += (performance.now() - leftoverFastStart);
       }
@@ -2492,22 +2475,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           const replayPaths: Record<string, { x: number; y: number }[]> = {};
           const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
           applyReplayCommand(ctx, newCmdRecord, replayPaths, replaySessions);
-          Object.keys(replaySessions).forEach((instId) => {
-            try {
-              const session = replaySessions[instId];
-              const path = replayPaths[instId];
-              if (session && path && path.length > 0) {
-                const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-                if (isShape) {
-                  const startPt = path[0];
-                  const lastPt = path[path.length - 1];
-                  drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
-                } else {
-                  drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser));
-                }
-              }
-            } catch (err) {}
-          });
+          renderLeftoverReplaySessions(ctx, replayPaths, replaySessions, replayOptionsRef.current);
           isReplayingRef.current = false;
         }
 
@@ -2666,24 +2634,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       });
 
       // Render any leftover paths (e.g. drawer disconnected mid-stroke)
-      Object.keys(replaySessions).forEach((instId) => {
-        try {
-          const session = replaySessions[instId];
-          const path = replayPaths[instId];
-          if (session && path && path.length > 0) {
-            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-            if (isShape) {
-              const startPt = path[0];
-              const lastPt = path[path.length - 1];
-              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
-            } else {
-              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser));
-            }
-          }
-        } catch (itemErr) {
-          console.error("[DrawingCanvasCore] Leftover stroke parsing error: ", itemErr);
-        }
-      });
+      renderLeftoverReplaySessions(
+        ctx,
+        replayPaths,
+        replaySessions,
+        replayOptionsRef.current,
+        (itemErr) => console.error("[DrawingCanvasCore] Leftover stroke parsing error: ", itemErr)
+      );
 
       // Clean up local temp active sessions cache to clear residual lines
       activeSessionsRef.current = {};
@@ -3053,24 +3010,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       // Render any leftover committed strokes
       const leftoverStart = diag ? performance.now() : 0;
-      Object.keys(replaySessions).forEach((instId) => {
-        try {
-          const session = replaySessions[instId];
-          const path = replayPaths[instId];
-          if (session && path && path.length > 0) {
-            const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-            if (isShape) {
-              const startPt = path[0];
-              const lastPt = path[path.length - 1];
-              drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
-            } else {
-              drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser));
-            }
-          }
-        } catch (itemErr) {
-          // Ignore
-        }
-      });
+      renderLeftoverReplaySessions(ctx, replayPaths, replaySessions, replayOptionsRef.current);
       if (diag) {
         diag.replayOtherDurationMs += (performance.now() - leftoverStart);
       }
@@ -3898,23 +3838,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               return;
             }
 
-            Object.keys(replaySessions).forEach((instId) => {
-              try {
-                const session = replaySessions[instId];
-                const path = replayPaths[instId];
-                if (session && path && path.length > 0) {
-                  const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-                  if (isShape) {
-                    const startPt = path[0];
-                    const lastPt = path[path.length - 1];
-                    drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, session.tool, session.color, session.width, session.opacity, false);
-                  } else {
-                    drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser));
-                  }
-                }
-                if (path) path.length = 0;
-              } catch (err) {}
-            });
+            renderLeftoverReplaySessions(
+              ctx,
+              replayPaths,
+              replaySessions,
+              replayOptionsRef.current,
+              undefined,
+              true
+            );
 
             // IMPORTANT: DO NOT wipe activeSessionsRef.current = {} here!
             // Live drawing sessions by other users that arrived while chunks were rendering are preserved.
