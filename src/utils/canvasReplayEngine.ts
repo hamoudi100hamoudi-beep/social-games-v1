@@ -28,10 +28,28 @@ export interface ReplayRenderOptions {
 }
 
 export interface ReplayCommandEnvelope {
-  data?: any;
+  data?: unknown;
   _replayHint?: string;
   _replayColor?: string;
   _replayOpacity?: number;
+}
+
+export interface DecodedReplayData {
+  instanceId?: string;
+  tool?: ToolType;
+  color?: string;
+  width?: number;
+  opacity?: number;
+  x?: number;
+  y?: number;
+  startX?: number;
+  startY?: number;
+  endX?: number;
+  endY?: number;
+  isCancelled?: boolean;
+  points?: { x: number; y: number }[];
+  moves?: { x: number; y: number }[];
+  targetRGBA?: TargetRGBA;
 }
 
 export interface ReplayUndoDiagnostics {
@@ -62,7 +80,7 @@ export type FloodFillFunction = (
   logicalWidth?: number,
   logicalHeight?: number,
   expectedTarget?: TargetRGBA,
-  joinDiag?: any
+  joinDiag?: ReplayJoinSyncDiagnostics | null
 ) => (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean; filledPixelCount?: number }) | null;
 
 /**
@@ -85,7 +103,8 @@ export function replaySingleCommand(
   const decoded = decodeBinaryDrawMessage(cmdObj.data);
   if (!decoded || !decoded.data) return 'none';
 
-  const { event, data } = decoded;
+  const event: string = decoded.event;
+  const data = decoded.data as DecodedReplayData;
   const instId: string = data.instanceId || 'default';
   const cmdTool: ToolType = data.tool || 'pencil';
   const cmdColor: string = data.color || '#000000';
@@ -130,8 +149,8 @@ export function replaySingleCommand(
       width: cmdWidth,
       opacity: cmdOpacity
     };
-    const rx = data.x * options.logicalWidth;
-    const ry = data.y * options.logicalHeight;
+    const rx = (data.x || 0) * options.logicalWidth;
+    const ry = (data.y || 0) * options.logicalHeight;
     path.length = 0;
     path.push({ x: rx, y: ry });
     return 'none';

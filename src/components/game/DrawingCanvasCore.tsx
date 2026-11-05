@@ -25,7 +25,7 @@ import {
   CanvasUndoCache
 } from '../../utils/canvasUndoCache';
 export type { FreeDrawUndoCacheMeta } from '../../utils/canvasUndoCache';
-import { replaySingleCommand } from '../../utils/canvasReplayEngine';
+import { replaySingleCommand, ReplayRenderOptions } from '../../utils/canvasReplayEngine';
 import { evaluateStateTransitionReset, GameStateSnapshot } from '../../utils/gameStateSyncHelper';
 import {
   getCommandSignature,
@@ -2581,6 +2581,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
+  // ⚡ Single reusable ReplayRenderOptions object (eliminates per-command options object allocations)
+  const replayOptionsRef = useRef<ReplayRenderOptions>({
+    logicalWidth: LOGICAL_WIDTH,
+    logicalHeight: LOGICAL_HEIGHT,
+    isFreeDraw: false,
+    enableDestinationOutEraser: false
+  });
+
   // 🛡️ Unified History Replay Engine: Ensures that Live Replay, New Join Sync, and Remote Undo
   // execute identical drawing, shape, path, clear, and bucket fill operations across all environments.
   const applyReplayCommand = (
@@ -2592,17 +2600,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     joinDiag?: JoinSyncDiagnostics | null
   ) => {
     try {
+      const opts = replayOptionsRef.current;
+      opts.logicalWidth = LOGICAL_WIDTH;
+      opts.logicalHeight = LOGICAL_HEIGHT;
+      opts.isFreeDraw = propsRef.current.isFreeDraw;
+      opts.enableDestinationOutEraser = propsRef.current.enableDestinationOutEraser;
+
       const effect = replaySingleCommand(
         ctx,
         cmdObj,
         replayPaths,
         replaySessions,
-        {
-          logicalWidth: LOGICAL_WIDTH,
-          logicalHeight: LOGICAL_HEIGHT,
-          isFreeDraw: propsRef.current.isFreeDraw,
-          enableDestinationOutEraser: propsRef.current.enableDestinationOutEraser
-        },
+        opts,
         floodFill,
         diag,
         joinDiag
