@@ -25,6 +25,7 @@ import {
   CanvasUndoCache
 } from '../../utils/canvasUndoCache';
 export type { FreeDrawUndoCacheMeta } from '../../utils/canvasUndoCache';
+import { replaySingleCommand } from '../../utils/canvasReplayEngine';
 import { evaluateStateTransitionReset, GameStateSnapshot } from '../../utils/gameStateSyncHelper';
 import {
   getCommandSignature,
@@ -2591,211 +2592,32 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     joinDiag?: JoinSyncDiagnostics | null
   ) => {
     try {
-      const decoded = decodeBinaryDrawMessage(cmdObj.data);
-      if (!decoded) return;
-      const { event, data } = decoded;
-      if (!data) return;
+      const effect = replaySingleCommand(
+        ctx,
+        cmdObj,
+        replayPaths,
+        replaySessions,
+        {
+          logicalWidth: LOGICAL_WIDTH,
+          logicalHeight: LOGICAL_HEIGHT,
+          isFreeDraw: propsRef.current.isFreeDraw,
+          enableDestinationOutEraser: propsRef.current.enableDestinationOutEraser
+        },
+        floodFill,
+        diag,
+        joinDiag
+      );
 
-      const instId = data.instanceId || 'default';
-      const cmdTool = data.tool || 'pencil';
-      const cmdColor = data.color || '#000000';
-      const cmdWidth = data.width || 5;
-      const cmdOpacity = data.opacity !== undefined ? data.opacity : 1;
-
-      if (!replayPaths[instId]) {
-        replayPaths[instId] = [];
-      }
-      const path = replayPaths[instId];
-
-      if (event === 'draw_stroke') {
-        const isShape = cmdTool !== 'pencil' && cmdTool !== 'eraser';
-        const scaledPoints = (data.points || []).map((pt: any) => ({
-          x: pt.x * LOGICAL_WIDTH,
-          y: pt.y * LOGICAL_HEIGHT
-        }));
-        if (scaledPoints.length > 0) {
-          if (isShape && scaledPoints.length >= 2) {
-            const startPt = scaledPoints[0];
-            const lastPt = scaledPoints[scaledPoints.length - 1];
-            drawShape(ctx, startPt.x, startPt.y, lastPt.x, lastPt.y, cmdTool, cmdColor, cmdWidth, cmdOpacity, false);
-          } else {
-            drawEntirePath(ctx, scaledPoints, cmdTool, cmdColor, cmdWidth, cmdOpacity, Boolean(propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser));
-          }
-        }
-        saveSnapshot();
-      } else if (event === 'draw_start') {
-        replaySessions[instId] = {
-          tool: cmdTool,
-          color: cmdColor,
-          width: cmdWidth,
-          opacity: cmdOpacity
-        };
-        const rx = data.x * LOGICAL_WIDTH;
-        const ry = data.y * LOGICAL_HEIGHT;
-        path.length = 0;
-        path.push({ x: rx, y: ry });
-      } else if (event === 'draw_move') {
-        const handleMovePoint = (mx: number, my: number) => {
-          path.push({ x: mx, y: my });
-        };
-
-        if (data.moves && Array.isArray(data.moves)) {
-          data.moves.forEach((m: any) => {
-            handleMovePoint(m.x * LOGICAL_WIDTH, m.y * LOGICAL_HEIGHT);
-          });
-        } else if (data.x !== undefined && data.y !== undefined) {
-          handleMovePoint(data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT);
-        }
-      } else if (event === 'draw_end') {
-        const session = replaySessions[instId] || {
-          tool: 'pencil',
-          color: '#000000',
-          width: 5,
-          opacity: 1
-        };
-        const isShape = session.tool !== 'pencil' && session.tool !== 'eraser';
-        if (!data.isCancelled && path.length > 0 && !isShape) {
-          drawEntirePath(ctx, path, session.tool, session.color, session.width, session.opacity, Boolean(propsRef.current.isFreeDraw || propsRef.current.enableDestinationOutEraser));
-        }
-
-        if (!data.isCancelled && isShape && data.startX !== undefined && data.startY !== undefined) {
-          const sX = data.startX * LOGICAL_WIDTH;
-          const sY = data.startY * LOGICAL_HEIGHT;
-          const eX = (data.x !== undefined ? data.x : (data.endX !== undefined ? data.endX : 0)) * LOGICAL_WIDTH;
-          const eY = (data.y !== undefined ? data.y : (data.endY !== undefined ? data.endY : 0)) * LOGICAL_HEIGHT;
-          drawShape(ctx, sX, sY, eX, eY, session.tool, session.color, session.width, session.opacity, false);
-        }
-        path.length = 0;
-        delete replaySessions[instId];
-        if (!data.isCancelled) {
-          saveSnapshot();
-        }
-      } else if (event === 'draw_cancel') {
-        path.length = 0;
-        delete replaySessions[instId];
-      } else if (event === 'draw_clear') {
-        Object.keys(replayPaths).forEach((k) => delete replayPaths[k]);
-        Object.keys(replaySessions).forEach((k) => delete replaySessions[k]);
+      if (effect === 'clear') {
         resetCanvasBackingStores(ctx, tempCtxRef.current);
         saveSnapshot();
-      } else if (event === 'draw_action') {
-        if (cmdTool === 'bucket' && data.x !== undefined && data.y !== undefined) {
-          if (cmdObj && cmdObj._replayHint === 'full_canvas_opaque' && (cmdOpacity === undefined || cmdOpacity >= 0.95)) {
-            if (diag) diag.hints.usedShortcut++;
-            const fillHex = cmdObj._replayColor || cmdColor;
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0);
-            ctx.fillStyle = fillHex;
-            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            ctx.restore();
-          } else if (cmdObj && cmdObj._replayHint === 'noop') {
-            if (diag) diag.hints.usedShortcut++;
-            // 🛡️ Verified No-Op check: test 1x1 candidate seed pixel
-            let isVerifiedNoOp = false;
-            try {
-              const cw = ctx.canvas.width;
-              const ch = ctx.canvas.height;
-              const sx = Math.floor(data.x * cw);
-              const sy = Math.floor(data.y * ch);
-              if (sx >= 0 && sx < cw && sy >= 0 && sy < ch) {
-                const p = ctx.getImageData(sx, sy, 1, 1).data;
-                let fillHex = cmdColor;
-                if (fillHex.length === 4) {
-                  fillHex = '#' + fillHex[1] + fillHex[1] + fillHex[2] + fillHex[2] + fillHex[3] + fillHex[3];
-                }
-                const fr = parseInt(fillHex.slice(1, 3), 16) || 0;
-                const fg = parseInt(fillHex.slice(3, 5), 16) || 0;
-                const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
-                if (p[3] >= 240 && (cmdOpacity === undefined || cmdOpacity >= 0.95) &&
-                    Math.abs(p[0] - fr) <= 5 && Math.abs(p[1] - fg) <= 5 && Math.abs(p[2] - fb) <= 5) {
-                  isVerifiedNoOp = true;
-                }
-              }
-            } catch (pErr) {
-              isVerifiedNoOp = false;
-            }
-
-            if (!isVerifiedNoOp) {
-              if (diag) {
-                diag.hints.forcedFill++;
-                if (cmdObj?._replayHint) diag.hints.discarded++;
-              }
-              const fillStart = (diag || joinDiag) ? performance.now() : 0;
-              const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA, joinDiag);
-              if (diag) {
-                diag.floodFillExecutions++;
-                const dur = performance.now() - fillStart;
-                diag.cumulativeFillDurationMs += dur;
-                if (dur > diag.maxFillDurationMs) diag.maxFillDurationMs = dur;
-                if (fillRes) {
-                  const pCount = fillRes.filledPixelCount || 0;
-                  diag.cumulativeFilledPixels += pCount;
-                  if (pCount > diag.maxFillPixelCount) diag.maxFillPixelCount = pCount;
-                }
-              }
-              if (joinDiag) {
-                joinDiag.floodFillExecutions++;
-                const dur = performance.now() - fillStart;
-                joinDiag.cumulativeFillDurationMs += dur;
-              }
-              if (cmdObj) {
-                if (fillRes?.isFullCanvasOpaque) {
-                  cmdObj._replayHint = 'full_canvas_opaque';
-                  cmdObj._replayColor = fillRes.fillHex || cmdColor;
-                  cmdObj._replayOpacity = cmdOpacity;
-                } else if (fillRes?.isNoOp) {
-                  cmdObj._replayHint = 'noop';
-                } else {
-                  delete cmdObj._replayHint;
-                  delete cmdObj._replayColor;
-                  delete cmdObj._replayOpacity;
-                }
-              }
-            }
-          } else {
-            if (diag) {
-              diag.hints.forcedFill++;
-              if (cmdObj?._replayHint) diag.hints.discarded++;
-            }
-            const fillStart = (diag || joinDiag) ? performance.now() : 0;
-            const fillRes = floodFill(ctx, data.x * LOGICAL_WIDTH, data.y * LOGICAL_HEIGHT, cmdColor, cmdOpacity, LOGICAL_WIDTH, LOGICAL_HEIGHT, data.targetRGBA, joinDiag);
-            if (diag) {
-              diag.floodFillExecutions++;
-              const dur = performance.now() - fillStart;
-              diag.cumulativeFillDurationMs += dur;
-              if (dur > diag.maxFillDurationMs) diag.maxFillDurationMs = dur;
-              if (fillRes) {
-                const pCount = fillRes.filledPixelCount || 0;
-                diag.cumulativeFilledPixels += pCount;
-                if (pCount > diag.maxFillPixelCount) diag.maxFillPixelCount = pCount;
-              }
-            }
-            if (joinDiag) {
-              joinDiag.floodFillExecutions++;
-              const dur = performance.now() - fillStart;
-              joinDiag.cumulativeFillDurationMs += dur;
-            }
-            if (cmdObj) {
-              if (fillRes?.isFullCanvasOpaque) {
-                cmdObj._replayHint = 'full_canvas_opaque';
-                cmdObj._replayColor = fillRes.fillHex || cmdColor;
-                cmdObj._replayOpacity = cmdOpacity;
-              } else if (fillRes?.isNoOp) {
-                cmdObj._replayHint = 'noop';
-              } else {
-                delete cmdObj._replayHint;
-                delete cmdObj._replayColor;
-                delete cmdObj._replayOpacity;
-              }
-            }
-          }
-          saveSnapshot();
-        }
-      } else if (event === 'draw_undo') {
+      } else if (effect === 'snapshot') {
+        saveSnapshot();
+      } else if (effect === 'undo') {
         if (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) {
           executeUndo(false);
         }
-      } else if (event === 'draw_redo') {
+      } else if (effect === 'redo') {
         if (!propsRef.current.isFreeDraw && !propsRef.current.isExperimental) {
           executeRedo(false);
         }
