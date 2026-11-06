@@ -7,10 +7,10 @@
 
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
-| **المرحلة المعمارية الحالية** | `PHASE 4F` (مغلقة بقرار عدم الاستخراج) ➔ `PHASE 5B` | تم إغلاق `PHASE 4F` بقرار إبقاء المزامنة في المكون. المرحلة القادمة المخططة: تدقيق معماري لـ `PHASE 5B` |
-| **الدفعة الحالية / الأخيرة** | `PHASE 4F` | `[x] CLOSED (NO EXTRACTION WARRANTED)` — انتهى التدقيق المعماري للقراءة فقط وتقرر عدم استخراج `DrawingSocketSync` |
-| **آخر دفعة متمة بالكامل** | `SUB-BATCH-4E-1C Stage 2B` | `[x] COMPLETED` — استخراج `renderLeftoverReplaySessions` وتحديث مواضع الاستدعاء الـ5 |
-| **الدفعة التالية المخططة** | `PHASE 5B` | `[ ] PLANNED` — تدقيق معماري للقراءة فقط لفئة `RoomManager` ومسؤولياتها (`server/rooms.ts`) |
+| **المرحلة المعمارية الحالية** | `PHASE 5B` (جارٍ تنفيذ دفعاتها تدريجياً) | تم إكمال `SUB-BATCH-5B-1` بنجاح. الخطوة التالية: تدقيق معماري للقراءة فقط لـ `PHASE 5B Stage 2` |
+| **الدفعة الحالية / الأخيرة** | `SUB-BATCH-5B-1` | `[x] COMPLETED` — استخراج خوارزميات سجل الرسم والتراجع إلى `server/roomDrawingHistory.ts` |
+| **آخر دفعة متمة بالكامل** | `SUB-BATCH-5B-1` | `[x] COMPLETED` — 4 دوال لـ `server/roomDrawingHistory.ts` مع بقاء الواجهات التوافقية لـ `RoomManager` |
+| **الدفعة التالية المخططة** | `PHASE 5B Stage 2` | `[ ] PLANNED — READ-ONLY AUDIT` — تدقيق معماري للقراءة فقط لملكية بث الرسم الحر النشط والاعتماد المعياري |
 | **المخاطر والعوائق المعمارية المفتوحة** | لا يوجد عوائق حرجة | جميع الثوابت المعمارية ونظام الرسم والتراجع والمزامنة مستقرة بالكامل وتحت الحماية المعمارية |
 | **وثيقة التفكيك التفصيلية** | [ARCHITECTURE_DECOMPOSITION_PLAN.md](./ARCHITECTURE_DECOMPOSITION_PLAN.md) | الوثيقة المرجعية للمسؤوليات والاعتماديات وشروط الحفاظ على السلوك |
 
@@ -173,16 +173,29 @@
   - `server/utils/arabicFuzzyMatch.ts`
   - `server/data/wordsDictionary.ts`
   - `server/utils/binaryBufferHelpers.ts`
-- [ ] **PHASE 5B — تفكيك وحدات السيرفر الداخلية (RoomManager Modular Controllers)**:
-  - **الحالة**: `[ ] PLANNED`
-  - **الهدف المخطط**: دراسة إمكانية فصل مسؤوليات `RoomManager` بالسيرفر (`server/rooms.ts`) إلى وحدات تحكم متخصصة مع الحفاظ التام والمطلق على مصدر الحقيقة الموحد لحالة الغرف في الذاكرة (`In-Memory Room State`).
-  - **الإجراء التالي**: تدقيق معماري للقراءة فقط (READ-ONLY architectural audit) لتحديد الاعتماديات ومصادر الحقيقة قبل أي خطوة تنفيذية.
-  - **مجالات التدقيق المحتملة مستقبلاً (مواضيع فحص فقط وليست مهام استخراج معتمدة)**:
-    - دورة حياة الغرف (Room Lifecycle).
-    - دورة حياة الجولات والانتقالات (Game Round Lifecycle & Transitions).
-    - دورة حياة الرسم الحر وسجل الرسم المعياري (Free Draw Lifecycle & Canonical History).
-    - سلوك السيرفر في سجل الرسم والتراجع وإلغاء التراجع (Drawing History & Undo/Redo).
-    - إدارة اللاعبين وإعادة الاتصال وهويات الرسم (Player Membership, Reconnection & Identities).
+- [~] **PHASE 5B — تفكيك وحدات السيرفر الداخلية (RoomManager Modular Controllers)**:
+  - **الحالة**: **مرحلة معمارية مستمرة جارٍ تنفيذ دفعاتها تدريجياً (Ongoing Phase)**
+  - [x] **Stage 1: Full RoomManager Architectural Audit** — `[x] COMPLETED`
+  - [x] **Stage 1B: Drawing Subsystem Ownership Re-validation** — `[x] COMPLETED`
+  - [x] **SUB-BATCH-5B-1 — Server Drawing History & Undo/Redo Extraction**:
+    - **الحالة**: `[x] COMPLETED`
+    - **الملف الجديد المنشأ**: `server/roomDrawingHistory.ts`
+    - **الملف المعدل**: `server/rooms.ts`
+    - **الدوال المستخرجة**: `recordRoomDrawCommand`, `undoRoomFreeDrawStroke`, `undoRoomLastDrawing`, `redoRoomDrawing`.
+    - **التوصيف الفعلي والثوابت**:
+      - تصنيف الدوال كـ Synchronous Room-scoped State Algorithms تعمل بالمرجع على كائن `Room` الأصلي.
+      - بقاء `RoomManager` المالك الحصري والوحيد لخريطة `this.rooms` في الذاكرة دون تخزين مكرر.
+      - بقاء الواجهات التوافقية لـ `RoomManager` دون تغيير في التوقيع أو المستدعين الخارجيين أو الاستدعاءات الداخلية (`handleFreeDrawEnd`, `handleFreeDrawClear`).
+      - خلو الوحدة تماماً من Socket.IO وعضوية اللاعبين والمؤقتات وانتقالات الجولات.
+      - رفع `extractInstanceIdFromBuffer` إلى نطاق الوحدة وتفادي إنشائه المتكرر.
+      - حماية الدلو والمسح كأول إجراء `type === 4 || 10 || 5`، قفل الرسم عند التراجع `isDrawingActive = false`، تراجع بخطوة واحدة، حذف ذري `Type 9 + Type 3` وحذف مستهدف لخطوات Free Draw مع إبطال التخزين المعياري المؤقت `freeDrawCanonicalCache`.
+    - **المسؤوليات المتبقية داخل `RoomManager`**: خريطة الغرف، الجولات، الـ Tick الدوري، مؤقتات المراحل، إدارة اللاعبين وإعادة الاتصال، سجل هويات الرسم (`drawingIdentities`)، بدء/إيقاف الرسم الحر، بث وسريان الرسم الحر النشط، فك ترميز وتنسيق `Type 13`/`Type 2` والاعتماد `Type 9` وإشعارات المقابس، ودالة `clearDrawHistoryForRoomAndClient`.
+    - **نتائج التحقق الفعلي**: `test_session_identity_suite` (626/626 نجاح)، `test_experimental_draw_trial` (نجاح)، `test_type13_hardening` (نجاح)، `test_freedraw_bucket_undo_fastpath` (4/4 نجاح)، `test_controlled_fixes_suite` (نجاح Tests A-G)، `tsc --noEmit` (0 أخطاء)، `npm run build` (بناء ناجح).
+  - [ ] **Stage 2: Free Draw Streaming Ownership Audit**:
+    - **الحالة**: `[ ] PLANNED — READ-ONLY AUDIT`
+    - **الملف المستهدف**: `server/rooms.ts`
+    - **المواضيع المستهدفة للتدقيق**: دورة حياة الضربة النشطة، معالجة `Type 2` و `Type 13`، اعتماد `Type 9` المعياري، إشعارات `Type 11` و `Type 12`، دورة حياة التخزين المعياري، ومزامنة الانضمام النشط.
+    - **القاعدة الإلزامية**: تنفيذ تدقيق معماري للقراءة فقط أولاً دون الموافقة المسبقة على الاستخراج.
 
 ---
 
