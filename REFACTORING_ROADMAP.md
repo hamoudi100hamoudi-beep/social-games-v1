@@ -7,10 +7,10 @@
 
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
-| **المرحلة المعمارية الحالية** | `PHASE 5B` (جارٍ تنفيذ دفعاتها تدريجياً) | تم إكمال `SUB-BATCH-5B-1` بنجاح. الخطوة التالية: تدقيق معماري للقراءة فقط لـ `PHASE 5B Stage 2` |
-| **الدفعة الحالية / الأخيرة** | `SUB-BATCH-5B-1` | `[x] COMPLETED` — استخراج خوارزميات سجل الرسم والتراجع إلى `server/roomDrawingHistory.ts` |
-| **آخر دفعة متمة بالكامل** | `SUB-BATCH-5B-1` | `[x] COMPLETED` — 4 دوال لـ `server/roomDrawingHistory.ts` مع بقاء الواجهات التوافقية لـ `RoomManager` |
-| **الدفعة التالية المخططة** | `PHASE 5B Stage 2` | `[ ] PLANNED — READ-ONLY AUDIT` — تدقيق معماري للقراءة فقط لملكية بث الرسم الحر النشط والاعتماد المعياري |
+| **المرحلة المعمارية الحالية** | `PHASE 5B` (تم إكمال `SUB-BATCH-5B-1` و `SUB-BATCH-5B-2`) | تم استخراج محرك الرسم المعياري المستمر إلى `server/roomCanonicalStrokeEngine.ts`. الخطوة التالية: `PHASE 5C` (تدقيق تماسك أنماط الغرف النشطة) |
+| **الدفعة الحالية / الأخيرة** | `SUB-BATCH-5B-2` | `[x] COMPLETED` — استخراج محرك الرسم المعياري المستمر بالسيرفر إلى `server/roomCanonicalStrokeEngine.ts` |
+| **آخر دفعة متمة بالكامل** | `SUB-BATCH-5B-2` | `[x] COMPLETED` — 7 دوال لـ `server/roomCanonicalStrokeEngine.ts` مع بقاء الواجهات التوافقية لـ `RoomManager` |
+| **الدفعة التالية المخططة** | `PHASE 5C` | `[ ] PLANNED — READ-ONLY AUDIT` — تدقيق معماري للقراءة فقط لتأكيد تماسك قواعد خيارات أنماط الغرف النشطة |
 | **المخاطر والعوائق المعمارية المفتوحة** | لا يوجد عوائق حرجة | جميع الثوابت المعمارية ونظام الرسم والتراجع والمزامنة مستقرة بالكامل وتحت الحماية المعمارية |
 | **وثيقة التفكيك التفصيلية** | [ARCHITECTURE_DECOMPOSITION_PLAN.md](./ARCHITECTURE_DECOMPOSITION_PLAN.md) | الوثيقة المرجعية للمسؤوليات والاعتماديات وشروط الحفاظ على السلوك |
 
@@ -41,8 +41,11 @@
     * خادم المقابس اللحظية `socket.io` (`4.8.3`) مع دعم MsgPack الثنائي.
   * **إدارة حالة الغرف (Room State Architecture)**:
     * إدارة كاملة في الذاكرة العشوائية (`In-Memory Room Management`) عبر فئة `RoomManager` داخل `server/rooms.ts` لضمان أقل زمن تأخير ممكن (Low Latency) دون وسيط قاعدة بيانات لغرف اللعب السريع.
-  * **مسار محرك الرسم النشط المعتمد (Active Drawing Pipeline)**:
-    * البنية الهرمية المعزولة: `IsolatedDrawingLayer` -> `ExperimentalDrawingBoard` -> `DrawingCanvasCore`.
+  * **مسار محرك الرسم النشط المعتمد ومصفوفة أنماط الغرف (Active Drawing Pipeline & Mode Matrix)**:
+    * **وضع الرسم الحر (`isFreeDraw: true`)**: يُوجّه إلى `GameRoom.tsx`.
+    * **النماذج التنافسية الحالية (`isExperimental: true`)**: (`General #Test`, `General #10P`, `Experimental Draw`, Custom fallback) تُوجّه جميعها إلى `ExperimentalGameRoom.tsx`.
+    * **البنية الهرمية المعزولة للرسم المشتركة**: `IsolatedDrawingLayer` -> `ExperimentalDrawingBoard` -> `DrawingCanvasCore` -> المحرك المعياري المستمر بالسيرفر (`Server Canonical Continuous Stroke Pipeline`).
+    * **مسار الرسم الخام القديم غير المجمع (`isFreeDraw: false && isExperimental: false`)**: مسار توافق قديم لا يوجد له أي مسار روم نشط مدمج في الواجهة والتوجيه الحالي.
 
 ---
 
@@ -160,9 +163,10 @@
     - عمليات التخزين المؤقت والنقاط المرجعية للتراجع (`undoCache` و `checkpointManager`).
     - دورة حياة إعادة بناء السجل عبر RAF ومنع ازدواجية الحزم (`areHistoryArraysEqual`).
     - دورة حياة React ومراجع المكون وحالة واجهة المستخدم وإلغاء أجيال المزامنة.
-  - **التدقيق التكميلي للسيرفر**:
-    - مسار حركة السيرفر: يميز `server/registerDrawBinaryHandler.ts` بين المسار المعتمد في Free Draw / Experimental (معالجة معيارية) وبين الرومات التنافسية العادية (بث اعتيادي). مسار الإرسال من العميل يستخدم `socket.volatile` لأحداث الحركة في المواضع المنفذة حالياً.
-    - إدارة الذاكرة وتخصيص الكائنات: يستخدم الكود مجمع نقاط قابلاً لإعادة الاستخدام في `drawBinaryHelper.ts`، مع بقاء تخصيصات كائنات ومصفوفات ومؤقتات في أجزاء أخرى من المسار؛ والقرار يهدف لتفادي إضافة طبقات كولباك إضافية.
+  - **التدقيق التكميلي للسيرفر المحدث**:
+    - مسار حركة السيرفر: جميع النماذج التنافسية المحددة مسبقاً (`General #Test`, `General #10P`, `Experimental Draw`, Custom fallback) تستخدم `isExperimental: true` ووضع الرسم الحر يستخدم `isFreeDraw: true`؛ وبالتالي تشترك جميع الأنماط النشطة في المحرك المعياري المستمر (Canonical Continuous Stroke Pipeline).
+    - مسار الرسم الخام القديم غير المجمع (`isFreeDraw: false && isExperimental: false`): يظل مسار توافق قديم لا يوجد له روم نشط مدمج في التوجيه الحالي.
+    - إدارة الذاكرة وتخصيص الكائنات: يستخدم الكود مجمع نقاط قابلاً لإعادة الاستخدام في `drawBinaryHelper.ts` مع الحفاظ على المعالجة التزامنية ومنع النسخ غير الضرورية في مسار الحركة عالي التردد دون مطالبات أداء غير مثبتة باختبارات قياسية.
     - معالجات الانضمام والمغادرة: فحص `server/registerJoinRoomHandler.ts` (إرسال السجل والتراجع ومزامنة خطوط Free Draw النشطة للداخلين الجدد) و `server/registerLeaveRoomHandler.ts` (حذف موثق بالسيرفر وإسناد الانقطاع إلى `roomManager.handleDisconnect()` في `server.ts`).
   - **النتيجة**: أغلقت المرحلة دون استخراج أو إنشاء أي ملفات كود أو مساس ببروتوكول السيرفر أو إضافة مطالبات غير مثبتة.
 
@@ -191,11 +195,38 @@
       - حماية الدلو والمسح كأول إجراء `type === 4 || 10 || 5`، قفل الرسم عند التراجع `isDrawingActive = false`، تراجع بخطوة واحدة، حذف ذري `Type 9 + Type 3` وحذف مستهدف لخطوات Free Draw مع إبطال التخزين المعياري المؤقت `freeDrawCanonicalCache`.
     - **المسؤوليات المتبقية داخل `RoomManager`**: خريطة الغرف، الجولات، الـ Tick الدوري، مؤقتات المراحل، إدارة اللاعبين وإعادة الاتصال، سجل هويات الرسم (`drawingIdentities`)، بدء/إيقاف الرسم الحر، بث وسريان الرسم الحر النشط، فك ترميز وتنسيق `Type 13`/`Type 2` والاعتماد `Type 9` وإشعارات المقابس، ودالة `clearDrawHistoryForRoomAndClient`.
     - **نتائج التحقق الفعلي**: `test_session_identity_suite` (626/626 نجاح)، `test_experimental_draw_trial` (نجاح)، `test_type13_hardening` (نجاح)، `test_freedraw_bucket_undo_fastpath` (4/4 نجاح)، `test_controlled_fixes_suite` (نجاح Tests A-G)، `tsc --noEmit` (0 أخطاء)، `npm run build` (بناء ناجح).
-  - [ ] **Stage 2: Free Draw Streaming Ownership Audit**:
-    - **الحالة**: `[ ] PLANNED — READ-ONLY AUDIT`
-    - **الملف المستهدف**: `server/rooms.ts`
-    - **المواضيع المستهدفة للتدقيق**: دورة حياة الضربة النشطة، معالجة `Type 2` و `Type 13`، اعتماد `Type 9` المعياري، إشعارات `Type 11` و `Type 12`، دورة حياة التخزين المعياري، ومزامنة الانضمام النشط.
-    - **القاعدة الإلزامية**: تنفيذ تدقيق معماري للقراءة فقط أولاً دون الموافقة المسبقة على الاستخراج.
+  - [x] **SUB-BATCH-5B-2 — Server Canonical Stroke Engine Extraction**:
+    - **الحالة**: `[x] COMPLETED`
+    - **الملف الجديد المنشأ**: `server/roomCanonicalStrokeEngine.ts`
+    - **الملف المعدل**: `server/rooms.ts`
+    - **الدوال المستخرجة**: `getOrCreateFreeDrawStrokes`, `getOrCreateFreeDrawCanonicalCache`, `handleFreeDrawStart`, `handleFreeDrawMove`, `handleFreeDrawMoveCompressed`, `handleFreeDrawEnd`, `getCanonicalFreeDrawStroke`.
+    - **الحدود المعمارية والتصميم التزامني**:
+      - تعمل تزامندياً بالكامل على كائن `Room` الأصلي الممرر كمرجع (By reference).
+      - بقاء `RoomManager` المالك الحصري والوحيد لخريطة `this.rooms` وحالة الغرف المعتمدة.
+      - بقاء التواقيع العامة للأصل كواجهات توافقية (Compatibility Facades).
+      - بقاء بث إشعار الإلغاء `Type 12` عبر `abortFreeDrawStroke` وتنسيق الإلغاء والمزامنة والمسح مملوكاً لـ `RoomManager`.
+      - تسلسل تاريخ `Type 9` ثم `Type 3` تتابعي عبر كولباك الواجهة التوافقية لـ `recordDrawCommand`.
+      - ملكية إشعار التثبيت `Type 11` (Commit Ack) لمسار Socket.IO في `server/registerDrawBinaryHandler.ts`؛ وإشعار الإلغاء `Type 12` (Abort) لـ `RoomManager.abortFreeDrawStroke`.
+    - **الحقيقة التشغيلية لمصفوفة الأنماط**: النماذج التنافسية (`isExperimental: true`) ووضع الرسم الحر (`isFreeDraw: true`) تشترك في محرك الرسم المعياري المستمر بالسيرفر وفي تسلسل الواجهة (`IsolatedDrawingLayer` -> `ExperimentalDrawingBoard` -> `DrawingCanvasCore`).
+    - **نتائج التحقق الهندسي**: `test_experimental_draw_trial.ts` (نجاح)، `test_type13_hardening.ts` (نجاح)، `test_freedraw_bucket_undo_fastpath.ts` (4/4 نجاح)، `test_session_identity_suite.ts` (626/626 نجاح)، `test_controlled_fixes_suite.ts` (نجاح Tests A-G)، `test_legacy1a_routing.ts` (نجاح)، `test_legacy1c_unknown_room_routing.ts` (نجاح)، `tsc --noEmit` (0 أخطاء)، `npm run build` (بناء ناجح 100%).
+  - [x] **Stage 2: Free Draw Streaming Ownership Audit & Correction Addendum** — `[x] COMPLETED`
+
+---
+
+### 📌 PHASE 5C — ACTIVE ROOM MODES CONSISTENCY AUDIT
+- [ ] **PHASE 5C — ACTIVE ROOM MODES CONSISTENCY AUDIT**:
+  - **الحالة**: `[ ] PLANNED — STRICT READ-ONLY AUDIT`
+  - **الهدف المعماري**: تدقيق للقراءة فقط لتأكيد أن جميع الغرف التنافسية النشطة تتشارك نفس قواعد وخيارات اللعب، وأن الفروقات تقتصر حصرياً على قيم التكوين المعتمدة مثل سعة اللاعبين.
+  - **النماذج المستهدفة والمقارنة**: `General #Test`, `General #10P`, `Experimental Draw`, والغرف التنافسية المخصصة (Custom fallback).
+  - **فحص صريح لإعدادات الفوز**: فحص فرق `winningScore` بين `General #10P` (= 120) والبقية (= 30) كإعدادات منتج تتطلب التأكيد.
+  - **فحص الخصائص والتفاعل**: فحص جميع أفرع وأعلام `EXPERIMENTAL_*_TEST` في `ExperimentalDrawingBoard.tsx` وتأكيد تفعيلها بانسجام عبر النماذج التنافسية، بالإضافة لفحص قواعد وضع الرسم الحر (`Free Draw`) دون مؤقتات أو جولات وسماحيات الرسامين المتعددين، والتأكد من تشارك محركات الرسم.
+  - **أهداف التصنيف الـ5**:
+    1. محرك الرسم المشترك.
+    2. قواعد اللعب التنافسية المشتركة.
+    3. سلوك الروم/الجلسة المخصص لكل نمط.
+    4. الفروقات القائمة على التكوين فقط.
+    5. أي انحراف غير مقصود في الميزات.
+  - **القاعدة الإلزامية**: عدم إجراء أي تعديلات برمجية أثناء مرحلة التدقيق.
 
 ---
 
