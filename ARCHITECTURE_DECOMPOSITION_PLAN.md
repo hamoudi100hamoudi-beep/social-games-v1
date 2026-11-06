@@ -346,10 +346,10 @@
 
 ---
 
-### 🟡 المرحلة المعمارية قيد التفكيك التدريجي (`PHASE 5B`)
+### 🟢 المرحلة المعمارية المكتملة (`PHASE 5B`)
 
-#### 🟡 `PHASE 5B — SERVER / ROOMMANAGER MODULAR CONTROLLERS`
-* **الحالة**: **مرحلة معمارية مستمرة قيد التنفيذ تدريجياً (Ongoing Phase)**
+#### 🟢 `PHASE 5B — SERVER / ROOMMANAGER MODULAR CONTROLLERS`
+* **الحالة**: `[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`
 * **الملف المستهدف**: `server/rooms.ts` (`RoomManager`)
 
 ##### 🟢 `Stage 1: Full RoomManager Architectural Audit`
@@ -421,6 +421,27 @@
 ##### 🟢 `PHASE 5B — STAGE 2: FREE DRAW STREAMING OWNERSHIP AUDIT & CORRECTION ADDENDUM`
 * **الحالة**: `[x] COMPLETED`
 * **النتيجة**: اكتمل التدقيق وتدقيق التصحيح بنجاح وتم تنفيذه كاملاً في `SUB-BATCH-5B-2`.
+
+##### 🟢 `Stage 3: Residual RoomManager Core Architectural Audit & Closure`
+* **الحالة**: `[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`
+* **طبيعة التدقيق**: تدقيق معماري بنمط **القراءة فقط (Read-Only Source Audit)** لم يقم بتشغيل أو إعادة تنفيذ الاختبارات الآلية، واعتمد على فحص الكود المباشر وتحليل شجرة الاعتماديات.
+* **النتائج والحقائق المعمارية الدائمة المثبتة**:
+  1. **القرار المعماري النهائي**: إغلاق المرحلة `PHASE 5B` رسمياً بقرار **عدم الحاجة لاستخراج إضافي تحت البنية والمسؤوليات الراهنة (`NO FURTHER EXTRACTION WARRANTED`)**. استخراج `server/roomDrawingHistory.ts` و `server/roomCanonicalStrokeEngine.ts` أنشأ الحد المعياري المستقل والأنسب للمشروع. لا يعني ذلك حظر أي تفكيك مستقبلي للأبد؛ وإنما عدم وجود مبرر معماري حالي، وحال ظهور حدود مستقلة مستقبلاً يمكن إجراء تدقيق جديد.
+  2. **خريطة ملكية ومسؤوليات `RoomManager` المتبقية**:
+     - **ملكية كائنات الغرف وفهرس اللاعبين**: يحتفظ `RoomManager` بالملكية الحصرية لخريطة الغرف `this.rooms: Map<string, Room>` كـ Source of Truth، وفهرس `this.players: Map<string, Player>` المخصص للبحث السريع برقم المقبس `socketId` إلى كائن `Player`، إلى جانب مصفوفة `room.players` التي تُمثّل عضوية اللاعبين داخل كل غرفة.
+     - **اختيار الرسام وتدوير الدور**: تختار دالة `transitionToChoosing` أول مرشح في `room.gameState.turnQueue` يوجد له كائن لاعب مطابق داخل مصفوفة `room.players` (عبر المطابقة مع `p.persistentId || p.id`) دون تصفية صريحة لخاصية `isOffline`.
+     - **إدارة الانقطاع وفترة السماح الصامتة**: تحفظ دالة `handleDisconnect` عمداً `p.isOffline = false` خلال فترة السماح الصامتة (90 ثانية) وتكتفي بتثبيت `p.offlineSince = Date.now()` لمنع اضطراب واجهة المستخدم وتأطير مؤقت الإخلاء في `this.evictionTimers`.
+     - **دوال تنسيق الرسم الحر المتبقية داخل `RoomManager`**:
+       - `syncActiveFreeDrawStrokesToSocket`: تنسيق تجهيز حزم `Type 1` و `Type 2` ومزامنة الضربات النشطة المفتوحة للداخلين الجدد.
+       - `abortAllActiveFreeDrawStrokesForSocket`: تنظيف وإلغاء الضربات النشطة للمقابس المنقطعة.
+       - `abortAllActiveFreeDrawStrokesForRoom`: تنظيف وإلغاء جميع الضربات النشطة للغرفة.
+       - `abortFreeDrawStroke`: بث حزمة الإلغاء الثنائية `Type 12` على مستوى الغرفة عبر Socket.IO.
+       - *(هذه الدوال تُمثل تنسيق البث والإنهاء الشبكي على مستوى الغرف وليست خوارزميات فك الترميز أو سجل التراجع المستخرجة).*
+     - **الدقة والصياغة المعمارية والأداء**:
+       - الأجزاء التزامنية في JavaScript تُنفّذ بشكل تتابعي متسلسل على خيط الـ Event-loop في Node.js.
+       - مؤشرات كولباك المؤقتات وأحداث المقابس تُنفذ في مهام لاحقة لـ Event-loop وتتطلب دائماً التحقق من صلاحية الحالة (`stale-state validation`).
+       - يقوم `RoomManager` بالمرور على خرائط الضربات النشطة لعمليات الإلغاء والتنسيق والمزامنة، كما يمر Tick الدوري على الغرف النشطة دون افتراض سقف عددي عالمي غير موثق.
+       - تحتفظ جميع الغرف بقيم تكوينها المستقلة المعتمدة (`General #Test`: maxPlayers 5, winningScore 30; `General #10P`: maxPlayers 10, winningScore 120).
 
 ---
 

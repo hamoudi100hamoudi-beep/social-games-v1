@@ -7,9 +7,9 @@
 
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
-| **المرحلة المعمارية الحالية** | `PHASE 5C` (`[x] COMPLETED — READ-ONLY SOURCE AUDIT`) | تم إكمال التدقيق وتوثيق المرجع المعماري الدائم لأنماط الغرف النشطة في `ARCHITECTURE_DECOMPOSITION_PLAN.md` (قسم 4.5) |
-| **الدفعة الحالية / الأخيرة** | `PHASE 5C` | `[x] COMPLETED` — تدقيق تماسك وتوافق أنماط الغرف النشطة (المصدر المرجعي دائم التثبيت) |
-| **آخر دفعة متمة بالكامل** | `PHASE 5C` | `[x] COMPLETED` — تدقيق ثوابت المنتج وحقائق التوجيه وأعلام الخصائص وتحديد توجه إنشاء الغرف المستقبلي |
+| **المرحلة المعمارية الحالية** | `PHASE 5B` (`[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`) | إغلاق إستراتيجية تفكيك السيرفر بقرار عدم الحاجة لاستخراج إضافي مع توثيق المرجع المعماري لـ RoomManager و PHASE 5C |
+| **الدفعة الحالية / الأخيرة** | `PHASE 5B Stage 3` | `[x] COMPLETED` — تدقيق محرك وإغلاق تفكيك RoomManager السيرفري بقرار عدم الحاجة لاستخراج إضافي |
+| **آخر دفعة متمة بالكامل** | `PHASE 5B Stage 3 & PHASE 5C` | `[x] COMPLETED` — تدقيق وإغلاق تفكيك RoomManager وتثبيت المرجع المعماري بأنماط الغرف النشطة |
 | **الدفعة التالية المخططة** | غير معينة بعد (`UNASSIGNED`) | بانتظار نتائج التدقيق المعماري القادم لتحديد الهدف التالي |
 | **المخاطر والعوائق المعمارية المفتوحة** | لا يوجد عوائق حرجة | ملاحظة فنية مثبتة لم يتم تعديلها: بوابة DPR الصامتة (`EXPERIMENTAL_DPR_1_TEST`) تتطلب تدقيقاً مستقلاً مستقبلاً |
 | **وثيقة التفكيك التفصيلية** | [ARCHITECTURE_DECOMPOSITION_PLAN.md](./ARCHITECTURE_DECOMPOSITION_PLAN.md) | الوثيقة المرجعية المعتمدة (راجع قسم 4.5 للمرجع المعماري الدائم لأنماط الغرف) |
@@ -177,39 +177,16 @@
   - `server/utils/arabicFuzzyMatch.ts`
   - `server/data/wordsDictionary.ts`
   - `server/utils/binaryBufferHelpers.ts`
-- [~] **PHASE 5B — تفكيك وحدات السيرفر الداخلية (RoomManager Modular Controllers)**:
-  - **الحالة**: **مرحلة معمارية مستمرة جارٍ تنفيذ دفعاتها تدريجياً (Ongoing Phase)**
+- [x] **PHASE 5B — تفكيك وحدات السيرفر الداخلية (RoomManager Modular Controllers)**:
+  - **الحالة**: `[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`
   - [x] **Stage 1: Full RoomManager Architectural Audit** — `[x] COMPLETED`
   - [x] **Stage 1B: Drawing Subsystem Ownership Re-validation** — `[x] COMPLETED`
-  - [x] **SUB-BATCH-5B-1 — Server Drawing History & Undo/Redo Extraction**:
-    - **الحالة**: `[x] COMPLETED`
-    - **الملف الجديد المنشأ**: `server/roomDrawingHistory.ts`
-    - **الملف المعدل**: `server/rooms.ts`
-    - **الدوال المستخرجة**: `recordRoomDrawCommand`, `undoRoomFreeDrawStroke`, `undoRoomLastDrawing`, `redoRoomDrawing`.
-    - **التوصيف الفعلي والثوابت**:
-      - تصنيف الدوال كـ Synchronous Room-scoped State Algorithms تعمل بالمرجع على كائن `Room` الأصلي.
-      - بقاء `RoomManager` المالك الحصري والوحيد لخريطة `this.rooms` في الذاكرة دون تخزين مكرر.
-      - بقاء الواجهات التوافقية لـ `RoomManager` دون تغيير في التوقيع أو المستدعين الخارجيين أو الاستدعاءات الداخلية (`handleFreeDrawEnd`, `handleFreeDrawClear`).
-      - خلو الوحدة تماماً من Socket.IO وعضوية اللاعبين والمؤقتات وانتقالات الجولات.
-      - رفع `extractInstanceIdFromBuffer` إلى نطاق الوحدة وتفادي إنشائه المتكرر.
-      - حماية الدلو والمسح كأول إجراء `type === 4 || 10 || 5`، قفل الرسم عند التراجع `isDrawingActive = false`، تراجع بخطوة واحدة، حذف ذري `Type 9 + Type 3` وحذف مستهدف لخطوات Free Draw مع إبطال التخزين المعياري المؤقت `freeDrawCanonicalCache`.
-    - **المسؤوليات المتبقية داخل `RoomManager`**: خريطة الغرف، الجولات، الـ Tick الدوري، مؤقتات المراحل، إدارة اللاعبين وإعادة الاتصال، سجل هويات الرسم (`drawingIdentities`)، بدء/إيقاف الرسم الحر، بث وسريان الرسم الحر النشط، فك ترميز وتنسيق `Type 13`/`Type 2` والاعتماد `Type 9` وإشعارات المقابس، ودالة `clearDrawHistoryForRoomAndClient`.
-    - **نتائج التحقق الفعلي**: `test_session_identity_suite` (626/626 نجاح)، `test_experimental_draw_trial` (نجاح)، `test_type13_hardening` (نجاح)، `test_freedraw_bucket_undo_fastpath` (4/4 نجاح)، `test_controlled_fixes_suite` (نجاح Tests A-G)، `tsc --noEmit` (0 أخطاء)، `npm run build` (بناء ناجح).
-  - [x] **SUB-BATCH-5B-2 — Server Canonical Stroke Engine Extraction**:
-    - **الحالة**: `[x] COMPLETED`
-    - **الملف الجديد المنشأ**: `server/roomCanonicalStrokeEngine.ts`
-    - **الملف المعدل**: `server/rooms.ts`
-    - **الدوال المستخرجة**: `getOrCreateFreeDrawStrokes`, `getOrCreateFreeDrawCanonicalCache`, `handleFreeDrawStart`, `handleFreeDrawMove`, `handleFreeDrawMoveCompressed`, `handleFreeDrawEnd`, `getCanonicalFreeDrawStroke`.
-    - **الحدود المعمارية والتصميم التزامني**:
-      - تعمل تزامندياً بالكامل على كائن `Room` الأصلي الممرر كمرجع (By reference).
-      - بقاء `RoomManager` المالك الحصري والوحيد لخريطة `this.rooms` وحالة الغرف المعتمدة.
-      - بقاء التواقيع العامة للأصل كواجهات توافقية (Compatibility Facades).
-      - بقاء بث إشعار الإلغاء `Type 12` عبر `abortFreeDrawStroke` وتنسيق الإلغاء والمزامنة والمسح مملوكاً لـ `RoomManager`.
-      - تسلسل تاريخ `Type 9` ثم `Type 3` تتابعي عبر كولباك الواجهة التوافقية لـ `recordDrawCommand`.
-      - ملكية إشعار التثبيت `Type 11` (Commit Ack) لمسار Socket.IO في `server/registerDrawBinaryHandler.ts`؛ وإشعار الإلغاء `Type 12` (Abort) لـ `RoomManager.abortFreeDrawStroke`.
-    - **الحقيقة التشغيلية لمصفوفة الأنماط**: النماذج التنافسية (`isExperimental: true`) ووضع الرسم الحر (`isFreeDraw: true`) تشترك في محرك الرسم المعياري المستمر بالسيرفر وفي تسلسل الواجهة (`IsolatedDrawingLayer` -> `ExperimentalDrawingBoard` -> `DrawingCanvasCore`).
-    - **نتائج التحقق الهندسي**: `test_experimental_draw_trial.ts` (نجاح)، `test_type13_hardening.ts` (نجاح)، `test_freedraw_bucket_undo_fastpath.ts` (4/4 نجاح)، `test_session_identity_suite.ts` (626/626 نجاح)، `test_controlled_fixes_suite.ts` (نجاح Tests A-G)، `test_legacy1a_routing.ts` (نجاح)، `test_legacy1c_unknown_room_routing.ts` (نجاح)، `tsc --noEmit` (0 أخطاء)، `npm run build` (بناء ناجح 100%).
+  - [x] **SUB-BATCH-5B-1 — Server Drawing History & Undo/Redo Extraction** — `[x] COMPLETED`
+  - [x] **SUB-BATCH-5B-2 — Server Canonical Stroke Engine Extraction** — `[x] COMPLETED`
   - [x] **Stage 2: Free Draw Streaming Ownership Audit & Correction Addendum** — `[x] COMPLETED`
+  - [x] **Stage 3: Residual RoomManager Core Architectural Audit & Closure** — `[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`:
+    - **التدقيق والقرار**: تدقيق معماري بنمط القراءة فقط أثبت أن استخراج `roomDrawingHistory.ts` و `roomCanonicalStrokeEngine.ts` أنشأ الحد المعياري المستقل والأنسب، وأن بقية مسؤوليات `RoomManager` تشكل نواة متماسكة ومترابطة تزامندياً. إغلاق المرحلة رسمياً بقرار عدم الحاجة لاستخراج إضافي تحت البنية والمسؤوليات الراهنة.
+    - **دقة الحقائق وتوثيق المكونات المتبقية**: توثيق اختيار الرسام في `transitionToChoosing` (مطابقة أول مرشح في `turnQueue` بـ `room.players` دون تصفية صريحة لـ `isOffline`)، وإدارة الانقطاع مع الحفاظ عمداً على `isOffline = false` وتثبيت `offlineSince` خلال فترة السماح الصامتة (90 ثانية)، وإدراج دوال التنسيق الشبكي للرسم الحر (`syncActiveFreeDrawStrokesToSocket`, `abortAllActiveFreeDrawStrokesForSocket`, `abortAllActiveFreeDrawStrokesForRoom`, `abortFreeDrawStroke`) ضمن خريطة ملكية `RoomManager` بالكامل.
 
 ---
 
