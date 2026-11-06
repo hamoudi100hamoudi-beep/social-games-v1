@@ -48,9 +48,10 @@
   - محركات الرسم: المسارات المنعمة، الأشكال (`canvasPathRenderer.ts`)، والدلو النقطي (`canvasFloodFill.ts`).
   - محرك التراجع وإلغاء التراجع المحلي والربط مع `canvasUndoCache.ts` و `canvasCheckpointManager.ts`.
   - مزامنة المقابس الثنائية اللحظية والربط مع `canvasReplayEngine.ts`.
-- **الأجزاء التي يجب إبقاؤها داخل الملف (Non-extractable Hot Paths)**:
+- **الأجزاء التي يجب إبقاؤها داخل الملف (Non-extractable Hot Paths & Coordinators)**:
   - حلقة معالجة حركة المؤشر اللحظية `processStrokeMove` وحسابات الاستكمال الخطي (Lerp).
   - التنسيق عالي المستوى لإعادة التشغيل (High-level Replay Orchestration) لشدة ارتباطه بمراجع React، ومؤقتات RAF، وإلغاء الأجيال، وحالة واجهة المستخدم.
+  - معالجة أحداث المقابس اللحظية وتدفق المزامنة (Drawing Socket Sync & Event Processing) لشدة ارتباطها بسياقات الكانفاس، وجلسات الرسم النشطة والمستنزفة، وحاجز التراجع، وإصلاح الخطوط المفقودة.
 
 ### 2. `src/components/experimental/ExperimentalGameRoom.tsx`
 - **المسؤوليات الرئيسية**:
@@ -190,14 +191,39 @@
 
 ---
 
-### 🔴 الدفعات القادمة مجدولة (`PHASE 4F` وما بعدها)
+### 🟢 تفكيك وتدقيق مزامنة المقابس للرسم (`PHASE 4F`)
 
-* **`PHASE 4F — DrawingSocketSync`**:
-  * **الحالة**: `[ ] PLANNED`
-  * **المسؤولية**: استخراج وتأطير بروتوكول مزامنة المقابس للرسم وإعادة الاتصال والانضمام المتأخر من `DrawingCanvasCore.tsx`.
+#### 🟢 `PHASE 4F — Drawing Socket Sync Architectural Audit`
+* **الحالة**: `[x] CLOSED (NO EXTRACTION WARRANTED)`
+* **القرار المعماري النهائي**:
+  - انتهى التدقيق المعماري للقراءة فقط إلى أن استخراج معالجة المقابس من `DrawingCanvasCore.tsx` إلى وحدة خارجية مستقلة (`DrawingSocketSync`) أو إلى خطاف مخصص (`useDrawingSocketSync`) لن يحقق فصلاً وظيفياً حقيقياً، بل سيؤدي إلى إنشاء "كيس مراجع وكولباكات" متضخم (Ref-bag / Callback-soup) يربط الكود الخارجي بأكثر من 35 مرجعاً ودالة داخلية للمكون.
+* **المسؤوليات المقيدة بالمكون (`Component-Owned Responsibilities`)**:
+  1. الارتباط المباشر بسياقات الكانفاس (`ctxRef` و `tempCtxRef`) والطبقات المؤقتة ومسارات الرسم اللحظي.
+  2. إدارة طوابير الجلسات النشطة والمستنزفة (`activeSessionsRef` و `drainingStrokesRef`) ومؤقت استنزاف المراقبين بمعدل 60 إطاراً بالثانية (`spectatorPlaybackRafRef`).
+  3. التسليم الذري للخطوط المكتملة (`commitRemoteStrokeAtomically`) وحل طلبات الإصلاح الموجهة (`draw_repair_req`).
+  4. معاملات التخزين المؤقت للصور والنقاط المرجعية للتراجع (`CanvasUndoCache` و `CanvasCheckpointManager`).
+  5. إعادة بناء السجل عبر شرائح RAF بحجم 50 أمراً (`processIncomingHistorySync`) وقمع الحزم المكررة بمقارنة المحتوى (`areHistoryArraysEqual`).
+  6. دورة حياة React، ومراجع المكون، وحالة واجهة المستخدم (`isSyncing`, `hasSyncedOnce`)، وإلغاء أجيال المزامنة (`historySyncGenerationRef`).
+* **التدقيق التكميلي للسيرفر والبروتوكول**:
+  - **مسار حركة السيرفر**: يميز `server/registerDrawBinaryHandler.ts` بين المسار المعتمد في Free Draw / Experimental (معالجة معيارية للحزم) وبين الرومات التنافسية العادية (بث اعتيادي). مسار الإرسال من العميل يستخدم `socket.volatile` لأحداث الحركة في المواضع المنفذة حالياً دون تغيير في البروتوكول.
+  - **إدارة تخصيص الذاكرة (Allocations)**: يستخدم الكود مجمع نقاط قابلاً لإعادة الاستخدام في `drawBinaryHelper.ts` (`pointPool`)، مع بقاء تخصيصات كائنات ومصفوفات ومؤقتات في أجزاء أخرى من مسار الإدخال والترميز؛ والقرار المعماري يهدف للحفاظ على التحسينات الحالية ومنع إضافة طبقات كولباك إضافية تزيد ضغط الـ GC.
+  - **معالجات الانضمام والمغادرة**: تم فحص `server/registerJoinRoomHandler.ts` (إرسال السجل والتراجع ومزامنة خطوط Free Draw النشطة للداخلين الجدد) و `server/registerLeaveRoomHandler.ts` (حذف موثق بالسيرفر وإسناد الانقطاع الفعلي إلى `roomManager.handleDisconnect()` في `server.ts`).
+  - **النتيجة**: أغلقت المرحلة دون استخراج أو إنشاء أي ملفات كود أو مساس ببروتوكول السيرفر أو إضافة مطالبات غير مثبتة.
 
-* **`BATCH-5B-1 — RoomManager Modular Controllers`**:
-  * **الحالة**: `[ ] PLANNED`
-  * **المسؤولية**: تفكيك الفئة المركزية `RoomManager` بالسيرفر إلى وحدات تحكم متخصصة مع الحفاظ المطلق على مصدر الحقيقة في الذاكرة.
+---
+
+### 🔴 المرحلة المعمارية القادمة المخططة (`PHASE 5B`)
+
+#### 🔴 `PHASE 5B — SERVER / ROOMMANAGER MODULAR CONTROLLERS`
+* **الحالة**: `[ ] PLANNED`
+* **الملف المستهدف**: `server/rooms.ts` (`RoomManager`)
+* **الهدف المعماري**: دراسة إمكانية فصل مسؤوليات الفئة المركزية `RoomManager` بالسيرفر إلى وحدات تحكم متخصصة ومتماسكة مع الحفاظ التام والمطلق على مصدر الحقيقة الموحد لحالة الغرف في الذاكرة (`In-Memory Room State`).
+* **الإجراء التالي المعتمد**: تدقيق معماري للقراءة فقط (READ-ONLY architectural audit) لتحديد الاعتماديات ومصادر الحقيقة قبل الشروع في أي خطوة تنفيذية.
+* **مجالات التدقيق المحتملة مستقبلاً (مواضيع فحص فقط وليست مهام استخراج معتمدة)**:
+  1. دورة حياة الغرف وإنشاؤها ومسحها (Room Lifecycle & Cleanup).
+  2. دورة حياة الجولات والانتقالات ومؤقت الـ Tick (Game Round Lifecycle & Transitions).
+  3. دورة حياة الرسم الحر وسجل الرسم المعياري (Free Draw Lifecycle & Canonical History).
+  4. سلوك السيرفر في سجل الرسم والتراجع وإلغاء التراجع (Drawing History & Undo/Redo Invariants).
+  5. إدارة اللاعبين ومصادقة الجلسات وإعادة الاتصال وهويات الرسم (Player Membership, Session Auth & Identities).
 
 ---

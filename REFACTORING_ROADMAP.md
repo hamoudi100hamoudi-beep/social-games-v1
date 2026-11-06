@@ -7,11 +7,11 @@
 
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
-| **المرحلة المعمارية الحالية** | `PHASE 4E` (مكتملة) ➔ `PHASE 4F` | تم إنجاز تفكيك السجل والتراجع ومحرك الإعادة (`PHASE 4E`). المرحلة القادمة المخططة: `PHASE 4F` |
-| **الدفعة الحالية / الأخيرة** | `SUB-BATCH-4E-1C Stage 2C` | `[x] CLOSED (NO EXTRACTION WARRANTED)` — اكتمل التدقيق المعماري وتقرر تقييد المنظم عالي المستوى بالمكون |
+| **المرحلة المعمارية الحالية** | `PHASE 4F` (مغلقة بقرار عدم الاستخراج) ➔ `PHASE 5B` | تم إغلاق `PHASE 4F` بقرار إبقاء المزامنة في المكون. المرحلة القادمة المخططة: تدقيق معماري لـ `PHASE 5B` |
+| **الدفعة الحالية / الأخيرة** | `PHASE 4F` | `[x] CLOSED (NO EXTRACTION WARRANTED)` — انتهى التدقيق المعماري للقراءة فقط وتقرر عدم استخراج `DrawingSocketSync` |
 | **آخر دفعة متمة بالكامل** | `SUB-BATCH-4E-1C Stage 2B` | `[x] COMPLETED` — استخراج `renderLeftoverReplaySessions` وتحديث مواضع الاستدعاء الـ5 |
-| **الدفعة التالية المخططة** | `PHASE 4F` | `[ ] PLANNED` — استخراج وتأطير بروتوكول مزامنة المقابس ومسار إعادة الاتصال (DrawingSocketSync) |
-| **المخاطر والعوائق المعمارية المفتوحة** | لا يوجد عوائق حرجة | جميع الثوابت المعمارية ونظام الرسم والتراجع مستقرة بالكامل وتحت الحماية المعمارية |
+| **الدفعة التالية المخططة** | `PHASE 5B` | `[ ] PLANNED` — تدقيق معماري للقراءة فقط لفئة `RoomManager` ومسؤولياتها (`server/rooms.ts`) |
+| **المخاطر والعوائق المعمارية المفتوحة** | لا يوجد عوائق حرجة | جميع الثوابت المعمارية ونظام الرسم والتراجع والمزامنة مستقرة بالكامل وتحت الحماية المعمارية |
 | **وثيقة التفكيك التفصيلية** | [ARCHITECTURE_DECOMPOSITION_PLAN.md](./ARCHITECTURE_DECOMPOSITION_PLAN.md) | الوثيقة المرجعية للمسؤوليات والاعتماديات وشروط الحفاظ على السلوك |
 
 > ⚠️ **تنبيه للمطورين والذكاء الاصطناعي**: هذا الملف هو **المرجع الحصري والدائم** لتنظيم وتتبع كل المهام المعمارية والأمنية وهيكلة الكود في المشروع. للتفاصيل الفنية الدقيقة حول أحجام الملفات والاعتماديات وجداول الدفعات، راجع الوثيقة المرجعية الشقيقة: `ARCHITECTURE_DECOMPOSITION_PLAN.md`.
@@ -150,8 +150,21 @@
     - Stage 2A (Single-command Replay Extraction): استخراج `replaySingleCommand()` إلى `src/utils/canvasReplayEngine.ts` كدالة مساعدة ذات أثر (Stateless/Effectful Helper).
     - Stage 2B (Leftover Replay Session Rendering): استخراج `renderLeftoverReplaySessions()` إلى `src/utils/canvasReplayEngine.ts` كدالة مساعدة ذات أثر واستبدال مواضع الاستدعاء الخمسة في `DrawingCanvasCore.tsx`.
     - Stage 2C (High-Level Replay Orchestration Audit): **[x] CLOSED (NO EXTRACTION WARRANTED)**. تدقيق معماري للقراءة فقط إكمالاً لتقييم المنظم عالي المستوى. تقرر عدم استخراج المنظم عالي المستوى لحماية اعتماده على مراجع ومؤقتات React، وجدولة RAF، والتخزين المؤقت، وإلغاء الأجيال، ونقل المقابس، والقياسات التشخيصية.
-- [ ] **PHASE 4F — فصل بروتوكول المزامنة وإعادة الاتصال (Socket Sync Decoupling)**:
-  - [ ] استخراج وتأطير معالجات المقابس ومسارات المزامنة المتأخرة والربط المباشر من `DrawingCanvasCore.tsx` إلى وحدة مستقلة (`DrawingSocketSync`).
+- [x] **PHASE 4F — تدقيق مزامنة المقابس للرسم (Drawing Socket Sync Architectural Audit)**:
+  - **الحالة**: `[x] CLOSED (NO EXTRACTION WARRANTED)`
+  - **القرار المعماري**: خلص التدقيق المعماري للقراءة فقط إلى أن إنشاء وحدة منفصلة `DrawingSocketSync` أو استخراج Custom Hook كبير لن يوفر فصلاً وظيفياً حقيقياً، بل سيخلق كيس مراجع وكولباكات متضخماً (Ref/Callback bag) يزيد التعقيد.
+  - **مبررات إبقاء المعالجة داخل `DrawingCanvasCore.tsx`**:
+    - الارتباط العضوي بسياقات الكانفاس (`ctxRef` و `tempCtxRef`) والطبقات المؤقتة ومسارات الرسم اللحظي.
+    - إدارة طوابير الجلسات النشطة والمستنزفة (`activeSessionsRef` و `drainingStrokesRef`).
+    - التسليم الذري للخطوط المكتملة وحل طلبات الإصلاح (`commitRemoteStrokeAtomically` و `draw_repair_req`).
+    - عمليات التخزين المؤقت والنقاط المرجعية للتراجع (`undoCache` و `checkpointManager`).
+    - دورة حياة إعادة بناء السجل عبر RAF ومنع ازدواجية الحزم (`areHistoryArraysEqual`).
+    - دورة حياة React ومراجع المكون وحالة واجهة المستخدم وإلغاء أجيال المزامنة.
+  - **التدقيق التكميلي للسيرفر**:
+    - مسار حركة السيرفر: يميز `server/registerDrawBinaryHandler.ts` بين المسار المعتمد في Free Draw / Experimental (معالجة معيارية) وبين الرومات التنافسية العادية (بث اعتيادي). مسار الإرسال من العميل يستخدم `socket.volatile` لأحداث الحركة في المواضع المنفذة حالياً.
+    - إدارة الذاكرة وتخصيص الكائنات: يستخدم الكود مجمع نقاط قابلاً لإعادة الاستخدام في `drawBinaryHelper.ts`، مع بقاء تخصيصات كائنات ومصفوفات ومؤقتات في أجزاء أخرى من المسار؛ والقرار يهدف لتفادي إضافة طبقات كولباك إضافية.
+    - معالجات الانضمام والمغادرة: فحص `server/registerJoinRoomHandler.ts` (إرسال السجل والتراجع ومزامنة خطوط Free Draw النشطة للداخلين الجدد) و `server/registerLeaveRoomHandler.ts` (حذف موثق بالسيرفر وإسناد الانقطاع إلى `roomManager.handleDisconnect()` في `server.ts`).
+  - **النتيجة**: أغلقت المرحلة دون استخراج أو إنشاء أي ملفات كود أو مساس ببروتوكول السيرفر أو إضافة مطالبات غير مثبتة.
 
 ---
 
@@ -160,7 +173,16 @@
   - `server/utils/arabicFuzzyMatch.ts`
   - `server/data/wordsDictionary.ts`
   - `server/utils/binaryBufferHelpers.ts`
-- [ ] **PHASE 5B — تفكيك وحدات السيرفر الداخلية (RoomManager Modular Controllers)**: (مجدولة مستقبلاً)
+- [ ] **PHASE 5B — تفكيك وحدات السيرفر الداخلية (RoomManager Modular Controllers)**:
+  - **الحالة**: `[ ] PLANNED`
+  - **الهدف المخطط**: دراسة إمكانية فصل مسؤوليات `RoomManager` بالسيرفر (`server/rooms.ts`) إلى وحدات تحكم متخصصة مع الحفاظ التام والمطلق على مصدر الحقيقة الموحد لحالة الغرف في الذاكرة (`In-Memory Room State`).
+  - **الإجراء التالي**: تدقيق معماري للقراءة فقط (READ-ONLY architectural audit) لتحديد الاعتماديات ومصادر الحقيقة قبل أي خطوة تنفيذية.
+  - **مجالات التدقيق المحتملة مستقبلاً (مواضيع فحص فقط وليست مهام استخراج معتمدة)**:
+    - دورة حياة الغرف (Room Lifecycle).
+    - دورة حياة الجولات والانتقالات (Game Round Lifecycle & Transitions).
+    - دورة حياة الرسم الحر وسجل الرسم المعياري (Free Draw Lifecycle & Canonical History).
+    - سلوك السيرفر في سجل الرسم والتراجع وإلغاء التراجع (Drawing History & Undo/Redo).
+    - إدارة اللاعبين وإعادة الاتصال وهويات الرسم (Player Membership, Reconnection & Identities).
 
 ---
 
