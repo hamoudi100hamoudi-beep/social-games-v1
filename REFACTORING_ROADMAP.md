@@ -7,10 +7,10 @@
 
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
-| **المرحلة المعمارية الحالية** | `PHASE 5B` (`[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`) | إغلاق إستراتيجية تفكيك السيرفر بقرار عدم الحاجة لاستخراج إضافي مع توثيق المرجع المعماري لـ RoomManager و PHASE 5C |
-| **الدفعة الحالية / الأخيرة** | `PHASE 5B Stage 3` | `[x] COMPLETED` — تدقيق محرك وإغلاق تفكيك RoomManager السيرفري بقرار عدم الحاجة لاستخراج إضافي |
-| **آخر دفعة متمة بالكامل** | `PHASE 5B Stage 3 & PHASE 5C` | `[x] COMPLETED` — تدقيق وإغلاق تفكيك RoomManager وتثبيت المرجع المعماري بأنماط الغرف النشطة |
-| **الدفعة التالية المخططة** | غير معينة بعد (`UNASSIGNED`) | بانتظار نتائج التدقيق المعماري القادم لتحديد الهدف التالي |
+| **المرحلة المعمارية الحالية** | `PHASE 6C — ExperimentalGameRoom Refactoring` | استكمال استخراج المكونات المستقلة وتصفية الكود المتبقي في غلاف اللعب التنافسي |
+| **الدفعة الحالية / الأخيرة** | `BATCH-6C-1` | `[x] COMPLETED` — استخراج شريط التغذية التفاعلية السريعة إلى المكون المستقل `GameActivityFeed` |
+| **آخر دفعة متمة بالكامل** | `BATCH-6C-1` | `[x] COMPLETED` — استخراج `GameActivityFeed` بنجاح (مع ثبات وحفظ إنجازات PHASE 5B و PHASE 5C سابقاً) |
+| **الدفعة التالية المخططة** | `BATCH-6C-2` | تنظيف وإنهاء توليد جزيئات الاحتفال غير المستغلة `confettis` في `ExperimentalGameRoom.tsx` |
 | **المخاطر والعوائق المعمارية المفتوحة** | لا يوجد عوائق حرجة | ملاحظة فنية مثبتة لم يتم تعديلها: بوابة DPR الصامتة (`EXPERIMENTAL_DPR_1_TEST`) تتطلب تدقيقاً مستقلاً مستقبلاً |
 | **وثيقة التفكيك التفصيلية** | [ARCHITECTURE_DECOMPOSITION_PLAN.md](./ARCHITECTURE_DECOMPOSITION_PLAN.md) | الوثيقة المرجعية المعتمدة (راجع قسم 4.5 للمرجع المعماري الدائم لأنماط الغرف) |
 
@@ -202,6 +202,19 @@
     - تم توثيق الملاحظة الفنية المثبتة لبوابة DPR الصامتة (`EXPERIMENTAL_DPR_1_TEST`) وتأجيل أي تغيير مستقبلي لدقة الكانفاس لتدقيق مستقل منفصل.
     - إمكانية إنشاء غرف مخصصة بخيارات يحددها المستخدم مستوحاة من Gartic.io هي قدرة منتج مستقبلية (`FUTURE PRODUCT CAPABILITY`) وليست دفعة إعادة هيكلة حالية.
     - تمت المحافظة التامة على الكود دون إجراء أي تعديلات برمجية أو تغيير في السلوك التشغيلي.
+
+---
+
+### 📌 PHASE 6 — EXPERIMENTALGAMEROOM REFACTORING & CLEANUP
+- [x] **PHASE 6C Stage 1 — Residual ExperimentalGameRoom Architectural Audit**:
+  - **الحالة**: `[x] COMPLETED — READ-ONLY SOURCE AUDIT`
+  - **التفاصيل**: إجراء تدقيق معماري شامل للمكون `ExperimentalGameRoom.tsx` وتوثيق مكوناته المتبقية والمستخرجة وإحصاء أسطره الحالية (~2052 سطر).
+- [x] **BATCH-6C-1 — Game Activity Feed Extraction**:
+  - **الحالة**: `[x] COMPLETED`
+  - **التفاصيل**: استخراج منطقة التغذية السريعة (Quick Feedback Area) إلى المكون المستقل `src/components/game/GameActivityFeed.tsx` بشروطه الأربعة (`guesses`, `socketId`, `amIDrawer`, `isFreeDraw`).
+- [ ] **BATCH-6C-2 — Remove Unused Podium Confetti Generation**:
+  - **الحالة**: `[ ] PLANNED`
+  - **التفاصيل**: تنظيف وإنهاء الكود غير المستغل لمتغير `confettis` المولّد عبر `React.useMemo` (في الأسطر 280–319) من `ExperimentalGameRoom.tsx` (`VERIFIED UNUSED CODE — PROPOSED CLEANUP, NOT YET IMPLEMENTED`).
 
 ---
 

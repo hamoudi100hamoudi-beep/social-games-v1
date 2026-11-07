@@ -59,8 +59,9 @@
   - إدارة الانتقال بين حالات الجولة (`WAITING`, `CHOOSING`, `DRAWING`, `ROUND_END`, `PODIUM`).
   - تكيف الواجهة مع النافذة المرئية ولوحة المفاتيح في الهواتف (`visualViewport` و `--keyboard-inset`).
   - شريط الوقت عالي الدقة `SmoothTimer`.
-  - النوافذ المنبثقة التفاعلية الـ11 المضمنة داخل الـ JSX عبر `CinematicModal`.
-  - طبقات المراحل: اختيار الكلمات، لوحة الرسم النشطة، منصة التتويج، وشريط الدردشة العائم.
+  - النوافذ المنبثقة التفاعلية المضمنة واستخدام المكونات المستخرجة: `ChoosingWordOverlay`, `PlayersSidebar`, `MiniBoardOverlay`, `OverlayChatRoom`, `ExperimentalWordOverlay`, `ExperimentalHitOverlay`, `GameActivityFeed`, ونوافذ الإجراءات والتنبيهات الـ 6 المستخرجة عبر `CinematicModal`.
+  - طبقات المراحل: اختيار الكلمات، لوحة الرسم النشطة، منصة التتويج، شريط التغذية التفاعلية المستخرج (`GameActivityFeed`), وشريط الدردشة العائم.
+  - الحجم الحالي: حوالي 2052 خطاً برمجياً بعد استخراج `GameActivityFeed`.
   - تشترك مع `GameRoom.tsx` (المخصصة لـ Free Draw `isFreeDraw: true`) في نفس تسلسل مكونات الرسم: `IsolatedDrawingLayer` -> `ExperimentalDrawingBoard` -> `DrawingCanvasCore`.
 
 ### 3. `server/rooms.ts`
@@ -287,6 +288,27 @@
 * **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx`.
 * **الملف الجديد المنشأ**: `src/components/experimental/ChoosingWordOverlay.tsx`.
 * **درجة المخاطر**: **الفئة B (متوسطة المخاطر)**.
+
+---
+
+### 🟢 الدفعة `BATCH-6C-1` — استخراج شريط التغذية التفاعلية السريعة (`GameActivityFeed`)
+* **الحالة**: `[x] COMPLETED`
+* **الملف المصدر**: `src/components/experimental/ExperimentalGameRoom.tsx`.
+* **الملف الجديد المنشأ**: `src/components/game/GameActivityFeed.tsx`.
+* **درجة المخاطر**: **الفئة A (منخفضة المخاطر - Low Risk)**.
+* **التفاصيل والمعايير المعمارية**:
+  - تم استخراج قسم التغذية التفاعلية السريعة (Quick Feedback Area) بالكامل إلى مكون عرض مستقل وغير مالك للحالة (Stateless Presentational Component) باسم `GameActivityFeed`.
+  - يتلقى المكون المقترن 4 Props فقط: `guesses`, `socketId`, `amIDrawer`, `isFreeDraw`.
+  - تم الاحتفاظ بجميع مستمعي Socket.IO، وحالة `guesses` ومراجعها التزامنية `guessesRef` ورسائل الخلفية المؤجلة، والمؤثرات الصوتية، وإدارة حالة اللعبة بالكامل داخل `ExperimentalGameRoom.tsx`.
+  - تمت المحافظة الصارمة على ترتيب الرسائل المعكوس `[...guesses].reverse()` وكافة شروط التصيير والأيقونات ومستويات الألوان والأنيميشن ونمط `dir="auto"`.
+
+---
+
+### 🟡 الملاحظة الفنية للدفعة المخططة `BATCH-6C-2` — تنظيف كود جزيئات الاحتفال غير المستغلة
+* **التصنيف المعماري**: `VERIFIED UNUSED CODE — PROPOSED CLEANUP, NOT YET IMPLEMENTED`
+* **التفاصيل المعمارية**:
+  - كشف التدقيق المصطفي للكود في `ExperimentalGameRoom.tsx` أن المتغير `confettis` المولّد عبر `React.useMemo` (في الأسطر 280–319) يُنشئ 120 كائناً لجزيئات الاحتفال عند دخول مرحلة `PODIUM` دون وجود أي مرجع أو استخدام أو تصيير له في أي مكان آخر داخل المكون.
+  - لم يُنفذ حذف هذا الكود في هذه الدفعة، وتم توثيقه كمرشح للتنظيف في الدفعة القادمة `BATCH-6C-2`.
 
 ---
 
