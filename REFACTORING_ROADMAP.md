@@ -97,9 +97,9 @@
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
 | **المرحلة المعمارية الحالية** | `PHASE 6C — ExperimentalGameRoom Refactoring` | مستمرة — استكمال استخراج المكونات المستقلة وتنظيف الكود المتبقي في غلاف اللعب التنافسي |
-| **آخر دفعة متمة ومثبتة** | `BATCH-6C-2` | `[x] COMPLETED` — حذف توليد كائن جزيئات الاحتفال غير المستغل `confettis` من `ExperimentalGameRoom.tsx` وتخفيض حجم الملف إلى 2010 سطراً واجتياز الفحص الثابت والبناء |
+| **آخر دفعة متمة ومثبتة** | `BATCH-6C-3` | `[x] COMPLETED` — استخراج واجهة حالة الاتصال المشتركة `RoomConnectionStatusOverlay.tsx` بنجاح ومزامنتها على GitHub وتأكيد التجربة اليدوية |
 | **الدفعة الحالية قيد التنفيذ** | لا يوجد | لا توجد أي أعمال برمجية جارية حالياً |
-| **الدفعة التالية المعتمدة** | `BATCH-6C-3` | `[ ] PLANNED — NOT STARTED` — استخراج واجهة حالة الاتصال المشتركة `RoomConnectionStatusOverlay.tsx` |
+| **النشاط التالي المعتمد** | `PHASE 6C — Stage 2` | `[ ] PLANNED — NOT STARTED` — إجراء تدقيق معماري بنمط القراءة فقط للمسؤوليات المتبقية داخل `ExperimentalGameRoom.tsx` |
 | **المخاطر والعوائق المفتوحة** | لا يوجد عوائق حرجة | ملاحظة فنية مثبتة: بوابة DPR الصامتة (`EXPERIMENTAL_DPR_1_TEST`) تتطلب تدقيقاً مستقلاً مستقبلاً عند تعديل دقة الكانفاس |
 
 ### 🏷️ قاموس حالات دورة حياة الدفعات (Status Dictionary)
@@ -323,10 +323,10 @@
   - **الحالة**: `[x] COMPLETED`.
   - **النتيجة**: حذف وتصفية الكود غير المستغل لمتغير `confettis` المولّد عبر `React.useMemo` في `ExperimentalGameRoom.tsx` (تخفيض حجم الملف إلى 2010 سطراً) واجتياز الفحص الثابت (`tsc --noEmit`) وبناء التطبيق بنجاح تام، مع الحفاظ الكامل على تصيير وشاشات مرحلة التتويج PODIUM.
 
-- [ ] **BATCH-6C-3 — Shared Room Connection Status Overlay Extraction**:
-  - **الحالة**: **`[ ] PLANNED — NOT STARTED`**.
-  - **المكون الجديد المخطط**: `src/components/game/RoomConnectionStatusOverlay.tsx`.
-  - **الملفات المستهدفة**: `src/components/GameRoom.tsx` و `src/components/experimental/ExperimentalGameRoom.tsx`.
+- [x] **BATCH-6C-3 — Shared Room Connection Status Overlay Extraction**:
+  - **الحالة**: **`[x] COMPLETED`**.
+  - **المكون الجديد المنشأ**: `src/components/game/RoomConnectionStatusOverlay.tsx`.
+  - **الملفات المعدلة**: `src/components/GameRoom.tsx` و `src/components/experimental/ExperimentalGameRoom.tsx`.
   - **الواجهة المعمارية المعتمدة الصريحة (Exact Props Interface)**:
     ```typescript
     interface RoomConnectionStatusOverlayProps {
@@ -336,10 +336,24 @@
       onReturnToLobby: () => void;
     }
     ```
-  - **المعمارية وحدود المسؤولية**:
-    - المكون سيكون مكون عرض مستقل وغير مالك للحالة (Stateless Presentational Component) يتولى فقط تصيير واجهة التنبيه وأشرطة انقطاع الاتصال بناءً على الـ Props الممررة.
-    - تظل حالة الاتصال الحقيقية، ومستمعو وموفرو Socket.IO، وسلوك إعادة الاتصال التلقائي، ومؤقتات العد التنازلي لإعادة الاتصال، والتخزين المحلي، ودوال مغادرة الروم والعودة للوبي داخل المكونات الأصلية (`GameRoom.tsx` و `ExperimentalGameRoom.tsx`).
-    - *ملاحظة ملزمة*: هذه الدفعة مخططة وموزونة ولم يبدأ كتابة أي كود لها بعد.
+  - **النتائج المعمارية والتغييرات**:
+    - استخراج واجهة حالة الاتصال وإعادة الاتصال المطابقة إلى مكون عرض مستقل غير مالك للحالة (`Stateless Presentational Component`).
+    - دمج واستخدام المكون المشترك في كلا المكونين الأب (`GameRoom.tsx` و `ExperimentalGameRoom.tsx`).
+    - بقاء حالة الاتصال، ومستمعي Socket.IO، وسلوك إعادة الاتصال التلقائي، والمؤقتات، وتنظيف التخزين المحلي، ودوال مغادرة الغرفة بالكامل داخل المكونات الأب.
+    - الحفاظ الكامل على شاشات التحميل الأولية ومنطق إدارة الاتصال.
+    - إزالة استيرادي `WifiOff` و `LogOut` غير المستخدمين من المكونين الأب مع الإبقاء على استيرادي `motion` و `AnimatePresence`.
+  - **نتائج التحقق الفني والتجربة المسجلة**:
+    - `npx tsc --noEmit`: اجتياز بنسبة 100% (**0 errors**).
+    - `npm run build`: بناء ناجح بنسبة 100%.
+    - المزامنة مع GitHub: مكتملة ومؤكدة (`GitHub Synchronization Completed`).
+    - التجربة اليدوية للمستخدم: ناجحة واكتمال تجربة اللعب بشكل طبيعي ممتاز دون أي كسر.
+
+- [ ] **PHASE 6C — Stage 2: Post-Extraction Residual Architectural Audit**:
+  - **الحالة**: **`[ ] PLANNED — NOT STARTED`**.
+  - **الهدف وطبيعة التدقيق**:
+    - إجراء تدقيق معماري جديد بنمط القراءة فقط (Read-Only Audit) للمسؤوليات المتبقية داخل `ExperimentalGameRoom.tsx` بعد إنجاز الدفعات `BATCH-6C-1` و `BATCH-6C-2` و `BATCH-6C-3`.
+    - تحديد المسؤوليات المتماسكة التي يجب إبقاؤها داخل المكون الأب، وتقييم أي مرشح استخراج مستقل حقاً، ودراسة الاعتماديات وملكية الحالة، وتقييم الأثر على المعالج، الذاكرة العشوائية، سلاسة التصيير، الهواتف الذكية والتزامن.
+    - اتخاذ قرار معماري واضح بما إذا كان هناك مبرر لاستخراج إضافي أم يجب إغلاق المرحلة `PHASE 6C` دون استخراج جديد. *(عدم صياغة BATCH-6C-4 مسبقاً قبل نتائج التدقيق)*.
 
 ---
 
@@ -478,13 +492,13 @@
      - حلقة معالجة حركة المؤشر اللحظية `processStrokeMove` وحسابات الاستكمال الخطي (Lerp).
      - التنسيق عالي المستوى لإعادة التشغيل (High-level Replay Orchestration) لشدة ارتباطه بمراجع React، ومؤقتات RAF، وإلغاء الأجيال، وحالة واجهة المستخدم.
      - معالجة أحداث المقابس اللحظية وتدفق المزامنة (Drawing Socket Sync & Event Processing) لشدة ارتباطها بسياقات الكانفاس، وجلسات الرسم النشطة والمستنزفة، وحاجز التراجع، وإصلاح الخطوط المفقودة.
-2. **`src/components/experimental/ExperimentalGameRoom.tsx`** (~2010 سطراً بعد تنفيذ BATCH-6C-2):
+2. **`src/components/experimental/ExperimentalGameRoom.tsx`** (~1966 سطراً في قياس المستودع الحالي بعد تنفيذ BATCH-6C-3؛ مع الحفاظ على القراءة التاريخية 2010 سطراً عند نقطة BATCH-6C-2):
    - منسق الغرفة التنافسية المخصص لجميع النماذج التنافسية (`General #Test`, `General #10P`, `Experimental Draw`, والغرف التنافسية المخصصة `isExperimental: true`).
    - إدارة الانتقال بين حالات الجولة (`WAITING`, `CHOOSING`, `DRAWING`, `ROUND_END`, `PODIUM`).
    - تكيف الواجهة مع النافذة المرئية ولوحة المفاتيح في الهواتف (`visualViewport` و `--keyboard-inset`).
    - شريط الوقت عالي الدقة `SmoothTimer`.
-   - النوافذ المنبثقة التفاعلية المضمنة واستخدام المكونات المستخرجة: `ChoosingWordOverlay`, `PlayersSidebar`, `MiniBoardOverlay`, `OverlayChatRoom`, `ExperimentalWordOverlay`, `ExperimentalHitOverlay`, `GameActivityFeed`, ونوافذ الإجراءات والتنبيهات المستخرجة عبر `CinematicModal`.
-   - طبقات المراحل: اختيار الكلمات، لوحة الرسم النشطة، منصة التتويج، شريط التغذية التفاعلية المستخرج (`GameActivityFeed`)، وشريط الدردشة العائم.
+   - النوافذ المنبثقة التفاعلية المضمنة واستخدام المكونات المستخرجة: `ChoosingWordOverlay`, `PlayersSidebar`, `MiniBoardOverlay`, `OverlayChatRoom`, `ExperimentalWordOverlay`, `ExperimentalHitOverlay`, `GameActivityFeed`, `RoomConnectionStatusOverlay`, ونوافذ الإجراءات والتنبيهات المستخرجة عبر `CinematicModal`.
+   - طبقات المراحل: اختيار الكلمات، لوحة الرسم النشطة، منصة التتويج، شريط التغذية التفاعلية المستخرج (`GameActivityFeed`)، واجهة حالة الاتصال المشتركة (`RoomConnectionStatusOverlay`)، وشريط الدردشة العائم.
 3. **`server/rooms.ts`**:
    - مدير الغرف المركزي في الذاكرة `RoomManager` (مصدر الحقيقة الموحد والمالك الحصري لخريطة `this.rooms`).
    - دورة حياة الغرف والجولات، ومؤقت التحديثات الدوري `tick()`.
