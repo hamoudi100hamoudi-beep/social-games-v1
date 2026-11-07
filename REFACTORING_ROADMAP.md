@@ -8,15 +8,15 @@
 
 > ⚠️ **تنبيه ملزم للذكاء الاصطناعي وأي مطور يقرأ هذا المستند**:
 > 1. **المرجع الحصري والنهائي**: تُمثّل هذه الوثيقة **المرجع الموحد والحصري والدائم** لجميع القواعد المعمارية، ومنهجية العمل، والثوابت الأمنية، وسجل تفكيك الكود، وحالة المشروع في مستودع `hamoudi100hamoudi-beep/social-games-v1`.
-> 2. **إلزامية القراءة المسبقة**: يجب **قراءة وفهم هذه الوثيقة بالكامل** قبل اقتراح أو تنفيذ أي تعديل معماري، أو صياغة Prompt، أو إعادة هيكلة، أو إضافة ميزات جديدة في المشروع.
-> 3. **اعتماد نقطة البداية الفعلية**: تُمثّل الحالة الموثقة في هذا الملف نقطة البداية المعتمدة للعمل، ولا يجوز الاعتماد على محادثات قديمة، أو تقارير سابقة، أو فرضيات ملغاة إذا كانت تتعارض مع الكود الحالي وهذه الوثيقة.
+> 2. **إلزامية القراءة المسبقة**: يجب **قراءة وفهم هذه الوثيقة بالكامل** قبل اقتراح أو تنفيذ أي تعديل معماري، أو صياغة Prompt، أو إعادة هيكلة، أو إضافة ميزات جديدة في المشروع، واعتماد حالتها الحالية بوصفها نقطة البداية للعمل.
+> 3. **اعتماد نقطة البداية الفعلية**: تُمثّل الحالة الموثقة في هذا الملف نقطة البداية المعتمدة للعمل، ولا يجوز الاعتماد على محادثات قديمة، أو تقارير سابقة، أو فرضيات ملغاة إذا كانت تتعارض مع الكود الحالي والوثيقة المحدثة.
 > 4. **سياسة عدم التخمين**: في حال وجود أي تعارض أو عدم يقين، يجب فحص السورس كود المباشر وتحديث هذه الوثيقة وفق الحقيقة البرمجية المثبتة.
 
 ---
 
-## ⚙️ القسم B — منهجية العمل المعتمدة (Development Workflow)
+## ⚙️ القسم B — منهجية العمل وسياسة الدفعات المعتمدة (Development Workflow & Batch Policy)
 
-تلتزم جميع عمليات التطوير، وإعادة الهيكلة، والتدقيق بالمبادئ العشرة التالية دون استثناء:
+تلتزم جميع عمليات التطوير، وإعادة الهيكلة، والتدقيق بالمبادئ العشرة وسياسة الدفعات الصارمة التالية:
 
 ### 1. افهم الوضع الحالي أولاً (Understand Current State First)
 * **الفحص البرمجي المباشر**: ابدأ دائماً بقراءة وفحص السورس كود المباشر قبل اقتراح أو كتابة أي تعديلات.
@@ -29,11 +29,15 @@
 * **التدقيق المركّز**: يُطلب تدقيق قرائي موجه إذا كانت الاعتماديات أو الحدود أو المخاطر غير واضحة.
 * **الامتناع عن التعديل العشوائي**: يُمنع إجراء أي تعديل أو تفكيك برمجي إذا لم توجد فائدة معمارية أو تشغيلية حقيقية.
 
-### 3. حافظ على البنية المستقرة (Preserve Stable Architecture)
+### 3. حافظ على البنية المستقرة وسياسة تدرج المخاطر (Preserve Stable Architecture & Risk Tiers)
 * **الاستقرار أولاً**: يُحظر تغيير أي بنية معمارية مستقرة ومجربة دون سبب فني واضح ومبرر.
 * **حظر التفتيت الشكلي**: يُمنع تقطيع أو استخراج الملفات لمجرد تقليص عدد الأسطر أو حجم الملفات دون وجود حد وظيفي مستقل.
-* **الشمولية والاستدامة**: لا تتجنب حلاً معمارياً أكبر إذا كان يعالج أصل المشكلة بصورة أفضل وأكثر استدامة.
-* **موازنة الخيارات**: قارن دائماً بين الحل البسيط والحل الأشمل من حيث الفائدة، الأداء، التعقيد، والمخاطر.
+* **التماسك الوظيفي (Functional Cohesion)**: كل دفعة تجمع مكونات أو دوال تشترك في نطاق عمل واحد، ويُحظر خلط تعديلات غير مترابطة في دفعة واحدة.
+* **التدرج الصارم للمخاطر (Strict Risk Classification A -> B -> C)**:
+  - **الفئة A (منخفضة المخاطر - Low Risk)**: مكونات عرض مستقلة، دوال نقية (Pure functions)، وأدوات حسابية. تُنفذ أولاً.
+  - **الفئة B (متوسطة المخاطر - Medium Risk)**: Custom Hooks وشاشات وتراكيب تعتمد على عدة Props أو دورات حياة React.
+  - **الفئة C (عالية المخاطر - High Risk)**: محركات الرسم، Socket.IO، سجل الرسم، والتراجع. محظورة تماماً لحين استيفاء بوابات الاستقرار المسبقة.
+* **الشمولية والاستدامة**: لا تتجنب حلاً معمارياً أكبر إذا كان يعالج أصل المشكلة بصورة أفضل وأكثر استدامة. قارن دائماً بين الحل البسيط والحل الأشمل من حيث الفائدة، الأداء، التعقيد، والمخاطر.
 
 ### 4. قيّم أثر التعديل على الموارد (Resource & Performance Impact Evaluation)
 قبل أي تغيير له أثر محتمل، راجع تأثيره المباشر على:
@@ -54,10 +58,14 @@
 * **التركيز على مهام النظام**: لا تطلب من الذكاء الاصطناعي تنفيذ محاكاة تجارب لعب يدوية يستطيع المستخدم تنفيذها بنفسه بالمتصفح.
 * **ترشيد الاختبارات الآلية**: لا تطلب تشغيل حزم اختبارات آلية ثقيلة أو مكلفة إلا عند وجود ضرورة تقنية حقيقية لمكونات السيرفر والبروتوكول.
 
-### 7. راجع التنفيذ قبل اعتماده (Pre-Acceptance Verification)
+### 7. راجع التنفيذ قبل اعتماده وشروط قبول الدفعة (Pre-Acceptance Verification & Acceptance Gates)
 * **عدم الاكتفاء بالتقارير اللفظية**: لا تعتبر تقرير الذكاء الاصطناعي دليلاً كافياً على نجاح المهمة.
 * **فحص الكود والـ Diff**: افحص الكود الفعلي والتغيرات السطرية لضمان عدم وجود تغييرات جانبية أو تجاوز للنطاق.
-* **الفحص الثابت والتجميع**: تحقق من اجتياز فحص الأنواع (`tsc --noEmit`) وبناء التطبيق (`npm run build`) واختبارات النطاق إن وجدت.
+* **شروط قبول الدفعة (Batch Acceptance Gates)**:
+  - عرض الـ Diff البرمجي الكامل وتدقيقه بدقة.
+  - اجتياز فحص الأنواع الصارم: `tsc --noEmit` بنسبة 100% دون أي خطأ.
+  - اجتياز بناء التطبيق الكامل: `npm run build` بنجاح تام عند وجود تغييرات كود.
+  - المراجعة البرمجية والمشاهدة الاستاتيكية للسياسة الهيكلية.
 
 ### 8. اختبار المستخدم والمزامنة (User Testing & GitHub Sync Protocol)
 * **التجربة اليدوية للمستخدم**: بعد مراجعة التعديل وتمرير التجميع، يتولى المستخدم تجربة اللعبة والميزات المتأثرة يدوياً بالمتصفح.
@@ -71,29 +79,32 @@
 
 ### 10. التعامل مع عدم اليقين (Honesty & Fact Discipline)
 * **حظر التلفيق**: يُمنع منعاً باتاً اختراع معلومات، أو أسطر برمجية غير موجودة، أو ادعاء نتائج اختبارات لم تتم.
-* **الفصل بين الحقائق والفرضيات**: مَيّز بوضوح بين الحقيقة البرمجية المثبتة بالسورس كود، والفرضية، والاقتراح المستقبلي.
-* **التسجيل الصريح**: عندما تعذر التحقق من معلومة، سجّل أنها "تحتاج إلى تحقق في الكود" بدلاً من تقديمها كحقيقة قائمة.
+* **الفصل الصارم**: مَيّز بوضوح بين:
+  - **الحقيقة البرمجية المثبتة (Verified Fact)**: كود مثبت بالأسطر والملفات والنتائج.
+  - **الافتراض (Assumption)**: تقدير يتطلب تحققاً مركزاً عند بدء الدفعة.
+  - **المقترح المستقبلي (Future Proposal)**: فكرة أو قدرة منتج مستقبلية لم يتم اعتمادها كدفعة برمجية بعد.
+* **التسجيل الصريح**: عندما يتعذر التحقق من معلومة، سجّل أنها "تحتاج إلى تحقق في الكود" بدلاً من تقديمها كحقيقة قائمة.
 
 ---
 
 ## 📍 القسم C — الحالة الحالية للمشروع (Current Project State & Architecture Tracker)
 
 > **تاريخ آخر تحديث وثائقي**: 2026-11-07  
-> **حالة التنفيذ الحالية**: لا توجد أي دفعة برمجية قيد التنفيذ حالياً. المشروع في حالة استقرار وثبات تامة جاهزة للدفعة التالية.
+> **حالة التنفيذ الحالية**: لا توجد أي دفعة برمجية قيد التنفيذ حالياً (`No active in-progress batches`). المشروع في حالة استقرار وثبات تامة جاهزة للدفعة التالية المخططة.
 
 ### 📊 سجل التقدم المعماري المبسط (Simplified Architecture Tracker)
 
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
 | **المرحلة المعمارية الحالية** | `PHASE 6C — ExperimentalGameRoom Refactoring` | مستمرة — استكمال استخراج المكونات المستقلة وتنظيف الكود المتبقي في غلاف اللعب التنافسي |
-| **آخر دفعة متمة ومثبتة** | `BATCH-6C-2` | `[x] COMPLETED` — حذف توليد كائن جزيئات الاحتفال غير المستغل `confettis` من `ExperimentalGameRoom.tsx` بنجاح |
+| **آخر دفعة متمة ومثبتة** | `BATCH-6C-2` | `[x] COMPLETED` — حذف توليد كائن جزيئات الاحتفال غير المستغل `confettis` من `ExperimentalGameRoom.tsx` وتخفيض حجم الملف إلى 2010 سطراً واجتياز الفحص الثابت والبناء |
 | **الدفعة الحالية قيد التنفيذ** | لا يوجد | لا توجد أي أعمال برمجية جارية حالياً |
 | **الدفعة التالية المعتمدة** | `BATCH-6C-3` | `[ ] PLANNED — NOT STARTED` — استخراج واجهة حالة الاتصال المشتركة `RoomConnectionStatusOverlay.tsx` |
 | **المخاطر والعوائق المفتوحة** | لا يوجد عوائق حرجة | ملاحظة فنية مثبتة: بوابة DPR الصامتة (`EXPERIMENTAL_DPR_1_TEST`) تتطلب تدقيقاً مستقلاً مستقبلاً عند تعديل دقة الكانفاس |
 
 ### 🏷️ قاموس حالات دورة حياة الدفعات (Status Dictionary)
 * `[x] COMPLETED`: المهمة مكتملة ومحققة معمارياً ومثبتة في الكود ومفحوصة بالتجميع.
-* `[~] IN PROGRESS`: المهمة قيد التنفيذ والعمل الفعلي حالياً. *(ملاحظة: مجرد صياغة Prompt أو مناقشة المهمة لا يُعد دليلاً على أنها قيد التنفيذ)*.
+* `[~] IN PROGRESS`: المهمة قيد التنفيذ والعمل الفعلي حالياً. *(ملاحظة ملزمة: مجرد صياغة Prompt أو مناقشة المهمة لا يُعد دليلاً على أنها قيد التنفيذ)*.
 * `[ ] PLANNED — NOT STARTED`: مهمة معتمدة ومخططة في خارطة الطريق ولم يبدأ كتابة أي كود لها بعد.
 * `[—] DEFERRED`: مؤجلة عمداً بقرار معماري لوجود بوابات سابقة إلزامية.
 * `[x] CLOSED (NO EXTRACTION WARRANTED)`: خضعت لتدقيق معماري وتقرر عدم الاستخراج لحماية الأداء، الثوابت، والتعقيد.
@@ -109,8 +120,8 @@
 2. **وحدة مصدر الحقيقة في الذاكرة (Single Source of Truth)**:
    الالتزام الحصري بمالكية `RoomManager` لـ `this.rooms: Map<string, Room>` داخل ذاكرة السيرفر. يُمنع منعاً باتاً إنشاء نُسخ مستقلة أو متكررة من حالة الغرف (`RoomState`) أو سجل الرسم (`drawHistory`) أو مراجع الكانفاس لتفادي انفصال التزامن (State Desynchronization).
 3. **حماية بروتوكول Socket.IO والحزم الثنائية**:
-   * **أداة الدلو والبدء الفوري**: الشرط `type === 4 || type === 10 || type === 5` داخل `recordDrawCommand` بملف `server/rooms.ts` و `server/roomDrawingHistory.ts` محمي تماماً لتأمين تسجيل أداة الدلو كخطوة أولى.
-   * **بروتوكول الرسم الثنائي**: الحفاظ الصارم على البنية المضغوطة `Type 13` و `Type 2` للمكالمات عالي التردد، والبناء المعياري لـ `Type 9` بالسيرفر، وإشعارات الاعتماد `Type 11` والإلغاء `Type 12`.
+   * **أداة الدلو والبدء الفوري**: الشرط `type === 4 || type === 10 || type === 5` داخل `recordDrawCommand` بملف `server/rooms.ts` و `server/roomDrawingHistory.ts` محمي تماماً لتأمين تسجيل أداة الدلو كخطوة أولى دون اعتبارها حزمة يتيمة.
+   * **بروتوكول الرسم الثنائي**: الحفاظ الصارم على البنية المضغوطة `Type 13` و `Type 2` للمكالمات عالي التردد، والبناء المعياري لـ `Type 9` بالسيرفر، وإشعارات الاعتماد `Type 11` (Commit Ack) والإلغاء `Type 12` (Abort Stroke).
 4. **حماية طبقات ومراجع لوحة الرسم (`DrawingCanvasCore`)**:
    * حماية مراجع الرسم الأساسية: `canvasRef` و `ctxRef` و `tempCtxRef` والطبقات المؤقتة.
    * حماية حلقة معالجة المؤشر عالي التردد (60-120Hz) وحماية ملكية اللمس الصريحة عبر `activePointerIdRef`.
@@ -126,7 +137,7 @@
 8. **حماية واجهات الهواتف الذكية والنافذة المرئية**:
    * حظر المساس بدوال `visualViewport` أو المتغير البرمجي `--keyboard-inset` أو سلوك تقليص الواجهة وتحويل الدردشة إلى طبقة شفافة عائمة عند فتح لوحة المفاتيح.
 9. **نسبة أبعاد الكانفاس وتصميم الواجهة (CSS & Layout Protection)**:
-   * الحفاظ على النسبة الدقيقة `aspect-[740/430]` لنسبة أبعاد الكانفاس.
+   * الحفاظ على النسبة الدقيقة `aspect-[740/430]` لنسبة أبعاد الكانفاس لمنع تشوه العرض لدى المراقبين.
    * الحفاظ على لون حلقة تحديد Palette الذهبية الممتازة `#D4AF37` بسمك `border-[1.5px]` وتحديد خارجي `-inset-[3px]`.
 10. **عدم الدمج القسري للغرف**:
     يُمنع دمج `GameRoom.tsx` و `ExperimentalGameRoom.tsx` في ملف واحد لمجرد تقليل عدد الملفات؛ فلكل منهما مسار مستقر مستقل.
@@ -137,7 +148,7 @@
 
 ---
 
-## 🏛️ القسم E — خارطة الطريق وسجل الإنجاز (Roadmap Phases Detail)
+## 🏛️ القسم E — خارطة الطريق وسجل الإنجاز (Roadmap Phases & Historical Batches Detail)
 
 ### 📌 PHASE 1 — SERVER SECURITY COMPLETION
 - [x] **تحديد معدل التصويت بالطرد**: `submit_vote_kick`.
@@ -153,82 +164,218 @@
 ---
 
 ### 📌 PHASE 2 — DRAW HISTORY LIFECYCLE
-- [x] **`BATCH-2-RES` — دراسة دورة حياة سجل الرسم وحدود الذاكرة**: اكتملت واستقرت مع عزل `server/roomDrawingHistory.ts`.
+- [x] **`BATCH-2-RES` — دراسة دورة حياة سجل الرسم وحدود الذاكرة**:
+  - دراسة مسارات إضافة وحذف ومسح `drawHistory`.
+  - دراسة وضع الرسم الحر (Free Draw) والغرف طويلة العمر.
+  - توثيق العلاقة المتبادلة بين السجل وحاجز التراجع وتقييم خيار اللقطات المرجعية (Canvas Snapshots).
+  - اكتملت واستقرت البوابة مع عزل `server/roomDrawingHistory.ts`.
 
 ---
 
 ### 📌 PHASE 3 — DRAW SYNC CORRECTNESS
 - [x] **`BATCH-3-SYNC` — مصفوفة التحقق السلوكي لمزامنة اللوحات وحالات إعادة الاتصال**:
-  - الرسم المباشر، أداة الدلو، التراجع/إلغاء التراجع، مسح اللوحة، الانضمام المتأخر، إعادة الاتصال في تبويب خلفي، بروتوكول الإصلاح، وتوافق البكسلات.
+  - الرسم المباشر اللحظي بين لاعبين متصلين في نفس اللحظة.
+  - أداة الدلو (Bucket / Flood Fill) وتجاوز عائق البدء الفوري.
+  - التراجع (Undo) وإلغاء التراجع (Redo) بحاجز الإغلاق اللحظي `isDrawingActive = false`.
+  - مسح اللوحة (Clear Canvas) وتزامن المسح لدى المراقبين والرسام.
+  - انضمام لاعب متأخر أثناء رسم نشط واسترجاع السجل.
+  - انقطاع الاتصال وإعادة الاتصال في تبويب خلفي ثم العودة.
+  - إصلاح الخطوط النشطة المفقودة عبر بروتوكول الإصلاح `draw_repair_req`.
+  - توافق وتطابق بكسلات اللوحة بين الرسام والمخمنين بعد تسلسل عمليات مركب.
+  - **القرار المعماري النهائي**: `READY TO CLOSE PHASE 3` — اكتمال التدقيق وتأكيد سلامة بروتوكول المزامنة وإعادة الاتصال والرفع المتأخر.
 
 ---
 
 ### 📌 PHASE 4 — DRAWINGCANVASCORE REFACTOR
+
+#### 1. الوحدات الحسابية وخوارزميات الرسم المستقلة
 - [x] **PHASE 4A — حصر المسؤوليات والاعتماديات**.
 - [x] **PHASE 4B — فصل محركات وخوارزميات الرسم المستقلة**:
-  - `canvasCommandHelpers.ts`: دوال فحص الأوامر والأنواع.
-  - `canvasPathRenderer.ts`: تصيير الأشكال الهندسية (`drawShape`) والمسارات المنعمة (`drawEntirePath`).
-  - `canvasFloodFill.ts`: النواة الحسابية لتعبئة المساحات النقطية (`executeRasterFloodFill`).
+  - `PHASE 4B-1`: استخراج دوال فحص الأوامر والأنواع إلى `src/utils/canvasCommandHelpers.ts`.
+  - `PHASE 4B-2`: تدقيق محرك الأشكال والمسارات.
+  - `PHASE 4B-3A`: استخراج محرك تصيير الأشكال الهندسية `drawShape` إلى `src/utils/canvasPathRenderer.ts`.
+  - `PHASE 4B-3B`: استخراج محرك تصيير المسارات المنعمة `drawEntirePath` إلى `src/utils/canvasPathRenderer.ts`.
+  - `PHASE 4B-4A`: استخراج النواة الحسابية لتعبئة المساحات النقطية `executeRasterFloodFill` إلى `src/utils/canvasFloodFill.ts`.
 - [x] **PHASE 4C — فصل وظائف الكانفاس والتحكم بالعرض (Viewport & Transform)**:
-  - `canvasViewportMath.ts`: دوال `computeCanvasFitScale` و `calculateLogicalCoordinates`.
+  - `PHASE 4C-2`: استخراج `computeCanvasFitScale` إلى `src/utils/canvasViewportMath.ts`.
+  - `PHASE 4C-4`: استخراج `calculateLogicalCoordinates` إلى `src/utils/canvasViewportMath.ts`.
 - [x] **PHASE 4D — فصل مسار الإدخال والتصيير (Pointer & Stroke Pipeline)**:
-  - إعادة استخدام قياس DOMRect، فحص ملكية اللمس `activePointerIdRef`، وتثبيت إنهاء الضربة عند بدء التكبير/التصغير بالأصابع Pinch-to-Zoom.
-- [x] **PHASE 4E — فصل إدارة السجل والتراجع ومحرك الإعادة**:
-  - `SUB-BATCH-4E-1A`: `canvasCheckpointManager.ts` لإدارة النقاط المرجعية والتقييد.
-  - `SUB-BATCH-4E-1B`: `canvasUndoCache.ts` لإدارة التخزين المؤقت النقطي للتراجع.
-  - `SUB-BATCH-4E-1C`: `canvasReplayEngine.ts` (استخراج `replaySingleCommand` و `renderLeftoverReplaySessions`).
-  - `Stage 2C (High-Level Replay Orchestration Audit)`: **`[x] CLOSED (NO EXTRACTION WARRANTED)`** — تقرر إبقاء المنظم عالي المستوى داخل `DrawingCanvasCore.tsx` لشدة اعتماده على مراجع React ومؤقتات RAF وحالة الواجهة.
-- [x] **PHASE 4F — تدقيق مزامنة المقابس للرسم (Drawing Socket Sync Audit)**:
-  - **`[x] CLOSED (NO EXTRACTION WARRANTED)`** — انتهى التدقيق القرائي إلى أن استخراج المقابس سيخلق "كيس مراجع وكولباكات" متضخم يربط الكود الخارجي بأكثر من 35 مرجعاً دافلياً دون فائدة معمارية حقيقية.
+  - `PHASE 4D-2`: إعادة استخدام قياس DOMRect لكل حدث في Coalesced Events.
+  - `PHASE 4D-3 / 4D-3C`: إضافة فحص ملكية المؤشر الصريح `activePointerIdRef`.
+  - `PHASE 4D-3D-FIX`: تثبيت وإنهاء الضربة عند بدء التكبير/التصغير بالأصابع Pinch-to-Zoom.
+
+#### 2. تفكيك مرحلة سجل الرسم والتراجع ومحرك الإعادة (`PHASE 4E`)
+- [x] **`SUB-BATCH-4E-1A` — Canvas Checkpoint Manager**:
+  - **الملف المستخرج**: `src/utils/canvasCheckpointManager.ts`.
+  - **المسؤولية والمعمارية**: إدارة دورة حياة النقاط المرجعية للكانفاس (Checkpoints)، النقاط الأساسية والذيلية (Base/Tail Slots)، التحقق من الصلاحية، التحديث التراكمي، الإبطال، وسيارات التخلّي والحد من استهلاك الذاكرة.
+- [x] **`SUB-BATCH-4E-1B` — Canvas Undo Cache**:
+  - **الملف المستخرج**: `src/utils/canvasUndoCache.ts`.
+  - **المسؤولية والمعمارية**: إدارة التخزين المؤقت لصور التراجع وإلغاء التراجع النقطي بخطوة واحدة (`Single-step Bitmap Undo/Redo Cache`)، معالجة التخزين المسبق المعلق قبل الضربة، التحقق من البيانات الوصفية، والإنشاء الكسول للطبقات.
+- [x] **`SUB-BATCH-4E-1C` — Replay Engine Extraction & Audit**:
+  - **الملف المستخرج**: `src/utils/canvasReplayEngine.ts`.
+  - **Stage 1 (Architectural Audit)**: تحديد حدود الملكية وقيود بروتوكول الإعادة.
+  - **Stage 2A (Single-command Replay Extraction)**: استخراج الدالة المساعدة ذات الأثر `replaySingleCommand()` لفك ترميز الحزم الفردية ورسم المسارات والأشكال وتنفيذ اختصارات الملء.
+  - **Stage 2B (Leftover Replay Session Rendering)**: استخراج الدالة المساعدة ذات الأثر `renderLeftoverReplaySessions()` وتحديث مواضع الاستدعاء الخمسة في `DrawingCanvasCore.tsx` مع الحفاظ الصارم على سلوك مسح المسارات الخاص بـ `processChunk` وبقاء جلسات الرسم النشطة.
+  - **تصنيف الدوال**: تم تصنيف `replaySingleCommand()` و `renderLeftoverReplaySessions()` كـ **Stateless / Effectful Helpers**؛ فهي لا تملك حالة داخلية دائمة، ولكنها تعدل المجمعات وسياق الكانفاس الممرر إليها.
+  - **Stage 2C (High-Level Replay Orchestration Audit)**: **`[x] CLOSED (NO EXTRACTION WARRANTED)`**. تدقيق معماري للقراءة فقط للتدفق عالي المستوى. **القرار المعماري**: تقرر عدم استخراج المنظم عالي المستوى إلى المحرك وإبقاؤه داخل `DrawingCanvasCore.tsx` لشدة اعتماده على مراجع ومؤقتات React، وحالة المزودات، والتخزين المؤقت، وجدولة RAF، وإلغاء الأجيال، ونقل المقابس، والمقاييس التشخيصية.
+
+#### 3. تدقيق مزامنة المقابس للرسم (`PHASE 4F`)
+- [x] **`PHASE 4F — Drawing Socket Sync Architectural Audit`**:
+  - **الحالة**: **`[x] CLOSED (NO EXTRACTION WARRANTED)`**.
+  - **القرار المعماري النهائي**: انتهى التدقيق المعماري للقراءة فقط إلى أن استخراج معالجة المقابس من `DrawingCanvasCore.tsx` إلى وحدة خارجية مستقلة (`DrawingSocketSync`) أو إلى خطاف مخصص (`useDrawingSocketSync`) لن يحقق فصلاً وظيفياً حقيقياً، بل سيؤدي إلى إنشاء "كيس مراجع وكولباكات" متضخم (Ref-bag / Callback-soup) يربط الكود الخارجي بأكثر من 35 مرجعاً ودالة داخلية للمكون، مما يزيد التعقيد ويعرض المزامنة للخلل.
+  - **المسؤوليات المقيدة بالمكون (`Component-Owned Responsibilities`)**:
+    1. الارتباط المباشر بسياقات الكانفاس (`ctxRef` و `tempCtxRef`) والطبقات المؤقتة ومسارات الرسم اللحظي.
+    2. إدارة طوابير الجلسات النشطة والمستنزفة (`activeSessionsRef` و `drainingStrokesRef`) ومؤقت استنزاف المراقبين بمعدل 60 إطاراً بالثانية (`spectatorPlaybackRafRef`).
+    3. التسليم الذري للخطوط المكتملة (`commitRemoteStrokeAtomically`) وحل طلبات الإصلاح الموجهة (`draw_repair_req`).
+    4. معاملات التخزين المؤقت للصور والنقاط المرجعية للتراجع (`CanvasUndoCache` و `CanvasCheckpointManager`).
+    5. إعادة بناء السجل عبر شرائح RAF بحجم 50 أمراً (`processIncomingHistorySync`) وقمع الحزم المكررة بمقارنة المحتوى (`areHistoryArraysEqual`).
+    6. دورة حياة React، ومراجع المكون، وحالة واجهة المستخدم (`isSyncing`, `hasSyncedOnce`)، وإلغاء أجيال المزامنة (`historySyncGenerationRef`).
+  - **التدقيق التكميلي للسيرفر والبروتوكول الواقعي**:
+    - جميع النماذج التنافسية المحددة مسبقاً تستخدم `isExperimental: true` ووضع الرسم الحر يستخدم `isFreeDraw: true`؛ وبالتالي تشترك جميع الأنماط النشطة في مسار المحرك المعياري المستمر (Canonical Continuous Stroke Pipeline).
+    - مسار الرسم الخام غير المجمع (`isFreeDraw: false && isExperimental: false`) يظل مسار توافق قديم لا يوجد له أي روم نشط مدمج في التوجيه الحالي.
+    - إدارة الذاكرة: استخدام مجمع نقاط قابل لإعادة الاستخدام في `drawBinaryHelper.ts` (`pointPool`) مع تفادي النسخ غير الضروري في مسار الحركة عالي التردد.
+    - معالجات الانضمام والمغادرة: فحص `registerJoinRoomHandler.ts` و `registerLeaveRoomHandler.ts` وإسناد الانقطاع الفعلي إلى `roomManager.handleDisconnect()` في `server.ts`.
+  - **النتيجة**: أغلقت المرحلة رسمياً دون استخراج أو إنشاء أي ملفات كود أو مساس ببروتوكول السيرفر أو إضافة مطالبات غير مثبتة.
 
 ---
 
 ### 📌 PHASE 5 — SERVER ARCHITECTURE & ROOMMANAGER DECOUPLING
-- [x] **PHASE 5A — استخراج الأدوات النقية من `server/rooms.ts`**:
-  - `server/utils/arabicFuzzyMatch.ts`
-  - `server/data/wordsDictionary.ts`
-  - `server/utils/binaryBufferHelpers.ts`
-- [x] **PHASE 5B — تفكيك وحدات السيرفر الداخلية (RoomManager Modular Controllers)**:
-  - `SUB-BATCH-5B-1`: استخراج خوارزميات سجل الرسم والتراجع إلى `server/roomDrawingHistory.ts`.
-  - `SUB-BATCH-5B-2`: استخراج محرك المعالجة التزامنية للضربات المعيارية إلى `server/roomCanonicalStrokeEngine.ts`.
-  - `Stage 3: Residual RoomManager Core Audit`: **`[x] CLOSED (NO FURTHER EXTRACTION WARRANTED)`** — أثبت التدقيق القرائي أن `RoomManager` يحتفظ فقط بالمسؤوليات المترابطة تزامندياً (ملكية الغرف، دورة حياة اللاعبين والجولات، التنسيق الشبكي للرسم الحر)، وأن حدود التفكيك الحالية هي الحد الأنسب والأعلى استقراراً.
-- [x] **PHASE 5C — ACTIVE ROOM MODES CONSISTENCY AUDIT**:
-  - **`[x] COMPLETED — READ-ONLY SOURCE AUDIT`** — تثبيت وتوثيق المرجع المعماري الدائم لأنماط الغرف النشطة.
+
+#### 1. الأدوات النقية للسيرفر (`PHASE 5A`)
+- [x] **`BATCH-5A-1` — استخراج أدوات المطابقة وقواميس الكلمات**:
+  - **الملفات المنشأة**: `server/utils/arabicFuzzyMatch.ts`، `server/data/wordsDictionary.ts`.
+  - **درجة المخاطر**: الفئة A (منخفضة المخاطر).
+- [x] **`BATCH-5A-2` — استخراج أدوات معالجة الحزم الثنائية**:
+  - **الملف المنشأ**: `server/utils/binaryBufferHelpers.ts`.
+  - **درجة المخاطر**: الفئة A (منخفضة المخاطر).
+
+#### 2. تفكيك وحدات السيرفر الداخلية (`PHASE 5B`)
+- [x] **`PHASE 5B — SERVER / ROOMMANAGER MODULAR CONTROLLERS`**:
+  - **الحالة**: **`[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`**.
+  - **`Stage 1: Full RoomManager Architectural Audit`**: توثيق الاعتماديات وتأكيد ملكية `RoomManager` الحصرية لخريطة `this.rooms` في الذاكرة وفهرس المقابس `this.players`.
+  - **`Stage 1B: Drawing Subsystem Ownership Re-validation`**: إعادة فحص الاعتماديات وفصل خوارزميات سجل الرسم والتراجع عن إدارة هويات الرسم وبث الرسم الحر النشط.
+  - **`SUB-BATCH-5B-1 — Server Drawing History & Undo/Redo Extraction`**:
+    - **الملف الجديد المنشأ**: `server/roomDrawingHistory.ts`.
+    - **الدوال الأربع المستخرجة**:
+      1. `recordRoomDrawCommand`
+      2. `undoRoomFreeDrawStroke`
+      3. `undoRoomLastDrawing`
+      4. `redoRoomDrawing`
+    - **التوصيف المعماري**: خوارزميات ناتجة عن حالة بنطاق الغرفة (Synchronous Room-scoped State Algorithms) تعمل مباشرة على كائن `Room` الأصلي الممرر كمرجع (By reference). بقاء `RoomManager` كواجهة توافقية (Compatibility Facades) تحافظ تماماً على التواقيع والمستدعين الخارجيين. رفع مساعد استخراج معرف الجلسة `extractInstanceIdFromBuffer` إلى نطاق الوحدة (Module scope).
+  - **`SUB-BATCH-5B-2 — Server Canonical Stroke Engine Extraction`**:
+    - **الملف الجديد المنشأ**: `server/roomCanonicalStrokeEngine.ts`.
+    - **الدوال السبع المستخرجة**:
+      1. `getOrCreateFreeDrawStrokes`
+      2. `getOrCreateFreeDrawCanonicalCache`
+      3. `handleFreeDrawStart`
+      4. `handleFreeDrawMove`
+      5. `handleFreeDrawMoveCompressed`
+      6. `handleFreeDrawEnd`
+      7. `getCanonicalFreeDrawStroke`
+    - **الحدود المعمارية**: تعمل تزامندياً بالكامل على كائن `Room` الممرر كمرجع، مع بقاء `RoomManager` مالكاً لخريطة الغرف وواجهات التوافق وبث إشعار الإلغاء `Type 12` عبر `abortFreeDrawStroke`. تسلسل سجل التاريخ التراكمي لـ `Type 9` متبوعاً بـ `Type 3` يظل تتابعياً عبر كولباك الواجهة التوافقية لـ `recordDrawCommand`. إشعار اعتماد الضربة `Type 11` (Commit Ack) يظل مملوكاً لـ `server/registerDrawBinaryHandler.ts`.
+    - **نتائج حزمة الاختبارات التاريخية المثبتة**:
+      * `scripts/test_experimental_draw_trial.ts`: اجتياز بنجاح.
+      * `scripts/test_type13_hardening.ts`: اجتياز بنجاح.
+      * `scripts/test_freedraw_bucket_undo_fastpath.ts`: نجاح 4/4 اختبارات.
+      * `scripts/test_session_identity_suite.ts`: نجاح 626/626 اختباراً بنسبة 100%.
+      * `scripts/test_controlled_fixes_suite.ts`: اجتياز جميع الاختبارات (Tests A - G).
+      * `scripts/test_legacy1a_routing.ts`: اجتياز بنجاح.
+      * `scripts/test_legacy1c_unknown_room_routing.ts`: اجتياز بنجاح.
+  - **`Stage 2: Free Draw Streaming Ownership Audit & Correction Addendum`**: اكتمل بنجاح وتم تنفيذه كاملاً في `SUB-BATCH-5B-2`.
+  - **`Stage 3: Residual RoomManager Core Architectural Audit & Closure`**:
+    - **الحالة**: **`[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`**.
+    - **طبيعة التدقيق**: تدقيق معماري بنمط القراءة فقط (Read-Only Source Audit).
+    - **القرار المعماري النهائي**: إغلاق المرحلة رسمياً بقرار **عدم الحاجة لاستخراج إضافي تحت البنية والمسؤوليات الراهنة (`NO FURTHER EXTRACTION WARRANTED`)**. استخراج `roomDrawingHistory.ts` و `roomCanonicalStrokeEngine.ts` أنشأ الحد المعياري المستقل والأنسب، وبقية مسؤوليات `RoomManager` تشكل نواة متماسكة ومترابطة تزامندياً.
+    - **خريطة ملكية ومسؤوليات `RoomManager` المتبقية**:
+      1. **ملكية كائنات الغرف وفهرس اللاعبين**: يحتفظ بالملكية الحصرية لخريطة الغرف `this.rooms: Map<string, Room>` كـ Source of Truth، وفهرس `this.players: Map<string, Player>` المخصص للبحث السريع برقم المقبس `socketId` إلى كائن `Player`، إلى جانب مصفوفة `room.players`.
+      2. **اختيار الرسام وتدوير الدور**: تختار دالة `transitionToChoosing` أول مرشح في `room.gameState.turnQueue` يوجد له كائن لاعب مطابق داخل مصفوفة `room.players` (عبر المطابقة مع `p.persistentId || p.id`) دون تصفية صريحة لخاصية `isOffline`.
+      3. **إدارة الانقطاع وفترة السماح الصامتة (90 ثانية)**: تحفظ دالة `handleDisconnect` عمداً `p.isOffline = false` وتكتفي بتثبيت `p.offlineSince = Date.now()` خلال فترة السماح الصامتة (90 ثانية) لمنع اضطراب واجهة المستخدم وتأطير مؤقت الإخلاء في `this.evictionTimers`.
+      4. **دوال تنسيق الرسم الحر المتبقية داخل `RoomManager`**:
+         - `syncActiveFreeDrawStrokesToSocket`: تنسيق تجهيز حزم `Type 1` و `Type 2` ومزامنة الضربات النشطة المفتوحة للداخلين الجدد.
+         - `abortAllActiveFreeDrawStrokesForSocket`: تنظيف وإلغاء الضربات النشطة للمقابس المنقطعة.
+         - `abortAllActiveFreeDrawStrokesForRoom`: تنظيف وإلغاء جميع الضربات النشطة للغرفة.
+         - `abortFreeDrawStroke`: بث حزمة الإلغاء الثنائية `Type 12` على مستوى الغرفة عبر Socket.IO.
+      5. **الدقة والصياغة المعمارية**: الأجزاء التزامنية تُنفّذ بشكل تتابعي على خيط Event-loop في Node.js، ومؤشرات كولباك المؤقتات وأحداث المقابس تُنفذ في مهام لاحقة وتتطلب دائماً التحقق من صلاحية الحالة (`stale-state validation`).
+
+#### 3. تدقيق اتساق أنماط الغرف النشطة (`PHASE 5C`)
+- [x] **`PHASE 5C — ACTIVE ROOM MODES CONSISTENCY AUDIT`**:
+  - **الحالة**: **`[x] COMPLETED — READ-ONLY SOURCE AUDIT`**.
+  - **النتائج والحقائق المعمارية الدائمة المثبتة**:
+    1. جميع النماذج التنافسية الحالية تعتمد `isExperimental: true` وتُوجّه إلى `<ExperimentalGameRoom />`.
+    2. اختلاف قيم نقاط الفوز (`General #10P` بـ 120 نقطة مقابل 30 نقطة للبقية) هو خيار تكوين متعمد على مستوى كل غرفة؛ ويُحظر تماماً تعميم أو توحيد قيم نقاط الفوز.
+    3. وضع الرسم الحر نمط تشغيل/جلسة مستمر وليس محرك رسم منفصل؛ حيث يُوجّه إلى `<GameRoom />` ويتشارك مع الغرف التنافسية محركات الرسم المشتركة بالسيرفر والعميل.
+    4. التمييز الصارم بين النموذج المخصص الحالي (تكوين ثابت: 5 لاعبين، 30 نقطة) والإنشاء المستقبلي للغرف المخصصة كقدرة منتج مستقبلية.
+    5. توثيق الملاحظة الفنية المثبتة لبوابة DPR الصامتة `EXPERIMENTAL_DPR_1_TEST` دون تغيير الكود.
 
 ---
 
 ### 📌 PHASE 6 — EXPERIMENTALGAMEROOM REFACTORING & CLEANUP
 
 - [x] **PHASE 6C Stage 1 — Residual ExperimentalGameRoom Architectural Audit**:
-  - **الحالة**: `[x] COMPLETED — READ-ONLY SOURCE AUDIT`
+  - **الحالة**: `[x] COMPLETED — READ-ONLY SOURCE AUDIT`.
   - **النتيجة**: تدقيق شامل للمكون `ExperimentalGameRoom.tsx` وتوثيق مكوناته المستخرجة وبنيته المتبقية.
 
 - [x] **BATCH-6C-1 — Game Activity Feed Extraction**:
-  - **الحالة**: `[x] COMPLETED`
-  - **النتيجة**: استخراج منطقة التغذية السريعة (Quick Feedback Area) إلى المكون العرضي المستقل `src/components/game/GameActivityFeed.tsx` بالـ 4 Props الصريحة (`guesses`, `socketId`, `amIDrawer`, `isFreeDraw`).
+  - **الحالة**: `[x] COMPLETED`.
+  - **النتيجة**: استخراج منطقة التغذية السريعة (Quick Feedback Area) إلى المكون العرضي المستقل `src/components/game/GameActivityFeed.tsx` بالـ 4 Props الصريحة (`guesses`, `socketId`, `amIDrawer`, `isFreeDraw`). تم الحفاظ على مستمعي Socket.IO، وحالة `guesses` ومراجعها التزامنية `guessesRef` ورسائل الخلفية المؤجلة والمؤثرات الصوتية بالكامل داخل `ExperimentalGameRoom.tsx`.
 
 - [x] **BATCH-6C-2 — Remove Unused Podium Confetti Generation**:
-  - **الحالة**: `[x] COMPLETED`
-  - **النتيجة**: تنظيف وإنهاء الكود غير المستغل لمتغير `confettis` المولّد عبر `React.useMemo` في `ExperimentalGameRoom.tsx` واختبار التجميع والأنواع بنجاح (تخفيض حجم الملف إلى 2010 سطراً).
+  - **الحالة**: `[x] COMPLETED`.
+  - **النتيجة**: حذف وتصفية الكود غير المستغل لمتغير `confettis` المولّد عبر `React.useMemo` في `ExperimentalGameRoom.tsx` (تخفيض حجم الملف إلى 2010 سطراً) واجتياز الفحص الثابت (`tsc --noEmit`) وبناء التطبيق بنجاح تام، مع الحفاظ الكامل على تصيير وشاشات مرحلة التتويج PODIUM.
 
 - [ ] **BATCH-6C-3 — Shared Room Connection Status Overlay Extraction**:
-  - **الحالة**: `[ ] PLANNED — NOT STARTED`
-  - **الهدف والمعمارية المقترحة**:
-    - استخراج واجهة حالة الاتصال وإعادة الاتصال المشتركة المكررة بين `src/components/GameRoom.tsx` و `src/components/experimental/ExperimentalGameRoom.tsx` إلى مكون عرض مستقل غير مالك للحالة: `src/components/game/RoomConnectionStatusOverlay.tsx`.
-    - المكون المقترح سيكون Presentational فقط يستقبل بيانات الحالة (مثل `isReconnecting`, `reconnectCountdown`, `connectionError`) ويقوم بتصيير التنبيهات المرئية.
-    - تظل حالة الاتصال الفعلية، ومستمعو Socket.IO، ومؤقتات العد التنازلي لإعادة الاتصال، وعمليات المغادرة وإعادة التوجيه داخل المكونات الأصلية (`GameRoom.tsx` و `ExperimentalGameRoom.tsx`).
-    - *ملاحظة ملزمة*: هذه الدفعة مخططة وموزونة ولم يبدأ تنفيذها برمجياً بعد.
+  - **الحالة**: **`[ ] PLANNED — NOT STARTED`**.
+  - **المكون الجديد المخطط**: `src/components/game/RoomConnectionStatusOverlay.tsx`.
+  - **الملفات المستهدفة**: `src/components/GameRoom.tsx` و `src/components/experimental/ExperimentalGameRoom.tsx`.
+  - **الواجهة المعمارية المعتمدة الصريحة (Exact Props Interface)**:
+    ```typescript
+    interface RoomConnectionStatusOverlayProps {
+      isVisible: boolean;
+      isConnected: boolean;
+      isProlongedDisconnect: boolean;
+      onReturnToLobby: () => void;
+    }
+    ```
+  - **المعمارية وحدود المسؤولية**:
+    - المكون سيكون مكون عرض مستقل وغير مالك للحالة (Stateless Presentational Component) يتولى فقط تصيير واجهة التنبيه وأشرطة انقطاع الاتصال بناءً على الـ Props الممررة.
+    - تظل حالة الاتصال الحقيقية، ومستمعو وموفرو Socket.IO، وسلوك إعادة الاتصال التلقائي، ومؤقتات العد التنازلي لإعادة الاتصال، والتخزين المحلي، ودوال مغادرة الروم والعودة للوبي داخل المكونات الأصلية (`GameRoom.tsx` و `ExperimentalGameRoom.tsx`).
+    - *ملاحظة ملزمة*: هذه الدفعة مخططة وموزونة ولم يبدأ كتابة أي كود لها بعد.
 
 ---
 
-### 🗂️ سجل المكونات المستخرجة تاريخياً في العميل (Historical Client Extractions)
+### 🗂️ سجل الدفعات والمكونات المستخرجة تاريخياً (Historical Batch Register)
+
+#### 1. استخراجات واجهات الغرف والتنبيهات في العميل (`PHASE 6A` & `PHASE 6B`)
+- [x] **`BATCH-6A-1` — استخراج مؤقت اللعبة `SmoothTimer`**:
+  - **الملف المنشأ**: `src/components/game/SmoothTimer.tsx`.
+  - **المسؤولية**: عزل شريط ومؤقت الوقت عالي الدقة.
+  - **درجة المخاطر**: الفئة A (منخفضة المخاطر).
+- [x] **`BATCH-6A-2` — استخراج نوافذ الإجراءات التفاعلية الأساسية (Action Modals)**:
+  - **الملفات المنشأة**: `ExitConfirmModal.tsx`، `SkipConfirmModal.tsx`، `ReportConfirmModal.tsx`، `AfkWarningModal.tsx`.
+  - **درجة المخاطر**: الفئة A (منخفضة المخاطر).
+- [x] **`BATCH-6A-3` — استخراج نوافذ الملف الشخصي والتنبيهات (Profile & Alert Modals)**:
+  - **الملفات المنشأة**: `PlayerProfileModal.tsx`، `RoomAlertModals.tsx`.
+  - **درجة المخاطر**: الفئة A (منخفضة المخاطر).
+- [x] **`BATCH-6B-1` — استخراج شاشة اختيار الكلمات للرسام (`ChoosingWordOverlay`)**:
+  - **الملف المنشأ**: `src/components/experimental/ChoosingWordOverlay.tsx`.
+  - **المسؤولية**: عزل شاشة اختيار الكلمة المنبثقة للرسام النشط.
+  - **درجة المخاطر**: الفئة B (متوسطة المخاطر).
+
+#### 2. إعادة الاستخدام وتفكيك واجهات البداية (`PHASE 7A`)
+- [x] **`BATCH-7A-1` — إعادة استخدام النوافذ المستخرجة في `GameRoom.tsx`**:
+  - **الملف المعدل**: `src/components/GameRoom.tsx`.
+  - **المسؤولية**: استبدال النوافذ المضمنة بالنوافذ المستخرجة الموحدة (`CinematicModal`).
+  - **درجة المخاطر**: الفئة A/B.
+- [x] **`BATCH-7A-2` — استخراج واجهات Lobby المستقلة**:
+  - **الملفات المنشأة**: `src/components/lobby/RoomInfoModal.tsx`، `src/components/lobby/AvatarCarousel.tsx`.
+  - **المسؤولية**: عزل نافذة معلومات الغرفة ومحدد الأفاتار ثلاثي الأبعاد/الدوار.
+  - **درجة المخاطر**: الفئة B (متوسطة المخاطر).
+
+#### 3. المكونات التأسيسية المعزولة تاريخياً (Historical Decoupling)
 - `src/components/game/PlayersSidebar.tsx`: عزل قائمة اللاعبين والتفاعلات.
 - `src/components/game/OverlayChatRoom.tsx`: عزل واجهة الدردشة التفاعلية العائمة.
-- `src/components/game/SmoothTimer.tsx`: عزل شريط الوقت عالي الدقة.
-- `src/components/game/GameActivityFeed.tsx`: عزل منطقة التغذية التفاعلية السريعة.
-- `src/components/experimental/ChoosingWordOverlay.tsx`: عزل شاشة اختيار الكلمة للرسام.
-- `ExitConfirmModal.tsx`, `SkipConfirmModal.tsx`, `ReportConfirmModal.tsx`, `AfkWarningModal.tsx`, `PlayerProfileModal.tsx`, `RoomAlertModals.tsx`: استخراج نوافذ الإجراءات والتنبيهات والملف الشخصي وتوحيدها عبر `CinematicModal`.
-- `src/components/lobby/RoomInfoModal.tsx`, `src/components/lobby/AvatarCarousel.tsx`: استخراج واجهات شاشة البداية Lobby.
+- `src/types/draw.ts` و `src/utils/drawBinaryHelper.ts`: فصل أدوات الضغط والترميز الثنائي.
+- `DrawingCanvasCore.tsx`: اعتماد المحرك المعماري النشط للرسم وتجميع منطق الكانفاس المطور.
 
 ---
 
@@ -236,14 +383,14 @@
 
 ### 1. توجيه أنماط الغرف أثناء التشغيل (Runtime Room Routing)
 * **الغرف التنافسية (Competitive Rooms)**:
-  تشمل جميع النماذج المحددة مسبقاً (`General #Test`, `General #10P`, `Experimental Draw`, والغرف التنافسية المخصصة). تعتمد جميعها `isExperimental: true` ويقوم `App.tsx` بتوجيهها حصرياً إلى الغلاف التشغيلي `<ExperimentalGameRoom />`.
+  تشمل جميع النماذج المحددة مسبقاً (`General #Test`, `General #10P`, `Experimental Draw`, والغرف التنافسية المخصصة الافتراضية). تعتمد جميعها الخاصية البرمجية `isExperimental: true` ويقوم الملف الرئيسي `src/App.tsx` بتوجيهها حصرياً إلى الغلاف التشغيلي `<ExperimentalGameRoom />`.
 * **وضع الرسم الحر (Free Draw Mode)**:
-  يعتمد `isFreeDraw: true` ويقوم `App.tsx` بتوجيه هذا الوضع حصرياً إلى الغلاف التشغيلي `<GameRoom />`.
-* **توضيح معماري حاسم**: `GameRoom.tsx` يُمثل الغلاف التشغيلي لوضع الرسم الحر حصراً، بينما `ExperimentalGameRoom.tsx` يُمثل الغلاف التشغيلي لجميع الغرف التنافسية.
+  يعتمد الخاصية البرمجية `isFreeDraw: true` (مع كون `isExperimental: false` أو `undefined`) ويقوم الملف الرئيسي `src/App.tsx` بتوجيه هذا الوضع حصرياً إلى الغلاف التشغيلي `<GameRoom />`.
+* **توضيح معماري حاسم**: كائن `GameRoom.tsx` حالياً يُمثل **الغلاف التشغيلي لوضع الرسم الحر حصراً**، وليس محرك رسم كلاسيكي منفصل. كائن `ExperimentalGameRoom.tsx` يُمثل الغلاف التشغيلي لجميع الغرف التنافسية الحالية. ولا يجوز افتراض وجود محركات رسم مختلفة لمجرد اختلاف أسماء مكونات الغرف.
 
 ### 2. مصفوفة تكوين الغرف وحقيقة إعدادات المنتج (Room Configuration Matrix)
 
-| اسم النمط / الغرفة | السعة القصوى (`maxPlayers`) | نقاط الفوز (`winningScore`) | نمط التشغيل (Mode) |
+| اسم النمط / الغرفة (Preset / Room) | السعة القصوى (`maxPlayers`) | نقاط الفوز (`winningScore`) | نمط التشغيل (Mode) |
 | :--- | :--- | :--- | :--- |
 | **General #Test** | 5 لاعبين | 30 نقطة | تنافسي (Competitive) |
 | **General #10P** | 10 لاعبين | 120 نقطة | تنافسي (Competitive) |
@@ -251,27 +398,40 @@
 | **Custom fallback** | 5 لاعبين | 30 نقطة | تنافسي (Competitive) |
 | **Free Draw** | 5 لاعبين | 0 (بلا نهاية) | رسم حر (Free Draw) |
 
-* **قرار المنتج المعماري الملزم**: اختلاف نقاط الفوز (`winningScore`) هو خيار تكوين متعمد على مستوى كل غرفة. النمط `General #10P` يحتفظ بـ `winningScore: 120` بشكل دائم، ويُحظر توحيد نقاط الفوز إلى 30 عبر النماذج التنافسية.
-* **التوجه المستقبلي لخيار إنشاء الغرف المخصصة**: خيار إنشاء غرف مخصصة بواسطة المستخدم مستوحى من Gartic.io هو ميزة مستقبلية (`FUTURE PRODUCT CAPABILITY`) وليست مهمة برمجية منفذة حالياً.
+* **قرار المنتج المعماري الملزم (Explicit Product Decision)**:
+  - اختلاف قيم نقاط الفوز (`winningScore`) هو **خيار تكوين متعمد ومقصود على مستوى كل غرفة على حدة**.
+  - النمط `General #10P` **يجب أن يحتفظ بـ `winningScore: 120` بشكل دائم**، ويُحظر تماماً تعميم أو توحيد قيم نقاط الفوز إلى 30 عبر النماذج التنافسية.
+  - لا يجوز افتراض أن الغرف التنافسية يجب أن تتشارك نفس نقاط الفوز؛ فقيمتا `maxPlayers` و `winningScore` متغيران مستقلان تماماً لضبط خيارات الروم، ويقرأهما محرك اللعب مباشرة من كائن الغرفة السيرفري `Room`.
+* **التوجه المستقبلي لخيار إنشاء الغرف المخصصة (Future Product Direction)**:
+  - إمكانية إنشاء غرف مخصصة بواسطة المستخدم مستوحاة من تجربة Gartic.io (تتيح للمستخدم تحديد عدد اللاعبين ونقاط الفوز) هي قدرة منتج مستقبلية (`FUTURE PRODUCT CAPABILITY`) وليست مهمة برمجية منفذة حالياً.
+  - التصميم المستقبلي سيعتمد محرك لعب تنافسي واحد مشترك مع تمرير إعدادات الغرفة المعتمدة إلى كائن `Room` السيرفري.
+  - يتم التمييز الصارم بين:
+    1. **النموذج المخصص الحالي (Current Custom Fallback)**: تكوين ثابت بحجم 5 لاعبين و 30 نقطة.
+    2. **إنشاء الغرف المخصصة المستقبلي (Future User-Created Configurable Rooms)**: ميزة مستقبلية غير منفذة بعد.
 
-### 3. البنية المعمارية المشتركة لمحرك الرسم في العميل (Client Drawing Architecture)
+### 3. البنية المعمارية المشتركة لمحرك الرسم في العميل (Shared Client Drawing Architecture)
+تتشارك جميع الغرف التنافسية ووضع الرسم الحر نفس تسلسل مكونات الرسم المعزولة:
 * **المسار التنافسي**: `App.tsx` -> `ExperimentalGameRoom.tsx` -> `IsolatedDrawingLayer.tsx` -> `ExperimentalDrawingBoard.tsx` -> `DrawingCanvasCore.tsx`
 * **مسار الرسم الحر**: `App.tsx` -> `GameRoom.tsx` -> `IsolatedDrawingLayer.tsx` -> `ExperimentalDrawingBoard.tsx` -> `DrawingCanvasCore.tsx`
-* **الوحدات المساعدة المستخرجة**:
-  - `canvasPathRenderer.ts`: تصيير الأشكال والمسارات المنعمة.
-  - `canvasFloodFill.ts`: تعبئة المساحات النقطية.
-  - `canvasCheckpointManager.ts`: إدارة النقاط المرجعية للكانفاس والحد من الذاكرة.
-  - `canvasUndoCache.ts`: التخزين المؤقت النقطي للتراجع بخطوة واحدة.
-  - `canvasReplayEngine.ts`: دوال تصيير إعادة التشغيل الفردية والمجمعة.
+* **مسؤولية طبقة الرسم المشتركة**: استقبال وإلغاء وتجميع معالجة إدخالات المؤشر واللمس، بناء وتصيير المسارات، أداة الدلو، المسح، التراجع وإلغاء التراجع، والتكامل مع التخزين المؤقت والنقاط المرجعية ومعالجة الحزم الثنائية.
+* **مسؤولية أغلفة الغرف**: إدارة عرض واجهة اللعبة، الجلسة، انتقال المراحل، وشاشات الانتظار واختيار الكلمات والتتويج.
+* **الوحدات الحسابية المساعدة المستخرجة**:
+  - `canvasPathRenderer.ts`: تصيير الأشكال الهندسية (`drawShape`) والمسارات المنعمة (`drawEntirePath`).
+  - `canvasFloodFill.ts`: النواة الحسابية لتعبئة المساحات النقطية (`executeRasterFloodFill`).
+  - `canvasCheckpointManager.ts`: إدارة النقاط المرجعية للكانفاس، تقييد السقوف، وإدارة حد الذاكرة.
+  - `canvasUndoCache.ts`: التخزين المؤقت النقطي للتراجع بخطوة واحدة والإنشاء الكسول للطبقات.
+  - `canvasReplayEngine.ts`: دوال تصيير إعادة التشغيل الفردية والمجمعة (`replaySingleCommand`, `renderLeftoverReplaySessions`).
 
-### 4. البنية المعمارية المشتركة للسيرفر ومحرك الرسم (Server Drawing Architecture)
+### 4. البنية المعمارية المشتركة للسيرفر ومحرك الرسم (Shared Server Drawing Architecture)
+مسار معالجة موحد بين وضع الرسم الحر والغرف التنافسية:  
 `server/registerDrawBinaryHandler.ts` -> `server/roomCanonicalStrokeEngine.ts` -> `server/roomDrawingHistory.ts` -> `RoomManager` (`server/rooms.ts`)
-* `registerDrawBinaryHandler.ts`: استقبال وتوجيه الحزم الثنائية، إرسال `Type 11` (Commit Ack).
-* `roomCanonicalStrokeEngine.ts`: المعالجة التزامنية للضربات المعيارية، فك ترميز `Type 2` و `Type 13`، وبناء `Type 9`.
-* `roomDrawingHistory.ts`: خوارزميات سجل الرسم والسلوك التزامني للتراجع بخطوة واحدة.
-* `RoomManager` (`server/rooms.ts`): المالك الحصري لخريطة الغرف `this.rooms` في الذاكرة، إدارة الجلسات، انتقالات الجولات، بث الإلغاء `Type 12` عبر `abortFreeDrawStroke` وتنسيق مسح اللوحة.
+* `server/registerDrawBinaryHandler.ts`: استقبال وتوجيه الحزم الثنائية، التحقق من الصلاحيات والأدوار، الترحيل الشبكي، وإرسال إشعار اعتماد الضربة `Type 11` (Commit Ack).
+* `server/roomCanonicalStrokeEngine.ts`: المعالجة التزامنية للضربات المعيارية النشطة، فك ترميز الحزم المضغوطة `Type 2` و `Type 13`، بناء حزمة الاعتماد المعيارية `Type 9`، وإدارة التخزين المعياري المؤقت.
+* `server/roomDrawingHistory.ts`: خوارزميات سجل الرسم المعتمدة بالسيرفر، الحذف المستهدف للضربات، سلوك التراجع/إلغاء التراجع بخطوة واحدة، وحماية ثوابت سجل الرسم.
+* `RoomManager` (`server/rooms.ts`): المالك الحصري لحالة الغرف المعتمدة `this.rooms` في الذاكرة، واجهات التوافق (Facades)، دورة حياة الغرف واللاعبين، بث إشعارات الإلغاء `Type 12` عبر `abortFreeDrawStroke`، تنسيق المسح، إدارة الاتصال وإعادة الاتصال، وسجل هويات الرسم.
+* **مسار التوافق القديم (Legacy Branch)**: مسار `isFreeDraw: false && isExperimental: false` يظل مسار توافق قديم لا يوجد له أي روم نشط مدمج في الواجهة والتوجيه الحالي.
 
-### 5. مصفوفة الفروقات الدائمة بين الأنماط (Mode Difference Matrix)
+### 5. مصفوفة الفروقات الدائمة بين الأنماط (Permanent Mode Difference Matrix)
 
 | العنصر / الخاصية | الأنماط التنافسية (`Competitive`) | وضع الرسم الحر (`Free Draw`) |
 | :--- | :--- | :--- |
@@ -283,38 +443,75 @@
 | **نظام التخمين والدردشة** | تخمين الكلمة المطلوبة مع احتساب النقاط وتصنيف الإجابات | دردشة تفاعلية عامة بين اللاعبين دون نظام تخمين نقاط |
 | **مؤقتات العد التنازلي** | مؤقت جولة محدد لكل مرحلة (`SmoothTimer`) | بلا مؤقت جولات (مع بقاء المراقبة العامة للـ AFK وإعادة الاتصال نشطة) |
 | **التحقق من التراجع** | تراجع مستهدف بالضربة عبر المحرك المعياري | تراجع مستهدف بالضربة مع التحقق الصارم من ملكية هوية الرسام للـ Socket |
+| **عناصر الواجهة المميزة** | شريط الوقت، اختيار الكلمات، لوحة التتويج، زر إلغاء الدور | بطاقات أجهزة الرسامين الطافية، أزرار بدء/إيقاف الرسم الحر |
 
-### 6. أعلام الخصائص التجريبية وتدقيق DPR (Feature Flags & Known Findings)
-* **علامة `EXPERIMENTAL_DPR_1_TEST`**: ملاحظة فنية مثبتة لم يتم تعديلها. دقة الكانفاس `effectiveDPR` تظل مثبتة دائماً عند `1.0` في جميع الرومات التنافسية والحر بسبب تفعيل `isExperimental` أو `isFreeDraw`. تغيير هذا السلوك مستقبلاً يتطلب تدقيقاً كاملاً لأثره على الذاكرة والمعالج في الهواتف.
+### 6. أعلام الخصائص التجريبية وتدقيق DPR (Experimental Feature Flags & DPR Gate Reference)
+مكون `src/components/experimental/ExperimentalDrawingBoard.tsx` يحتوي على أعلام الخصائص التجريبية التالية:
+* `EXPERIMENTAL_COLOR_WHEEL_TEST = true`
+* `EXPERIMENTAL_INPUT_OPTIMIZATIONS_TEST = true`
+* `EXPERIMENTAL_BITMAP_UNDO_TEST = true`
+* `EXPERIMENTAL_DPR_1_TEST = true`
+* `EXPERIMENTAL_CANVAS_ALPHA_TEST = true`
+* `EXPERIMENTAL_DESTINATION_OUT_ERASER_TEST = true`
+
+* **آلية تأثير الأعلام عبر الأنماط**:
+  - نظراً لأن جميع الغرف التنافسية الحالية تعتمد `isExperimental: true`، فإن هذه الأعلام تؤثر على جميع الغرف التنافسية.
+  - وضع الرسم الحر يمتلك شروطاً مستقلة عبر `isFreeDraw` تُفعّل السلوكيات المماثلة مباشرة (تحسينات الإدخال، التخزين المؤقت النقطي للتراجع، تثبيت DPR عند 1.0، قناة Alpha، أداة المحاية بـ destination-out، وعجلة الألوان).
+* **نتيجة التدقيق الفني لبوابة DPR الصامتة (Known Ineffective DPR Test Gate)**:
+  - **حقيقة الكود الفعلية**: العلم `EXPERIMENTAL_DPR_1_TEST` لا يتحكم بشكل مستقل في دقة الكانفاس المرئية للرومات التنافسية النشطة.
+  - **السبب الفني الموثق في الكود**: يحسب `DrawingCanvasCore.tsx` دقة `effectiveDPR` باستخدام الشرط الصريح:
+    `const effectiveDPR = (isFreeDraw || isExperimental || enableFixedDPR) ? 1.0 : (window.devicePixelRatio || 1.0);`
+  - ونظراً لأن جميع الغرف التنافسية تعتمد `isExperimental: true` ووضع الرسم الحر يعتمد `isFreeDraw: true`، فإن `effectiveDPR` يظل مثبتاً دائماً عند `1.0` حتى لو تم تغيير قيمة `EXPERIMENTAL_DPR_1_TEST`.
+  - **التصنيف والتوجيه**: يُصنف كـ **ملاحظة فنية مثبتة لم يتم تعديلها (KNOWN TECHNICAL FINDING — NOT FIXED)**. يُحظر تعديل هذا السلوك في مهام التوثيق؛ وأي تغيير مستقبلي لدقة DPR يتطلب تدقيقاً شاملاً ومستقلاً لأثره على استهلاك الذاكرة والمعالج والأجهزة الضعيفة.
+* **التعليقات القديمة في الكود (Stale Comments)**:
+  توجد بعض التعليقات داخل `DrawingCanvasCore.tsx` تشير إلى استخدام الرومات التنافسية لدقة DPR متكيفة (Adaptive DPR). هذه التعليقات غير دقيقة تشغيلياً بسبب اعتماد جميع الرومات التنافسية على `isExperimental: true`. تم ترك التعليقات كما هي دون مساس بها.
 
 ### 7. الجرد الفعلي للملفات الكبيرة ومسؤولياتها المتبقية (Large Files Inventory)
 1. **`src/components/game/DrawingCanvasCore.tsx`**:
-   - إدارة الكانفاس والطبقات المؤقتة والمؤثرات، تحويلات الزوم والسحب، ومسار إدخال المؤشر (60-120Hz).
-   - *حدود محظورة الاستخراج*: حلقة معالجة المؤشر `processStrokeMove` والتنسيق عالي المستوى لإعادة التشغيل ومستمعي مقابس الرسم.
-2. **`src/components/experimental/ExperimentalGameRoom.tsx`** (~2010 سطراً):
-   - منسق الغرفة التنافسية وإدارة انتقالات الجولات والنوافذ التفاعلية المستخرجة.
+   - إدارة الكانفاس والطبقات المؤقتة (`canvasRef`, `tempCanvasRef`, `ctxRef`, `tempCtxRef`).
+   - تحويلات العرض والزوم والسحب بالأصابع والفأرة (`transformRef`, `measureAndCenter`).
+   - مسار إدخال المؤشر واللمس عالي التردد (60-120Hz)، وحلقات Coalesced Events، وحماية ملكية المؤشر `activePointerIdRef`.
+   - محركات الرسم: المسارات المنعمة، الأشكال (`canvasPathRenderer.ts`)، والدلو النقطي (`canvasFloodFill.ts`).
+   - محرك التراجع وإلغاء التراجع المحلي والربط مع `canvasUndoCache.ts` و `canvasCheckpointManager.ts`.
+   - مزامنة المقابس الثنائية اللحظية والربط مع `canvasReplayEngine.ts`.
+   - **حدود محظورة الاستخراج (Non-extractable Hot Paths & Coordinators)**:
+     - حلقة معالجة حركة المؤشر اللحظية `processStrokeMove` وحسابات الاستكمال الخطي (Lerp).
+     - التنسيق عالي المستوى لإعادة التشغيل (High-level Replay Orchestration) لشدة ارتباطه بمراجع React، ومؤقتات RAF، وإلغاء الأجيال، وحالة واجهة المستخدم.
+     - معالجة أحداث المقابس اللحظية وتدفق المزامنة (Drawing Socket Sync & Event Processing) لشدة ارتباطها بسياقات الكانفاس، وجلسات الرسم النشطة والمستنزفة، وحاجز التراجع، وإصلاح الخطوط المفقودة.
+2. **`src/components/experimental/ExperimentalGameRoom.tsx`** (~2010 سطراً بعد تنفيذ BATCH-6C-2):
+   - منسق الغرفة التنافسية المخصص لجميع النماذج التنافسية (`General #Test`, `General #10P`, `Experimental Draw`, والغرف التنافسية المخصصة `isExperimental: true`).
+   - إدارة الانتقال بين حالات الجولة (`WAITING`, `CHOOSING`, `DRAWING`, `ROUND_END`, `PODIUM`).
+   - تكيف الواجهة مع النافذة المرئية ولوحة المفاتيح في الهواتف (`visualViewport` و `--keyboard-inset`).
+   - شريط الوقت عالي الدقة `SmoothTimer`.
+   - النوافذ المنبثقة التفاعلية المضمنة واستخدام المكونات المستخرجة: `ChoosingWordOverlay`, `PlayersSidebar`, `MiniBoardOverlay`, `OverlayChatRoom`, `ExperimentalWordOverlay`, `ExperimentalHitOverlay`, `GameActivityFeed`, ونوافذ الإجراءات والتنبيهات المستخرجة عبر `CinematicModal`.
+   - طبقات المراحل: اختيار الكلمات، لوحة الرسم النشطة، منصة التتويج، شريط التغذية التفاعلية المستخرج (`GameActivityFeed`)، وشريط الدردشة العائم.
 3. **`server/rooms.ts`**:
-   - مدير الغرف المركزي في الذاكرة `RoomManager` (مصدر الحقيقة الموحد وخريطة `this.rooms`).
-   - دورة حياة الغرف، الجلسات، الانقطاع والصيانة، وتنسيق بث الرسم الحر الشبكي.
+   - مدير الغرف المركزي في الذاكرة `RoomManager` (مصدر الحقيقة الموحد والمالك الحصري لخريطة `this.rooms`).
+   - دورة حياة الغرف والجولات، ومؤقت التحديثات الدوري `tick()`.
+   - مصادقة الجلسات، التحقق من التوكنات، إدارة هوية الرسام، وإعادة الاتصال.
+   - تخمينات الكلمات، المطابقة التقريبية، والتصويت على الطرد.
+   - واجهات التوافق (Facades) لعمليات سجل الرسم والتراجع (`server/roomDrawingHistory.ts`) ومحرك الرسم المعياري المستمر (`server/roomCanonicalStrokeEngine.ts`).
+   - تنسيق إشعارات الإلغاء (`Type 12`)، مزامنة الضربات النشطة، وإدارة هوية الرسامين.
 4. **`src/components/GameRoom.tsx`**:
-   - منسق الغرفة المحدد لوضع الرسم الحر (`isFreeDraw: true`).
+   - منسق الغرفة المحدد لوضع الرسم الحر (Free Draw `isFreeDraw: true`).
+   - تستخدم نفس البنية الهرمية المعزولة للرسم (`IsolatedDrawingLayer` -> `ExperimentalDrawingBoard` -> `DrawingCanvasCore`).
 5. **`src/components/Lobby.tsx`**:
-   - شاشة البداية، اختيار الأفاتار، واستعراض قائمة الغرف والإحصائيات.
+   - شاشة البداية: اختيار الأفاتار، محدد الإيموجي، إدخال الاسم، واستعراض قائمة الغرف والإحصائيات.
 
 ---
 
 ## 🧪 القسم G — سياسة الاختبارات والموارد (Testing & Resource Policy)
 
-تلتزم جميع عمليات الفحص والتحقق بالضوابط التالية:
+تلتزم جميع عمليات الفحص والتحقق بالضوابط التقنية التالية:
 1. **الأولوية المطلقة للفحص الثابت المباشر**:
-   الاعتماد بالدرجة الأولى على قراءة الكود الذكية، وفحص الـ Diff السطري، والمشاهدة الاستاتيكية لضمان عدم وجود تغييرات جانبية.
+   الاعتماد بالدرجة الأولى على قراءة الكود الذكية، وتدقيق الـ Diff السطري، والمشاهدة الاستاتيكية لضمان عدم وجود تغييرات جانبية أو تجاوز للنطاق.
 2. **فحص الأنواع والتجميع للمهام البرمجية**:
    عند إجراء أي تعديل في السورس كود، يجب تشغيل:
    - فحص الأنواع الصارم: `tsc --noEmit` بنسبة 100% دون أي خطأ.
    - بناء التطبيق الكامل: `npm run build` بنجاح تام.
 3. **الاختبارات الآلية الموجهة والخفيفة فقط**:
-   تشغيل الاختبارات الآلية الموجودة في `scripts/` ذات الصلة المباشرة بمهمة الخادم أو محرك الرسم فقط عند وجود مبرر تقني حقيقي (مثل `scripts/test_session_identity_suite.ts`).
+   تشغيل الاختبارات الآلية الموجودة في `scripts/` ذات الصلة المباشرة بمهمة الخادم أو محرك الرسم فقط عند وجود مبرر تقني حقيقي (مثل `scripts/test_session_identity_suite.ts`). ولا يتم تشغيل حزم اختبارات ثقيلة أو غير ذات صلة لمهام التوثيق أو المهام العرضية البسيطة.
 4. **الاختبار اليدوي بواسطة المستخدم**:
    محاكاة تجارب اللعب بالمتصفح، واختبار سلوك الواجهة والتفاعل اليدوي يتولاه المستخدم بنفسه بعد جاهزية البناء؛ ولا يُطلب من الذكاء الاصطناعي محاكاة تجارب لعب يدوية.
 5. **التدقيق المتناسب مع المخاطر**:
-   التعديلات في محركات الرسم أو المقابس أو السيرفر تتطلب مستوى أعلى من التحقق والاحتياط مقارنة بمكونات العرض المستقلة.
+   التعديلات في محركات الرسم أو المقابس أو السيرفر (الفئة C) تتطلب مستوى أعلى من التحقق والاحتياط مقارنة بمكونات العرض المستقلة (الفئة A).
