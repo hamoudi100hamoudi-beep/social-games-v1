@@ -96,11 +96,11 @@
 
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
-| **المرحلة المعمارية الحالية** | `PHASE 6C — ExperimentalGameRoom Refactoring` | `[x] CLOSED — NO FURTHER EXTRACTION WARRANTED` — تم إغلاق المرحلة رسمياً بعد اكتمال التدقيق المعماري للمسؤوليات المتبقية وتأكيد تماسك المكون الأب |
-| **آخر دفعة متمة ومثبتة** | `BATCH-6C-3` | `[x] COMPLETED` — استخراج واجهة حالة الاتصال المشتركة `RoomConnectionStatusOverlay.tsx` بنجاح ومزامنتها على GitHub وتأكيد التجربة اليدوية |
-| **تدقيق المرحلة النهائي** | `PHASE 6C — Stage 2` | `[x] COMPLETED — READ-ONLY ARCHITECTURAL AUDIT` — اكتمال التدقيق القرائي للمسؤوليات المتبقية وتأكيد بقائها في المكون الأب (لا يوجد BATCH-6C-4) |
+| **المرحلة المعمارية الحالية** | `PHASE 7C — GameRoom Architecture` | `[x] CLOSED — NO EXTRACTION WARRANTED` — إغلاق المرحلة رسمياً بقرار عدم الحاجة لاستخراج إضافي تحت البنية والمسؤوليات الراهنة؛ المكون الأب يمثل منسقاً متماسكاً لوضع الرسم الحر |
+| **آخر دفعات ومراحل منجزة** | `PHASE 5B Stage 2`, `PHASE 7B Stage 2`, `PHASE 7C Stage 1` | `[x] COMPLETED` — اكتمال تدقيق محرك الرسم بالسيرفر (PHASE 5B-2: مغلقة بلا استخراج)، استخراج شاشة تصفح الرومات `RoomsBrowserScreen.tsx` بـ Commit `3b1bb48df5eecd8a925e8209c9161f198e0c7860` (PHASE 7B-2)، وتدقيق غلاف الرسم الحر (PHASE 7C-1: مغلقة بلا استخراج) |
+| **تدقيق الغرف ومحركات السيرفر** | `PHASE 5B-2 & 6C & 7C` | `[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)` — تأكيد تماسك نواة السيرفر وغلاف الغرف التنافسية وغلاف الرسم الحر |
 | **الدفعة الحالية قيد التنفيذ** | لا يوجد | لا توجد أي أعمال برمجية جارية حالياً |
-| **النشاط التالي المعتمد** | بانتظار التحديد | لم يتم تحديد الدفعة البرمجية التالية بعد؛ سيتم اختيار الهدف المعماري القادم بشكل منفصل بعد مراجعة أولويات تنظيم المشروع |
+| **النشاط التالي المعتمد** | بانتظار التحديد | لم يتم تحديد الدفعة البرمجية التالية بعد؛ سيتم اختيار الهدف القادم بعد مراجعة أولويات المشروع المتبقية |
 | **المخاطر والعوائق المفتوحة** | لا يوجد عوائق حرجة | ملاحظة فنية مثبتة: بوابة DPR الصامتة (`EXPERIMENTAL_DPR_1_TEST`) تتطلب تدقيقاً مستقلاً مستقبلاً عند تعديل دقة الكانفاس |
 
 ### 🏷️ قاموس حالات دورة حياة الدفعات (Status Dictionary)
@@ -282,8 +282,12 @@
       * `scripts/test_controlled_fixes_suite.ts`: اجتياز جميع الاختبارات (Tests A - G).
       * `scripts/test_legacy1a_routing.ts`: اجتياز بنجاح.
       * `scripts/test_legacy1c_unknown_room_routing.ts`: اجتياز بنجاح.
-  - **`Stage 2: Free Draw Streaming Ownership Audit & Correction Addendum`**: اكتمل بنجاح وتم تنفيذه كاملاً في `SUB-BATCH-5B-2`.
-  - **`Stage 3: Residual RoomManager Core Architectural Audit & Closure`**:
+  - **`Stage 2: Focused Drawing Pipeline Extraction Feasibility Audit & Closure`**:
+    - **الحالة**: **`[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`**.
+    - **طبيعة التدقيق**: تدقيق معماري بنمط القراءة فقط (Read-Only Source Audit) لمسار الرسم والضربات المعيارية وسجل الرسم والتراجع في `server/rooms.ts`.
+    - **القرار المعماري النهائي**: تأكيد أن الخوارزميات الناتجة ومعالجة الحزم الثنائية تم استخراجها بالفعل في `roomDrawingHistory.ts` و `roomCanonicalStrokeEngine.ts` و `binaryBufferHelpers.ts`. وما تبقى في `server/rooms.ts` يقتصر على واجهات تفويضية رشيقة (Facades لا تتجاوز 2–5 أسطر) وعمليات بث مرتبطة بـ `this.io`؛ وبالتالي **لا يوجد أي مسوغ لاستخراج DrawingService إضافي أو مشتت**، مع بقاء ملكية الغرف لـ `RoomManager`.
+    - *(ملاحظة معمارية: يتم التمييز بين نتائج الاختبارات التاريخية المثبتة أعلاه 626/626، وبين هذا التدقيق القرائي الذي لم يتطلب أي تغيير كود أو إعادة تشغيل حزم)*.
+  - **`Stage 3: Residual RoomManager Core Architectural Audit & Final Closure`**:
     - **الحالة**: **`[x] COMPLETED — CLOSED (NO FURTHER EXTRACTION WARRANTED)`**.
     - **طبيعة التدقيق**: تدقيق معماري بنمط القراءة فقط (Read-Only Source Audit).
     - **القرار المعماري النهائي**: إغلاق المرحلة رسمياً بقرار **عدم الحاجة لاستخراج إضافي تحت البنية والمسؤوليات الراهنة (`NO FURTHER EXTRACTION WARRANTED`)**. استخراج `roomDrawingHistory.ts` و `roomCanonicalStrokeEngine.ts` أنشأ الحد المعياري المستقل والأنسب، وبقية مسؤوليات `RoomManager` تشكل نواة متماسكة ومترابطة تزامندياً.
@@ -394,7 +398,7 @@
   - **المسؤولية**: عزل شاشة اختيار الكلمة المنبثقة للرسام النشط.
   - **درجة المخاطر**: الفئة B (متوسطة المخاطر).
 
-#### 2. إعادة الاستخدام وتفكيك واجهات البداية (`PHASE 7A`)
+#### 2. إعادة الاستخدام وتفكيك واجهات البداية (`PHASE 7A` & `PHASE 7B`)
 - [x] **`BATCH-7A-1` — إعادة استخدام النوافذ المستخرجة في `GameRoom.tsx`**:
   - **الملف المعدل**: `src/components/GameRoom.tsx`.
   - **المسؤولية**: استبدال النوافذ المضمنة بالنوافذ المستخرجة الموحدة (`CinematicModal`).
@@ -403,8 +407,50 @@
   - **الملفات المنشأة**: `src/components/lobby/RoomInfoModal.tsx`، `src/components/lobby/AvatarCarousel.tsx`.
   - **المسؤولية**: عزل نافذة معلومات الغرفة ومحدد الأفاتار ثلاثي الأبعاد/الدوار.
   - **درجة المخاطر**: الفئة B (متوسطة المخاطر).
+- [x] **`PHASE 7B — Lobby Architecture`**:
+  - **Stage 1 (Residual Architectural Audit)**: `[x] COMPLETED — READ-ONLY SOURCE AUDIT`. فحص الـ 10 مسؤوليات وتحديد حدود شاشة تصفح الرومات كمرشح عرض مستقل.
+  - **Stage 2 (Rooms Browser Presentation Extraction)**: `[x] COMPLETED`.
+    - **المكون الجديد المستخرج**: `src/components/lobby/RoomsBrowserScreen.tsx` (127 سطراً).
+    - **الملف المعدل**: `src/components/Lobby.tsx` (تخفيض الحجم إلى 715 سطراً).
+    - **الواجهة المعمارية المعتمدة**:
+      ```typescript
+      interface RoomsBrowserScreenProps {
+        sortedPresets: RoomConfig[];
+        roomStats: Record<string, { count: number; max: number; winningScore: number; theme: string }>;
+        newRoomNotice: string | null;
+        onBackToHome: () => void;
+        onSelectRoom: (roomId: string) => void;
+        onNewRoomClick: () => void;
+      }
+      ```
+    - **الثوابت المحفوظة في الأب**: بقاء المقابس (Socket.IO)، استعلامات `get_rooms_info`، مؤقت الـ 10 ثوانٍ، كبح التكرار `lastRoomsInfoFetchTime`، التحقق من السعة قبل الدخول، دورة حياة الـ Viewport والكيبورد، وإدارة الأفاتار والاسم بالكامل في `Lobby.tsx`.
+    - **المزامنة والتحقق**: الـ Commit المعتمد في GitHub هو `3b1bb48df5eecd8a925e8209c9161f198e0c7860`. اجتياز الفحص الثابت (`tsc --noEmit`)، وبناء التطبيق، وتأكيد تجربة المستخدم اليدوية لسلامة اللعب دون أي كسر. *(لا يُدّعى أي رقم تحسين أداء مقاس)*.
 
-#### 3. المكونات التأسيسية المعزولة تاريخياً (Historical Decoupling)
+#### 3. تدقيق بنية غلاف الرسم الحر (`PHASE 7C`)
+- [x] **`PHASE 7C Stage 1 — GameRoom Architecture Residual Audit`**:
+  - **الحالة**: **`[x] COMPLETED — CLOSED (NO EXTRACTION WARRANTED)`**.
+  - **طبيعة التدقيق**: تدقيق معماري بنمط القراءة فقط (Read-Only Source Audit) لمكون `src/components/GameRoom.tsx` (1381 سطراً، 50,546 بايت).
+  - **الحقيقة المعمارية المثبتة**: كائن `GameRoom.tsx` هو الغلاف التشغيلي المخصص لوضع الرسم الحر (`isFreeDraw: true`)، ويتشارك محرك الرسم بالكامل (`IsolatedDrawingLayer` -> `ExperimentalDrawingBoard` -> `DrawingCanvasCore`) مع الغرف التنافسية.
+  - **المكونات المستخرجة والمعزولة مسبقاً**:
+    - `RoomConnectionStatusOverlay.tsx` (واجهة حالة الاتصال المشتركة).
+    - `FreeDrawPlayersList.tsx` (قائمة اللاعبين وشريط الخانات).
+    - `MiniBoardOverlay.tsx` (لوحة العرض المصغرة والمراقبين).
+    - `OverlayChatRoom.tsx` (واجهة الدردشة العائمة).
+    - النوافذ الموحدة: `ExitConfirmModal.tsx`، `AfkWarningModal.tsx`، `PlayerProfileModal.tsx`، `RoomAlertModals.tsx`.
+    - `FreeDrawMobileDebug.tsx` (كونسول تصحيح الأخطاء بالهواتف).
+  - **المسؤوليات المتبقية والمحفوظة في المكون الأب (`Responsibilities Retained in GameRoom.tsx`)**:
+    1. دورة حياة الجلسة والانضمام وإعادة الاتصال الذري (`join_room` بمهلة 10 ثوانٍ) وإعادة التوجيه عند انتهاء الصلاحية.
+    2. إدارة حالة وحصانة الرسامين النشطين في الرسم الحر (`activeDrawers`، `handleStartFreeDraw`، `handleStopFreeDraw`).
+    3. آلية عزل الرسم الحر التشخيصية (`FREE_DRAW_ISOLATION_TEST`) ومحرك التخزين المؤقت للدردشة في المراجع المتزامنة (`chatMessagesRef`، `unreadBadgeTopRef`، `unreadBadgeSideRef`).
+    4. مصيدة زر الرجوع الفيزيائي في Android (15 حالة عبر `popstate`) وحماية `beforeunload`.
+    5. تكيف النافذة المرئية ولوحة المفاتيح في الهواتف (`visualViewport`، `--keyboard-inset`، وقفل الـ body/HTML).
+    6. تنسيق إشارات الصوت وبوابة الأحداث (`useRoomEventGate`).
+  - **المرشحات المفحوصة وسبب رفض الاستخراج (`Evaluated Candidates & Rejection Reasons`)**:
+    - **شريط الإجراءات السفلي (`ActionsBar`)**: 38 سطراً فقط؛ يتطلب تمرير ما لا يقل عن 6 Props وكولباكات، واستخراجه لا يحقق أي حد وظيفي مستقل.
+    - **زر الخروج العلوي (`GlobalExitButton`)**: 10 أسطر بسيطة من الـ JSX مرتبطة بنافذة `showExitConfirm`.
+  - **القرار المعماري النهائي**: إغلاق `PHASE 7C` رسمياً بقرار **عدم الحاجة لاستخراج إضافي (`NO EXTRACTION WARRANTED`)** لحماية تماسك الغلاف التشغيلي وتفادي انتكاسات التزامن أو تجربة الهواتف.
+
+#### 4. المكونات التأسيسية المعزولة تاريخياً (Historical Decoupling)
 - `src/components/game/PlayersSidebar.tsx`: عزل قائمة اللاعبين والتفاعلات.
 - `src/components/game/OverlayChatRoom.tsx`: عزل واجهة الدردشة التفاعلية العائمة.
 - `src/types/draw.ts` و `src/utils/drawBinaryHelper.ts`: فصل أدوات الضغط والترميز الثنائي.
@@ -525,11 +571,12 @@
    - تخمينات الكلمات، المطابقة التقريبية، والتصويت على الطرد.
    - واجهات التوافق (Facades) لعمليات سجل الرسم والتراجع (`server/roomDrawingHistory.ts`) ومحرك الرسم المعياري المستمر (`server/roomCanonicalStrokeEngine.ts`).
    - تنسيق إشعارات الإلغاء (`Type 12`)، مزامنة الضربات النشطة، وإدارة هوية الرسامين.
-4. **`src/components/GameRoom.tsx`**:
+4. **`src/components/GameRoom.tsx`** (1381 سطراً، 50,546 بايت في قياس المستودع المتزامن الحالي):
    - منسق الغرفة المحدد لوضع الرسم الحر (Free Draw `isFreeDraw: true`).
-   - تستخدم نفس البنية الهرمية المعزولة للرسم (`IsolatedDrawingLayer` -> `ExperimentalDrawingBoard` -> `DrawingCanvasCore`).
-5. **`src/components/Lobby.tsx`**:
-   - شاشة البداية: اختيار الأفاتار، محدد الإيموجي، إدخال الاسم، واستعراض قائمة الغرف والإحصائيات.
+   - تشارك نفس البنية الهرمية المعزولة للرسم (`IsolatedDrawingLayer` -> `ExperimentalDrawingBoard` -> `DrawingCanvasCore`).
+   - تماسك الغلاف التشغيلي لإدارة دورة حياة المقابس، وانضمام الرسامين النشطين، ومصيدة أزرار الرجوع في الهواتف.
+5. **`src/components/Lobby.tsx`** (715 سطراً بعد استخراج `RoomsBrowserScreen.tsx` بـ Commit `3b1bb48df5eecd8a925e8209c9161f198e0c7860`):
+   - شاشة البداية: اختيار الأفاتار، محدد الإيموجي، إدخال الاسم، واستعراض قائمة الغرف والإحصائيات عبر المكون المستخرج.
 
 ---
 
