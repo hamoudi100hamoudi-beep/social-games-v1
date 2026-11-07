@@ -65,6 +65,11 @@ class SoundManager {
         // Return silently if the file is not found (e.g. 404). This prevents custom console errors.
         return;
       }
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html')) {
+        // Returned HTML (e.g., SPA fallback because file does not exist on disk). Do not decode.
+        return;
+      }
       const arrayBuffer = await response.arrayBuffer();
       const buffer = await this.context.decodeAudioData(arrayBuffer);
       this.buffers.set(name, buffer);
