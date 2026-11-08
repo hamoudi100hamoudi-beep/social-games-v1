@@ -31,7 +31,11 @@ export default function App() {
     // 🔊 Global Button Click Sound Listener
     const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
-      if (target.closest('button')) {
+      const button = target ? target.closest('button') : null;
+      if (button) {
+        if (button.id === 'exit-confirm-yes-btn') {
+          return;
+        }
         soundManager.play('buttonClick');
       }
     };

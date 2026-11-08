@@ -943,13 +943,6 @@ export default function ExperimentalGameRoom({
     };
 
     const onReceiveMessage = (msg: any) => {
-      // 🔊 Play notification sound for system messages (chatMessage sound is completely removed)
-      if (eventGate.isLive() && canPlaySoundRef.current) {
-        if (msg.type === "system") {
-          soundManager.play('notification');
-        }
-      }
-
       if (chatMessagesRef.current.some((m) => m.id === msg.id)) {
         return;
       }

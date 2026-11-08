@@ -8,9 +8,7 @@ export type SoundEvent =
   | 'roundStart'
   | 'roundEnd'
   | 'applause'
-  | 'buttonClick'
-  | 'chatMessage'
-  | 'notification';
+  | 'buttonClick';
 
 export interface SoundSettings {
   path: string;
@@ -86,23 +84,9 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   },
   buttonClick: {
     path: '/sounds/ui/button.wav',
-    volume: 0.6,
+    volume: 0.25,
     delayMs: 0,
     cooldown: 50,
-    enabled: true,
-  },
-  chatMessage: {
-    path: '/sounds/ui/chat.wav',
-    volume: 1.0,
-    delayMs: 0,
-    cooldown: 100,
-    enabled: true,
-  },
-  notification: {
-    path: '/sounds/ui/notification.wav',
-    volume: 1.0,
-    delayMs: 0,
-    cooldown: 200,
     enabled: true,
   },
 };
