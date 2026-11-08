@@ -58,53 +58,8 @@ export const FREE_DRAW_BUCKET_TAIL_THRESHOLD = 3;
 const DEFAULT_LOGICAL_WIDTH = CANVAS_WIDTH;
 const DEFAULT_LOGICAL_HEIGHT = CANVAS_HEIGHT;
 
-// --- Performance and DPR Tiering ---
-const getPerformanceTier = () => {
-  if (typeof window === 'undefined') return 1;
-  try {
-    const nav: any = navigator;
-    const cpuCount = nav.hardwareConcurrency;
-    const memory = nav.deviceMemory;
-
-    const cpus = cpuCount !== undefined ? cpuCount : 4;
-    const mem = memory !== undefined ? memory : 4;
-
-    if (cpus <= 2 || mem <= 2) {
-      return 3; // Low-End: ultra-low VRAM memory restrictions
-    }
-    if (cpus <= 4 || mem <= 3) {
-      return 2; // Medium-End
-    }
-  } catch (err) {
-    if (window.devicePixelRatio !== undefined && window.devicePixelRatio < 1.5) {
-      return 3;
-    }
-  }
-  return 1; // High-End
-};
-
-const PERF_TIER = typeof window !== 'undefined' ? getPerformanceTier() : 1;
-const IS_LOW_END = PERF_TIER === 3;
-
-const getAdaptiveDPR = () => {
-  if (typeof window === 'undefined') return 2;
-  
-  const isMobileOrTablet = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Tablet/i.test(navigator.userAgent) || 
-    ('ontouchstart' in window) || 
-    (navigator.maxTouchPoints > 0);
-
-  if (isMobileOrTablet) {
-    if (PERF_TIER === 3) return 1.0;
-    if (PERF_TIER === 2) return 1.2;
-    return Math.min(1.5, window.devicePixelRatio || 1);
-  }
-
-  if (PERF_TIER === 3) return 1.0;
-  if (PERF_TIER === 2) return 1.2;
-  return Math.min(2, window.devicePixelRatio || 1);
-};
-
-const DPR = typeof window !== 'undefined' ? getAdaptiveDPR() : 2;
+// --- Production Canvas Resolution ---
+export const CANVAS_DPR = 1.0;
 
 interface UndoDiagnostics {
   opId: string;
@@ -326,7 +281,6 @@ interface DrawingCanvasCoreProps {
   showFloatingNames?: boolean;
   enableInputOptimizations?: boolean;
   enableBitmapUndoCache?: boolean;
-  enableFixedDPR?: boolean;
   enableCanvasAlpha?: boolean;
   enableDestinationOutEraser?: boolean;
   isRoomJoined?: boolean;
@@ -351,7 +305,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     showFloatingNames = true,
     enableInputOptimizations = false,
     enableBitmapUndoCache = false,
-    enableFixedDPR = false,
     enableCanvasAlpha = false,
     enableDestinationOutEraser = false,
     isRoomJoined = false
@@ -731,12 +684,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       getLogicalBounds: () => ({
         width: LOGICAL_WIDTH,
         height: LOGICAL_HEIGHT,
-        dpr: DPR
+        dpr: CANVAS_DPR
       }),
       getConfig: () => ({
         isFreeDraw: propsRef.current.isFreeDraw,
-        isExperimental: propsRef.current.isExperimental,
-        enableFixedDPR
+        isExperimental: propsRef.current.isExperimental
       })
     });
   }
@@ -808,11 +760,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableFixedDPR, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -1504,7 +1456,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCtx = tempCtxRef.current;
     if (!tempCtx) return;
 
-    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
 
     if (isDrawingRef.current) {
       const activeTool = propsRef.current.tool;
@@ -2143,7 +2095,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     if (tempCtxRef.current) {
-      tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
     }
 
     // 5. Replay ONLY commands that occurred after target (if any)
@@ -2372,7 +2324,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         restoredViaCache = undoCache.restoreFromUndoCache();
         if (restoredViaCache) {
           if (tempCtxRef.current) {
-            tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+            tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
           }
           undoCache.consumeUndo();
         }
@@ -2532,7 +2484,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       restoredViaCache = undoCache.restoreFromRedoCache();
       if (restoredViaCache) {
         if (tempCtxRef.current) {
-          tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+          tempCtxRef.current.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
         }
         undoCache.consumeRedo();
       }
@@ -2694,7 +2646,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const retainedCount = (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw)
           ? checkpointManager.getHistoryCheckpointCount()
           : 2;
-        const effectiveDPR = (propsRef.current.isFreeDraw || propsRef.current.isExperimental || enableFixedDPR) ? 1.0 : DPR;
+        const effectiveDPR = CANVAS_DPR;
         const memMB = (retainedCount * (Math.round(LOGICAL_WIDTH * effectiveDPR) * Math.round(LOGICAL_HEIGHT * effectiveDPR) * 4)) / (1024 * 1024);
         diag.checkpointFacts.retainedCanvases = retainedCount;
         diag.checkpointFacts.checkpointCount = retainedCount;
@@ -2728,7 +2680,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const cpRestoreStart = diag ? performance.now() : 0;
       if (bestCp && bestCp.index > lastClearIndex) {
         // 1. Clear ONLY the permanent base canvas
-        ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        ctx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
         // 2. Blit baked checkpoint canvas instantly (1:1 pixel exact copy)
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2738,7 +2690,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else {
         // Fallback: Safe Clear-Barrier replay
         invalidateCheckpoint('all');
-        ctx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+        ctx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
         startIndex = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
       }
       if (diag) {
@@ -2823,7 +2775,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const useBatchReplay = isBucketBatchReplayExpEnabled() && propsRef.current.isFreeDraw;
       let batchImageData: ImageData | null = null;
       let batchData: Uint8ClampedArray | null = null;
-      const effectiveDPR = (propsRef.current.isFreeDraw || propsRef.current.isExperimental || enableFixedDPR) ? 1.0 : DPR;
+      const effectiveDPR = CANVAS_DPR;
       const batchCw = Math.round(LOGICAL_WIDTH * effectiveDPR);
       const batchCh = Math.round(LOGICAL_HEIGHT * effectiveDPR);
       let batchVisited: Uint8Array | null = null;
@@ -4395,11 +4347,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCanvas = tempCanvasRef.current;
     if (!canvas || !tempCanvas) return;
 
-    // In Free Draw mode and Experimental (Batch 3 DPR test): Canonical Backing Store Resolution (Option B)
-    // Both Main and Temp canvases are strictly locked to effectiveDPR = 1.0 (680x396 physical pixels)
+    // Canonical Backing Store Resolution:
+    // Both Main and Temp canvases are strictly locked to CANVAS_DPR = 1.0 (680x396 physical pixels)
     // for 100% deterministic pixel-perfect synchronization across all devices and zero memory bloat on mobile.
-    // In Normal/Competitive rooms: Adaptive DPR continues to be used.
-    const effectiveDPR = (isFreeDraw || isExperimental || enableFixedDPR) ? 1.0 : DPR;
+    const effectiveDPR = CANVAS_DPR;
 
     canvas.width = Math.round(LOGICAL_WIDTH * effectiveDPR);
     canvas.height = Math.round(LOGICAL_HEIGHT * effectiveDPR);
@@ -4474,7 +4425,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const tempCtx = tempCtxRef.current;
     if (tempCtx) {
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
     }
 
     currentPathRef.current = [];
@@ -4669,9 +4620,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
-    const intervalMs = isContinuousMode
-      ? 200
-      : (IS_LOW_END ? 40 : (PERF_TIER === 2 ? 24 : 16));
+    const intervalMs = 200;
 
     if (!throttleTimeoutRef.current) {
       throttleTimeoutRef.current = setTimeout(() => {
@@ -4760,7 +4709,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         moveBatchRef.current = [];
       }
 
-      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+      tempCtx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
 
       if (currentPathRef.current.length > 0) {
         // Only commit undo cache and record stroke in history if at least one point is inside/touches canvas viewport
@@ -4888,7 +4837,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       y: rawY / LOGICAL_HEIGHT
     });
 
-    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
     drawShape(tempCtx, rawX, rawY, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity, false);
   };
 
@@ -4910,7 +4859,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeWidth = propsRef.current.thickness;
     const activeOpacity = propsRef.current.opacity;
 
-    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
     drawShape(tempCtx, startXRef.current, startYRef.current, rawX, rawY, activeTool, activeColor, activeWidth, activeOpacity, false);
   };
 
@@ -4930,7 +4879,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       throttleTimeoutRef.current = null;
     }
 
-    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * DPR, LOGICAL_HEIGHT * DPR);
+    tempCtx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
 
     const activeTool = propsRef.current.tool;
     const activeColor = propsRef.current.color;
@@ -5526,7 +5475,6 @@ const MemoizedDrawingCanvasCore = React.memo(DrawingCanvasCore, (prevProps, next
     prevProps.showFloatingNames === nextProps.showFloatingNames &&
     prevProps.enableInputOptimizations === nextProps.enableInputOptimizations &&
     prevProps.enableBitmapUndoCache === nextProps.enableBitmapUndoCache &&
-    prevProps.enableFixedDPR === nextProps.enableFixedDPR &&
     prevProps.enableCanvasAlpha === nextProps.enableCanvasAlpha &&
     prevProps.enableDestinationOutEraser === nextProps.enableDestinationOutEraser &&
     prevProps.deferredReset === nextProps.deferredReset &&

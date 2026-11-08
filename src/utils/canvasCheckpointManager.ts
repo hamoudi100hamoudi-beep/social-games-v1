@@ -43,7 +43,6 @@ export interface CanvasCheckpointDependencies {
   getConfig: () => {
     isFreeDraw: boolean;
     isExperimental: boolean;
-    enableFixedDPR?: boolean;
   };
 }
 
@@ -109,7 +108,7 @@ export class CanvasCheckpointManager {
   acquireRecycledCheckpointCanvas(): HTMLCanvasElement {
     const config = this.deps.getConfig();
     const bounds = this.deps.getLogicalBounds();
-    const effectiveDPR = (config.isFreeDraw || config.isExperimental || config.enableFixedDPR) ? 1.0 : bounds.dpr;
+    const effectiveDPR = bounds.dpr ?? 1.0;
     const targetW = Math.round(bounds.width * effectiveDPR);
     const targetH = Math.round(bounds.height * effectiveDPR);
 
@@ -245,7 +244,7 @@ export class CanvasCheckpointManager {
     const canvas = cp.canvas;
     const config = this.deps.getConfig();
     const bounds = this.deps.getLogicalBounds();
-    const effectiveDPR = (config.isFreeDraw || config.isExperimental || config.enableFixedDPR) ? 1.0 : bounds.dpr;
+    const effectiveDPR = bounds.dpr ?? 1.0;
     const targetW = Math.round(bounds.width * effectiveDPR);
     const targetH = Math.round(bounds.height * effectiveDPR);
     if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -304,7 +303,7 @@ export class CanvasCheckpointManager {
     if (targetIndex !== undefined && cp.index > targetIndex) return false;
 
     const bounds = this.deps.getLogicalBounds();
-    const effectiveDPR = (config.isFreeDraw || config.isExperimental || config.enableFixedDPR) ? 1.0 : bounds.dpr;
+    const effectiveDPR = bounds.dpr ?? 1.0;
     const targetW = Math.round(bounds.width * effectiveDPR);
     const targetH = Math.round(bounds.height * effectiveDPR);
     if (cp.canvas.width !== targetW || cp.canvas.height !== targetH) return false;
