@@ -9,6 +9,29 @@ export interface TargetRGBA {
   filledPixelCount?: number;
 }
 
+// 🛡️ Experimental Feature Switch (Phase 4):
+// When true, runs existing primary flood fill (T=40) followed by bounded adaptive edge growth.
+// When false, executes original production scanline behavior with zero edge growth.
+export const EXPERIMENTAL_ADAPTIVE_BUCKET_EDGE_GROWTH = true;
+
+const MAX_BOUNDARY_CAPACITY = 32768;
+const T_EDGE_MAX = 150;
+const MIN_GRADIENT_STEP = 15;
+
+let sharedBoundaryX: Int32Array | null = null;
+let sharedBoundaryY: Int32Array | null = null;
+let sharedBoundaryFromX: Int32Array | null = null;
+let sharedBoundaryFromY: Int32Array | null = null;
+
+const ensureBoundaryBuffers = () => {
+  if (!sharedBoundaryX) {
+    sharedBoundaryX = new Int32Array(MAX_BOUNDARY_CAPACITY);
+    sharedBoundaryY = new Int32Array(MAX_BOUNDARY_CAPACITY);
+    sharedBoundaryFromX = new Int32Array(MAX_BOUNDARY_CAPACITY);
+    sharedBoundaryFromY = new Int32Array(MAX_BOUNDARY_CAPACITY);
+  }
+};
+
 const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b: number, a: number) => {
   if (a <= 10) {
     return data[i + 3] <= 10;
@@ -128,6 +151,29 @@ export const executeRasterFloodFill = (
     queueY = [sy];
   }
 
+  let boundaryCount = 0;
+  let boundaryOverflow = false;
+
+  if (EXPERIMENTAL_ADAPTIVE_BUCKET_EDGE_GROWTH) {
+    ensureBoundaryBuffers();
+  }
+
+  const pushBoundaryCandidate = (bx: number, by: number, fx: number, fy: number) => {
+    const bPixelIdx = by * cw + bx;
+    if (visited[bPixelIdx] === 0) {
+      if (boundaryCount < MAX_BOUNDARY_CAPACITY) {
+        visited[bPixelIdx] = 2; // Marked as candidate (deduplicated)
+        sharedBoundaryX![boundaryCount] = bx;
+        sharedBoundaryY![boundaryCount] = by;
+        sharedBoundaryFromX![boundaryCount] = fx;
+        sharedBoundaryFromY![boundaryCount] = fy;
+        boundaryCount++;
+      } else {
+        boundaryOverflow = true;
+      }
+    }
+  };
+
   let head = 0;
   let filledPixelCount = 0;
   const byteStride = cw * 4;
@@ -138,7 +184,7 @@ export const executeRasterFloodFill = (
     head++;
 
     const seedIdx = cy * cw + cx;
-    if (visited[seedIdx]) continue;
+    if (visited[seedIdx] === 1) continue;
 
     let xCurr = cx;
     let yCurr = cy;
@@ -146,10 +192,13 @@ export const executeRasterFloodFill = (
     let idx = (yCurr * cw + xCurr) * 4;
     let pixelIdx = yCurr * cw + xCurr;
 
-    while (xCurr >= 0 && !visited[pixelIdx] && matchColor(data, idx, tr, tg, tb, ta)) {
+    while (xCurr >= 0 && visited[pixelIdx] !== 1 && matchColor(data, idx, tr, tg, tb, ta)) {
       xCurr--;
       idx -= 4;
       pixelIdx--;
+    }
+    if (EXPERIMENTAL_ADAPTIVE_BUCKET_EDGE_GROWTH && xCurr >= 0) {
+      pushBoundaryCandidate(xCurr, yCurr, xCurr + 1, yCurr);
     }
     xCurr++;
     idx += 4;
@@ -162,7 +211,7 @@ export const executeRasterFloodFill = (
     const yAbove = yCurr - 1;
     const yBelow = yCurr + 1;
 
-    while (xCurr < cw && !visited[pixelIdx] && matchColor(data, idx, tr, tg, tb, ta)) {
+    while (xCurr < cw && visited[pixelIdx] !== 1 && matchColor(data, idx, tr, tg, tb, ta)) {
       visited[pixelIdx] = 1;
       filledPixelCount++;
 
@@ -196,7 +245,7 @@ export const executeRasterFloodFill = (
       if (hasAbove) {
         const pixelIdxAbove = pixelIdx - cw;
         const idxAbove = idx - byteStride;
-        const matchesAbove = !visited[pixelIdxAbove] && matchColor(data, idxAbove, tr, tg, tb, ta);
+        const matchesAbove = visited[pixelIdxAbove] !== 1 && matchColor(data, idxAbove, tr, tg, tb, ta);
         if (!spanAbove && matchesAbove) {
           queueX.push(xCurr);
           queueY.push(yAbove);
@@ -204,12 +253,15 @@ export const executeRasterFloodFill = (
         } else if (spanAbove && !matchesAbove) {
           spanAbove = false;
         }
+        if (!matchesAbove && EXPERIMENTAL_ADAPTIVE_BUCKET_EDGE_GROWTH) {
+          pushBoundaryCandidate(xCurr, yAbove, xCurr, yCurr);
+        }
       }
 
       if (hasBelow) {
         const pixelIdxBelow = pixelIdx + cw;
         const idxBelow = idx + byteStride;
-        const matchesBelow = !visited[pixelIdxBelow] && matchColor(data, idxBelow, tr, tg, tb, ta);
+        const matchesBelow = visited[pixelIdxBelow] !== 1 && matchColor(data, idxBelow, tr, tg, tb, ta);
         if (!spanBelow && matchesBelow) {
           queueX.push(xCurr);
           queueY.push(yBelow);
@@ -217,11 +269,92 @@ export const executeRasterFloodFill = (
         } else if (spanBelow && !matchesBelow) {
           spanBelow = false;
         }
+        if (!matchesBelow && EXPERIMENTAL_ADAPTIVE_BUCKET_EDGE_GROWTH) {
+          pushBoundaryCandidate(xCurr, yBelow, xCurr, yCurr);
+        }
       }
 
       xCurr++;
       idx += 4;
       pixelIdx++;
+    }
+
+    if (EXPERIMENTAL_ADAPTIVE_BUCKET_EDGE_GROWTH && xCurr < cw) {
+      pushBoundaryCandidate(xCurr, yCurr, xCurr - 1, yCurr);
+    }
+  }
+
+  // Phase 2: Bounded Adaptive Edge Growth (One-Step Ascending Gradient Rule)
+  // If buffer overflow occurred, skip entire edge-growth pass to preserve primary flood fill result safely.
+  if (
+    EXPERIMENTAL_ADAPTIVE_BUCKET_EDGE_GROWTH &&
+    !boundaryOverflow &&
+    sharedBoundaryX &&
+    sharedBoundaryY &&
+    sharedBoundaryFromX &&
+    sharedBoundaryFromY
+  ) {
+    for (let b = 0; b < boundaryCount; b++) {
+      const bx = sharedBoundaryX[b];
+      const by = sharedBoundaryY[b];
+      const bPixelIdx = by * cw + bx;
+      const bIdx = bPixelIdx * 4;
+
+      const pr = data[bIdx];
+      const pg = data[bIdx + 1];
+      const pb = data[bIdx + 2];
+      const pa = data[bIdx + 3];
+
+      const distP = Math.max(Math.abs(pr - tr), Math.abs(pg - tg), Math.abs(pb - tb));
+      if (distP > T_EDGE_MAX) {
+        continue;
+      }
+
+      const fx = sharedBoundaryFromX[b];
+      const fy = sharedBoundaryFromY[b];
+      const dx = bx - fx;
+      const dy = by - fy;
+      const ox = bx + dx;
+      const oy = by + dy;
+
+      if (ox >= 0 && ox < cw && oy >= 0 && oy < ch) {
+        const oPixelIdx = oy * cw + ox;
+        // Do not expand if outward neighbor is already part of the filled region
+        if (visited[oPixelIdx] === 1) {
+          continue;
+        }
+
+        const oIdx = oPixelIdx * 4;
+        const or = data[oIdx];
+        const og = data[oIdx + 1];
+        const ob = data[oIdx + 2];
+
+        const distO = Math.max(Math.abs(or - tr), Math.abs(og - tg), Math.abs(ob - tb));
+
+        // STROKE CORE INVARIANT:
+        // P is filled if and only if O is strictly more contrasting than P by at least MIN_GRADIENT_STEP.
+        // If distO < distP + MIN_GRADIENT_STEP, P is the local crest of a thin line, background, or ambiguous. DO NOT TOUCH.
+        if (distO >= distP + MIN_GRADIENT_STEP) {
+          visited[bPixelIdx] = 1;
+          filledPixelCount++;
+
+          if (fillOpacity === 1) {
+            data[bIdx] = fr;
+            data[bIdx + 1] = fg;
+            data[bIdx + 2] = fb;
+            data[bIdx + 3] = 255;
+          } else {
+            const destA = pa / 255;
+            const outA = fillOpacity + destA * (1 - fillOpacity);
+            const factorSrc = fillOpacity / outA;
+            const factorDest = (destA * (1 - fillOpacity)) / outA;
+            data[bIdx] = Math.round(fr * factorSrc + pr * factorDest);
+            data[bIdx + 1] = Math.round(fg * factorSrc + pg * factorDest);
+            data[bIdx + 2] = Math.round(fb * factorSrc + pb * factorDest);
+            data[bIdx + 3] = Math.round(outA * 255);
+          }
+        }
+      }
     }
   }
 
