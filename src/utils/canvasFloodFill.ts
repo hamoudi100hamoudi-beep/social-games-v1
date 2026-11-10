@@ -9,23 +9,22 @@ export interface TargetRGBA {
   filledPixelCount?: number;
 }
 
-// 🛡️ Experimental Feature Switch (Phase 4):
-// When true, runs existing primary flood fill (T=40) followed by bounded adaptive edge growth.
-// When false, executes original production scanline behavior with zero edge growth.
+// 🛡️ Master Emergency Switch:
+// When true, runs existing primary flood fill (T=40) followed by adaptive edge preservation.
+// When false, completely bypasses edge processing and returns pure primary scanline fill.
 export const EXPERIMENTAL_ADAPTIVE_BUCKET_EDGE_GROWTH = true;
 
 // 🛡️ Experimental Feature Switch (Phase 5):
 // When true, applies alpha-aware boundary compositing for transparent-seeded fills (target alpha <= 10).
-// When false, preserves Phase 4 behavior exactly.
+// When false, skips transparent edge processing cleanly (zero modification).
 export const EXPERIMENTAL_ALPHA_AWARE_TRANSPARENT_EDGE_FILL = true;
 
 // 🛡️ Experimental Feature Switch (Phase 6):
 // When true, applies mathematical alpha-reconstruction and edge preservation for opaque-seeded fills (target alpha > 10).
-// When false, preserves Phase 4 RGB edge-growth behavior exactly.
+// When false, skips opaque edge processing cleanly (zero modification).
 export const EXPERIMENTAL_OPAQUE_BACKGROUND_EDGE_PRESERVATION = true;
 
 const MAX_BOUNDARY_CAPACITY = 32768;
-const T_EDGE_MAX = 150;
 const MIN_GRADIENT_STEP = 15;
 const MIN_ALPHA_GRADIENT_STEP = 20;
 
@@ -469,58 +468,6 @@ export const executeRasterFloodFill = (
 
           visited[bPixelIdx] = 1;
           filledPixelCount++;
-        }
-      } else {
-        // Phase 4: Existing RGB Adaptive Edge Growth for Opaque Seeds (and transparent fallback when Phase 5 is disabled)
-        const distP = Math.max(Math.abs(pr - tr), Math.abs(pg - tg), Math.abs(pb - tb));
-        if (distP > T_EDGE_MAX) {
-          continue;
-        }
-
-        const fx = sharedBoundaryFromX[b];
-        const fy = sharedBoundaryFromY[b];
-        const dx = bx - fx;
-        const dy = by - fy;
-        const ox = bx + dx;
-        const oy = by + dy;
-
-        if (ox >= 0 && ox < cw && oy >= 0 && oy < ch) {
-          const oPixelIdx = oy * cw + ox;
-          // Do not expand if outward neighbor is already part of the filled region
-          if (visited[oPixelIdx] === 1) {
-            continue;
-          }
-
-          const oIdx = oPixelIdx * 4;
-          const or = data[oIdx];
-          const og = data[oIdx + 1];
-          const ob = data[oIdx + 2];
-
-          const distO = Math.max(Math.abs(or - tr), Math.abs(og - tg), Math.abs(ob - tb));
-
-          // STROKE CORE INVARIANT:
-          // P is filled if and only if O is strictly more contrasting than P by at least MIN_GRADIENT_STEP.
-          // If distO < distP + MIN_GRADIENT_STEP, P is the local crest of a thin line, background, or ambiguous. DO NOT TOUCH.
-          if (distO >= distP + MIN_GRADIENT_STEP) {
-            visited[bPixelIdx] = 1;
-            filledPixelCount++;
-
-            if (fillOpacity === 1) {
-              data[bIdx] = fr;
-              data[bIdx + 1] = fg;
-              data[bIdx + 2] = fb;
-              data[bIdx + 3] = 255;
-            } else {
-              const destA = pa / 255;
-              const outA = fillOpacity + destA * (1 - fillOpacity);
-              const factorSrc = fillOpacity / outA;
-              const factorDest = (destA * (1 - fillOpacity)) / outA;
-              data[bIdx] = Math.round(fr * factorSrc + pr * factorDest);
-              data[bIdx + 1] = Math.round(fg * factorSrc + pg * factorDest);
-              data[bIdx + 2] = Math.round(fb * factorSrc + pb * factorDest);
-              data[bIdx + 3] = Math.round(outA * 255);
-            }
-          }
         }
       }
     }
