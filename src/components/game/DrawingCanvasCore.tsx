@@ -738,6 +738,100 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   } | null>(null);
   const outsideShapeStartCoordsRef = useRef<{ x: number; y: number } | null>(null);
 
+  // ── Eyedropper (Pipette) Live Preview & Gesture Refs ──
+  const sampleCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const sampleCtxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const pipetteTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const pipetteCancelledRef = useRef<boolean>(false);
+  const pipettePointerActiveRef = useRef<boolean>(false);
+  const pipetteCoordsRef = useRef<{ clientX: number; clientY: number; logicalX: number; logicalY: number }>({
+    clientX: 0,
+    clientY: 0,
+    logicalX: 0,
+    logicalY: 0,
+  });
+  const lastSampledColorRef = useRef<string>('#ffffff');
+  const pipetteMarkerVisibleRef = useRef<boolean>(false);
+  const pipetteRafIdRef = useRef<number | null>(null);
+  const lastSampleTimeRef = useRef<number>(0);
+  const [showPipetteMarker, setShowPipetteMarker] = useState<boolean>(false);
+  const pipetteMarkerElementRef = useRef<HTMLDivElement | null>(null);
+  const pipetteColorBubbleRef = useRef<HTMLDivElement | null>(null);
+
+  const getSampleCtx = () => {
+    if (!sampleCtxRef.current) {
+      if (typeof document !== 'undefined') {
+        const sc = document.createElement('canvas');
+        sc.width = 1;
+        sc.height = 1;
+        sampleCanvasRef.current = sc;
+        sampleCtxRef.current = sc.getContext('2d', { willReadFrequently: true });
+      }
+    }
+    return sampleCtxRef.current;
+  };
+
+  const sampleColorAtLogical = (logicalX: number, logicalY: number): string | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const sCtx = getSampleCtx();
+    if (!sCtx) return null;
+
+    const scaleX = canvas.width / LOGICAL_WIDTH;
+    const scaleY = canvas.height / LOGICAL_HEIGHT;
+    const rx = Math.max(0, Math.min(canvas.width - 1, Math.floor(logicalX * scaleX)));
+    const ry = Math.max(0, Math.min(canvas.height - 1, Math.floor(logicalY * scaleY)));
+
+    sCtx.imageSmoothingEnabled = false;
+    sCtx.clearRect(0, 0, 1, 1);
+    sCtx.drawImage(canvas, rx, ry, 1, 1, 0, 0, 1, 1);
+
+    const pixel = sCtx.getImageData(0, 0, 1, 1).data;
+    const alpha = pixel[3];
+    const r = alpha === 255 ? pixel[0] : Math.round((pixel[0] * alpha + 255 * (255 - alpha)) / 255);
+    const g = alpha === 255 ? pixel[1] : Math.round((pixel[1] * alpha + 255 * (255 - alpha)) / 255);
+    const b = alpha === 255 ? pixel[2] : Math.round((pixel[2] * alpha + 255 * (255 - alpha)) / 255);
+    return '#' + ('000000' + ((r << 16) | (g << 8) | b).toString(16)).slice(-6);
+  };
+
+  const cancelPipetteInteraction = () => {
+    pipetteCancelledRef.current = true;
+    pipettePointerActiveRef.current = false;
+    if (pipetteTimerRef.current) {
+      clearTimeout(pipetteTimerRef.current);
+      pipetteTimerRef.current = null;
+    }
+    if (pipetteRafIdRef.current) {
+      cancelAnimationFrame(pipetteRafIdRef.current);
+      pipetteRafIdRef.current = null;
+    }
+    if (pipetteMarkerVisibleRef.current) {
+      pipetteMarkerVisibleRef.current = false;
+      setShowPipetteMarker(false);
+    }
+  };
+
+  // Cancel eyedropper if tool changes while finger is held
+  useEffect(() => {
+    if (tool !== 'pipette' && pipettePointerActiveRef.current) {
+      cancelPipetteInteraction();
+    }
+  }, [tool]);
+
+  // Clean up eyedropper on unmount
+  useEffect(() => {
+    return () => {
+      if (pipetteTimerRef.current) {
+        clearTimeout(pipetteTimerRef.current);
+        pipetteTimerRef.current = null;
+      }
+      if (pipetteRafIdRef.current) {
+        cancelAnimationFrame(pipetteRafIdRef.current);
+        pipetteRafIdRef.current = null;
+      }
+    };
+  }, []);
+
   // Force re-centering instantly when user drawing status / role updates and reset observer readiness gate
   useEffect(() => {
     hasInitializedTransform.current = false;
@@ -760,11 +854,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   }, [isSyncing]);
 
   // Dynamic references to read props values directly in listeners without re-binding
-  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined });
-  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined };
+  const propsRef = useRef({ tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined, onPipetteColorPicked });
+  propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined, onPipetteColorPicked };
   useEffect(() => {
-    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined };
-  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined]);
+    propsRef.current = { tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined, onPipetteColorPicked };
+  }, [tool, color, thickness, opacity, readOnly, isFreeDraw, isExperimental, showFloatingNames, enableInputOptimizations, enableBitmapUndoCache, enableCanvasAlpha, enableDestinationOutEraser, isRoomJoined, onPipetteColorPicked]);
 
   const applyTransformRef = useRef<(overrideBaseScale?: number) => void>(() => {});
   applyTransformRef.current = (overrideBaseScale?: number) => {
@@ -881,6 +975,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           clearTimeout(bucketTimeoutRef.current);
           bucketTimeoutRef.current = null;
         }
+        cancelPipetteInteraction();
       }
 
       // Smoothly finalize genuine strokes or cancel accidental touches when user introduces a second touch (pinch zoom start)
@@ -959,6 +1054,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           clearTimeout(bucketTimeoutRef.current);
           bucketTimeoutRef.current = null;
         }
+        cancelPipetteInteraction();
         if (isDrawingRef.current) {
           const activeTool = propsRef.current.tool;
           const isShape = activeTool === 'line' || activeTool === 'strokeRect' || activeTool === 'fillRect' || activeTool === 'strokeCircle' || activeTool === 'fillCircle';
@@ -5038,25 +5134,39 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     if (activeTool === 'pipette') {
-      const offscreen = document.createElement('canvas');
-      offscreen.width = canvas.width;
-      offscreen.height = canvas.height;
-      const oCtx = offscreen.getContext('2d', { willReadFrequently: true });
-      if (oCtx) {
-        oCtx.drawImage(canvas, 0, 0);
-        const scaleX = canvas.width / LOGICAL_WIDTH;
-        const scaleY = canvas.height / LOGICAL_HEIGHT;
-        const rx = Math.floor(x * scaleX);
-        const ry = Math.floor(y * scaleY);
-        const pixel = oCtx.getImageData(rx, ry, 1, 1).data;
-        const alpha = pixel[3];
-        const r = alpha === 255 ? pixel[0] : Math.round((pixel[0] * alpha + 255 * (255 - alpha)) / 255);
-        const g = alpha === 255 ? pixel[1] : Math.round((pixel[1] * alpha + 255 * (255 - alpha)) / 255);
-        const b = alpha === 255 ? pixel[2] : Math.round((pixel[2] * alpha + 255 * (255 - alpha)) / 255);
-        const hex = "#" + ("000000" + ((r << 16) | (g << 8) | b).toString(16)).slice(-6);
-        onPipetteColorPicked?.(hex);
+      if (e.pointerType === 'touch') {
+        pipetteCancelledRef.current = false;
+        pipettePointerActiveRef.current = true;
+        pipetteCoordsRef.current = { clientX: e.clientX, clientY: e.clientY, logicalX: x, logicalY: y };
+
+        if (pipetteTimerRef.current) {
+          clearTimeout(pipetteTimerRef.current);
+          pipetteTimerRef.current = null;
+        }
+
+        // 200ms Long-Press Timer for Live Preview Marker
+        pipetteTimerRef.current = setTimeout(() => {
+          if (
+            pipettePointerActiveRef.current &&
+            !pipetteCancelledRef.current &&
+            activeTouchCountRef.current < 2 &&
+            !isZoomPinchingRef.current
+          ) {
+            pipetteMarkerVisibleRef.current = true;
+            const hex = sampleColorAtLogical(pipetteCoordsRef.current.logicalX, pipetteCoordsRef.current.logicalY);
+            if (hex) lastSampledColorRef.current = hex;
+            setShowPipetteMarker(true);
+          }
+        }, 200);
+        return;
+      } else {
+        // Desktop Mouse / Pen: Select immediately on pointerdown as before (zero delay, no marker)
+        const hex = sampleColorAtLogical(x, y);
+        if (hex) {
+          onPipetteColorPicked?.(hex);
+        }
+        return;
       }
-      return;
     }
 
     if (activeTool === 'pencil' || activeTool === 'eraser') {
@@ -5071,6 +5181,39 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
     e.stopPropagation();
     if (e.pointerId !== activePointerIdRef.current) return;
+
+    // ── Eyedropper Live Preview Movement Handling ──
+    if (propsRef.current.tool === 'pipette' && pipettePointerActiveRef.current) {
+      if (pipetteCancelledRef.current || isZoomPinchingRef.current || activeTouchCountRef.current >= 2) {
+        cancelPipetteInteraction();
+        return;
+      }
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas, true);
+      pipetteCoordsRef.current = { clientX: e.clientX, clientY: e.clientY, logicalX: x, logicalY: y };
+
+      if (pipetteMarkerVisibleRef.current) {
+        // Direct DOM update on translate3d for 60 FPS hardware accelerated movement
+        if (pipetteMarkerElementRef.current) {
+          pipetteMarkerElementRef.current.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
+        }
+        // Throttled color sampling (~30ms cadence)
+        const now = performance.now();
+        if (now - lastSampleTimeRef.current >= 30) {
+          lastSampleTimeRef.current = now;
+          const hex = sampleColorAtLogical(x, y);
+          if (hex) {
+            lastSampledColorRef.current = hex;
+            if (pipetteColorBubbleRef.current) {
+              pipetteColorBubbleRef.current.style.backgroundColor = hex;
+            }
+          }
+        }
+      }
+      return;
+    }
+
     if (!isDrawingRef.current && !exitedOutsideWhilePointerDownRef.current) return;
 
     const canvas = canvasRef.current;
@@ -5173,6 +5316,38 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     exitedOutsideWhilePointerDownRef.current = false;
     lastOutsidePointerRef.current = null;
 
+    // ── Eyedropper Pointer Up Commit ──
+    if (propsRef.current.tool === 'pipette' && pipettePointerActiveRef.current) {
+      const wasCancelled = pipetteCancelledRef.current || isZoomPinchingRef.current || activeTouchCountRef.current >= 2;
+      const wasVisible = pipetteMarkerVisibleRef.current;
+
+      if (pipetteTimerRef.current) {
+        clearTimeout(pipetteTimerRef.current);
+        pipetteTimerRef.current = null;
+      }
+      if (pipetteRafIdRef.current) {
+        cancelAnimationFrame(pipetteRafIdRef.current);
+        pipetteRafIdRef.current = null;
+      }
+      pipettePointerActiveRef.current = false;
+      pipetteMarkerVisibleRef.current = false;
+      if (wasVisible) {
+        setShowPipetteMarker(false);
+      }
+
+      if (!wasCancelled) {
+        const canvas = canvasRef.current;
+        let finalHex = lastSampledColorRef.current;
+        if (canvas) {
+          const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas, true);
+          const sampled = sampleColorAtLogical(x, y);
+          if (sampled) finalHex = sampled;
+        }
+        propsRef.current.onPipetteColorPicked?.(finalHex);
+      }
+      return;
+    }
+
     const canvas = canvasRef.current;
     const tempCanvas = tempCanvasRef.current;
     const ctx = ctxRef.current;
@@ -5194,6 +5369,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const handlePointerCancel = (e: React.PointerEvent<HTMLCanvasElement>) => {
     e.stopPropagation();
     if (activePointerIdRef.current !== null && e.pointerId !== activePointerIdRef.current) {
+      return;
+    }
+    if (propsRef.current.tool === 'pipette') {
+      cancelPipetteInteraction();
+      activePointerIdRef.current = null;
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch (err) {}
       return;
     }
     handlePointerUp(e);
@@ -5426,6 +5609,37 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           />
         )}
       </div>
+
+      {/* 🔍 Eyedropper Live Color Preview Marker Portal */}
+      {showPipetteMarker && typeof document !== 'undefined' && createPortal(
+        <div
+          ref={pipetteMarkerElementRef}
+          className="fixed top-0 left-0 pointer-events-none z-[99999] select-none will-change-transform"
+          style={{
+            transform: `translate3d(${pipetteCoordsRef.current.clientX}px, ${pipetteCoordsRef.current.clientY}px, 0)`,
+          }}
+        >
+          {/* Eyedropper Location Pin Marker positioned directly above the touch point */}
+          <div className="relative -translate-x-1/2 -translate-y-[calc(100%+6px)] flex flex-col items-center">
+            {/* Outer magnified color bubble */}
+            <div className="relative w-12 h-12 rounded-full p-[2.5px] bg-slate-900/90 shadow-[0_4px_16px_rgba(0,0,0,0.5)] border border-white/40 flex items-center justify-center">
+              <div
+                ref={pipetteColorBubbleRef}
+                className="w-full h-full rounded-full border border-black/30 shadow-inner transition-colors duration-75"
+                style={{ backgroundColor: lastSampledColorRef.current }}
+              />
+              {/* Central target reticle dot */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-1.5 h-1.5 rounded-full border border-white/60 bg-black/40" />
+              </div>
+            </div>
+            {/* Downward indicator pin needle pointing at exact contact coordinates */}
+            <div className="w-0 h-0 border-x-[6px] border-x-transparent border-t-[10px] border-t-slate-900/90 drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)] -mt-[1px]" />
+            <div className="w-1.5 h-1.5 rounded-full bg-white border border-black/60 -mt-[2px] shadow-sm" />
+          </div>
+        </div>,
+        document.body
+      )}
 
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
