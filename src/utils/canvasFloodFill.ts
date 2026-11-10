@@ -19,6 +19,11 @@ export const EXPERIMENTAL_ADAPTIVE_BUCKET_EDGE_GROWTH = true;
 // When false, preserves Phase 4 behavior exactly.
 export const EXPERIMENTAL_ALPHA_AWARE_TRANSPARENT_EDGE_FILL = true;
 
+// 🛡️ Experimental Feature Switch (Phase 6):
+// When true, applies mathematical alpha-reconstruction and edge preservation for opaque-seeded fills (target alpha > 10).
+// When false, preserves Phase 4 RGB edge-growth behavior exactly.
+export const EXPERIMENTAL_OPAQUE_BACKGROUND_EDGE_PRESERVATION = true;
+
 const MAX_BOUNDARY_CAPACITY = 32768;
 const T_EDGE_MAX = 150;
 const MIN_GRADIENT_STEP = 15;
@@ -361,6 +366,109 @@ export const executeRasterFloodFill = (
               filledPixelCount++;
             }
           }
+        }
+      } else if (!isTransparentSeed && EXPERIMENTAL_OPAQUE_BACKGROUND_EDGE_PRESERVATION) {
+        // Phase 6: Opaque-Background Edge Preservation via Alpha Reconstruction
+        const fx = sharedBoundaryFromX[b];
+        const fy = sharedBoundaryFromY[b];
+        const dx = bx - fx;
+        const dy = by - fy;
+        const ox = bx + dx;
+        const oy = by + dy;
+
+        if (ox >= 0 && ox < cw && oy >= 0 && oy < ch) {
+          const oPixelIdx = oy * cw + ox;
+          // Do not expand if outward neighbor is already part of the filled region
+          if (visited[oPixelIdx] === 1) {
+            continue;
+          }
+
+          const oIdx = oPixelIdx * 4;
+          const or = data[oIdx];
+          const og = data[oIdx + 1];
+          const ob = data[oIdx + 2];
+          const oa = data[oIdx + 3];
+
+          // Outward neighbor must be opaque enough to serve as a reliable stroke core
+          if (oa < 200) {
+            continue;
+          }
+
+          const distP = Math.max(Math.abs(pr - tr), Math.abs(pg - tg), Math.abs(pb - tb));
+          const distO = Math.max(Math.abs(or - tr), Math.abs(og - tg), Math.abs(ob - tb));
+
+          // Gradient Step Invariant: Stroke core O must be strictly more contrasting with background B than candidate P
+          if (distO < distP + MIN_GRADIENT_STEP) {
+            continue;
+          }
+
+          // Vector from background B to stroke core O: v = O - B
+          const vr = or - tr;
+          const vg = og - tg;
+          const vb = ob - tb;
+          const vSq = vr * vr + vg * vg + vb * vb;
+
+          // Core Distinction Invariant: O must be sufficiently distinct from B (||v||^2 >= 900, i.e. ||v|| >= 30)
+          if (vSq < 900) {
+            continue;
+          }
+
+          // Vector from background B to candidate pixel P: u = P - B
+          const ur = pr - tr;
+          const ug = pg - tg;
+          const ub = pb - tb;
+          const uDotV = ur * vr + ug * vg + ub * vb;
+
+          // Positive projection along vector v
+          if (uDotV <= 0) {
+            continue;
+          }
+
+          // Estimated stroke coverage alpha
+          const alpha = uDotV / vSq;
+
+          // Valid antialiasing skirt range [0.10, 0.85]
+          // Reject < 0.10 (essentially background) and > 0.85 (preserve stroke core untouched)
+          if (alpha < 0.10 || alpha > 0.85) {
+            continue;
+          }
+
+          // Directional Consistency / Residual Error Check
+          // Check that P actually lies along the segment between B and O
+          const predR = tr + alpha * vr;
+          const predG = tg + alpha * vg;
+          const predB = tb + alpha * vb;
+
+          if (Math.abs(pr - predR) > 15 || Math.abs(pg - predG) > 15 || Math.abs(pb - predB) > 15) {
+            continue;
+          }
+
+          // Reconstruct new pixel: P_new = alpha * O + (1 - alpha) * F_eff
+          let newR: number;
+          let newG: number;
+          let newB: number;
+
+          if (fillOpacity >= 0.99) {
+            newR = Math.min(255, Math.max(0, Math.round(alpha * or + (1 - alpha) * fr)));
+            newG = Math.min(255, Math.max(0, Math.round(alpha * og + (1 - alpha) * fg)));
+            newB = Math.min(255, Math.max(0, Math.round(alpha * ob + (1 - alpha) * fb)));
+          } else {
+            const effFr = fillOpacity * fr + (1 - fillOpacity) * tr;
+            const effFg = fillOpacity * fg + (1 - fillOpacity) * tg;
+            const effFb = fillOpacity * fb + (1 - fillOpacity) * tb;
+
+            newR = Math.min(255, Math.max(0, Math.round(alpha * or + (1 - alpha) * effFr)));
+            newG = Math.min(255, Math.max(0, Math.round(alpha * og + (1 - alpha) * effFg)));
+            newB = Math.min(255, Math.max(0, Math.round(alpha * ob + (1 - alpha) * effFb)));
+          }
+
+          data[bIdx] = newR;
+          data[bIdx + 1] = newG;
+          data[bIdx + 2] = newB;
+          data[bIdx + 3] = 255;
+
+          visited[bPixelIdx] = 1;
+          filledPixelCount++;
         }
       } else {
         // Phase 4: Existing RGB Adaptive Edge Growth for Opaque Seeds (and transparent fallback when Phase 5 is disabled)
