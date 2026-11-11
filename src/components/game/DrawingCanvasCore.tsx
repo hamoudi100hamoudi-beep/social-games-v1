@@ -61,6 +61,9 @@ const DEFAULT_LOGICAL_HEIGHT = CANVAS_HEIGHT;
 // --- Production Canvas Resolution ---
 export const CANVAS_DPR = 1.0;
 
+// Eyedropper touch long-press threshold
+export const PIPETTE_LONG_PRESS_THRESHOLD_MS = 100;
+
 interface UndoDiagnostics {
   opId: string;
   type: 'local_undo' | 'remote_undo';
@@ -750,8 +753,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     logicalX: 0,
     logicalY: 0,
   });
-  const lastSampledColorRef = useRef<string>('#ffffff');
+  const lastSampledColorRef = useRef<string>('transparent');
   const pipetteMarkerVisibleRef = useRef<boolean>(false);
+  const pipetteHasValidSampleRef = useRef<boolean>(false);
   const pipetteRafIdRef = useRef<number | null>(null);
   const lastSampleTimeRef = useRef<number>(0);
   const [showPipetteMarker, setShowPipetteMarker] = useState<boolean>(false);
@@ -797,6 +801,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const cancelPipetteInteraction = () => {
     pipetteCancelledRef.current = true;
     pipettePointerActiveRef.current = false;
+    pipetteHasValidSampleRef.current = false;
+    lastSampledColorRef.current = 'transparent';
     if (pipetteTimerRef.current) {
       clearTimeout(pipetteTimerRef.current);
       pipetteTimerRef.current = null;
@@ -1544,6 +1550,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   ) => {
     const rect = rectOverride ?? canvas.getBoundingClientRect();
     return calculateLogicalCoordinates(clientX, clientY, rect, LOGICAL_WIDTH, LOGICAL_HEIGHT, clamp);
+  };
+
+  const isPointInsideCanvas = (
+    clientX: number,
+    clientY: number,
+    canvas: HTMLCanvasElement
+  ): { isInside: boolean; logicalX: number; logicalY: number } => {
+    const rawCoords = getLogicalCoords(clientX, clientY, canvas, false);
+    const isInside = rawCoords.x >= 0 && rawCoords.x <= LOGICAL_WIDTH && rawCoords.y >= 0 && rawCoords.y <= LOGICAL_HEIGHT;
+    return { isInside, logicalX: rawCoords.x, logicalY: rawCoords.y };
   };
 
   // --- Dynamic Drawing Functions ---
@@ -5134,17 +5150,35 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
 
     if (activeTool === 'pipette') {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const { isInside, logicalX, logicalY } = isPointInsideCanvas(e.clientX, e.clientY, canvas);
+
       if (e.pointerType === 'touch') {
         pipetteCancelledRef.current = false;
         pipettePointerActiveRef.current = true;
-        pipetteCoordsRef.current = { clientX: e.clientX, clientY: e.clientY, logicalX: x, logicalY: y };
+        pipetteCoordsRef.current = { clientX: e.clientX, clientY: e.clientY, logicalX, logicalY };
+
+        if (isInside) {
+          const hex = sampleColorAtLogical(logicalX, logicalY);
+          if (hex) {
+            lastSampledColorRef.current = hex;
+            pipetteHasValidSampleRef.current = true;
+          } else {
+            lastSampledColorRef.current = 'transparent';
+            pipetteHasValidSampleRef.current = false;
+          }
+        } else {
+          lastSampledColorRef.current = 'transparent';
+          pipetteHasValidSampleRef.current = false;
+        }
 
         if (pipetteTimerRef.current) {
           clearTimeout(pipetteTimerRef.current);
           pipetteTimerRef.current = null;
         }
 
-        // 200ms Long-Press Timer for Live Preview Marker
+        // 140ms Long-Press Timer for Live Preview Marker
         pipetteTimerRef.current = setTimeout(() => {
           if (
             pipettePointerActiveRef.current &&
@@ -5153,17 +5187,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             !isZoomPinchingRef.current
           ) {
             pipetteMarkerVisibleRef.current = true;
-            const hex = sampleColorAtLogical(pipetteCoordsRef.current.logicalX, pipetteCoordsRef.current.logicalY);
-            if (hex) lastSampledColorRef.current = hex;
             setShowPipetteMarker(true);
           }
-        }, 200);
+        }, PIPETTE_LONG_PRESS_THRESHOLD_MS);
         return;
       } else {
         // Desktop Mouse / Pen: Select immediately on pointerdown as before (zero delay, no marker)
-        const hex = sampleColorAtLogical(x, y);
-        if (hex) {
-          onPipetteColorPicked?.(hex);
+        if (isInside) {
+          const hex = sampleColorAtLogical(logicalX, logicalY);
+          if (hex) {
+            onPipetteColorPicked?.(hex);
+          }
         }
         return;
       }
@@ -5190,23 +5224,35 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       }
       const canvas = canvasRef.current;
       if (!canvas) return;
-      const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas, true);
-      pipetteCoordsRef.current = { clientX: e.clientX, clientY: e.clientY, logicalX: x, logicalY: y };
+      const { isInside, logicalX, logicalY } = isPointInsideCanvas(e.clientX, e.clientY, canvas);
+      pipetteCoordsRef.current = { clientX: e.clientX, clientY: e.clientY, logicalX, logicalY };
 
       if (pipetteMarkerVisibleRef.current) {
         // Direct DOM update on translate3d for 60 FPS hardware accelerated movement
         if (pipetteMarkerElementRef.current) {
           pipetteMarkerElementRef.current.style.transform = `translate3d(${e.clientX}px, ${e.clientY}px, 0)`;
         }
-        // Throttled color sampling (~30ms cadence)
-        const now = performance.now();
-        if (now - lastSampleTimeRef.current >= 30) {
-          lastSampleTimeRef.current = now;
-          const hex = sampleColorAtLogical(x, y);
-          if (hex) {
-            lastSampledColorRef.current = hex;
-            if (pipetteColorBubbleRef.current) {
-              pipetteColorBubbleRef.current.style.backgroundColor = hex;
+
+        if (!isInside) {
+          // Out of canvas: make circular preview transparent and invalidate current sample
+          pipetteHasValidSampleRef.current = false;
+          lastSampledColorRef.current = 'transparent';
+          if (pipetteColorBubbleRef.current) {
+            pipetteColorBubbleRef.current.style.backgroundColor = 'transparent';
+          }
+        } else {
+          // Inside canvas: throttled color sampling (~30ms cadence)
+          const now = performance.now();
+          // If we just re-entered from outside (!pipetteHasValidSampleRef.current), sample immediately without throttle delay
+          if (!pipetteHasValidSampleRef.current || now - lastSampleTimeRef.current >= 30) {
+            lastSampleTimeRef.current = now;
+            const hex = sampleColorAtLogical(logicalX, logicalY);
+            if (hex) {
+              lastSampledColorRef.current = hex;
+              pipetteHasValidSampleRef.current = true;
+              if (pipetteColorBubbleRef.current) {
+                pipetteColorBubbleRef.current.style.backgroundColor = hex;
+              }
             }
           }
         }
@@ -5337,13 +5383,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       if (!wasCancelled) {
         const canvas = canvasRef.current;
-        let finalHex = lastSampledColorRef.current;
         if (canvas) {
-          const { x, y } = getLogicalCoords(e.clientX, e.clientY, canvas, true);
-          const sampled = sampleColorAtLogical(x, y);
-          if (sampled) finalHex = sampled;
+          const { isInside, logicalX, logicalY } = isPointInsideCanvas(e.clientX, e.clientY, canvas);
+          if (isInside) {
+            const sampled = sampleColorAtLogical(logicalX, logicalY);
+            if (sampled) {
+              propsRef.current.onPipetteColorPicked?.(sampled);
+            }
+          }
+          // If released outside the canvas: do NOT commit a stale or fabricated color!
+          // Cancel selection safely, leaving eyedropper active so user can move back inside.
         }
-        propsRef.current.onPipetteColorPicked?.(finalHex);
       }
       return;
     }
@@ -5610,7 +5660,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         )}
       </div>
 
-      {/* 🔍 Eyedropper Live Color Preview Marker Portal */}
+      {/* 🔍 Eyedropper Live Color Preview Marker Portal (Ibis Paint Style) */}
       {showPipetteMarker && typeof document !== 'undefined' && createPortal(
         <div
           ref={pipetteMarkerElementRef}
@@ -5619,23 +5669,46 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             transform: `translate3d(${pipetteCoordsRef.current.clientX}px, ${pipetteCoordsRef.current.clientY}px, 0)`,
           }}
         >
-          {/* Eyedropper Location Pin Marker positioned directly above the touch point */}
-          <div className="relative -translate-x-1/2 -translate-y-[calc(100%+6px)] flex flex-col items-center">
-            {/* Outer magnified color bubble */}
-            <div className="relative w-12 h-12 rounded-full p-[2.5px] bg-slate-900/90 shadow-[0_4px_16px_rgba(0,0,0,0.5)] border border-white/40 flex items-center justify-center">
+          {/* Ibis Paint Eyedropper Teardrop Pin Marker positioned directly above the touch point */}
+          <div className="relative -translate-x-1/2 -translate-y-full flex flex-col items-center">
+            <div
+              className="relative w-[76px] h-[94px] animate-pipette-pop"
+              style={{ transformOrigin: '38px 90px' }}
+            >
+              {/* 1. Circular Color Preview Area (Centered at 38, 38 with diameter 53px) - Positioned UNDER SVG frame without any gap */}
               <div
-                ref={pipetteColorBubbleRef}
-                className="w-full h-full rounded-full border border-black/30 shadow-inner transition-colors duration-75"
-                style={{ backgroundColor: lastSampledColorRef.current }}
-              />
-              {/* Central target reticle dot */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-1.5 h-1.5 rounded-full border border-white/60 bg-black/40" />
+                className="absolute top-[11.5px] left-[11.5px] w-[53px] h-[53px] rounded-full overflow-hidden flex items-center justify-center pointer-events-none select-none"
+              >
+                <div
+                  ref={pipetteColorBubbleRef}
+                  className="w-full h-full rounded-full transition-colors duration-75"
+                  style={{ backgroundColor: lastSampledColorRef.current }}
+                />
               </div>
+
+              {/* 2. Outer Teardrop Pin Frame with cutout window (Flat Dark Primary Blue #0B3B75 & Solid White Outer Border) */}
+              <svg
+                width="76"
+                height="94"
+                viewBox="0 0 76 94"
+                className="absolute inset-0 w-full h-full pointer-events-none select-none overflow-visible"
+              >
+                {/* Teardrop Pin Body with circular cutout hole for color preview (Flat solid #0B3B75, zero gloss, zero shadow, zero transparency) */}
+                <path
+                  d="M 38 90 L 12.02 62.92 A 36 36 0 1 1 63.98 62.92 Z M 38 12 A 26 26 0 1 0 38 64 A 26 26 0 1 0 38 12 Z"
+                  fillRule="evenodd"
+                  fill="#0B3B75"
+                />
+                {/* Outer teardrop border ONLY - Matching the lighter blue border tone of the drawing toolbar icons (border-white/35 over #0B3B75) */}
+                <path
+                  d="M 38 90 L 12.02 62.92 A 36 36 0 1 1 63.98 62.92 Z"
+                  fill="none"
+                  stroke="rgba(255, 255, 255, 0.35)"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </div>
-            {/* Downward indicator pin needle pointing at exact contact coordinates */}
-            <div className="w-0 h-0 border-x-[6px] border-x-transparent border-t-[10px] border-t-slate-900/90 drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)] -mt-[1px]" />
-            <div className="w-1.5 h-1.5 rounded-full bg-white border border-black/60 -mt-[2px] shadow-sm" />
           </div>
         </div>,
         document.body
