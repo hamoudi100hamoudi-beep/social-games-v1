@@ -24,6 +24,11 @@ export const EXPERIMENTAL_ALPHA_AWARE_TRANSPARENT_EDGE_FILL = true;
 // When false, skips opaque edge processing cleanly (zero modification).
 export const EXPERIMENTAL_OPAQUE_BACKGROUND_EDGE_PRESERVATION = true;
 
+// 🛡️ Experimental Feature Switch (Phase 7):
+// When true, guards partial-alpha seeds (10 < ta < 255) from entering Phase 6 opaque edge reconstruction.
+// When false, restores original Phase 6 routing for partial-alpha seeds for controlled rollback.
+export const EXPERIMENTAL_GUARD_PARTIAL_ALPHA_SEEDS_FROM_PHASE6 = true;
+
 const MAX_BOUNDARY_CAPACITY = 32768;
 const MIN_GRADIENT_STEP = 15;
 const MIN_ALPHA_GRADIENT_STEP = 20;
@@ -305,8 +310,21 @@ export const executeRasterFloodFill = (
     sharedBoundaryFromY
   ) {
     const isTransparentSeed = ta <= 10;
+    const isFullyOpaqueSeed = ta === 255;
+    const isPartiallyTransparentSeed = ta > 10 && ta < 255;
 
-    for (let b = 0; b < boundaryCount; b++) {
+    const canRunPhase5 = isTransparentSeed && EXPERIMENTAL_ALPHA_AWARE_TRANSPARENT_EDGE_FILL;
+    const canRunPhase6 = (
+      EXPERIMENTAL_GUARD_PARTIAL_ALPHA_SEEDS_FROM_PHASE6
+        ? isFullyOpaqueSeed
+        : (isFullyOpaqueSeed || isPartiallyTransparentSeed)
+    ) && EXPERIMENTAL_OPAQUE_BACKGROUND_EDGE_PRESERVATION;
+
+    // Phase 7: If neither Phase 5 nor Phase 6 can run (e.g. partially transparent seed with guard active),
+    // skip boundary edge processing cleanly without mutating candidate pixels.
+    const activeBoundaryCount = (canRunPhase5 || canRunPhase6) ? boundaryCount : 0;
+
+    for (let b = 0; b < activeBoundaryCount; b++) {
       const bx = sharedBoundaryX[b];
       const by = sharedBoundaryY[b];
       const bPixelIdx = by * cw + bx;
@@ -317,7 +335,7 @@ export const executeRasterFloodFill = (
       const pb = data[bIdx + 2];
       const pa = data[bIdx + 3];
 
-      if (isTransparentSeed && EXPERIMENTAL_ALPHA_AWARE_TRANSPARENT_EDGE_FILL) {
+      if (canRunPhase5) {
         // Phase 5: Alpha-Aware Boundary Compositing for Transparent-Seeded Fills
         // Candidate must have intermediate alpha: above transparent threshold (>10) and not already near-opaque (<=240)
         if (pa <= 10 || pa > 240) {
@@ -366,7 +384,7 @@ export const executeRasterFloodFill = (
             }
           }
         }
-      } else if (!isTransparentSeed && EXPERIMENTAL_OPAQUE_BACKGROUND_EDGE_PRESERVATION) {
+      } else if (canRunPhase6) {
         // Phase 6: Opaque-Background Edge Preservation via Alpha Reconstruction
         const fx = sharedBoundaryFromX[b];
         const fy = sharedBoundaryFromY[b];
