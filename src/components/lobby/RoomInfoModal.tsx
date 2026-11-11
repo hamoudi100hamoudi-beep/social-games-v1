@@ -1,4 +1,3 @@
-import React from 'react';
 import { Settings, Play } from 'lucide-react';
 import CinematicModal from '../game/CinematicModal';
 import { getRoomConfig } from '../../types/game';

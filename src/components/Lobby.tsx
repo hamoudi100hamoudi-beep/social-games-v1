@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Users, Plus, ChevronLeft, ChevronRight, Search, X, LayoutGrid, Check, WifiOff, AlertTriangle } from 'lucide-react';
+import { Plus, X, Check, AlertTriangle } from 'lucide-react';
 import { useSocket } from './SocketProvider';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import CinematicModal from './game/CinematicModal';
 import CustomEmojiModal from './game/CustomEmojiModal';
 import RoomInfoModal from './lobby/RoomInfoModal';

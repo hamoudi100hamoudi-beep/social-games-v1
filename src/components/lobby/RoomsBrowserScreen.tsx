@@ -1,4 +1,3 @@
-import React from 'react';
 import { Users, Plus, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import GameTitle from '../game/GameTitle';

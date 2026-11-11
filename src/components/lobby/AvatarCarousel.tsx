@@ -1,4 +1,3 @@
-import React from 'react';
 import { ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react';
 
 interface AvatarCarouselProps {
