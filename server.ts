@@ -100,7 +100,11 @@ const getJsonSafeHistory = (history: any[]): any[] => {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT =
+    process.env.NODE_ENV !== 'production' ||
+    (process.env.NGINX_PORT && process.env.PORT === process.env.NGINX_PORT)
+      ? parseInt(process.env.DEFAULT_APP_PORT || '3000', 10)
+      : (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
   
   const httpServer = createServer(app);
   

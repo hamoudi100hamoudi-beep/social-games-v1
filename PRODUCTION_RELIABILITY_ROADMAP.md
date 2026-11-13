@@ -8,23 +8,28 @@
 
 ## E. Current Checkpoint / Session Handoff
 
-- **Active Phase / Task:** `PHASE 9A — Binary Packet Contract & Input Safety` (Read-Only Audit Complete; Implementation Not Started)
-- **Workspace Git State (Observed):** Local `.git` metadata is absent in the current workspace (`git status`, `git branch -v`, and `git log -n 3 --oneline` exited `128`: `fatal: not a git repository`). Active branch name and `HEAD` commit hash are therefore unverified in this workspace (historical `REFACTORING_ROADMAP.md` cites `6975924ce7fc1d9f5298fac41d5e1a833a2c3a11` for completed Phase 8A).
+- **Active Phase / Task:** `PHASE 9A — Binary Packet Contract & Input Safety` (`IN PROGRESS — Audit Complete; Implementation Blueprint Awaiting Review; No Implementation Started`)
+- **Workspace Git State & Reference Commit:**
+  - Initiating GitHub `main` reference commit: `bf6d0fbeb2952ac5aec17b0cf2c1432b92a23c8b` (adds `PRODUCTION_RELIABILITY_ROADMAP.md` only; does NOT include any `server.ts` change).
+  - Local `.git` metadata is absent in this runtime container (`git status`, `git branch -v`, and `git log` exit `128`), so diffs against `bf6d0fbeb2952ac5aec17b0cf2c1432b92a23c8b` are verified by direct file inspection.
+- **Development-Server `server.ts` Reconciliation (Separate from PHASE 9A):**
+  - Workspace `server.ts:103-107` contains an uncommitted local development-server fix:
+    `const PORT = process.env.NODE_ENV !== 'production' || (process.env.NGINX_PORT && process.env.PORT === process.env.NGINX_PORT) ? parseInt(process.env.DEFAULT_APP_PORT || '3000', 10) : (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);`
+  - Verified GitHub `main` (`bf6d0fbeb2952ac5aec17b0cf2c1432b92a23c8b`) still contains `const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;`.
+  - Conclusion: `server.ts:103-107` is a workspace-only dev-server port-collision change **not synced to GitHub `main`** and **strictly separate from PHASE 9A**. Neither `server.ts` nor any other application file was modified during blueprint planning.
 - **Last Completed Milestone:**
-  - Initialized `PRODUCTION_RELIABILITY_ROADMAP.md` covering `PHASE 9A` through `PHASE 9F`.
-  - Completed strict read-only source audit of the entire Socket.IO binary drawing protocol (`server.ts`, `server/registerDrawBinaryHandler.ts`, `server/roomCanonicalStrokeEngine.ts`, `server/roomDrawingHistory.ts`, `server/utils/binaryBufferHelpers.ts`, `server/rooms.ts`, `server/registerJoinRoomHandler.ts`, `server/registerRequestRoundSyncHandler.ts`, `src/utils/drawBinaryHelper.ts`, `src/components/game/DrawingCanvasCore.tsx`, `src/types/game.ts`, and `scripts/*`).
-- **Source Code Changes Made:** None (0 application files modified; 0 dependencies or lockfiles modified; 0 test commands run).
-- **Key Audit Takeaways (PHASE 9A):**
-  - Confirmed Type 2 trailing-byte bypass in canonical `handleFreeDrawMove` (`server/roomCanonicalStrokeEngine.ts:132-149`), allowing arbitrary trailing bytes up to `maxHttpBufferSize` (`1e8` = 100,000,000 bytes) to be relayed to all room spectators.
-  - Confirmed that server-only packet types `11` (`MSG_DRAW_COMMIT`) and `12` (`MSG_DRAW_ABORT`), as well as unvalidated client types `1` (shapes), `3`, `4`, `6`, `7` (trailing bytes), `8`, `9`, and unknown types (`0`, `10`, `14..255`), either bypass size/structural checks in `handleDrawBinary`'s `else` fallback or allow trailing bytes.
-  - Confirmed a critical client decoder fallback hazard in `decodeBinaryDrawMessage` (`src/utils/drawBinaryHelper.ts:629-642`): any unknown type (`0`, `10`, `14..255`) defaults to `'draw_clear'`, wiping client canvases via `applyClearEpoch` (`DrawingCanvasCore.tsx:3446-3447`).
-  - Confirmed `AGENTS.md` specifically protects `type === 4 || type === 10 || type === 5` inside `recordRoomDrawCommand` (`server/roomDrawingHistory.ts:100`), though no client encoder emits Type 10.
-- **Immediate Blockers / Open Decisions Before 9A Implementation:**
-  1. Confirm handling for legacy `Type 10` (protected check in `roomDrawingHistory.ts:100` vs. client fallback to `'draw_clear'`).
-  2. Decide whether Free Draw collaborative Redo (`DrawingCanvasCore.tsx:2488-2498`, which re-emits client-originated `Type 9`) needs client/server alignment on the `3,000`-point cap (today a drawn stroke accepted by canonical engine has `<= 3,000` points unless offline/local mutation occurred, whereas legacy normal mode `4848-4861` has no client-side `3,000`-point cap).
-  3. Confirm target `maxHttpBufferSize` reduction (e.g., whether `1e6` / `2e5` / `64 KiB` vs. `max` JSON `draw_history_sync` / MsgPack payload constraints on large reconnects).
+  - Initialized `PRODUCTION_RELIABILITY_ROADMAP.md` covering `PHASE 9A` through `PHASE 9F` (`bf6d0fbeb2952ac5aec17b0cf2c1432b92a23c8b`).
+  - Completed read-only `PHASE 9A` source contract audit and finalized the evidence-backed implementation blueprint (`Decisions A–F`, unresolved items, 5 ordered slices, test & acceptance criteria, and `server.ts` reconciliation).
+- **Source Code Changes Made:** None (0 application files modified; only `PRODUCTION_RELIABILITY_ROADMAP.md` updated).
+- **Key Audit & Blueprint Takeaways (PHASE 9A):**
+  - Confirmed Type 2 trailing-byte bypass in `handleFreeDrawMove` (`server/roomCanonicalStrokeEngine.ts:132-149`), allowing arbitrary trailing bytes up to `maxHttpBufferSize` (`1e8` at `server.ts:114`) to be relayed raw (`server/registerDrawBinaryHandler.ts:187-195`).
+  - Confirmed server-only `Type 11`/`12`, legacy `Type 10`, unvalidated client types (`1` shapes, `3`, `4`, `5`, `6`, `7` trailing bytes, `8`, `9`), non-canonical `Type 13`, and unknown types (`0`, `14..255`) pass through `handleDrawBinary`'s `else` fallback (`registerDrawBinaryHandler.ts:213-218`), and client `decodeBinaryDrawMessage` (`src/utils/drawBinaryHelper.ts:629-642`) maps unknown types to `'draw_clear'`.
+  - Confirmed additional blueprint constraints discovered during test/lifecycle verification:
+    1. Drawer ignores own `Type 12` (`draw_abort`) at `DrawingCanvasCore.tsx:3131` and has no client `3,000`-pt continuous cap, allowing a locally-committed `>3,000`-pt `Type 9` to be re-emitted on Redo (`2488-2563`).
+    2. `scripts/test_session_identity_suite.ts:1061` (`makeType4`, `AUTH-11.1`) passes a `20`-byte `Type 4` buffer whereas production client emits `{17, 19, 21, 23}` bytes (`drawBinaryHelper.ts:286-321`).
+    3. Existing test suites use `_` and `-` in binary `instId`s (`test_compressed_transport.ts:132,165`, `test_experimental_draw_trial.ts:206`, `test_controlled_fixes_suite.ts:93`), whereas `draw_repair_req` (`server.ts:258`) and `registerDrawingIdentity` (`rooms.ts:1352`) enforce `/^[a-zA-Z0-9]+$/`.
 - **Exact Next Action:**
-  `Review the PHASE 9A audit report and agree on the safest implementation scope before modifying source code.`
+  `Review and approve the first implementation slice before any application source modification.`
 
 ---
 
@@ -40,7 +45,7 @@ While the codebase already passes static compilation and targeted feature test s
 
 ## B. Master Task Checklist
 
-- [ ] **PHASE 9A — Binary Packet Contract & Input Safety** *(Audit Complete / Implementation Not Started — `IN PROGRESS`)*
+- [ ] **PHASE 9A — Binary Packet Contract & Input Safety** *(`IN PROGRESS — Audit Complete; Implementation Blueprint Awaiting Review; No Implementation Started`)*
 - [ ] **PHASE 9B — Free Draw History Lifecycle, Memory Growth & Sync Performance** *(`PLANNED`)*
 - [ ] **PHASE 9C — Reproducible Dependency Installation & Lockfile** *(`PLANNED`)*
 - [ ] **PHASE 9D — Unified Test Strategy & Safe Test Commands** *(`PLANNED`)*
@@ -70,7 +75,7 @@ This roadmap separates prior claims, independently verified code facts, unverifi
      - Claim A: Type 2 (`MSG_DRAW_MOVE`) checks `buf.length < expectedByteLen` without rejecting trailing bytes and relays the original buffer, potentially enabling oversized bandwidth/memory amplification under a large `maxHttpBufferSize`.
      - Claim B: Free Draw `drawHistory` lifecycle may grow unbounded over long-lived rooms and amplify memory/CPU during `getJsonSafeHistory` and reconnect syncs.
 2. **Independently Verified Against Current Source (This Audit):**
-   - **Verified:** `maxHttpBufferSize` in `server.ts:110` is `1e8` (100,000,000 bytes).
+   - **Verified:** `maxHttpBufferSize` in `server.ts:114` is `1e8` (100,000,000 bytes).
    - **Verified:** `handleFreeDrawMove` (`server/roomCanonicalStrokeEngine.ts:132-149`) checks `if (buf.length < expectedByteLen) return false;` and never checks `buf.length !== expectedByteLen`; `registerDrawBinaryHandler.ts:187-195` broadcasts the original raw `buf`.
    - **Verified:** `useCanonicalPipeline = isFreeDraw || isExperimental` (`registerDrawBinaryHandler.ts:84`) evaluates to `true` for 100% of `ROOM_PRESETS` and `getRoomConfig` fallback (`src/types/game.ts:72-160`), though legacy non-canonical paths still exist in `registerDrawBinaryHandler.ts` when invoked on custom `Room` objects lacking both flags.
    - **Verified:** Multiple non-Type-13 packet types (`1` shapes, `3` cancel/non-canonical/empty `instId`, `4`, `5`, `6`, `7` trailing bytes, `8`, `9`, `11`, `12`, unknown types `0/10/14..255`) lack exact structural/length validation on ingress in `handleDrawBinary`, allowing raw buffers up to `maxHttpBufferSize` to be broadcast and/or persisted into `room.gameState.drawHistory` and later converted via `Array.from(cmd.data)` inside `getJsonSafeHistory` (`server.ts:55`).
@@ -106,38 +111,31 @@ This roadmap separates prior claims, independently verified code facts, unverifi
   - `src/types/game.ts` (`ROOM_PRESETS`, `getRoomConfig`, `Room`, `GameState`)
 
 - **Audit Findings (Verified — Read-Only):**
-  1. **Transport Buffer Cap (`server.ts:110`):** `maxHttpBufferSize: 1e8` (100,000,000 bytes). Because `handleDrawBinary` checks neither a global frame limit nor exact packet lengths for most types, an authenticated drawer (or any joined Free Draw player who calls `start_free_draw`) can emit up to ~95.37 MiB per `draw_binary` message.
+  1. **Transport Buffer Cap (`server.ts:114`):** `maxHttpBufferSize: 1e8` (100,000,000 bytes). Because `handleDrawBinary` checks neither a global frame limit nor exact packet lengths for most types, an authenticated drawer (or any joined Free Draw player who calls `start_free_draw`) can emit up to ~95.37 MiB per `draw_binary` message.
   2. **Confirmed Type 2 Trailing-Bytes Defect (`roomCanonicalStrokeEngine.ts:132-149`, `registerDrawBinaryHandler.ts:187-195`):** Canonical `handleFreeDrawMove` checks `buf.length < expectedByteLen` and `stroke.points.length + count > 3000`, accepts buffers with `buf.length > expectedByteLen`, and `handleDrawBinary` relays the unmodified `buf` (with all trailing bytes) to the room. Client `decodeBinaryDrawMessage` ignores trailing bytes beyond `10 + movesLength * 4`.
   3. **Canonical Mode Empty-`instId` Persistence Edge Case (`roomCanonicalStrokeEngine.ts:66-70, 272-276`, `roomDrawingHistory.ts:60`):** None of `handleFreeDrawStart/Move/End` reject an all-null `instId` (`""`). When `instId === ""`, `recordRoomDrawCommand`'s duplicate-Type-3 suppression (`if (isBinary && instId && ...)`) does not fire, allowing unvalidated Type 3 buffers (including trailing bytes) to be persisted into `drawHistory` right after `type9Buf`. Also cancelled `Type 3` (`buf[22] === 1`) triggers `abortFreeDrawStroke` (returns `null` from `handleFreeDrawEnd`), causing `registerDrawBinaryHandler.ts:209-211` to broadcast the raw client `buf` unchecked.
   4. **Bypass in `registerDrawBinaryHandler.ts:213-218` (`else` Branch):** Reached in active rooms by `Type 1` (shapes), `Type 3` (shapes), `Type 4` (bucket), `Type 6` (cancel), `Type 9` (client shape strokes & Free Draw/Exp client `executeRedo` strokes), **plus spoofed `Type 11` / `Type 12`, `Type 13` (if `!useCanonicalPipeline`), and unknown types (`0`, `10`, `14..255`)**. Has **zero** length, bounds, coordinate, count, direction, or trailing-byte validation; directly calls `recordDrawCommand` and broadcasts raw `buf`.
   5. **Type 9 Unchecked Header & Length (`roomDrawingHistory.ts:51-56, 84-99`):** A 16-byte client `Type 9` with `pointsLength = 65535` or a 100 MB Type 9 passes the `else` branch, gets stored in `drawHistory` (`isValidStart = true`), broadcasts to room clients (where `decodeBinaryDrawMessage` throws `RangeError` and drops it), and bloats `draw_history_sync`. Legitimate client `Type 9` sizes are `26 B` (shapes), `<= 12,018 B` (canonical 3,000-pt stroke), or `16 + N*4 (+2)` in legacy normal mode / client Free Draw Redo.
   6. **Server-Only Type Spoofing (`Type 11` & `Type 12`):** Clients never legitimately send `Type 11` (`MSG_DRAW_COMMIT`) or `Type 12` (`MSG_DRAW_ABORT`), yet if sent, the `else` branch relays them to other sockets (corrupting spectator `activeSessionsRef` / `drainingStrokesRef` or triggering bogus `draw_repair_req` storms) and appends them to non-empty `drawHistory`.
   7. **Unknown Type -> Canvas Wipe (`drawBinaryHelper.ts:629-642`, `DrawingCanvasCore.tsx:3446-3447`):** `decodeBinaryDrawMessage` defaults unrecognized byte `0` values (`0`, `10`, `14..255`) to `'draw_clear'`, causing spectators to wipe their canvas via `applyClearEpoch`. Meanwhile `Type 10` (referenced in `roomDrawingHistory.ts:100` per `AGENTS.md` and `server.ts:79`) has zero client encoder, and `getToolName(idx)` (`drawBinaryHelper.ts:75-77`) silently maps any invalid tool index (`9..255`) to `'pencil'`.
-  8. **Rate & Authorization Observations:** `start_free_draw` (`server.ts:277-282`) allows any joined Free Draw player to self-authorize without rate limiting; `draw_binary` has no byte/message rate limit; `Type 7` in canonical mode checks `buf.length < 10` (allowing trailing bytes).
+  8. **Rate & Authorization Observations:** `start_free_draw` (`server.ts:281-286`) allows any joined Free Draw player to self-authorize without rate limiting; `draw_binary` has no byte/message rate limit; `Type 7` in canonical mode checks `buf.length < 10` (allowing trailing bytes).
   9. **Downstream `drawHistory` / `getJsonSafeHistory` Amplification:** Raw buffers accepted into `drawHistory` remain pinned in server RAM and are transformed via `Array.from(cmd.data)` (`server.ts:55`) into boxed JS number arrays on every `join_room` and `request_round_sync`, multiplying heap & wire cost.
 
 - **Implementation Decisions:**  
-  *Pending approval after review of the PHASE 9A audit report.*
+  *Blueprint drafted below (`PHASE 9A — Proposed Implementation Blueprint (Awaiting Review)`); awaiting slice-by-slice approval before any source edit.*
 
 - **Files Modified:**  
-  *None (application source files strictly untouched during read-only audit; only `PRODUCTION_RELIABILITY_ROADMAP.md` created).*
+  *None (0 application source files modified; only `PRODUCTION_RELIABILITY_ROADMAP.md` updated).*
 
 - **Tests Run & Exact Results:**  
-  *None executed during this read-only documentation & contract audit phase.* *(Existing baseline suites in `scripts/` inspected read-only and mapped in the PHASE 9A Audit Report.)*
+  *None executed during read-only blueprint verification.* *(Test fixtures in `scripts/` inspected read-only to confirm slice compatibility constraints.)*
 
 - **Performance & Compatibility Notes:**
   - `encodeBinaryDrawMessage` produces `27 B` for `Type 3` when `strokeId` and `expectedPointCount` are defined (`DrawingCanvasCore.tsx:4891, 5021`) or `23 B` otherwise.
-  - `Type 13` theoretical maximum for 3,000 points under `encodeZigZag` + 32-bit `writeVarInt` with values in `[-32768, 32767]` is `10 + 3000 * (3 + 3) = 18,010 B` (since worst-case ZigZag of `-32768..32767` is `<= 65536`, taking at most 3 VarInt bytes per coordinate, 6 bytes per point). Under current client clamp `[-30000, 30000]`, worst-case is identically `18,010 B` (`60000` requires 3 VarInt bytes).
+  - `Type 13` theoretical maximum for 3,000 points under `encodeZigZag` + 32-bit `writeVarInt` with values in `[-32768, 32767]` is `10 + 3000 * (3 + 3) = 18,010 B`.
   - Canonical `Type 9` for 3,000 points is `12,018 B` (`16 + 3000*4 + 2`); `Type 2` fallback (`createType2Buffer`) for 3,000 points is `12,010 B` (`10 + 3000*4`).
-  - Client Free Draw `executeRedo` emits `Type 9` with `newStrokeId` (`DrawingCanvasCore.tsx:2488-2562`) and ignores incoming `Type 12` abort for own `instanceId` (`DrawingCanvasCore.tsx:3131`). Normal rooms (`!isFreeDraw && !isExperimental`, currently unreachable via UI presets/fallback) do not enforce a `3,000`-point cap on continuous strokes before sending `Type 2` or `Type 9`.
+  - Client Free Draw `executeRedo` emits `Type 9` with `newStrokeId` (`DrawingCanvasCore.tsx:2488-2562`) and ignores incoming `Type 12` abort for own `instanceId` (`DrawingCanvasCore.tsx:3131`).
   - Any server hardening must preserve `AGENTS.md` invariants (`type === 4 || type === 10 || type === 5` inside `recordRoomDrawCommand`, 1-step undo/redo `isDrawingActive` lock, zero per-packet `console.log` spam).
-
-- **Known Risks / Unresolved Questions:**
-  1. Legacy `Type 10`: Should server ingress reject client `Type 10` while keeping the `type === 10` check inside `recordRoomDrawCommand` untouched per `AGENTS.md`, or keep read-only tolerance? And should client `decodeBinaryDrawMessage` stop defaulting unknown types to `'draw_clear'`?
-  2. Client vs. Server `Type 9` point-count cap (`3,000` points vs. possible multi-part or >3,000-pt stroke in non-canonical normal mode).
-  3. Safe `maxHttpBufferSize` threshold considering `draw_history_sync` (which is JSON-boxed `Array.from(cmd.data)` over MsgPack) vs. binary ingress.
-  4. Whether `Type 13` should be rejected in non-canonical fallback (`!useCanonicalPipeline`) or decoded through `decodeType13BufferSafely`.
-  5. Whether `instId` format on binary packets should match `registerDrawingIdentity` rules (`1..7` ASCII alphanumeric `/^[a-z0-9]+$/i` — note `server/rooms.ts:1202` sends `"server"` which is 6 ASCII alphanumeric chars, and `server.ts:254` enforces `^[a-zA-Z0-9]+$` on `draw_repair_req`).
 
 - **Completion Criteria:**
   - Exact binary schemas, directionality, byte bounds, and field constraints defined and enforced at server ingress (`handleDrawBinary`) for every allowed packet type (`1`–`9`, `13`).
@@ -147,10 +145,106 @@ This roadmap separates prior claims, independently verified code facts, unverifi
   - Automated validation test suite covering malformed, truncated, oversized, trailing-byte, spoofed, and valid packets passes alongside `npx tsc --noEmit`, `npm run build`, and existing Phase 5–8 test suites.
 
 - **Current Status:**  
-  `IN PROGRESS` *(Part 1 Read-Only Audit Complete; Part 2 Implementation Not Started)*
+  `IN PROGRESS — Audit Complete; Implementation Blueprint Awaiting Review; No Implementation Started`
 
 - **Next Exact Action:**  
-  `Review the PHASE 9A audit report and agree on the safest implementation scope before modifying source code.`
+  `Review and approve the first implementation slice before any application source modification.`
+
+---
+
+#### `PHASE 9A — Proposed Implementation Blueprint (Awaiting Review)`
+
+**Reference GitHub `main` Commit:** `bf6d0fbeb2952ac5aec17b0cf2c1432b92a23c8b`  
+**Status:** `IN PROGRESS — Audit Complete; Implementation Blueprint Awaiting Review; No Implementation Started`
+
+##### 1. Decisions Supported by Evidence (Resolved A–F)
+
+1. **Decision A — Legacy `Type 10` Policy:**
+   - *Evidence:* No encoder anywhere in `src/` or `scripts/` produces `Type 10`, and server code never emits `Type 10`. `server/roomDrawingHistory.ts:100` (`type === 4 || type === 10 || type === 5`) is explicitly protected by `AGENTS.md:16`, and `server.ts:79` tolerates it during `getJsonSafeHistory`. Meanwhile, client-sent `Type 10` currently passes `handleDrawBinary`'s `else` fallback (`server/registerDrawBinaryHandler.ts:213-218`), sets `isValidStart = true`, and decodes on receiving clients as `'draw_clear'` (`src/utils/drawBinaryHelper.ts:629-642`), causing canvas wipes.
+   - *Blueprint Decision:* **Reject client-originated `Type 10` at server ingress (`server/registerDrawBinaryHandler.ts`)**, **leave `server/roomDrawingHistory.ts:100` and `server.ts:79` intact** (100% compliant with `AGENTS.md`), and remove the unknown-type -> `'draw_clear'` default in `src/utils/drawBinaryHelper.ts:629-642`.
+
+2. **Decision B — `Type 9` Maximum & Free Draw Redo Lifecycle:**
+   - *Evidence:* Canonical `handleFreeDrawMove` (`server/roomCanonicalStrokeEngine.ts:137`) and `handleFreeDrawMoveCompressed` (`182`) abort strokes at `> 3,000` points and emit `Type 12` (`draw_abort`) to `io.to(roomId)` (`server/rooms.ts:1319-1334`). However, `DrawingCanvasCore.tsx:3131` (`if (data.instanceId === instanceId && !isFreeDrawUndo) return;`) causes the drawer to ignore their own server `Type 12` abort, and `processStrokeMove` (`4628-4756`) has no client-side `3,000`-point cap. Consequently, a drawer exceeding 3,000 points commits a `> 3,000`-pt `Type 9` locally (`4864-4878`), desyncs from spectators, and on Undo (`2276`) -> Redo (`2488-2563`) re-emits a `> 3,000`-pt `Type 9` (`> 12,018 B`). Wire format max (`UInt16LE` at byte `14`) is `65,535` points (`262,158 B`).
+   - *Blueprint Decision:* **Do not enforce a server-side `<= 3,000`-pt cap on client `Type 9` in isolation before aligning the client**, or legitimate user Redo after a long stroke would fail silently. Instead, pair exact structural validation (`buf.length === 16 + pointsLength * 4 (+2)`, `tool <= 8`) and `<= 3,000`-pt canonical enforcement together with client-side handling of `Type 12` abort / `3,000`-pt stroke boundary in a dedicated slice (**Slice 3**).
+
+3. **Decision C — Transport `maxHttpBufferSize` (`server.ts:114` = `1e8`):**
+   - *Evidence:* Socket.IO's `maxHttpBufferSize` caps incoming client->server Engine.IO payloads (server->client `draw_history_sync` emitted in `server/registerJoinRoomHandler.ts:104, 184` is not gated by inbound `maxHttpBufferSize`). Inspected client->server events: canonical `Type 13` max = `18,010 B`; canonical `Type 9` max (at `3,000` pts) = `12,018 B`; theoretical `UInt16` `Type 9` max (`65,535` pts) = `262,158 B`; `send_message` (`server/registerSendMessageHandler.ts:61`) `<= 250` chars; `submit_guess` (`server/registerSubmitGuessHandler.ts:60`) `<= 250` chars; `select_word` (`server/registerSelectWordHandler.ts:21-28`) word string; `draw_repair_req` (`server.ts:254-264`) `instId 1..7`, `strokeId 0..65535`; `get_rooms_info` (`server/registerGetRoomsInfoHandler.ts:31-38`) `<= 10` IDs `<= 100` chars; `register_drawing_identity` (`server/registerDrawingIdentityHandlers.ts`, `rooms.ts:1352`) `instId <= 7` chars; `submit_vote_kick` (`server/registerVoteKickHandler.ts`); `join_room` (`registerJoinRoomHandler.ts:48` — `nickname`/`avatar` are currently unlength-checked strings on server).
+   - *Blueprint Decision:* Isolate `maxHttpBufferSize` reduction into **Slice 5**, separate from binary schema checks. **`512 KiB` (`524_288 B`)** or **`1 MiB` (`1_048_576 B`)** preserves headroom even for worst-case `262,158 B` `Type 9` + MsgPack framing (a ~100x–190x reduction from `100 MB`), while tighter bounds (`256 KiB`) should only be applied after `Type 9` point caps (**Slice 3**) and `join_room` string bounds are confirmed.
+
+4. **Decision D — Binary `instId` Validation & Test Fixture Evidence:**
+   - *Evidence:* Production clients generate `/^[a-z0-9]{1,7}$/i` (`DrawingCanvasCore.tsx:317`); server binary clears use `"server"` (`server/rooms.ts:1202`); `draw_repair_req` (`server.ts:258`) and `registerDrawingIdentity` (`server/rooms.ts:1352`) require `/^[a-zA-Z0-9]{1,7}$/`. **However**, canonical engine (`server/roomCanonicalStrokeEngine.ts:66-70, 272-276`) does not reject `instId === ""` (all-zero `bytes 1..7`), which bypasses `recordRoomDrawCommand` duplicate suppression (`server/roomDrawingHistory.ts:60`). Crucially, inspected test suites pass binary `instId`s with `_` and `-`: `'loss_test'`/`'size_test'` (`scripts/test_compressed_transport.ts:132,165`), `'case_test'` (`scripts/test_experimental_draw_trial.ts:206`), `'user_01'` (`scripts/test_remote_handover_double_rendering.ts:13`), `'player-1'` (`scripts/test_controlled_fixes_suite.ts:93`).
+   - *Blueprint Decision:* Reject empty (`""`) and non-printable/control `instId` bytes on drawing/stroke/undo packets without blindly banning `-`/`_` (e.g., accept printable ASCII `[0x21..0x7E]` or `/^[a-zA-Z0-9_-]{1,7}$/`) so zero existing regression suites break unless tests explicitly migrate to `[a-zA-Z0-9]{1,7}`.
+
+5. **Decision E — `Type 13` in Non-Canonical Rooms:**
+   - *Evidence:* `useCanonicalPipeline = isFreeDraw || isExperimental` (`server/registerDrawBinaryHandler.ts:84`) is `true` for all `ROOM_PRESETS` and `getRoomConfig` fallback (`src/types/game.ts:72-161`). Only custom/synthetic non-canonical `Room` objects evaluate `!useCanonicalPipeline`, causing `Type 13` to skip `decodeType13BufferSafely` and fall into `else` (`213-218`).
+   - *Blueprint Decision:* Explicitly **reject `Type 13` when `!useCanonicalPipeline`** (`registerDrawBinaryHandler.ts`), since legacy non-canonical mode uses uncompressed `Type 2`.
+
+6. **Decision F — Unknown Packet Types & Server-Only Directions (`Type 11`, `Type 12`, Client Decoder Fallback):**
+   - *Evidence:* Client `decodeBinaryDrawMessage` (`src/utils/drawBinaryHelper.ts:395`) is the single binary decode choke point called by `onDrawBinary` (`DrawingCanvasCore.tsx:4122`), `replaySingleCommand` (`src/utils/canvasReplayEngine.ts:103`), `tryFastPathUndo` (`2228`), and `executeRedo` (`2478`). Lines `629-642` initialize `eventName = 'draw_clear'` and fall back to `'draw_clear'` for any type other than `1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13`.
+   - *Blueprint Decision:* Reject client-originated `Type 11`, `Type 12`, and all unknown types (`0`, `10`, `14..255`) silently on server ingress (**Slice 1**), and change `src/utils/drawBinaryHelper.ts:629-642` to match `type === MSG_DRAW_CLEAR` (`5`) explicitly and return `null` on unknown types (`applyClearEpoch` only runs for explicit `Type 5` or JSON `draw_clear`).
+
+##### 2. Decisions Still Requiring Evidence / Approval Before Coding
+
+1. **`Type 4` (`draw_action` / Bucket) Exact Length vs. Existing `AUTH-11.1` Test Helper:** Real client `encodeBinaryDrawMessage('draw_action')` emits only `{17, 19, 21, 23}` bytes (`src/utils/drawBinaryHelper.ts:286-321`), whereas `scripts/test_session_identity_suite.ts:1061` (`makeType4`, `AUTH-11.1`) passes `Buffer.alloc(20)` directly into `handleDrawBinary` (`line 1153`). Confirm whether to update `makeType4` to `17`/`21` bytes alongside strict `{17, 19, 21, 23}` server enforcement, or defer strict length checking to its own step.
+2. **Client-Side `3,000`-Point UX Policy (`DrawingCanvasCore.tsx`):** Confirm whether reaching `3,000` points during a single continuous stroke should (a) cleanly finalize/auto-split into a new stroke on client + canonical server, or (b) honor incoming `Type 12` (`draw_abort`) from the server by cancelling/discarding the local provisional stroke cleanly without inserting an oversized `Type 9` into `localCommandsRef`.
+3. **`Type 5` (`draw_clear`) Empty `instId` Tolerance:** Verify whether any client or test path calls `encodeBinaryDrawMessage('draw_clear', {})` with an empty `instId`, vs. always attaching caller `instanceId` (`DrawingCanvasCore.tsx:2102, 2113`).
+4. **Canonical `instId` Character Set:** Decide whether to retain `/^[a-zA-Z0-9_-]{1,7}$/` permanently in binary headers (full test compatibility) or standardize tests on `/^[a-zA-Z0-9]{1,7}$/` to match `draw_repair_req` and `registerDrawingIdentity`.
+5. **Exact `maxHttpBufferSize` Target & `join_room` Field Caps:** Confirm target `maxHttpBufferSize` (`512 KiB` vs. `1 MiB` initially; `256 KiB` post-Slice-3) and whether `join_room` (`nickname`, `avatar`, `playerId`, `reconnectSecret`) should receive explicit string length bounds in the same or follow-up PR.
+6. **Per-Socket `draw_binary` / `start_free_draw` Rate Limits:** Gather empirical event-rate/byte-rate measurements from rapid pencil strokes (`200ms` batches) and quick bucket clicks before setting throttle constants so legitimate drawers are never dropped.
+
+##### 3. Proposed Implementation Slices (In Order)
+
+1. **Slice 1 — Protocol Direction & Client Decoder Safety (`Type 10`, `11`, `12`, Unknown Types, Non-Canonical `Type 13` Block)**
+   - *Goal:* Close canvas-wipe vector and spoofed commit/abort relay with minimal behavioral surface.
+   - *Files:* `server/registerDrawBinaryHandler.ts`, `src/utils/drawBinaryHelper.ts`.
+   - *Scope:* Reject client-originated `Type 10`, `Type 11`, `Type 12`, unknown byte `0` types (`0`, `14..255`), and `Type 13` when `!useCanonicalPipeline` in `handleDrawBinary`; make `decodeBinaryDrawMessage` match `type === MSG_DRAW_CLEAR` (`5`) explicitly and return `null` on unknown types; do NOT touch `server/roomDrawingHistory.ts:100` (`AGENTS.md`) or `server.ts:79`.
+   - *Acceptance Criteria:* Sending `Type 0/10/11/12/14..255` from a client socket is silently ignored (`drawHistory` unchanged, not broadcast); client `decodeBinaryDrawMessage` returns `null` for `0/10/14..255` and still decodes `Type 5` and all valid `1..9, 11..13` packets.
+
+2. **Slice 2 — Canonical Stream & Control-Packet Structural Validation (`Type 2` Trailing Bytes, `Type 1`/`3`/`5`/`6`/`7`/`8` Exact Bounds & Non-Empty `instId`)**
+   - *Goal:* Eliminate the confirmed `Type 2` trailing-bytes relay defect, canonical `instId === ""` persistence leak, and header truncation/trailing-byte bugs on stream/control packets.
+   - *Files:* `server/registerDrawBinaryHandler.ts`, `server/roomCanonicalStrokeEngine.ts`.
+   - *Scope:*
+     - Enforce exact `buf.length === 10 + count * 4` on `Type 2` (canonical `handleFreeDrawMove` & legacy fallback).
+     - Enforce exact lengths and bounds: `Type 1` (`=== 18`, `tool <= 8`), `Type 3` (`=== 23` or `=== 27`, valid `tool`), `Type 5` (`=== 8`), `Type 6` (`=== 8`), `Type 7` (`=== 10` in canonical modes, `=== 8 || === 10` in normal mode), `Type 8` (`=== 8`).
+     - Validate non-empty printable `instId` (`/^[a-zA-Z0-9_-]{1,7}$/`) in `handleFreeDrawStart/Move/End`, and ensure cancelled `Type 3` (`buf[22] === 1`) aborts cleanly without bypassing validation.
+   - *Acceptance Criteria:* Trailing-byte `Type 2`, malformed/short `Type 1/3/5/6/7/8`, and all-zero `instId` canonical packets are rejected cleanly without entering `drawHistory` or relaying; all canonical/shape/undo/clear test suites pass unchanged.
+
+3. **Slice 3 — `Type 9` & Free Draw `>3,000`-Point / Redo Lifecycle Alignment**
+   - *Goal:* Harden client-originated `Type 9` while fixing the confirmed `Type 12` (`draw_abort`) / `>3,000`-pt desync on client Redo.
+   - *Files:* `src/components/game/DrawingCanvasCore.tsx`, `server/registerDrawBinaryHandler.ts`.
+   - *Scope:* Align drawer handling when a continuous stroke reaches `3,000` points or receives server `Type 12` abort (`DrawingCanvasCore.tsx:3131`, `4628-4912`), then enforce exact `Type 9` schema (`buf.length === 16 + pointsLength * 4 (+2)`, `tool <= 8`, `pointsLength <= 3000` in canonical modes / explicit agreed cap in normal mode, valid `instId`).
+   - *Acceptance Criteria:* Drawing `>3,000` points in Free Draw/Experimental never desyncs drawer vs. spectators, subsequent Undo/Redo stays in sync with server `drawHistory`, and oversized/truncated/trailing-byte `Type 9` packets are rejected at server ingress.
+
+4. **Slice 4 — `Type 4` (`draw_action`) Structural Hardening & Decoder Bounds Pre-Checks**
+   - *Goal:* Lock down remaining shape/bucket header validation and prevent client `DataView` `RangeError` exceptions on truncated inputs.
+   - *Files:* `server/registerDrawBinaryHandler.ts`, `src/utils/drawBinaryHelper.ts` *(plus `scripts/test_session_identity_suite.ts:1061` only if strict `{17, 19, 21, 23}` length is chosen over tolerating legacy 20B test packet)*.
+   - *Scope:* Validate `Type 4` (`tool === 2` bucket or valid shape/action bounds, exact byte length `{17, 19, 21, 23}` once reconciled with `makeType4`); add explicit `view.byteLength` guards before every `DataView` read in `decodeBinaryDrawMessage`.
+   - *Acceptance Criteria:* Zero uncaught `RangeError` noise on truncated `Type 1/2/3/4/9/11/12` buffers in `decodeBinaryDrawMessage`; bucket flood fill works identically across competitive & Free Draw modes and preserves `AGENTS.md` first-action invariant.
+
+5. **Slice 5 — Transport `maxHttpBufferSize` Tuning & Socket Event Payload/Rate Guardrails**
+   - *Goal:* Shrink Socket.IO ingress ceiling from `100 MB` (`1e8`) to a bounded production cap and verify chat/join/capability/rate-limit safety.
+   - *Files:* `server.ts` *(optionally `server/registerJoinRoomHandler.ts` if `nickname`/`avatar` caps are included)*.
+   - *Scope:* Lower `maxHttpBufferSize` (`524_288` / `1_048_576`, or `262_144` after Slice 3 confirms `Type 9` ceiling), without altering the existing `PORT` startup lines unless tracked separately; document measured overhead for `draw_history_sync` & MsgPack frames.
+   - *Acceptance Criteria:* Large `> maxHttpBufferSize` frames disconnect/reject cleanly at transport layer; max valid `Type 13` (`18,010 B`), `Type 9` (`12,018 B`), `join_room`, and normal reconnect `draw_history_sync` operate without regression.
+
+##### 4. Tests & Acceptance Criteria Across Slices
+
+- **Existing Verification Baseline (Must Stay Green):**
+  - Static checks: `npx tsc --noEmit` and `npm run build`.
+  - Protocol & Regression Suites in `scripts/` (run cleanly per slice): `scripts/test_type13_hardening.ts`, `scripts/test_compressed_transport.ts`, `scripts/test_session_identity_suite.ts`, `scripts/test_payload_validation_suite.ts`, `scripts/test_controlled_fixes_suite.ts`, `scripts/test_experimental_draw_trial.ts`, `scripts/test_repair_seamless_handover.ts`, `scripts/test_legacy1a_routing.ts`, `scripts/test_legacy1c_unknown_room_routing.ts`, `scripts/test_codec.ts`.
+- **New Targeted Tests Needed (During Implementation):**
+  - Negative/boundary binary contract tests covering: `Type 2` trailing bytes (`+1`, `+1024`), `Type 1/3/4/5/6/7/8/9` truncated & trailing-byte buffers, client-spoofed `Type 10`/`11`/`12`, unknown bytes (`0`, `14`, `255`), non-canonical `Type 13`, all-zero `instId` (`""`), invalid tool indices (`9`, `255`), `decodeBinaryDrawMessage` returning `null` instead of `'draw_clear'`, and canonical `Type 9` Redo after `>3,000`-pt strokes.
+
+##### 5. Development-Server `server.ts` Reconciliation Record
+
+- **Observed Difference:** Workspace `server.ts:103-107` resolves `PORT` via `NODE_ENV !== 'production' || (process.env.NGINX_PORT && process.env.PORT === process.env.NGINX_PORT) ? parseInt(process.env.DEFAULT_APP_PORT || '3000', 10) : ...`, whereas GitHub `main` (`bf6d0fbeb2952ac5aec17b0cf2c1432b92a23c8b`) has `const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;`.
+- **Disposition:** Keep completely separate from **PHASE 9A**. Do not bundle into Slice 1–4 packet contracts, and track/commit `server.ts:103-107` independently as a local runtime/dev-server fix.
+
+- **Current Status:**  
+  `IN PROGRESS — Audit Complete; Implementation Blueprint Awaiting Review; No Implementation Started`
+
+- **Next Exact Action:**  
+  `Review and approve the first implementation slice before any application source modification.`
 
 ---
 
@@ -170,7 +264,7 @@ This roadmap separates prior claims, independently verified code facts, unverifi
 - **Audit Findings (Preliminary Observations from 9A Inspection — Full Audit Pending):**
   - Competitive rounds reset history via `clearDrawHistoryForRoomAndClient` (`server/rooms.ts:505, 583`), whereas Free Draw has no automatic round reset and only clears on explicit `Type 5` (`draw_clear`) or room destruction.
   - `getJsonSafeHistory` (`server.ts:54-56`) converts every binary `Buffer` in `drawHistory` via `Array.from(cmd.data)` on every `join_room` and `request_round_sync`.
-  - Multiple rate-limit `Map`s in `server.ts:121-125` and `freeDrawCanonicalCache` eviction (`roomCanonicalStrokeEngine.ts:285-289`) require dedicated lifecycle inspection in Phase 9B.
+  - Multiple rate-limit `Map`s in `server.ts:125-129` and `freeDrawCanonicalCache` eviction (`roomCanonicalStrokeEngine.ts:285-289`) require dedicated lifecycle inspection in Phase 9B.
 
 - **Implementation Decisions:** *Not started.*
 - **Files Modified:** *None.*
