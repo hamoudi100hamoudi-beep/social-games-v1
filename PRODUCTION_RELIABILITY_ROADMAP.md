@@ -8,22 +8,20 @@
 
 ## E. Current Checkpoint / Session Handoff
 
-- **Active Phase / Task:** `PHASE 9A — Binary Packet Contract & Input Safety` (`IN PROGRESS — Slice 1 Awaiting Final Approval; No Implementation Started`)
+- **Active Phase / Task:** `PHASE 9A — Binary Packet Contract & Input Safety` (`IN PROGRESS — Slice 1 Implemented (AWAITING VERIFICATION); Slices 2–5 Not Started`)
 - **Last Completed Milestone:**
-  - Initialized `PRODUCTION_RELIABILITY_ROADMAP.md` covering `PHASE 9A` through `PHASE 9F`.
-  - Completed read-only `PHASE 9A` source contract audit, `Type 10` legacy compatibility investigation, and decoder null-safety readiness check (`decodeBinaryDrawMessage(` call-site audit).
-- **Source Code Changes Made:** None (0 application files modified; only `PRODUCTION_RELIABILITY_ROADMAP.md` updated).
-- **Key Audit & Blueprint Takeaways (PHASE 9A):**
-  - Confirmed Type 2 trailing-byte bypass in `handleFreeDrawMove` (`server/roomCanonicalStrokeEngine.ts:132-149`), allowing arbitrary trailing bytes up to `maxHttpBufferSize` (`1e8` at `server.ts:114`) to be relayed raw (`server/registerDrawBinaryHandler.ts:187-195`).
-  - Confirmed server-only `Type 11`/`12`, unvalidated client types (`1` shapes, `3`, `4`, `5`, `6`, `7` trailing bytes, `8`, `9`), non-canonical `Type 13`, legacy `Type 10`, and truly unknown types (`0`, `14..255`) pass through `handleDrawBinary`'s `else` fallback (`registerDrawBinaryHandler.ts:213-218`), and client `decodeBinaryDrawMessage` (`src/utils/drawBinaryHelper.ts:629-642`) silently maps unknown packet types (`0`, `14..255`) to `'draw_clear'`.
-  - **Finalized `Type 10` Policy (Protected Behavior Without a Verified Producer):** Workspace `.git` history is absent (`NO_GIT`) and no current producer or historical `Type 10` fixture exists, so **its exact legacy wire format/length remains unknown**. Keep `Type 10` distinct from `Type 5` (current clear), `Type 11`/`12` (server-originated control packets), and `0, 14..255` (truly unknown). Preserve `Type 10` legacy clear behavior in `server/roomDrawingHistory.ts:100` (`AGENTS.md`), `server.ts:79`, server ingress (do not reject `Type 10` or invent an unverified byte length), and `decodeBinaryDrawMessage` (`type === 10 -> 'draw_clear'`).
-  - **Decoder Null-Safety Readiness Check:** Audited all 7 `decodeBinaryDrawMessage(` call sites in `src/` (`DrawingCanvasCore.tsx:2228, 2478, 2915, 2987, 3124, 3541` and `canvasReplayEngine.ts:103`) plus `scripts/` test sites. Every `src/` consumer safely handles `null` without runtime exceptions, broken replay, broken history sync, broken repair, or unexpected early exits (noting `DrawingCanvasCore.tsx:2987` uses `decoded?.data || {}` under `isBucketCommand` without an explicit skip if `decoded === null`, and `scripts/test_compressed_transport.ts:84, 139, 198` dereference valid `Type 13` test decodes without null checks).
-  - Confirmed additional blueprint constraints for later slices (`Slices 2–5`):
-    1. Drawer ignores own `Type 12` (`draw_abort`) at `DrawingCanvasCore.tsx:3131` and has no client `3,000`-pt continuous cap, allowing a locally-committed `>3,000`-pt `Type 9` to be re-emitted on Redo (`2488-2563`).
-    2. `scripts/test_session_identity_suite.ts:1061` (`makeType4`, `AUTH-11.1`) passes a `20`-byte `Type 4` buffer whereas production client emits `{17, 19, 21, 23}` bytes (`drawBinaryHelper.ts:286-321`).
-    3. Existing test suites use `_` and `-` in binary `instId`s (`test_compressed_transport.ts:132,165`, `test_experimental_draw_trial.ts:206`, `test_controlled_fixes_suite.ts:93`), whereas `draw_repair_req` (`server.ts:258`) and `registerDrawingIdentity` (`rooms.ts:1352`) enforce `/^[a-zA-Z0-9]+$/`.
+  - Implemented narrow **PHASE 9A Slice 1** (protocol direction filtering, non-canonical `Type 13` blocking, and explicit client decoder handling with unknown opcodes returning `null`).
+  - Added `scripts/test_phase9a_slice1.ts` (89/89 checks passing) and verified `tsc --noEmit`, `vite build`, and all 11 existing protocol/replay regression suites pass.
+- **Source Code Changes Made (Slice 1):**
+  - `server/registerDrawBinaryHandler.ts`: Added pre-routing guard rejecting client-originated `Type 11`, `Type 12`, `Type 0`, `Types 14..255`, and non-canonical `Type 13` (`!useCanonicalPipeline`) while preserving `Type 10` and `Types 1..9` / canonical `13`.
+  - `src/utils/drawBinaryHelper.ts`: Replaced fallback `'draw_clear'` assignment in `decodeBinaryDrawMessage` with explicit branches for `Type 5` (`MSG_DRAW_CLEAR`), legacy `Type 10`, `Type 6`, `Type 7`, `Type 8`, and `return null` for unknown opcodes (`0`, `14..255`).
+  - `scripts/test_phase9a_slice1.ts`: New Slice 1 regression test suite (89 passed, 0 failed).
+- **Key Audit & Implementation Takeaways (PHASE 9A):**
+  - **Unknown Opcodes & Spoofed Controls Hardened (Slice 1):** Client-originated `0`, `11`, `12`, `14..255`, and non-canonical `13` are silently dropped before `drawHistory`, broadcast, or state mutation; `decodeBinaryDrawMessage` returns `null` for `0` and `14..255` instead of `'draw_clear'`.
+  - **`Type 10` Compatibility Limitation:** Legacy `Type 10` remains accepted on server ingress (with `server/roomDrawingHistory.ts:100` and `server.ts:79` untouched per `AGENTS.md`) and explicitly decoded as `'draw_clear'`. Because workspace `.git` history and original `Type 10` producers are absent, **its exact historical wire format remains unknown**, and synthetic `Type 10` tests verify only current compatibility behavior, not external historical client proof.
+  - **Deferred Scope (`Slices 2–5`):** `Type 2` trailing-byte fix (`server/roomCanonicalStrokeEngine.ts:132-149`), `Type 1/3/4/5/6/7/8/9` structural validation, `Type 9` Redo/point-cap alignment, `maxHttpBufferSize` reduction (`server.ts:114`), rate limiting, and `instId` standardization remain unstarted.
 - **Exact Next Action:**
-  `Review decoder null-safety findings and approve the narrow Slice 1 implementation.`
+  `Complete manual multiplayer game verification for Slice 1 (drawing, clear, undo/redo, repair, sync), then review and approve Slice 2.`
 
 ---
 
@@ -39,7 +37,7 @@ While the codebase already passes static compilation and targeted feature test s
 
 ## B. Master Task Checklist
 
-- [ ] **PHASE 9A — Binary Packet Contract & Input Safety** *(`IN PROGRESS — Slice 1 Awaiting Final Approval; No Implementation Started`)*
+- [ ] **PHASE 9A — Binary Packet Contract & Input Safety** *(`IN PROGRESS — Slice 1 AWAITING VERIFICATION; Slices 2–5 Not Started`)*
 - [ ] **PHASE 9B — Free Draw History Lifecycle, Memory Growth & Sync Performance** *(`PLANNED`)*
 - [ ] **PHASE 9C — Reproducible Dependency Installation & Lockfile** *(`PLANNED`)*
 - [ ] **PHASE 9D — Unified Test Strategy & Safe Test Commands** *(`PLANNED`)*
@@ -116,39 +114,56 @@ This roadmap separates prior claims, independently verified code facts, unverifi
   9. **Downstream `drawHistory` / `getJsonSafeHistory` Amplification:** Raw buffers accepted into `drawHistory` remain pinned in server RAM and are transformed via `Array.from(cmd.data)` (`server.ts:55`) into boxed JS number arrays on every `join_room` and `request_round_sync`, multiplying heap & wire cost.
 
 - **Implementation Decisions:**  
-  *Blueprint drafted below (`PHASE 9A — Proposed Implementation Blueprint (Awaiting Review)`); awaiting slice-by-slice approval before any source edit.*
+  - **Slice 1 Implemented (`AWAITING VERIFICATION`):** Enforced ingress opcode/direction filtering and non-canonical `Type 13` blocking in `server/registerDrawBinaryHandler.ts`, and replaced fallback `'draw_clear'` decoding in `src/utils/drawBinaryHelper.ts` with explicit handling for `Type 5`, legacy `Type 10`, `Type 6`, `Type 7`, `Type 8` and `return null` for unsupported opcodes (`0`, `14..255`).
+  - **Deferred Decisions:** Structural schemas and exact byte lengths for `Types 1–9`, `Type 2` trailing bytes, `Type 9` / Redo alignment, `maxHttpBufferSize`, rate limits, and `instId` standardization remain scoped to `Slices 2–5`.
 
 - **Files Modified:**  
-  *None (0 application source files modified; only `PRODUCTION_RELIABILITY_ROADMAP.md` updated).*
+  - `server/registerDrawBinaryHandler.ts` (Slice 1 ingress direction & non-canonical `Type 13` guard)
+  - `src/utils/drawBinaryHelper.ts` (Slice 1 explicit clear/control opcode branches & `null` for `0, 14..255`)
+  - `scripts/test_phase9a_slice1.ts` (new Slice 1 regression test suite)
+  - `PRODUCTION_RELIABILITY_ROADMAP.md` (status, verification results, limitations, rollback record)
 
-- **Tests Run & Exact Results:**  
-  *None executed during read-only blueprint verification.* *(Test fixtures in `scripts/` inspected read-only to confirm slice compatibility constraints.)*
+- **Tests Run & Exact Results (Executed After Slice 1 Changes):**
+  - `npx tsc --noEmit` (`lint_applet`): **PASS** (0 errors).
+  - `npm run build` (`compile_applet`): **PASS** (Vite build succeeded).
+  - `npx tsx scripts/test_phase9a_slice1.ts`: **PASS** (89 passed, 0 failed).
+  - `npx tsx scripts/test_type13_hardening.ts`: **PASS** (exit 0).
+  - `npx tsx scripts/test_session_identity_suite.ts`: **PASS** (626 passed, exit 0).
+  - `npx tsx scripts/test_compressed_transport.ts`: **PASS** (exit 0).
+  - `npx tsx scripts/test_experimental_draw_trial.ts`: **PASS** (exit 0).
+  - `npx tsx scripts/test_repair_seamless_handover.ts`: **PASS** (exit 0).
+  - `npx tsx scripts/test_controlled_fixes_suite.ts`: **PASS** (exit 0).
+  - `npx tsx scripts/test_full_canvas_replay_experiment.ts`: **PASS** (5 passed, 0 failed, exit 0).
+  - `npx tsx scripts/test_payload_validation_suite.ts`: **PASS** (212 passed, exit 0).
+  - `npx tsx scripts/test_legacy1a_routing.ts`: **PASS** (exit 0).
+  - `npx tsx scripts/test_legacy1c_unknown_room_routing.ts`: **PASS** (exit 0).
+  - `npx tsx scripts/test_codec.ts`: **PASS** (13 test cases passed, exit 0).
 
 - **Performance & Compatibility Notes:**
-  - `encodeBinaryDrawMessage` produces `27 B` for `Type 3` when `strokeId` and `expectedPointCount` are defined (`DrawingCanvasCore.tsx:4891, 5021`) or `23 B` otherwise.
-  - `Type 13` theoretical maximum for 3,000 points under `encodeZigZag` + 32-bit `writeVarInt` with values in `[-32768, 32767]` is `10 + 3000 * (3 + 3) = 18,010 B`.
-  - Canonical `Type 9` for 3,000 points is `12,018 B` (`16 + 3000*4 + 2`); `Type 2` fallback (`createType2Buffer`) for 3,000 points is `12,010 B` (`10 + 3000*4`).
-  - Client Free Draw `executeRedo` emits `Type 9` with `newStrokeId` (`DrawingCanvasCore.tsx:2488-2562`) and ignores incoming `Type 12` abort for own `instanceId` (`DrawingCanvasCore.tsx:3131`).
-  - Any server hardening must preserve `AGENTS.md` invariants (`type === 4 || type === 10 || type === 5` inside `recordRoomDrawCommand`, 1-step undo/redo `isDrawingActive` lock, zero per-packet `console.log` spam).
+  - Slice 1 runtime overhead is $O(1)$ per packet (two scalar integer checks in `handleDrawBinary` and direct equality checks in `decodeBinaryDrawMessage`), with zero heap allocations, zero buffer copies, zero hot-path loops, and zero `console.log` additions (`AGENTS.md` compliant).
+  - Memory footprint decreases under spoofed/malformed `Type 0/11/12/14..255` or non-canonical `Type 13` traffic because those frames are no longer appended to `room.gameState.drawHistory`.
+  - **`Type 10` Compatibility Limitation:** Legacy `Type 10` behavior is preserved (`server/roomDrawingHistory.ts:100`, `server.ts:79`, ingress pass-through, explicit `'draw_clear'` decode), but `.git` history and original producers are absent so its exact legacy packet format remains unverified; synthetic tests validate compatibility behavior only.
+  - **Remaining Risks (Deferred to Slices 2–5):** `Type 2` trailing bytes (`roomCanonicalStrokeEngine.ts:132-149`), unchecked lengths on client `Types 1, 3, 4, 5, 6, 7, 8, 9`, unbounded `Type 10` trailing bytes, `DrawingCanvasCore.tsx:2987` passing `NaN` if a malformed `Type 4` decodes to `null` (non-crashing), `maxHttpBufferSize: 1e8`, and absent per-socket `draw_binary` rate limits.
+  - **Rollback Instructions (Slice 1 Only):** Revert the two `if (type === ...)` guards at `server/registerDrawBinaryHandler.ts:118-123`, restore the fallback `let eventName = 'draw_clear'` block in `src/utils/drawBinaryHelper.ts:629-658`, remove `scripts/test_phase9a_slice1.ts`, and re-run `npx tsc --noEmit` + `npm run build`.
 
 - **Completion Criteria:**
   - Exact binary schemas, directionality, byte bounds, and field constraints defined and enforced at server ingress (`handleDrawBinary`) for every allowed packet type (`1`–`9`, `13`), with `Type 10` compatibility resolved separately and `server/roomDrawingHistory.ts:100` left unchanged.
   - Trailing-byte rejection on `Type 2`, `Type 7`, `Type 9`, etc., matching `Type 13` strictness.
-  - Client-originated `Type 11` / `Type 12` and truly unknown packet types (`0`, `14..255`) rejected cleanly on server ingress; client `decodeBinaryDrawMessage` no longer maps unknown packet types (`0`, `14..255`) to `'draw_clear'`.
+  - Client-originated `Type 11` / `Type 12` and truly unknown packet types (`0`, `14..255`) rejected cleanly on server ingress; client `decodeBinaryDrawMessage` no longer maps unknown packet types (`0`, `14..255`) to `'draw_clear'`. *(Slice 1 implemented — Awaiting Verification.)*
   - Safe `maxHttpBufferSize` tuned and documented with compatibility proof.
   - Automated validation test suite covering malformed, truncated, oversized, trailing-byte, spoofed, and valid packets passes alongside `npx tsc --noEmit`, `npm run build`, and existing Phase 5–8 test suites.
 
 - **Current Status:**  
-  `IN PROGRESS — Slice 1 Awaiting Final Approval; No Implementation Started`
+  `IN PROGRESS — Slice 1 AWAITING VERIFICATION (Slices 2–5 Not Started)`
 
 - **Next Exact Action:**  
-  `Review decoder null-safety findings and approve the narrow Slice 1 implementation.`
+  `Complete manual multiplayer game verification for Slice 1 (drawing, clear, undo/redo, repair, sync), then review and approve Slice 2.`
 
 ---
 
-#### `PHASE 9A — Proposed Implementation Blueprint (Awaiting Review)`
+#### `PHASE 9A — Implementation Blueprint & Slice Tracker`
 
-**Status:** `IN PROGRESS — Slice 1 Awaiting Final Approval; No Implementation Started`
+**Status:** `IN PROGRESS — Slice 1 AWAITING VERIFICATION`
 
 ##### 1. Decisions Supported by Evidence (Resolved A–F & Decoder Null Safety)
 
@@ -196,13 +211,13 @@ This roadmap separates prior claims, independently verified code facts, unverifi
 
 ##### 3. Proposed Implementation Slices (In Order)
 
-1. **Slice 1 — Narrow Ingress Direction Filtering, Non-Canonical `Type 13` Block & Client Decoder Unknown-Type Null Fix *(Ready for Final Approval)***
+1. **Slice 1 — Narrow Ingress Direction Filtering, Non-Canonical `Type 13` Block & Client Decoder Unknown-Type Null Fix *(AWAITING VERIFICATION — Implemented & Automated Checks Passed)***
    - *Goal:* Stop spoofed server control injection (`Type 11`/`12`), reject truly unknown opcodes (`0`, `14..255`), block non-canonical `Type 13` bypass, and stop client `decodeBinaryDrawMessage` from turning unknown opcodes into `'draw_clear'`, without absorbing Slices 2–5 or breaking `Type 10`.
-   - *Files:* `server/registerDrawBinaryHandler.ts`, `src/utils/drawBinaryHelper.ts` *(plus strictly necessary caller null guard only if proven needed — e.g., optional skip at `DrawingCanvasCore.tsx:2987`, though no `src/` caller throws on `null`)*.
-   - *Approved Narrow Scope (ONLY):*
-     - **A. Server ingress direction filtering (`handleDrawBinary`):** Reject client-originated `Type 11` and `Type 12`; reject unsupported/unknown types `0` and `14..255`; preserve `Type 10` (do **not** invent a `Type 10` length check and do **not** alter `server/roomDrawingHistory.ts:100` or `server.ts:79`); preserve all legitimate client drawing types (`1..9` and canonical `13`).
-     - **B. Non-canonical `Type 13` handling (`handleDrawBinary`):** Ensure `Type 13` cannot fall through to the `else` branch in a supported inbound path; reject `Type 13` cleanly when `!useCanonicalPipeline`.
-     - **C. Client decoder fallback correction (`decodeBinaryDrawMessage`):** Explicitly handle `Type 5` (`MSG_DRAW_CLEAR`) and `Type 10` as `'draw_clear'`; preserve `Type 11` (`draw_commit`) and `Type 12` (`draw_abort`) as recognized server control messages; return `null` for truly unknown types (`0`, `14..255`); add only strictly necessary caller null guards (none required for crash safety, as all `src/` call sites already handle `null`).
+   - *Files:* `server/registerDrawBinaryHandler.ts`, `src/utils/drawBinaryHelper.ts`, `scripts/test_phase9a_slice1.ts`.
+   - *Implemented Scope (ONLY):*
+     - **A. Server ingress direction filtering (`handleDrawBinary`):** Rejected client-originated `Type 11` and `Type 12`; rejected unsupported/unknown types `0` and `14..255`; preserved `Type 10` (without inventing a `Type 10` length check or altering `server/roomDrawingHistory.ts:100` or `server.ts:79`); preserved all legitimate client drawing types (`1..9` and canonical `13`).
+     - **B. Non-canonical `Type 13` handling (`handleDrawBinary`):** Rejected client-originated `Type 13` cleanly when `!useCanonicalPipeline`, while preserving canonical `handleFreeDrawMoveCompressed` validation and relay when `useCanonicalPipeline === true`.
+     - **C. Client decoder fallback correction (`decodeBinaryDrawMessage`):** Explicitly handled `Type 5` (`MSG_DRAW_CLEAR`) and `Type 10` as `'draw_clear'`; preserved `Type 11` (`draw_commit`) and `Type 12` (`draw_abort`) as recognized server control messages; returned `null` for truly unknown types (`0`, `14..255`). No caller edits were needed (`src/` callers already handle `null` safely).
    - *Explicitly Excluded From Slice 1 (Assigned to Slices 2–5):*
      - `Type 2` exact-length correction (`Slice 2`)
      - `Type 1` or `Type 3` structural validation (`Slice 2`)
@@ -213,7 +228,7 @@ This roadmap separates prior claims, independently verified code facts, unverifi
      - Transport `maxHttpBufferSize` changes (`Slice 5`)
      - Rate limiting (`Deferred`)
      - `instanceId` policy changes (`Slice 2`)
-   - *Acceptance Criteria:* Client-originated `0`, `11`, `12`, `14..255`, and non-canonical `Type 13` are silently rejected without broadcasting or history insertion; `Type 10` and `Type 5` clears work identically across ingress, history replay, and joining sync; server-emitted `Type 11`/`12` still decode and drive commit/repair/abort cleanly; `decodeBinaryDrawMessage` returns `null` for `0` and `14..255`.
+   - *Verification Status:* `npx tsc --noEmit`, `npm run build`, `scripts/test_phase9a_slice1.ts` (89/89), and all 11 baseline suites passed. Pending manual gameplay verification.
 
 2. **Slice 2 — Canonical Stream & Control-Packet Structural Validation (`Type 2` Trailing Bytes, `Type 1`/`3`/`5`/`6`/`7`/`8` Exact Bounds & Non-Empty `instId`)**
    - *Goal:* Eliminate the confirmed `Type 2` trailing-bytes relay defect, canonical `instId === ""` persistence leak, and header truncation/trailing-byte bugs on stream/control packets.
@@ -247,24 +262,22 @@ This roadmap separates prior claims, independently verified code facts, unverifi
 - **Existing Verification Baseline (Must Stay Green):**
   - Static checks: `npx tsc --noEmit` and `npm run build`.
   - Protocol & Regression Suites in `scripts/` (run per slice): `scripts/test_type13_hardening.ts`, `scripts/test_compressed_transport.ts`, `scripts/test_session_identity_suite.ts`, `scripts/test_payload_validation_suite.ts`, `scripts/test_controlled_fixes_suite.ts`, `scripts/test_experimental_draw_trial.ts`, `scripts/test_repair_seamless_handover.ts`, `scripts/test_legacy1a_routing.ts`, `scripts/test_legacy1c_unknown_room_routing.ts`, `scripts/test_codec.ts`.
-- **Slice 1 Required Regression Tests *(Not Yet Created or Executed)*:**
-  1. Valid `Type 5` (`MSG_DRAW_CLEAR`) still decodes to `'draw_clear'`, triggers server clear routing, and clears the canvas.
-  2. Legacy `Type 10` still produces explicit `'draw_clear'` behavior in `decodeBinaryDrawMessage`, passes `handleDrawBinary` -> `recordRoomDrawCommand` (`server/roomDrawingHistory.ts:100`) and `getJsonSafeHistory` (`server.ts:79`), and triggers canvas clear.
-  3. Unknown `Type 0` returns `null` in `decodeBinaryDrawMessage`, is rejected by `handleDrawBinary`, and never clears the canvas.
-  4. Unknown `Type 14` and `Type 255` return `null` in `decodeBinaryDrawMessage`, are rejected by `handleDrawBinary`, and never clear the canvas.
-  5. Client-originated `Type 11` and `Type 12` are rejected at server ingress without broadcasting or `drawHistory` insertion; non-canonical `Type 13` (`!useCanonicalPipeline`) is rejected cleanly without `else` fallback insertion.
-  6. Legitimate server-originated `Type 11` and `Type 12` still decode in `decodeBinaryDrawMessage` and preserve commit/repair/abort behavior when delivered to clients.
-  7. Valid `Type 1, 2, 3, 4, 5, 6, 7, 8, 9` and canonical `Type 13` paths remain compatible with Free Draw, Experimental, and Normal/Competitive room modes.
-  8. Every `decodeBinaryDrawMessage` consumer pattern (`DrawingCanvasCore` live/redo/undo/replay helpers and `canvasReplayEngine.replaySingleCommand`) handles `null` without throwing or stalling subsequent commands.
-  9. History replay and joining clients (`replaySingleCommand` / `getJsonSafeHistory`) still apply explicit `Type 5` and `Type 10` clear entries accurately while skipping any `null` unknown entry safely.
+- **Slice 1 Regression Suite (`scripts/test_phase9a_slice1.ts` — Executed, 89/89 Passed):**
+  1. Valid `Type 5` (`MSG_DRAW_CLEAR`) decodes to `'draw_clear'`, triggers server clear routing, and clears replay state.
+  2. Synthetic `Type 10` explicitly decodes as `'draw_clear'`, passes `handleDrawBinary` -> `recordRoomDrawCommand` (`server/roomDrawingHistory.ts:100`), and produces replay effect `'clear'` *(compatibility-behavior check only; exact historical format remains unknown)*.
+  3. Unknown `Type 0`, `14`, `15`, `99`, `255` return `null` in `decodeBinaryDrawMessage`, are rejected by `handleDrawBinary`, and return `'none'` without clearing replay state.
+  4. Client-originated `Type 11` and `Type 12` are rejected at `handleDrawBinary` across Free Draw, Experimental, and Normal/Competitive rooms without broadcasting, `drawHistory` insertion, or mutating `isDrawingActive`.
+  5. Non-canonical `Type 13` (`!useCanonicalPipeline`) is rejected cleanly without fallback relay or `drawHistory` insertion, while canonical `Type 13` succeeds and relays points normally.
+  6. Server-originated `Type 11` (`handleFreeDrawEnd`) and `Type 12` (`abortFreeDrawStroke`) emit and decode accurately for clients.
+  7. Supported client `Types 1..9` and `Type 13` codec roundtrips and Normal-room bucket/shape/redo flows remain intact.
 - **New Targeted Tests Needed for Later Slices (`Slices 2–5`):**
   - Negative/boundary binary contract tests covering: `Type 2` trailing bytes (`+1`, `+1024`), `Type 1/3/4/5/6/7/8/9` truncated & trailing-byte buffers, all-zero `instId` (`""`), invalid tool indices (`9`, `255`), and canonical `Type 9` Redo after `>3,000`-pt strokes.
 
 - **Current Status:**  
-  `IN PROGRESS — Slice 1 Awaiting Final Approval; No Implementation Started`
+  `IN PROGRESS — Slice 1 AWAITING VERIFICATION (Slices 2–5 Not Started)`
 
 - **Next Exact Action:**  
-  `Review decoder null-safety findings and approve the narrow Slice 1 implementation.`
+  `Complete manual multiplayer game verification for Slice 1 (drawing, clear, undo/redo, repair, sync), then review and approve Slice 2.`
 
 ---
 

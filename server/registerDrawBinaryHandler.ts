@@ -111,6 +111,17 @@ export function handleDrawBinary(
     }
 
     const type = buf[0];
+
+    // Slice 1: Reject server-only control types (11, 12), unsupported/unknown types (0, 14..255),
+    // and non-canonical Type 13 before any history insertion, broadcast, or state mutation.
+    // Legacy Type 10 remains accepted to preserve existing compatibility behavior.
+    if (type === 0 || type === 11 || type === 12 || type > 13) {
+      return;
+    }
+    if (type === 13 && !useCanonicalPipeline) {
+      return;
+    }
+
     const toolName = buf.length >= 9 ? getToolName(buf[8]) : '';
     const isContinuousTool = toolName === 'pencil' || toolName === 'eraser';
 
