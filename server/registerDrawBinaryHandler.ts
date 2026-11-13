@@ -1,5 +1,10 @@
 import { getToolName } from '../src/utils/drawBinaryHelper.js';
 import { createType2Buffer } from './rooms.js';
+import {
+  extractValidatedInstId,
+  isAllowedStartOrEndTool,
+  isValidInstIdBytes
+} from './utils/binaryBufferHelpers.js';
 
 export interface DrawBinaryDependencies {
   io?: any;
@@ -126,6 +131,8 @@ export function handleDrawBinary(
     const isContinuousTool = toolName === 'pencil' || toolName === 'eraser';
 
     if (type === 5) { // draw_clear
+      // Exact 8 bytes; allow all-zero empty instId ("") or valid ASCII instId
+      if (buf.length !== 8 || !isValidInstIdBytes(buf, true)) return;
       if (isFreeDraw || isExperimental) {
         roomManager.handleFreeDrawClear(roomId, buf);
       } else {
@@ -134,17 +141,20 @@ export function handleDrawBinary(
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
+    } else if (type === 6) { // draw_cancel
+      // Exact 8 bytes + valid non-empty ASCII instId
+      if (buf.length !== 8 || !isValidInstIdBytes(buf, false)) return;
+      roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+      if (socket.broadcast && typeof socket.broadcast.to === 'function') {
+        socket.broadcast.to(roomId).emit('draw_binary', buf);
+      }
     } else if (type === 7) { // draw_undo
       if (isFreeDraw || isExperimental) {
-        // In Free Draw and Experimental, type 7 MUST be a well-formed stroke undo (>= 10 bytes).
-        // Never fall back to global undoLastDrawing() for special modes.
-        if (buf.length < 10) return;
+        // In Free Draw and Experimental, type 7 MUST be an exact 10-byte stroke undo
+        // with a valid non-empty ASCII instId. Never fall back to global undoLastDrawing().
+        if (buf.length !== 10) return;
 
-        let targetInstId = "";
-        for (let i = 0; i < 7; i++) {
-          const code = buf[1 + i];
-          if (code > 0) targetInstId += String.fromCharCode(code);
-        }
+        const targetInstId = extractValidatedInstId(buf, false);
         if (!targetInstId) return;
 
         // In Free Draw: targetInstId MUST exist in room.drawingIdentities AND belong to socket.id
@@ -161,7 +171,8 @@ export function handleDrawBinary(
           io.to(roomId).emit('draw_binary', buf);
         }
       } else {
-        // Normal / Competitive Rooms: standard global undo
+        // Normal / Competitive Rooms: exact 8-byte global undo with valid non-empty ASCII instId
+        if (buf.length !== 8 || !isValidInstIdBytes(buf, false)) return;
         roomManager.undoLastDrawing(roomId);
         if (io && typeof io.to === 'function') {
           io.to(roomId).emit('draw_binary', buf);
@@ -173,28 +184,48 @@ export function handleDrawBinary(
       if (isFreeDraw || isExperimental) {
         return;
       }
+      // Normal / Competitive Rooms: exact 8-byte global redo with valid non-empty ASCII instId
+      if (buf.length !== 8 || !isValidInstIdBytes(buf, false)) return;
       roomManager.redoDrawing(roomId);
       if (io && typeof io.to === 'function') {
         io.to(roomId).emit('draw_binary', buf);
       }
-    } else if (useCanonicalPipeline && type === 1 && isContinuousTool) { // Canonical draw_start
-      roomManager.handleFreeDrawStart(roomId, socket.id, buf);
-      // Broadcast live draw_start so spectators initialize their local live layer
-      if (socket.broadcast && typeof socket.broadcast.to === 'function') {
-        socket.broadcast.to(roomId).emit('draw_binary', buf);
+    } else if (type === 1) { // draw_start
+      // Exact 18 bytes, valid non-empty ASCII instId, tool in {0, 1, 3, 4, 5, 6, 7}
+      if (buf.length !== 18 || !isAllowedStartOrEndTool(buf[8]) || !isValidInstIdBytes(buf, false)) {
+        return;
       }
-    } else if (useCanonicalPipeline && (type === 2 || type === 13)) { // Canonical draw_move
-      if (type === 13) {
-        const res = roomManager.handleFreeDrawMoveCompressed(roomId, socket.id, buf);
-        if (!res || !res.success || !res.points || !res.instId) {
-          return;
-        }
-        if (deps.relayFreeDrawMove) {
-          deps.relayFreeDrawMove(roomId, socket, buf, res.instId, res.points);
-        } else {
-          defaultRelayFreeDrawMove(io, roomManager, roomId, socket, buf, res.instId, res.points);
+      if (useCanonicalPipeline && isContinuousTool) {
+        const started = roomManager.handleFreeDrawStart(roomId, socket.id, buf);
+        if (!started) return;
+        // Broadcast live draw_start so spectators initialize their local live layer
+        if (socket.broadcast && typeof socket.broadcast.to === 'function') {
+          socket.broadcast.to(roomId).emit('draw_binary', buf);
         }
       } else {
+        // Shape start in canonical rooms or any allowed tool start in Normal rooms
+        roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+        if (socket.broadcast && typeof socket.broadcast.to === 'function') {
+          socket.broadcast.to(roomId).emit('draw_binary', buf);
+        }
+      }
+    } else if (type === 13) { // Canonical compressed draw_move
+      const res = roomManager.handleFreeDrawMoveCompressed(roomId, socket.id, buf);
+      if (!res || !res.success || !res.points || !res.instId) {
+        return;
+      }
+      if (deps.relayFreeDrawMove) {
+        deps.relayFreeDrawMove(roomId, socket, buf, res.instId, res.points);
+      } else {
+        defaultRelayFreeDrawMove(io, roomManager, roomId, socket, buf, res.instId, res.points);
+      }
+    } else if (type === 2) { // draw_move (uncompressed)
+      // Minimum 10 bytes, valid non-empty ASCII instId, exact length 10 + count * 4
+      if (buf.length < 10 || !isValidInstIdBytes(buf, false)) return;
+      const moveCount = buf.readUInt16LE(8);
+      if (buf.length !== 10 + moveCount * 4) return;
+
+      if (useCanonicalPipeline) {
         const ok = roomManager.handleFreeDrawMove(roomId, socket.id, buf);
         if (!ok) return;
         if (socket.broadcast && typeof socket.broadcast.to === 'function') {
@@ -204,25 +235,45 @@ export function handleDrawBinary(
             socket.broadcast.to(roomId).emit('draw_binary', buf);
           }
         }
-      }
-    } else if (useCanonicalPipeline && type === 3 && isContinuousTool) { // Canonical draw_end
-      const commitResult = roomManager.handleFreeDrawEnd(roomId, socket.id, buf);
-      if (commitResult && commitResult.committed) {
-        const commitBuf = Buffer.alloc(12);
-        commitBuf.writeUInt8(11, 0); // MSG_DRAW_COMMIT = 11
-        commitBuf.write(commitResult.instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
-        commitBuf.writeUInt16LE(commitResult.strokeId & 0xFFFF, 8);
-        commitBuf.writeUInt16LE(commitResult.pointCount & 0xFFFF, 10);
-        if (io && typeof io.to === 'function') {
-          io.to(roomId).emit('draw_binary', commitBuf);
-        }
       } else {
+        roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+        if (socket.broadcast && typeof socket.broadcast.to === 'function') {
+          socket.broadcast.to(roomId).emit('draw_binary', buf);
+        }
+      }
+    } else if (type === 3) { // draw_end
+      // Exact 23 or 27 bytes, valid non-empty ASCII instId, tool in {0, 1, 3, 4, 5, 6, 7}
+      if (
+        (buf.length !== 23 && buf.length !== 27) ||
+        !isAllowedStartOrEndTool(buf[8]) ||
+        !isValidInstIdBytes(buf, false)
+      ) {
+        return;
+      }
+      if (useCanonicalPipeline && isContinuousTool) {
+        const commitResult = roomManager.handleFreeDrawEnd(roomId, socket.id, buf);
+        if (commitResult && commitResult.committed) {
+          const commitBuf = Buffer.alloc(12);
+          commitBuf.writeUInt8(11, 0); // MSG_DRAW_COMMIT = 11
+          commitBuf.write(commitResult.instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
+          commitBuf.writeUInt16LE(commitResult.strokeId & 0xFFFF, 8);
+          commitBuf.writeUInt16LE(commitResult.pointCount & 0xFFFF, 10);
+          if (io && typeof io.to === 'function') {
+            io.to(roomId).emit('draw_binary', commitBuf);
+          }
+        }
+        // When handleFreeDrawEnd returns null (cancelled/expired already emitted Type 12 abort,
+        // or orphaned/duplicate stroke), do NOT broadcast raw Type 3.
+        return;
+      } else {
+        // Shape end in canonical rooms or any allowed tool end in Normal rooms
+        roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
         if (socket.broadcast && typeof socket.broadcast.to === 'function') {
           socket.broadcast.to(roomId).emit('draw_binary', buf);
         }
       }
     } else {
-      // Normal Rooms or non-commit actions (e.g. shapes, bucket, or Normal room pencil)
+      // Remaining supported types (Type 4 bucket, Type 9 stroke, legacy Type 10)
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);

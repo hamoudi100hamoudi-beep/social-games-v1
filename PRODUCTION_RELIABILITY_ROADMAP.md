@@ -8,21 +8,32 @@
 
 ## E. Current Checkpoint / Session Handoff
 
-- **Active Phase / Task:** `PHASE 9A — Binary Packet Contract & Input Safety` (`IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 IN PROGRESS — READ-ONLY AUDIT; Slices 3–5 Not Started`)
+- **Active Phase / Task:** `PHASE 9A — Binary Packet Contract & Input Safety` (`IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 AWAITING VERIFICATION; Slices 3–5 Not Started`)
 - **Last Completed Milestone:**
   - **PHASE 9A Slice 1 (`COMPLETED & VERIFIED`):** Protocol direction filtering, non-canonical `Type 13` blocking, and explicit client decoder handling with unknown opcodes returning `null`. Manually tested by the project owner (confirmed working normally) alongside passing `npx tsc --noEmit`, `npm run build`, `scripts/test_phase9a_slice1.ts` (89/89), and all 11 baseline regression suites.
-  - **PHASE 9A Slice 2 Read-Only Audit (`IN PROGRESS — READ-ONLY AUDIT`):** Completed end-to-end source & test-fixture audit of `Types 1, 2, 3, 5, 6, 7, 8` and drafted the Slice 2 structural validation implementation blueprint (no application code modified).
-- **Source Code Changes Made (Slice 1 Only):**
-  - `server/registerDrawBinaryHandler.ts`: Added pre-routing guard rejecting client-originated `Type 11`, `Type 12`, `Type 0`, `Types 14..255`, and non-canonical `Type 13` (`!useCanonicalPipeline`) while preserving `Type 10` and `Types 1..9` / canonical `13`.
-  - `src/utils/drawBinaryHelper.ts`: Replaced fallback `'draw_clear'` assignment in `decodeBinaryDrawMessage` with explicit branches for `Type 5` (`MSG_DRAW_CLEAR`), legacy `Type 10`, `Type 6`, `Type 7`, `Type 8`, and `return null` for unknown opcodes (`0`, `14..255`).
-  - `scripts/test_phase9a_slice1.ts`: New Slice 1 regression test suite (89 passed, 0 failed).
+  - **PHASE 9A Slice 2 (`AWAITING VERIFICATION`):** Enforced allocation-free O(1) structural packet validation across `Types 1, 2, 3, 5, 6, 7, 8` (`server/utils/binaryBufferHelpers.ts`, `server/roomCanonicalStrokeEngine.ts`, `server/registerDrawBinaryHandler.ts`), removed spurious canonical continuous `Type 3` raw fallback broadcast after `Type 12` aborts or orphaned/duplicate ends, updated outdated Normal `Type 7` fixtures (`AUTH-11.1`/`11.2`), added `scripts/test_phase9a_slice2.ts` (174/174), and verified all 13 test suites plus `tsc --noEmit` and `npm run build` cleanly.
+- **Source Code Changes Made:**
+  - **Slice 1:**
+    - `server/registerDrawBinaryHandler.ts`: Added pre-routing guard rejecting client-originated `Type 11`, `Type 12`, `Type 0`, `Types 14..255`, and non-canonical `Type 13` (`!useCanonicalPipeline`) while preserving `Type 10` and `Types 1..9` / canonical `13`.
+    - `src/utils/drawBinaryHelper.ts`: Replaced fallback `'draw_clear'` assignment in `decodeBinaryDrawMessage` with explicit branches for `Type 5` (`MSG_DRAW_CLEAR`), legacy `Type 10`, `Type 6`, `Type 7`, `Type 8`, and `return null` for unknown opcodes (`0`, `14..255`).
+    - `scripts/test_phase9a_slice1.ts`: Slice 1 regression test suite (89 passed, 0 failed).
+  - **Slice 2:**
+    - `server/utils/binaryBufferHelpers.ts`: Added allocation-free `isValidInstIdBytes`, `extractValidatedInstId`, and `isAllowedStartOrEndTool` (`{0, 1, 3, 4, 5, 6, 7}`) helpers.
+    - `server/roomCanonicalStrokeEngine.ts`: Tightened `handleFreeDrawStart` (`=== 18`, tool allowlist, non-empty valid `instId`), `handleFreeDrawMove` (`!== 10 + count * 4`, non-empty valid `instId` checked before stroke lookup), and `handleFreeDrawEnd` (`23 || 27`, tool allowlist, non-empty valid `instId`).
+    - `server/registerDrawBinaryHandler.ts`: Enforced exact structural validation per type (`Type 1`: `18 B`, tool `{0,1,3,4,5,6,7}`, non-empty `instId`, canonical broadcast gated on `handleFreeDrawStart`; `Type 2`: `>= 10 B` and `=== 10 + count * 4` in both canonical and Normal paths; `Type 3`: `23 || 27 B`, tool `{0,1,3,4,5,6,7}`, non-empty `instId`, removed canonical continuous raw `Type 3` fallback broadcast; `Type 5`: `8 B` allowing empty `""` or valid ASCII `instId`; `Type 6`: `8 B` non-empty `instId`; `Type 7`: `10 B` FD/Exp vs `8 B` Normal; `Type 8`: `8 B` Normal only). Left `Types 4, 9, 10` untouched.
+    - `scripts/test_session_identity_suite.ts`: Added `makeType7Normal` (`8 B`) and updated `AUTH-11.1` / `AUTH-11.2` Normal-mode undo calls from `10 B` to `8 B`.
+    - `scripts/test_phase9a_slice2.ts`: New Slice 2 regression test suite (174 passed, 0 failed).
 - **Key Audit & Implementation Takeaways (PHASE 9A):**
-  - **Slice 1 Hardening (`COMPLETED & VERIFIED`):** Client-originated `0`, `11`, `12`, `14..255`, and non-canonical `13` are silently dropped before `drawHistory`, broadcast, or state mutation; `decodeBinaryDrawMessage` returns `null` for `0` and `14..255` instead of `'draw_clear'`.
+  - **Slice 1 (`COMPLETED & VERIFIED`):** Client-originated `0`, `11`, `12`, `14..255`, and non-canonical `13` are silently dropped before `drawHistory`, broadcast, or state mutation; `decodeBinaryDrawMessage` returns `null` for `0` and `14..255` instead of `'draw_clear'`.
+  - **Slice 2 (`AWAITING VERIFICATION`):**
+    - `Type 1` (`18 B`) and `Type 3` (`23` or `27 B`) enforce tool allowlist `{0, 1, 3, 4, 5, 6, 7}` (`bucket=2` and `pipette=8` rejected) and non-empty valid `[a-zA-Z0-9_-]{1,7}` ASCII `instId`.
+    - `Type 2` enforces exact `buf.length === 10 + count * 4` in canonical and Normal paths with zero invented point-count caps (`count = 0` at `10 B` preserved; canonical `3,000`-pt abort limit preserved).
+    - Canonical continuous `Type 3` emits only `Type 11` on commit or `Type 12` on cancel/expiry abort; orphaned/duplicate `Type 3` drops silently with zero raw `Type 3` broadcast. Shape & Normal `Type 3` behavior preserved.
+    - `Type 5` (`8 B`) preserves all-zero empty `instId === ""` compatibility for `DrawingCanvasCore.tsx:2100, 2119` alongside non-empty valid `instId`; `Type 6` (`8 B`), `Type 7` (`10 B` FD/Exp vs `8 B` Normal), and `Type 8` (`8 B` Normal only) reject truncated, trailing-byte, and malformed control/padding packets.
   - **`Type 10` Compatibility Limitation:** Legacy `Type 10` remains accepted on server ingress (with `server/roomDrawingHistory.ts:100` and `server.ts:79` untouched per `AGENTS.md`) and explicitly decoded as `'draw_clear'`. Because workspace `.git` history and original `Type 10` producers are absent, its exact historical wire format remains unknown.
-  - **Slice 2 Critical Compatibility Finding (`Type 5` Clear):** Production `DrawingCanvasCore.tsx:2100, 2119` calls `encodeBinaryDrawMessage('draw_clear', {})` directly (bypassing `emitDrawCommand`), producing an `8`-byte `Type 5` packet with an all-zero `instId` (`""`). Server validation MUST enforce exact `buf.length === 8` on `Type 5` **without** rejecting empty `instId`, or Canvas Clear would break across all room modes.
   - **Remaining Deferred Scope (`Slices 3–5`):** `Type 9` / `>3,000`-pt Redo alignment (`Slice 3`), `Type 4` (`draw_action`) & decoder `DataView` pre-checks (`Slice 4`), `maxHttpBufferSize` reduction (`Slice 5`), and rate limiting remain unstarted.
 - **Exact Next Action:**
-  `Review and approve the Slice 2 implementation scope before modifying application source code.`
+  `Complete manual gameplay verification for PHASE 9A Slice 2 (Normal, Free Draw, and Experimental drawing/undo/redo/clear/cancel/shape/bucket flows), then review and approve Slice 3.`
 
 ---
 
@@ -38,7 +49,7 @@ While the codebase already passes static compilation and targeted feature test s
 
 ## B. Master Task Checklist
 
-- [ ] **PHASE 9A — Binary Packet Contract & Input Safety** *(`IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 IN PROGRESS — READ-ONLY AUDIT; Slices 3–5 Not Started`)*
+- [ ] **PHASE 9A — Binary Packet Contract & Input Safety** *(`IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 AWAITING VERIFICATION; Slices 3–5 Not Started`)*
 - [ ] **PHASE 9B — Free Draw History Lifecycle, Memory Growth & Sync Performance** *(`PLANNED`)*
 - [ ] **PHASE 9C — Reproducible Dependency Installation & Lockfile** *(`PLANNED`)*
 - [ ] **PHASE 9D — Unified Test Strategy & Safe Test Commands** *(`PLANNED`)*
@@ -89,7 +100,7 @@ This roadmap separates prior claims, independently verified code facts, unverifi
 
 - **Objective & Scope:**  
   Audit and harden every incoming `draw_binary` packet contract (Types `1`–`13` and unknown types) on both server ingress and client decode, prevent trailing-byte / oversized / direction-spoofed / out-of-bounds payloads, align Transport `maxHttpBufferSize` with real application needs, and enforce invariants without breaking canonical Free Draw/Experimental drawing, shape tools, bucket fill, undo/redo, or `AGENTS.md` rules.
-  *(Slice 1: COMPLETED & VERIFIED; Slice 2: IN PROGRESS — READ-ONLY AUDIT; Slices 3–5: Not Started.)*
+  *(Slice 1: COMPLETED & VERIFIED; Slice 2: AWAITING VERIFICATION; Slices 3–5: Not Started.)*
 
 - **Relevant Files:**
   - `server.ts` (`maxHttpBufferSize`, `getJsonSafeHistory`, `draw_repair_req`, `relayFreeDrawMove`)
@@ -116,57 +127,65 @@ This roadmap separates prior claims, independently verified code facts, unverifi
 
 - **Implementation Decisions:**  
   - **Slice 1 (`COMPLETED & VERIFIED`):** Enforced ingress opcode/direction filtering (`0`, `11`, `12`, `14..255`, non-canonical `13`) in `server/registerDrawBinaryHandler.ts`, and replaced fallback `'draw_clear'` decoding in `src/utils/drawBinaryHelper.ts` with explicit handling for `Type 5`, legacy `Type 10`, `Type 6`, `Type 7`, `Type 8` and `return null` for unsupported opcodes (`0`, `14..255`).
-  - **Slice 2 (`IN PROGRESS — READ-ONLY AUDIT`):** End-to-end audit and implementation blueprint completed for `Types 1, 2, 3, 5, 6, 7, 8` (awaiting user approval before editing source files).
+  - **Slice 2 (`AWAITING VERIFICATION`):** Implemented O(1) structural validation across `Types 1, 2, 3, 5, 6, 7, 8` (exact lengths, `{0,1,3,4,5,6,7}` tool allowlist on `Type 1/3`, allocation-free `[a-zA-Z0-9_-]{1,7}` ASCII `instId` check with `Type 5` empty-`instId` compatibility, mode-split `Type 7` lengths `10 B` FD/Exp vs `8 B` Normal, `Type 8` Normal-only `8 B`, and removal of canonical continuous `Type 3` raw fallback broadcast) and aligned `AUTH-11.1`/`AUTH-11.2` Normal `Type 7` test fixtures.
   - **Deferred Decisions (`Slices 3–5`):** `Type 9` / Redo point-cap alignment, `Type 4` length reconciliation & client `DataView` pre-checks, `maxHttpBufferSize`, and rate limits remain scoped to `Slices 3–5`.
 
 - **Files Modified:**  
-  - `server/registerDrawBinaryHandler.ts` (Slice 1 ingress direction & non-canonical `Type 13` guard)
+  - `server/registerDrawBinaryHandler.ts` (Slice 1 ingress direction & non-canonical `Type 13` guard; Slice 2 structural validation on `Types 1, 2, 3, 5, 6, 7, 8` and canonical `Type 3` fallback broadcast removal)
+  - `server/roomCanonicalStrokeEngine.ts` (Slice 2 `handleFreeDrawStart`, `handleFreeDrawMove`, and `handleFreeDrawEnd` structural/tool/`instId` enforcement)
+  - `server/utils/binaryBufferHelpers.ts` (Slice 2 allocation-free `isValidInstIdBytes`, `extractValidatedInstId`, and `isAllowedStartOrEndTool` helpers)
   - `src/utils/drawBinaryHelper.ts` (Slice 1 explicit clear/control opcode branches & `null` for `0, 14..255`)
-  - `scripts/test_phase9a_slice1.ts` (new Slice 1 regression test suite)
+  - `scripts/test_session_identity_suite.ts` (Slice 2 `makeType7Normal` helper and `AUTH-11.1` / `AUTH-11.2` 8-byte Normal `Type 7` fixture correction)
+  - `scripts/test_phase9a_slice1.ts` (Slice 1 regression test suite)
+  - `scripts/test_phase9a_slice2.ts` (Slice 2 regression test suite)
   - `PRODUCTION_RELIABILITY_ROADMAP.md` (status, verification results, limitations, rollback record)
 
-- **Manual & Automated Verification Results (Slice 1):**
-  - **Manual Verification:** Tested manually by the project owner after Slice 1 and reported as working normally *(no individual unverified gameplay sub-tests claimed)*.
-  - `npx tsc --noEmit` (`lint_applet`): **PASS** (0 errors).
-  - `npm run build` (`compile_applet`): **PASS** (Vite build succeeded).
-  - `npx tsx scripts/test_phase9a_slice1.ts`: **PASS** (89 passed, 0 failed).
+- **Manual & Automated Verification Results (Slice 1 & Slice 2):**
+  - **Slice 1 Manual Verification:** Tested manually by the project owner and reported as working normally *(no individual unverified gameplay sub-tests claimed)*.
+  - **Slice 2 Manual Verification:** *Pending project owner manual gameplay verification across Normal, Free Draw, and Experimental rooms.*
+  - `npx tsc --noEmit` (`lint_applet`, post-Slice 2): **PASS** (0 errors).
+  - `npm run build` (`compile_applet`, post-Slice 2): **PASS** (Vite build succeeded).
+  - `npx tsx scripts/test_phase9a_slice2.ts`: **PASS** (`174 passed, 0 failed`, exit 0).
+  - `npx tsx scripts/test_phase9a_slice1.ts`: **PASS** (`89 passed, 0 failed`, exit 0).
+  - `npx tsx scripts/test_session_identity_suite.ts`: **PASS** (`626 passed`, exit 0).
   - `npx tsx scripts/test_type13_hardening.ts`: **PASS** (exit 0).
-  - `npx tsx scripts/test_session_identity_suite.ts`: **PASS** (626 passed, exit 0).
   - `npx tsx scripts/test_compressed_transport.ts`: **PASS** (exit 0).
   - `npx tsx scripts/test_experimental_draw_trial.ts`: **PASS** (exit 0).
   - `npx tsx scripts/test_repair_seamless_handover.ts`: **PASS** (exit 0).
   - `npx tsx scripts/test_controlled_fixes_suite.ts`: **PASS** (exit 0).
-  - `npx tsx scripts/test_full_canvas_replay_experiment.ts`: **PASS** (5 passed, 0 failed, exit 0).
-  - `npx tsx scripts/test_payload_validation_suite.ts`: **PASS** (212 passed, exit 0).
+  - `npx tsx scripts/test_full_canvas_replay_experiment.ts`: **PASS** (`5 passed, 0 failed`, exit 0).
+  - `npx tsx scripts/test_payload_validation_suite.ts`: **PASS** (`212 passed`, exit 0).
   - `npx tsx scripts/test_legacy1a_routing.ts`: **PASS** (exit 0).
   - `npx tsx scripts/test_legacy1c_unknown_room_routing.ts`: **PASS** (exit 0).
-  - `npx tsx scripts/test_codec.ts`: **PASS** (13 test cases passed, exit 0).
+  - `npx tsx scripts/test_codec.ts`: **PASS** (`13 test cases passed`, exit 0).
 
 - **Performance & Compatibility Notes:**
-  - Slice 1 runtime overhead is $O(1)$ per packet (two scalar integer checks in `handleDrawBinary` and direct equality checks in `decodeBinaryDrawMessage`), with zero heap allocations, zero buffer copies, zero hot-path loops, and zero `console.log` additions (`AGENTS.md` compliant).
-  - Memory footprint decreases under spoofed/malformed `Type 0/11/12/14..255` or non-canonical `Type 13` traffic because those frames are no longer appended to `room.gameState.drawHistory`.
+  - Slice 1 & Slice 2 runtime overhead is $O(1)$ per packet: at most a 7-byte integer loop (`isValidInstIdBytes`), exact `buf.length` integer comparisons, and scalar `buf[8]` bounds checks before state lookup or room broadcast — zero extra buffer allocations, zero history sweeps, and zero `console.log` telemetry (`AGENTS.md` compliant).
+  - Network & memory impact improves strictly for malformed traffic: trailing-byte `Type 2`/`3`/`5`/`6`/`7`/`8` payloads and spurious raw `Type 3` packets after cancelled/expired/orphaned/duplicate canonical strokes are no longer relayed or appended to `drawHistory` (nor converted via `Array.from` during `join_room`/`request_round_sync`).
   - **`Type 10` Compatibility Limitation:** Legacy `Type 10` behavior is preserved (`server/roomDrawingHistory.ts:100`, `server.ts:79`, ingress pass-through, explicit `'draw_clear'` decode), but `.git` history and original producers are absent so its exact legacy packet format remains unverified; synthetic tests validate compatibility behavior only.
-  - **Remaining Risks (Targeted by Slices 2–5):** `Type 2` trailing bytes (`roomCanonicalStrokeEngine.ts:132-149`), unchecked lengths/headers on client `Types 1, 3, 4, 5, 6, 7, 8, 9`, unbounded `Type 10` trailing bytes, `DrawingCanvasCore.tsx:2987` passing `NaN` if a malformed `Type 4` decodes to `null` (non-crashing), `maxHttpBufferSize: 1e8`, and absent per-socket `draw_binary` rate limits.
-  - **Rollback Instructions (Slice 1 Only):** Revert the two `if (type === ...)` guards at `server/registerDrawBinaryHandler.ts:118-123`, restore the fallback `let eventName = 'draw_clear'` block in `src/utils/drawBinaryHelper.ts:629-658`, remove `scripts/test_phase9a_slice1.ts`, and re-run `npx tsc --noEmit` + `npm run build`.
+  - **Remaining Risks (Targeted by Slices 3–5):** Client-originated `Type 9` trailing bytes and `>3,000`-pt Free Draw Redo lifecycle (`Slice 3`), `Type 4` (`draw_action`) length/tool checks and client decoder `DataView` pre-checks (`Slice 4`, including `DrawingCanvasCore.tsx:2987` `NaN` multiplication if a malformed `Type 4` returns `null`), `maxHttpBufferSize: 1e8` (`Slice 5`), and absent per-socket `draw_binary` / `start_free_draw` rate limits.
+  - **Rollback Instructions:**
+    - *Slice 2:* Remove the Slice 2 helpers in `server/utils/binaryBufferHelpers.ts`, revert `handleFreeDrawStart`/`handleFreeDrawMove`/`handleFreeDrawEnd` in `server/roomCanonicalStrokeEngine.ts`, restore pre-Slice 2 branching in `server/registerDrawBinaryHandler.ts` (including previous `Type 3` canonical `else` broadcast), revert `makeType7Normal` in `scripts/test_session_identity_suite.ts`, delete `scripts/test_phase9a_slice2.ts`, and re-run `npx tsc --noEmit` + `npm run build`.
+    - *Slice 1:* Revert the two `if (type === ...)` guards at `server/registerDrawBinaryHandler.ts:118-123`, restore the fallback `let eventName = 'draw_clear'` block in `src/utils/drawBinaryHelper.ts`, remove `scripts/test_phase9a_slice1.ts`, and re-run `npx tsc --noEmit` + `npm run build`.
 
 - **Completion Criteria:**
   - Exact binary schemas, directionality, byte bounds, and field constraints defined and enforced at server ingress (`handleDrawBinary`) for every allowed packet type (`1`–`9`, `13`), with `Type 10` compatibility resolved separately and `server/roomDrawingHistory.ts:100` left unchanged.
-  - Trailing-byte rejection on `Type 2`, `Type 7`, `Type 9`, etc., matching `Type 13` strictness.
+  - Trailing-byte rejection on `Type 2`, `Type 7`, `Type 9`, etc., matching `Type 13` strictness. *(Types 1, 2, 3, 5, 6, 7, 8 enforced in Slice 2; Types 4 & 9 targeted in Slices 3–4.)*
   - Client-originated `Type 11` / `Type 12` and truly unknown packet types (`0`, `14..255`) rejected cleanly on server ingress; client `decodeBinaryDrawMessage` no longer maps unknown packet types (`0`, `14..255`) to `'draw_clear'`. *(Slice 1: `COMPLETED & VERIFIED`.)*
   - Safe `maxHttpBufferSize` tuned and documented with compatibility proof.
   - Automated validation test suite covering malformed, truncated, oversized, trailing-byte, spoofed, and valid packets passes alongside `npx tsc --noEmit`, `npm run build`, and existing Phase 5–8 test suites.
 
 - **Current Status:**  
-  `IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 IN PROGRESS — READ-ONLY AUDIT (Slices 3–5 Not Started)`
+  `IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 AWAITING VERIFICATION (Slices 3–5 Not Started)`
 
 - **Next Exact Action:**  
-  `Review and approve the Slice 2 implementation scope before modifying application source code.`
+  `Complete manual gameplay verification for PHASE 9A Slice 2 (Normal, Free Draw, and Experimental drawing/undo/redo/clear/cancel/shape/bucket flows), then review and approve Slice 3.`
 
 ---
 
 #### `PHASE 9A — Implementation Blueprint & Slice Tracker`
 
-**Status:** `IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 IN PROGRESS — READ-ONLY AUDIT`
+**Status:** `IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 AWAITING VERIFICATION`
 
 ##### 1. Decisions Supported by Evidence (Resolved A–F & Decoder Null Safety)
 
@@ -222,27 +241,33 @@ This roadmap separates prior claims, independently verified code facts, unverifi
      - **C. Client decoder fallback correction (`decodeBinaryDrawMessage`):** Explicitly handled `Type 5` (`MSG_DRAW_CLEAR`) and `Type 10` as `'draw_clear'`; preserved `Type 11` (`draw_commit`) and `Type 12` (`draw_abort`) as recognized server control messages; returned `null` for truly unknown types (`0`, `14..255`).
    - *Verification Status:* **COMPLETED & VERIFIED** — manually tested by the project owner (reported working normally), alongside passing `npx tsc --noEmit`, `npm run build`, `scripts/test_phase9a_slice1.ts` (89/89), and all 11 baseline suites.
 
-2. **Slice 2 — Canonical Stream & Control-Packet Structural Validation (`IN PROGRESS — READ-ONLY AUDIT`)**
-   - *Goal:* Harden structural validation of supported stream and control packets (`Type 1`, `Type 2`, `Type 3`, `Type 5`, `Type 6`, `Type 7`, `Type 8`) without changing gameplay semantics, altering wire formats, adding arbitrary point-count caps, or breaking legitimate client/test compatibility.
-   - *Files In Scope for Approval:* `server/registerDrawBinaryHandler.ts`, `server/roomCanonicalStrokeEngine.ts`, plus targeted Slice 2 tests (`scripts/test_phase9a_slice2.ts` or extended validation suite — no production files modified yet).
-   - **Verified End-to-End Audit Findings (Types `1, 2, 3, 5, 6, 7, 8`):**
-     - **`Type 1` (`MSG_DRAW_START`):** Client (`drawBinaryHelper.ts:153-177`) & server (`binaryBufferHelpers.ts:114-137`) always produce **`18` bytes** with tool `0..8` (continuous `0, 1` or shapes `3..7`). `DrawingCanvasCore.tsx:4615, 4942` always attaches `instanceId`. **Confirmed gaps:** (a) canonical `handleFreeDrawStart` (`roomCanonicalStrokeEngine.ts:53, 66-70`) checks `buf.length < 18` (allows trailing bytes `> 18`) and allows empty `instId === ""`, while `registerDrawBinaryHandler.ts:180-185` ignores `handleFreeDrawStart`'s return value and broadcasts raw `buf`; (b) non-canonical/shape `Type 1` hits `else` (`224-230`) with zero byte-length or tool check (`1`-byte `[1]` sets `isDrawingActive = true` and enters `drawHistory`; `tool >= 9` silently decodes to `'pencil'`). *Unconfirmed/dead branch:* `roomDrawingHistory.ts:39, 150` checks `type === 1 && length >= 25`, which has zero producers in `src/` or `scripts/`.
-     - **`Type 2` (`MSG_DRAW_MOVE`):** Client (`drawBinaryHelper.ts:179-198`) & server (`binaryBufferHelpers.ts:101-112`) always produce **`10 + count * 4` bytes** (`count = UInt16LE(8..9)`). Normal-mode `DrawingCanvasCore.tsx:4739-4750, 4809-4820` flushes batches with `moves.length >= 1` and zero client point-count cap. **Confirmed gaps:** (a) canonical `handleFreeDrawMove` (`roomCanonicalStrokeEngine.ts:112, 132-149`) checks `buf.length < expectedByteLen` (accepts trailing bytes up to `maxHttpBufferSize` and empty `instId === ""`) and `registerDrawBinaryHandler.ts:198-206` relays raw `buf` untouched; (b) non-canonical `else` (`224-230`) has zero length/header checks (`1`-byte `[2]` enters `drawHistory` and broadcasts). Note: canonical `3,000`-point cap is already enforced in `handleFreeDrawMove:137` (preserving behavior — no new arbitrary point cap added for Normal mode).
-     - **`Type 3` (`MSG_DRAW_END`):** Client (`drawBinaryHelper.ts:245-284`) produces **`23` bytes** when `strokeId`/`expectedPointCount` omitted, or **`27` bytes** when both provided (actual `DrawingCanvasCore.tsx:4891, 5021` always emit `27` bytes with `instanceId`). **Confirmed gaps:** (a) canonical `handleFreeDrawEnd` (`roomCanonicalStrokeEngine.ts:206, 209-213, 276`) only checks `buf.length < 8` (not `23`/`27`), allows trailing bytes to be pushed into `drawHistory` at `line 276`, and allows `instId === ""` (bypassing `roomDrawingHistory.ts:60` duplicate suppression); (b) when `handleFreeDrawEnd` returns `null` (no active stroke, cancelled `buf[22] === 1`, or `>60s` expired), `registerDrawBinaryHandler.ts:219-223` falls into `else` and broadcasts raw unchecked `buf` (even after `abortFreeDrawStroke` already emitted `Type 12`); (c) non-canonical/shape `Type 3` enters `224-230` with zero length (`1`-byte `[3]`) or tool checks.
-     - **`Type 5` (`MSG_DRAW_CLEAR`):** Client (`drawBinaryHelper.ts:383-392`) and server sweeper (`rooms.ts:1200-1203`) always emit **`8` bytes**. **Critical compatibility fact:** `DrawingCanvasCore.tsx:2100, 2119` (`applyClearEpoch`, `executeClear`) calls `encodeBinaryDrawMessage('draw_clear', {})` directly (not `emitDrawCommand`), producing `8` bytes with **all-null `instId === ""`**. **Confirmed gap:** `registerDrawBinaryHandler.ts:128-136` performs zero byte-length validation (`1`-byte or multi-MB `Type 5` buffers enter `drawHistory` and broadcast).
-     - **`Type 6` (`MSG_DRAW_CANCEL`):** Client (`drawBinaryHelper.ts:384-392`, `DrawingCanvasCore.tsx:4552`) always emits **`8` bytes** with non-empty `instanceId`. **Confirmed gap:** No `type === 6` branch in `registerDrawBinaryHandler.ts` — falls into `else` (`224-230`) with zero length check (`<8` or trailing bytes enter `drawHistory` when non-empty and broadcast). *(Architectural note, non-structural: canonical `Type 6` does not currently clear `room.freeDrawStrokes`; changing active-stroke cleanup semantics is outside structural-only validation unless explicitly requested.)*
-     - **`Type 7` (`MSG_DRAW_UNDO`):** Client (`drawBinaryHelper.ts:373-380, 385-392`) emits **`10` bytes** in Free Draw / Experimental (`strokeId` present, `DrawingCanvasCore.tsx:2407`) and **`8` bytes** in Normal mode (`DrawingCanvasCore.tsx:2452`, `instanceId` attached via `emitDrawCommand`). Note `test_session_identity_suite.ts:1157` (`AUTH-11.1`) sends `10` bytes (`makeType7`) in Normal mode. **Confirmed gaps:** (a) `registerDrawBinaryHandler.ts:141` checks `buf.length < 10` in Free Draw / Experimental — **allowing trailing bytes `> 10`** to broadcast via `io.to(roomId)`; (b) Normal mode (`164-169`) has zero byte-length check (`1`-byte or multi-MB `Type 7` triggers `undoLastDrawing` and broadcasts raw `buf`).
-     - **`Type 8` (`MSG_DRAW_REDO`):** Client (`drawBinaryHelper.ts:386-392`, `DrawingCanvasCore.tsx:2612`) always emits **`8` bytes** with `instanceId` attached. **Confirmed gap:** Rejects Free Draw / Experimental (`173-175`), but Normal mode (`176-179`) has zero byte-length check (`1`-byte or multi-MB `Type 8` triggers `redoDrawing` and broadcasts raw `buf`).
-   - **Exact Proposed Changes (Awaiting Approval):**
-     1. *Lightweight ASCII `instId` extractor/validator (`server/registerDrawBinaryHandler.ts` & `server/roomCanonicalStrokeEngine.ts`):* Zero-regex or tiny 7-byte loop checking printable `[a-zA-Z0-9_-]` characters (`instId.length >= 1 && instId.length <= 7`, rejecting embedded control/non-ASCII bytes). For **`Type 5` ONLY**, allow empty all-zero `instId` (`""`) OR valid `1..7`-char ASCII `instId` to protect `executeClear` (`DrawingCanvasCore.tsx:2119`).
-     2. *`Type 1`:* Require `buf.length === 18`, valid `instId` (non-empty), `buf[8] <= 8`. Canonical continuous (`useCanonicalPipeline && isContinuousTool`) additionally gates broadcast on `handleFreeDrawStart(...) === true`.
-     3. *`Type 2`:* Require `buf.length >= 10`, `count = buf.readUInt16LE(8)`, exact `buf.length === 10 + count * 4`, valid `instId` (non-empty) — enforced in both `handleFreeDrawMove` (replacing `< expectedByteLen` with `!== expectedByteLen`) AND non-canonical `registerDrawBinaryHandler.ts` `else` path.
-     4. *`Type 3`:* Require `buf.length === 23 || buf.length === 27`, valid `instId` (non-empty), `buf[8] <= 8`. Canonical continuous (`useCanonicalPipeline && isContinuousTool`): in `handleFreeDrawEnd`, validate `buf.length === 23 || buf.length === 27` and non-empty valid `instId`; if `handleFreeDrawEnd` does not commit, avoid re-broadcasting unvalidated/already-aborted buffers (`Type 12` already handles aborts, or check whether cancelled `Type 3` broadcast in `else` should simply remain gated by structural validity `[23|27]`).
-     5. *`Type 5`:* Require exact `buf.length === 8` (allowing all-zero `instId === ""` or valid `[a-zA-Z0-9_-]{1,7}` ASCII) before `handleFreeDrawClear` / `recordDrawCommand` / broadcast.
-     6. *`Type 6`:* Require exact `buf.length === 8` and valid non-empty `instId` before `recordDrawCommand` / broadcast.
-     7. *`Type 7`:* In Free Draw / Experimental require exact `buf.length === 10` (plus valid non-empty `instId` and existing `drawingIdentities` check for Free Draw); in Normal mode require `buf.length === 8 || buf.length === 10` (plus valid non-empty `instId`) before `undoLastDrawing` and `io.to(roomId).emit`.
-     8. *`Type 8`:* Keep Free Draw / Experimental rejection; in Normal mode require exact `buf.length === 8` (plus valid non-empty `instId`) before `redoDrawing` and `io.to(roomId).emit`.
-   - *Explicitly Excluded From Slice 2:* `Type 4` (`Slice 4`), `Type 9` & `>3,000`-pt Redo lifecycle (`Slice 3`), `Type 10` (`AGENTS.md` preserved), `maxHttpBufferSize` (`Slice 5`), rate limits, client edits, and behavioral changes to undo/abort state machines unless required by structural rejection.
+2. **Slice 2 — Canonical Stream & Control-Packet Structural Validation *(AWAITING VERIFICATION)***
+   - *Goal:* Harden structural validation of supported stream and control packets (`Type 1`, `Type 2`, `Type 3`, `Type 5`, `Type 6`, `Type 7`, `Type 8`) without changing gameplay semantics, altering wire formats, adding arbitrary point-count caps, or breaking legitimate client compatibility.
+   - *Files Modified:* `server/utils/binaryBufferHelpers.ts`, `server/roomCanonicalStrokeEngine.ts`, `server/registerDrawBinaryHandler.ts`, `scripts/test_session_identity_suite.ts` (corrected `AUTH-11.1` / `AUTH-11.2` Normal-mode `Type 7` fixture to 8 bytes), and `scripts/test_phase9a_slice2.ts` (174/174 passed).
+   - **Resolved Final Compatibility Decisions (Types `1, 2, 3, 5, 6, 7, 8`):**
+     1. **`Type 7` (`MSG_DRAW_UNDO`) Mode-Specific Length Policy:**
+        - *Finding:* Normal-mode production client (`DrawingCanvasCore.tsx:2452`) always calls `emitDrawCommand('draw_undo', {})` -> **`8` bytes**. Free Draw / Experimental (`2407`) always calls `emitDrawCommand('draw_undo', { strokeId })` -> **`10` bytes**. Zero production client paths emit `10` bytes in Normal mode (`drawBinaryHelper.ts:644` treats `strokeId` at bytes `8..9` as optional strictly because Normal mode sends `8` bytes). `scripts/test_session_identity_suite.ts:1074, 1157` (`AUTH-11.1`) passes a `10`-byte packet in Normal mode only because the test helper `makeType7` defaulted `strokeId = 1`.
+        - *Final Rule:* Enforce exact **`buf.length === 8`** in Normal / Competitive mode (`!isFreeDraw && !isExperimental`) and exact **`buf.length === 10`** in Free Draw / Experimental (`isFreeDraw || isExperimental`). Correct `AUTH-11.1` (`test_session_identity_suite.ts:1157`, and `1212` for consistency) to emit `8`-byte Normal `Type 7` packets alongside Slice 2 implementation rather than weakening production ingress.
+     2. **`Type 1` (`MSG_DRAW_START`) & `Type 3` (`MSG_DRAW_END`) Tool Allowlist:**
+        - *Finding:* `TOOLS_LIST` (`drawBinaryHelper.ts:68`) contains `0:'pencil'`, `1:'eraser'`, `2:'bucket'`, `3:'line'`, `4:'strokeRect'`, `5:'fillRect'`, `6:'strokeCircle'`, `7:'fillCircle'`, `8:'pipette'`. In `DrawingCanvasCore.tsx:5091-5213`, `bucket` (`2`) uses `Type 4` (`draw_action`) and returns early; `pipette` (`8`) is purely local sampling and emits no network packets. Only continuous tools (`0, 1`) and shape tools (`3, 4, 5, 6, 7`) emit `Type 1` (`4615, 4942`) and `Type 3` (`4891, 5021`); server catch-up `createType1Buffer` (`rooms.ts:1232`) emits only `0` or `1`. Accepting `2` (`bucket`) or `8` (`pipette`) on `Type 1`/`3` would spoof shape sessions (`activeSessionsRef`) and pollute `drawHistory`.
+        - *Final Rule:* Reject `2` (`bucket`), `8` (`pipette`), and `9..255` on `Type 1` and `Type 3`. Exact allowed tool index set is **`{0, 1, 3, 4, 5, 6, 7}`** (`tool <= 7 && tool !== 2`). Note `isContinuousTool` stays `{0, 1}`.
+     3. **`Type 2` (`MSG_DRAW_MOVE`) Zero-Count & Maximum-Count Boundary:**
+        - *Finding:* Normal UI client (`DrawingCanvasCore.tsx:4739, 4809`) guards `moveBatchRef.current.length > 0`, so real clients never emit `count = 0`. However, canonical `decodeType13BufferSafely` (`binaryBufferHelpers.ts:48-53`) explicitly treats `count = 0` (`10` B) as a valid empty packet, and `defaultRelayFreeDrawMove` (`registerDrawBinaryHandler.ts:43` -> `createType2Buffer`) emits a `10`-B `count = 0` fallback buffer if relaying an empty `Type 13` (while `syncActiveFreeDrawStrokesToSocket` always has `>= 1` point). Client decoder (`drawBinaryHelper.ts:450-469`) also decodes `count = 0` (`10` B) as a benign `{ moves: [] }` no-op. In canonical mode (`roomCanonicalStrokeEngine.ts:137`), active strokes start with `p0` (`length = 1`) and abort at `stroke.points.length + count > 3000` -> max accepted `count = 2999` (existing canonical bound, max accepted `12,006` B). Normal mode has no client or server point-count cap (`UInt16LE` protocol ceiling `65,535` -> `262,150` B, transport-bounded later in Slice 5).
+        - *Final Rule:* Enforce `buf.length >= 10` and exact `buf.length === 10 + buf.readUInt16LE(8) * 4` (with valid non-empty `instId`) across both `handleFreeDrawMove` and non-canonical `else`, with **zero newly invented point-count cap** (`count = 0` permitted at exact `10` B without introducing arbitrary `count >= 1` or max-count limits).
+     4. **`Type 3` (`MSG_DRAW_END`) Cancelled, Expired, Orphaned & Duplicate Handling:**
+        - *Finding:* Both `23`-B (no `strokeId`/`expectedPointCount`) and `27`-B (current extended metadata, `DrawingCanvasCore.tsx:4891, 5021`) variants are valid; `buf[22] === 1` marks cancelled. In canonical continuous mode (`useCanonicalPipeline && isContinuousTool`, `registerDrawBinaryHandler.ts:208-223`): (a) normal active stroke commits `[Type 9, Type 3]` in `drawHistory`, caches `Type 9`, deletes active stroke, and emits `Type 11` (`draw_commit`); (b) cancelled active stroke (`buf[22] === 1`) or expired active stroke (`> 60s`) triggers `abortFreeDrawStroke` (`rooms.ts:1305`), deleting active stroke and emitting `Type 12` (`draw_abort`), then returns `null`; (c) missing active stroke (orphan) or second duplicate `Type 3` returns `null`. Currently, `registerDrawBinaryHandler.ts:219-223` falls into `else { socket.broadcast.to(roomId).emit('draw_binary', buf); }` whenever `handleFreeDrawEnd` returns `null`, spuriously broadcasting raw `Type 3` **after** `Type 12` abort or without an active stroke. Meanwhile Shape (`!isContinuousTool`) and Normal-mode (`!useCanonicalPipeline`) `Type 3` route through `224-230` (preserving `roomDrawingHistory.ts:60` & spectator completion).
+        - *Final Rule:* Enforce exact `buf.length === 23 || buf.length === 27`, valid non-empty `instId`, and tool in `{0, 1, 3, 4, 5, 6, 7}` before routing. In canonical continuous `Type 3` (`208-223`), emit `Type 11` on commit and **remove the spurious `else` raw `Type 3` broadcast** (`219-223`) so cancelled/expired strokes emit only `Type 12` and orphaned/duplicate strokes drop silently. Preserve existing Shape and Normal-mode `Type 3` routing (`224-230`) unchanged.
+   - **Exact Finalized Slice 2 Implementation Rules:**
+     - *Shared ASCII `instId` check (`server/registerDrawBinaryHandler.ts` & `server/roomCanonicalStrokeEngine.ts`):* Zero-allocation 7-byte scan accepting `[a-zA-Z0-9_-]{1,7}` (non-empty, zero control/non-ASCII bytes). Exception: **`Type 5` ONLY** allows all-zero `instId === ""` OR `[a-zA-Z0-9_-]{1,7}` (rejecting malformed non-zero control/non-ASCII bytes).
+     - **`Type 1`:** `buf.length === 18` && non-empty valid `instId` && `buf[8] <= 7 && buf[8] !== 2`. Canonical continuous (`useCanonicalPipeline && isContinuousTool`): broadcast only if `handleFreeDrawStart(...) === true`.
+     - **`Type 2`:** `buf.length >= 10` && non-empty valid `instId` && `buf.length === 10 + buf.readUInt16LE(8) * 4` (enforced in `handleFreeDrawMove` and non-canonical fallback).
+     - **`Type 3`:** `(buf.length === 23 || buf.length === 27)` && non-empty valid `instId` && `buf[8] <= 7 && buf[8] !== 2`. Canonical continuous: only emits `Type 11` on commit or `Type 12` on abort (`handleFreeDrawEnd`), never re-broadcasting raw `buf` on `null` return. Shape/Normal mode: records & broadcasts structurally valid `23`/`27` B packets as before.
+     - **`Type 5`:** `buf.length === 8` && `(instId === "" || isValidAsciiInstId(instId))` (preserving `DrawingCanvasCore.tsx:2100, 2119` empty-`instId` clear).
+     - **`Type 6`:** `buf.length === 8` && non-empty valid `instId` (preserving current `recordDrawCommand` + broadcast behavior without redesigning canonical cleanup semantics).
+     - **`Type 7`:** In `isFreeDraw || isExperimental`: `buf.length === 10` && non-empty valid `instId` (plus existing Free Draw `drawingIdentities` ownership gate). In Normal mode: `buf.length === 8` && non-empty valid `instId`.
+     - **`Type 8`:** Reject `isFreeDraw || isExperimental`; in Normal mode: `buf.length === 8` && non-empty valid `instId`.
+     - **`Type 10`:** Preserved untouched (`AGENTS.md` compatibility).
+   - *Explicitly Excluded From Slice 2:* `Type 4` (`Slice 4`), `Type 9` & `>3,000`-pt Redo lifecycle (`Slice 3`), `Type 10` (`AGENTS.md`), `maxHttpBufferSize` (`Slice 5`), rate limits, client edits, and `Type 6` canonical stroke-abort semantic redesign.
 
 3. **Slice 3 — `Type 9` & Free Draw `>3,000`-Point / Redo Lifecycle Alignment**
    - *Goal:* Harden client-originated `Type 9` while fixing the confirmed `Type 12` (`draw_abort`) / `>3,000`-pt desync on client Redo.
@@ -275,27 +300,25 @@ This roadmap separates prior claims, independently verified code facts, unverifi
   5. Non-canonical `Type 13` (`!useCanonicalPipeline`) is rejected cleanly without fallback relay or `drawHistory` insertion, while canonical `Type 13` succeeds and relays points normally.
   6. Server-originated `Type 11` (`handleFreeDrawEnd`) and `Type 12` (`abortFreeDrawStroke`) emit and decode accurately for clients.
   7. Supported client `Types 1..9` and `Type 13` codec roundtrips and Normal-room bucket/shape/redo flows remain intact.
-- **New Targeted Tests Needed for Slice 2 (`scripts/test_phase9a_slice2.ts`) & Later Slices (`Slices 3–5`):**
-  - *Slice 2 Regression Matrix (All Tested Across Rejected Without `drawHistory`/Broadcast Mutation + Valid Pass-Through):*
-    1. `Type 2` trailing bytes (`+1`, `+1024`) rejected in canonical (`Free Draw`/`Experimental`) & non-canonical (`Normal`) rooms; valid `10 + N*4` `Type 2` passes.
-    2. `Type 2` truncated (`< 10` or `< 10 + count*4`) rejected.
-    3. `Type 1` (`< 18`, `> 18` trailing bytes, invalid `tool >= 9`, empty `instId`) rejected; valid `18 B` continuous & shape `Type 1` pass.
-    4. `Type 3` (`< 23`, `24..26`, `> 27` trailing bytes, invalid `tool >= 9`, empty `instId`) rejected; valid `23 B` and `27 B` `Type 3` (continuous commit & shape end) pass.
-    5. Cancelled `Type 3` (`buf[22] === 1`, valid `23`/`27` B vs malformed length) triggers clean abort (`Type 12`) when valid and rejects when malformed.
-    6. `Type 5` (`< 8`, `> 8` trailing bytes) rejected; valid `8 B` `Type 5` with BOTH empty all-zero `instId === ""` (`DrawingCanvasCore` production Clear!) AND non-empty `instId` pass.
-    7. `Type 6` (`< 8`, `> 8` trailing bytes, empty `instId`) rejected; valid `8 B` `Type 6` passes.
-    8. `Type 7` in Free Draw / Experimental (`=== 8`, `=== 9`, `> 10` trailing bytes, empty `instId`) rejected; valid `10 B` passes.
-    9. `Type 7` in Normal mode (`< 8`, `=== 9`, `> 10` trailing bytes, empty `instId`) rejected; BOTH `8 B` (client) and `10 B` (`AUTH-11.1`) pass.
-    10. `Type 8` (`< 8`, `> 8` trailing bytes, empty `instId`) rejected in Normal mode (and still rejected in Free Draw / Experimental); valid `8 B` passes in Normal mode.
-    11. Canonical `instId === ""` & non-printable control bytes rejected on `Type 1/2/3/6/7/8`, while `[a-zA-Z0-9_-]{1,7}` test IDs remain accepted.
-    12. Zero regression on `Type 10` compatibility (`test_phase9a_slice1.ts`) and all existing `scripts/` suites (`test_session_identity_suite.ts`, `test_experimental_draw_trial.ts`, etc.).
-  - *Later Slices (`3–5`):* `Type 9` truncated/trailing-byte/`>3,000`-pt Redo tests (`Slice 3`), `Type 4` `{17,19,21,23}` & decoder `DataView` bounds (`Slice 4`), and `maxHttpBufferSize` boundary checks (`Slice 5`).
+- **Slice 2 Regression Suite (`scripts/test_phase9a_slice2.ts` — Executed, 174/174 Passed):**
+  1. `Type 2` trailing bytes (`+1`, `+1024`) and truncated (`< 10`, `< 10 + count*4`) rejected in canonical (`Free Draw`/`Experimental`) & non-canonical (`Normal`) rooms; valid `10 + N*4` `Type 2` (including `count = 0` at `10` B, canonical `2999`-pt max, and large Normal-mode batches) passes without arbitrary count caps, while canonical `> 3,000` pts still aborts with `Type 12`.
+  2. `Type 1` (`< 18`, `> 18` trailing bytes, disallowed tools `2` bucket / `8` pipette / `>= 9`, empty/control `instId`) rejected; valid `18 B` `Type 1` for `{0, 1, 3, 4, 5, 6, 7}` pass in all modes.
+  3. `Type 3` (`22`, `24`, `26`, `28` trailing bytes, disallowed tools `2` / `8` / `>= 9`, empty/control `instId`) rejected; valid `23 B` and `27 B` `Type 3` (continuous commit & shape/Normal end) pass.
+  4. Canonical continuous `Type 3` edge states: cancelled (`buf[22] === 1`) and expired (`> 60s`) emit ONLY `Type 12` (`draw_abort`) without raw `Type 3` broadcast; orphaned and duplicate `Type 3` drop silently without `Type 11` or raw `Type 3` broadcast.
+  5. `Type 5` (`7`, `9`, `64` trailing bytes, malformed control/padding `instId`) rejected; valid `8 B` `Type 5` with BOTH empty all-zero `instId === ""` (`DrawingCanvasCore` production Clear!) AND non-empty `instId` pass.
+  6. `Type 6` (`7`, `9`, `32` trailing bytes, empty/non-ASCII `instId`) rejected; valid `8 B` `Type 6` passes.
+  7. `Type 7` in Free Draw / Experimental (`8`, `9`, `11`, `64` trailing bytes, empty `instId`) rejected; valid `10 B` passes.
+  8. `Type 7` in Normal mode (`7`, `9`, `10`, `20` trailing bytes, empty `instId`) rejected; valid `8 B` Normal packet passes (`AUTH-11.1`/`AUTH-11.2` updated from `10 B` to `8 B`).
+  9. `Type 8` (`7`, `9`, `16` trailing bytes, empty `instId`) rejected in Normal mode (and still rejected in Free Draw / Experimental); valid `8 B` passes in Normal mode.
+  10. Canonical `instId === ""`, embedded null after padding, space, control, and non-ASCII bytes rejected across `Type 1/2/3/6/7/8`, while `[a-zA-Z0-9_-]{1,7}` test IDs remain accepted.
+  11. Zero regression on `Type 10` compatibility (`test_phase9a_slice1.ts`) and all 11 existing `scripts/` regression suites.
+- **Later Slices (`3–5`):** `Type 9` truncated/trailing-byte/`>3,000`-pt Redo tests (`Slice 3`), `Type 4` `{17,19,21,23}` & decoder `DataView` bounds (`Slice 4`), and `maxHttpBufferSize` boundary checks (`Slice 5`).
 
 - **Current Status:**  
-  `IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 IN PROGRESS — READ-ONLY AUDIT (Slices 3–5 Not Started)`
+  `IN PROGRESS — Slice 1 COMPLETED & VERIFIED; Slice 2 AWAITING VERIFICATION (Slices 3–5 Not Started)`
 
 - **Next Exact Action:**  
-  `Review and approve the Slice 2 implementation scope before modifying application source code.`
+  `Complete manual gameplay verification for PHASE 9A Slice 2 (Normal, Free Draw, and Experimental drawing/undo/redo/clear/cancel/shape/bucket flows), then review and approve Slice 3.`
 
 ---
 

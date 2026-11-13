@@ -135,3 +135,72 @@ export function createType1Buffer(
   buf.writeInt16LE(p0_y, 16);
   return buf;
 }
+
+/**
+ * Validates the 7-byte ASCII instanceId slot (bytes 1..7) without heap allocations.
+ * Accepts 1..7 characters from [a-zA-Z0-9_-] followed strictly by 0x00 padding.
+ * Rejects control/non-ASCII characters and non-zero bytes appearing after 0x00 padding.
+ * When `allowEmpty` is true (Type 5 draw_clear compatibility), an all-zero 7-byte slot is allowed.
+ */
+export function isValidInstIdBytes(buf: Buffer, allowEmpty: boolean = false): boolean {
+  if (!Buffer.isBuffer(buf) || buf.length < 8) return false;
+  let seenZero = false;
+  let hasChar = false;
+  for (let i = 1; i <= 7; i++) {
+    const b = buf[i];
+    if (b === 0) {
+      seenZero = true;
+    } else {
+      if (seenZero) return false;
+      const isAllowed =
+        (b >= 48 && b <= 57) || // 0-9
+        (b >= 65 && b <= 90) || // A-Z
+        (b >= 97 && b <= 122) || // a-z
+        b === 95 || // _
+        b === 45; // -
+      if (!isAllowed) return false;
+      hasChar = true;
+    }
+  }
+  return hasChar || allowEmpty;
+}
+
+/**
+ * Validates and extracts the 7-byte ASCII instanceId (bytes 1..7).
+ * Returns null if malformed or empty when `allowEmpty` is false.
+ */
+export function extractValidatedInstId(buf: Buffer, allowEmpty: boolean = false): string | null {
+  if (!Buffer.isBuffer(buf) || buf.length < 8) return null;
+  let seenZero = false;
+  let len = 0;
+  for (let i = 1; i <= 7; i++) {
+    const b = buf[i];
+    if (b === 0) {
+      seenZero = true;
+    } else {
+      if (seenZero) return null;
+      const isAllowed =
+        (b >= 48 && b <= 57) ||
+        (b >= 65 && b <= 90) ||
+        (b >= 97 && b <= 122) ||
+        b === 95 ||
+        b === 45;
+      if (!isAllowed) return null;
+      len++;
+    }
+  }
+  if (len === 0) {
+    return allowEmpty ? "" : null;
+  }
+  return buf.toString("ascii", 1, 1 + len);
+}
+
+/**
+ * Allowed tool indices for Type 1 (DRAW_START) and Type 3 (DRAW_END):
+ * {0: pencil, 1: eraser, 3: line, 4: strokeRect, 5: fillRect, 6: strokeCircle, 7: fillCircle}.
+ * Rejects bucket (2), pipette (8), and out-of-range indices (>= 9).
+ */
+export function isAllowedStartOrEndTool(tool: number): boolean {
+  return tool <= 7 && tool !== 2;
+}
+

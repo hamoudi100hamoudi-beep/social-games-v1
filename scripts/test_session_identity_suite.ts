@@ -1079,6 +1079,13 @@ console.log('\n--- Test Group 11: SERVER-DRAW-AUTH-FIX-1 Tests ---');
     return buf;
   };
 
+  const makeType7Normal = (instId: string = 'inst001') => {
+    const buf = Buffer.alloc(8);
+    buf.writeUInt8(7, 0);
+    buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+    return buf;
+  };
+
   const makeType8 = (instId: string = 'inst001') => {
     const buf = Buffer.alloc(8);
     buf.writeUInt8(8, 0);
@@ -1153,8 +1160,8 @@ console.log('\n--- Test Group 11: SERVER-DRAW-AUTH-FIX-1 Tests ---');
     handleDrawBinary(mockSocket, makeType4('inst111'), deps);
     assert(room.gameState.drawHistory.length === 2, 'AUTH-11.1: Current drawer bucket command recorded in drawHistory');
 
-    // Send undo (Type 7)
-    handleDrawBinary(mockSocket, makeType7('inst111'), deps);
+    // Send undo (Type 7 Normal 8-byte packet)
+    handleDrawBinary(mockSocket, makeType7Normal('inst111'), deps);
     assert(room.gameState.drawHistory.length === 1, 'AUTH-11.1: Current drawer undo removes command from history');
     assert(room.gameState.redoStack.length === 1, 'AUTH-11.1: Current drawer undo pushes to redoStack');
     assert(ioEmits.length === 1, 'AUTH-11.1: Current drawer undo emitted to room via io.to()');
@@ -1208,8 +1215,8 @@ console.log('\n--- Test Group 11: SERVER-DRAW-AUTH-FIX-1 Tests ---');
     assert(room.gameState.drawHistory.length === 0, 'AUTH-11.2: Guesser clear command is rejected');
     assert(broadcastEmits.length === 0, 'AUTH-11.2: Guesser clear command not broadcast');
 
-    // Guesser tries to undo
-    handleDrawBinary(mockSocket, makeType7('inst222'), deps);
+    // Guesser tries to undo (Type 7 Normal 8-byte packet)
+    handleDrawBinary(mockSocket, makeType7Normal('inst222'), deps);
     assert(ioEmits.length === 0, 'AUTH-11.2: Guesser undo command is rejected (no io emit)');
 
     // Guesser tries to redo
