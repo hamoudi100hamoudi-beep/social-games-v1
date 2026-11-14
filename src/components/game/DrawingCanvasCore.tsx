@@ -54,6 +54,23 @@ export const FREE_DRAW_LOGICAL_WIDTH = 680;
 export const FREE_DRAW_LOGICAL_HEIGHT = 396;
 export const FREE_DRAW_TAIL_SIZE = 40;
 export const FREE_DRAW_BUCKET_TAIL_THRESHOLD = 3;
+export const CANONICAL_STROKE_MAX_POINTS = 3000;
+export const CANONICAL_FINISH_ENDPOINT_RESERVE = 1;
+
+/**
+ * Pure prospective limit check for canonical continuous segments (Free Draw / Experimental).
+ * Reserves `finishReserve` (1) point so finishCurrentStroke()'s optional endDist >= 1.0 endpoint
+ * never causes a committed canonical segment to exceed 3,000 points on the server.
+ */
+export function willCanonicalSegmentExceedLimit(
+  sentPointCount: number,
+  pendingBatchCount: number,
+  incomingPointCount: number,
+  maxPoints: number = CANONICAL_STROKE_MAX_POINTS,
+  finishReserve: number = CANONICAL_FINISH_ENDPOINT_RESERVE
+): boolean {
+  return sentPointCount + pendingBatchCount + incomingPointCount + finishReserve > maxPoints;
+}
 
 const DEFAULT_LOGICAL_WIDTH = CANVAS_WIDTH;
 const DEFAULT_LOGICAL_HEIGHT = CANVAS_HEIGHT;
@@ -3126,9 +3143,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const { event, data } = decoded;
       if (!data) return;
 
-      // In Free Draw / Experimental, allow draw_undo to reach the sender so their canvas stays 100% authoritative and synchronized with the server broadcast
+      // In Free Draw / Experimental, allow draw_undo to reach the sender so their canvas stays 100% authoritative and synchronized with the server broadcast.
+      // Always allow draw_abort (Type 12) to reach the originating sender so local active or late-aborted strokes roll back cleanly.
       const isFreeDrawUndo = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental) && event === 'draw_undo';
-      if (data.instanceId === instanceId && !isFreeDrawUndo) return;
+      const isLocalDrawAbort = event === 'draw_abort';
+      if (data.instanceId === instanceId && !isFreeDrawUndo && !isLocalDrawAbort) return;
 
       const remoteTool = data.tool || 'pencil';
       const remoteColor = data.color || '#000000';
@@ -3392,9 +3411,124 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
       } else if (event === 'draw_abort') {
-        delete activeSessionsRef.current[data.instanceId];
-        drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
-        executeRedrawTempLayer();
+        if (data.instanceId !== instanceId) {
+          delete activeSessionsRef.current[data.instanceId];
+          drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== data.instanceId);
+          executeRedrawTempLayer();
+          return;
+        }
+
+        const abortedStrokeId = data.strokeId || 0;
+        const matchesActiveStroke =
+          isDrawingRef.current &&
+          (abortedStrokeId === 0 || currentLocalStrokeIdRef.current === abortedStrokeId);
+
+        if (matchesActiveStroke) {
+          // Case 1: Active stroke rejected by server while pointer/touch is still down
+          isDrawingRef.current = false;
+          hasDrawnMeaningfulStrokeRef.current = false;
+          strokeStartCssPosRef.current = null;
+          activePointerIdRef.current = null;
+          exitedOutsideWhilePointerDownRef.current = false;
+          lastOutsidePointerRef.current = null;
+          touchStartedOutsideRef.current = false;
+          touchDrawingActiveFromOutsideRef.current = false;
+          lastOutsideTouchRef.current = null;
+          outsideShapeStartCoordsRef.current = null;
+
+          if (throttleTimeoutRef.current) {
+            clearTimeout(throttleTimeoutRef.current);
+            throttleTimeoutRef.current = null;
+          }
+
+          currentPathRef.current = [];
+          moveBatchRef.current = [];
+          networkStrokePointsRef.current = [];
+          canonicalStrokeRef.current = [];
+          lastNetworkPointRef.current = null;
+          lastNetworkDirXRef.current = 0;
+          lastNetworkDirYRef.current = 0;
+          lastNetworkSegmentLenRef.current = 0;
+          consecutiveTurnsRef.current = 0;
+          drawerNetworkPointCountRef.current = 0;
+
+          undoCache.discardPending();
+          delete activeSessionsRef.current[instanceId];
+          drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== instanceId);
+          executeRedrawTempLayer();
+          syncHistoryButtons();
+        } else if (abortedStrokeId > 0) {
+          // Case 2: Late post-release abort (e.g. 60s expiry at draw_end) for an already-recorded local command
+          drainingStrokesRef.current = drainingStrokesRef.current.filter(
+            s => !(s.instanceId === instanceId && s.strokeId === abortedStrokeId)
+          );
+
+          const list = localCommandsRef.current;
+          let targetIndex = -1;
+          for (let i = list.length - 1; i >= 0; i--) {
+            const cmd = list[i];
+            if (cmd && !isClearCommand(cmd)) {
+              const cmdInstId = cmd.instanceId || (cmd.data && typeof cmd.data === 'object' ? cmd.data.instanceId : undefined);
+              if (cmdInstId === instanceId && cmd.strokeId === abortedStrokeId) {
+                targetIndex = i;
+                break;
+              }
+            }
+          }
+
+          if (targetIndex !== -1) {
+            const hadActiveNewerStroke = isDrawingRef.current;
+            const restoredViaFastPath =
+              undoCache.canRestoreFastPath(instanceId, abortedStrokeId, targetIndex) &&
+              undoCache.restoreFromUndoCache();
+
+            invalidateCheckpointsAfterIndex(targetIndex);
+            list.splice(targetIndex, 1);
+
+            if (targetIndex < list.length) {
+              for (let i = targetIndex; i < list.length; i++) {
+                if (list[i]?._replayHint) {
+                  delete list[i]._replayHint;
+                  delete list[i]._replayColor;
+                  delete list[i]._replayOpacity;
+                }
+              }
+            }
+
+            if (restoredViaFastPath) {
+              if (targetIndex < list.length) {
+                isReplayingRef.current = true;
+                const replayPaths: Record<string, { x: number; y: number }[]> = {};
+                const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
+                for (let i = targetIndex; i < list.length; i++) {
+                  applyReplayCommand(ctx, list[i], replayPaths, replaySessions, null);
+                }
+                renderLeftoverReplaySessions(ctx, replayPaths, replaySessions, replayOptionsRef.current);
+                isReplayingRef.current = false;
+              }
+              undoCache.invalidateCommittedCaches();
+              saveSnapshot();
+            } else {
+              undoCache.invalidateCommittedCaches();
+              replayFreeDrawHistorySafely(list);
+              saveSnapshot();
+            }
+
+            // If user already began a newer stroke before this late abort arrived,
+            // refresh its pending Undo snapshot so it does not keep pixels from the aborted stroke.
+            if (hadActiveNewerStroke && undoCache.hasPendingCache()) {
+              stageFreeDrawPendingCache();
+            }
+
+            syncHistoryButtons();
+          }
+
+          executeRedrawTempLayer();
+        } else {
+          delete activeSessionsRef.current[instanceId];
+          drainingStrokesRef.current = drainingStrokesRef.current.filter(s => s.instanceId !== instanceId);
+          executeRedrawTempLayer();
+        }
       } else if (event === 'draw_end') {
         const session = activeSessionsRef.current[data.instanceId];
         if (session) {
@@ -4554,7 +4688,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     });
   };
 
-  const startPencilOrEraserStroke = (logicalX: number, logicalY: number) => {
+  const startPencilOrEraserStroke = (
+    logicalX: number,
+    logicalY: number,
+    options?: { fromAutoSplit?: boolean }
+  ) => {
     if (propsRef.current.readOnly) return;
     if (isDrawingRef.current) return;
     if (isZoomPinchingRef.current || activeTouchCountRef.current >= 2) return;
@@ -4570,7 +4708,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const activeOpacity = propsRef.current.opacity;
 
     isDrawingRef.current = true;
-    hasDrawnMeaningfulStrokeRef.current = false;
+    hasDrawnMeaningfulStrokeRef.current = Boolean(options?.fromAutoSplit);
     strokeStartCssPosRef.current = { x: logicalX, y: logicalY };
     startXRef.current = logicalX;
     startYRef.current = logicalY;
@@ -4672,6 +4810,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const brushSize = activeWidth;
     const currentThreshold = brushSize < 6 ? 0.5 : (brushSize > 10 ? 3.5 : 1.5);
+    const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
+    let incomingWirePoints = 1;
+    let pendingLerpStepsCount = 0;
+    let lerpBaseX = 0;
+    let lerpBaseY = 0;
 
     if (path.length > 0) {
       const lastPt = path[path.length - 1];
@@ -4681,24 +4824,59 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         return;
       }
 
-      const useInputOptimizations = propsRef.current.isFreeDraw || Boolean(propsRef.current.enableInputOptimizations);
-
       if (!useInputOptimizations && dist > 8) {
         const stepSize = 6;
         const stepsCount = Math.floor(dist / stepSize);
         if (stepsCount > 1) {
-          for (let i = 1; i < stepsCount; i++) {
-            const t = i / stepsCount;
-            const lerpX = Math.round((lastPt.x + (roundedX - lastPt.x) * t) * 10) / 10;
-            const lerpY = Math.round((lastPt.y + (roundedY - lastPt.y) * t) * 10) / 10;
-            path.push({ x: lerpX, y: lerpY });
-            moveBatchRef.current.push({ x: lerpX / LOGICAL_WIDTH, y: lerpY / LOGICAL_HEIGHT });
+          pendingLerpStepsCount = stepsCount;
+          lerpBaseX = lastPt.x;
+          lerpBaseY = lastPt.y;
+          incomingWirePoints += stepsCount - 1;
+        }
+      }
+    }
+
+    const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
+    if (
+      isContinuousMode &&
+      willCanonicalSegmentExceedLimit(
+        drawerNetworkPointCountRef.current,
+        moveBatchRef.current.length,
+        incomingWirePoints
+      )
+    ) {
+      const splitAnchor = finishCurrentStroke();
+      if (!splitAnchor) return;
+      startPencilOrEraserStroke(splitAnchor.x, splitAnchor.y, { fromAutoSplit: true });
+      if (!isDrawingRef.current) return;
+
+      // Recompute any synthetic lerp relative to the new segment's canonical p0
+      pendingLerpStepsCount = 0;
+      if (!useInputOptimizations && currentPathRef.current.length > 0) {
+        const newLastPt = currentPathRef.current[currentPathRef.current.length - 1];
+        const newDist = Math.hypot(roundedX - newLastPt.x, roundedY - newLastPt.y);
+        if (newDist > 8) {
+          const stepsCount = Math.floor(newDist / 6);
+          if (stepsCount > 1) {
+            pendingLerpStepsCount = stepsCount;
+            lerpBaseX = newLastPt.x;
+            lerpBaseY = newLastPt.y;
           }
         }
       }
     }
 
-    path.push({ x: roundedX, y: roundedY });
+    if (pendingLerpStepsCount > 1) {
+      for (let i = 1; i < pendingLerpStepsCount; i++) {
+        const t = i / pendingLerpStepsCount;
+        const lerpX = Math.round((lerpBaseX + (roundedX - lerpBaseX) * t) * 10) / 10;
+        const lerpY = Math.round((lerpBaseY + (roundedY - lerpBaseY) * t) * 10) / 10;
+        currentPathRef.current.push({ x: lerpX, y: lerpY });
+        moveBatchRef.current.push({ x: lerpX / LOGICAL_WIDTH, y: lerpY / LOGICAL_HEIGHT });
+      }
+    }
+
+    currentPathRef.current.push({ x: roundedX, y: roundedY });
 
     const isSingleSource = Boolean(
       (propsRef.current.isFreeDraw || propsRef.current.isExperimental) &&
@@ -4731,7 +4909,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       lastNetworkPointRef.current = { x: roundedX, y: roundedY };
     }
 
-    const isContinuousMode = Boolean(propsRef.current.isFreeDraw || propsRef.current.isExperimental);
     const intervalMs = 200;
 
     if (!throttleTimeoutRef.current) {
@@ -4755,14 +4932,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     }
   };
 
-  const finishCurrentStroke = () => {
+  const finishCurrentStroke = (): { x: number; y: number } | null => {
     const canvas = canvasRef.current;
     const tempCanvas = tempCanvasRef.current;
     const ctx = ctxRef.current;
     const tempCtx = tempCtxRef.current;
-    if (!canvas || !tempCanvas || !ctx || !tempCtx) return;
+    if (!canvas || !tempCanvas || !ctx || !tempCtx) return null;
 
-    if (!isDrawingRef.current) return;
+    if (!isDrawingRef.current) return null;
 
     const activeTool = propsRef.current.tool;
     const activeColor = propsRef.current.color;
@@ -4899,6 +5076,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       });
     }
 
+    const finalAnchor = lastNetworkPointRef.current
+      ? { x: lastNetworkPointRef.current.x, y: lastNetworkPointRef.current.y }
+      : null;
+
     currentPathRef.current = [];
     networkStrokePointsRef.current = [];
     canonicalStrokeRef.current = [];
@@ -4909,6 +5090,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     consecutiveTurnsRef.current = 0;
     drawerNetworkPointCountRef.current = 0;
     saveSnapshot();
+    return finalAnchor;
   };
 
   const startShapeDrawing = (rawX: number, rawY: number) => {

@@ -204,3 +204,38 @@ export function isAllowedStartOrEndTool(tool: number): boolean {
   return tool <= 7 && tool !== 2;
 }
 
+/**
+ * Validates Type 9 (DRAW_STROKE) binary packet header, length, tool, and mode rules in O(1):
+ * - Header: >= 16 bytes, type === 9, valid non-empty ASCII instId, tool in {0, 1, 3, 4, 5, 6, 7}.
+ * - Point count: readUInt16LE(14) >= 1; if shape tool (>= 3), exact pointsLength === 2.
+ * - Mode & strokeId length:
+ *   - Canonical pipeline (Free Draw / Experimental): pointsLength <= 3000 and exact 2-byte strokeId trailer (16 + N * 4 + 2).
+ *   - Normal / Competitive: pointsLength in 1..65535; shape requires 26 bytes (with strokeId),
+ *     continuous {0, 1} allows optional strokeId (16 + N * 4 or 16 + N * 4 + 2).
+ */
+export function isValidType9Packet(buf: Buffer, useCanonicalPipeline: boolean): boolean {
+  if (!Buffer.isBuffer(buf) || buf.length < 16 || buf[0] !== 9) return false;
+  if (!isValidInstIdBytes(buf, false)) return false;
+
+  const tool = buf[8];
+  if (!isAllowedStartOrEndTool(tool)) return false;
+
+  const pointsLength = buf.readUInt16LE(14);
+  if (pointsLength === 0) return false;
+
+  const isShape = tool >= 3;
+  if (isShape && pointsLength !== 2) return false;
+
+  const bodyEnd = 16 + pointsLength * 4;
+  if (useCanonicalPipeline) {
+    if (pointsLength > 3000) return false;
+    return buf.length === bodyEnd + 2;
+  }
+
+  if (isShape) {
+    return buf.length === bodyEnd + 2;
+  }
+
+  return buf.length === bodyEnd || buf.length === bodyEnd + 2;
+}
+

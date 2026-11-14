@@ -3,7 +3,8 @@ import { createType2Buffer } from './rooms.js';
 import {
   extractValidatedInstId,
   isAllowedStartOrEndTool,
-  isValidInstIdBytes
+  isValidInstIdBytes,
+  isValidType9Packet
 } from './utils/binaryBufferHelpers.js';
 
 export interface DrawBinaryDependencies {
@@ -272,8 +273,17 @@ export function handleDrawBinary(
           socket.broadcast.to(roomId).emit('draw_binary', buf);
         }
       }
+    } else if (type === 9) { // draw_stroke
+      // Strict O(1) structural validation before history insertion, redoStack clearing, or broadcast
+      if (!isValidType9Packet(buf, useCanonicalPipeline)) {
+        return;
+      }
+      roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+      if (socket.broadcast && typeof socket.broadcast.to === 'function') {
+        socket.broadcast.to(roomId).emit('draw_binary', buf);
+      }
     } else {
-      // Remaining supported types (Type 4 bucket, Type 9 stroke, legacy Type 10)
+      // Remaining supported types (Type 4 bucket, legacy Type 10)
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
