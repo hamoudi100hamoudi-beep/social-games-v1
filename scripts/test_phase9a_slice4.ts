@@ -206,6 +206,7 @@ console.log('── Part 1: Server Type 4 O(1) Validation Across All Modes ─�
 
 for (const mode of ['normal', 'experimental', 'freedraw'] as const) {
   const { rm, room, drawerSocket, deps, broadcasts } = setupModeRoom(mode);
+  try {
 
   // Valid 17, 19, 21, 23 byte forms
   const v17 = makeRawType4({ length: 17, instId: 'u000001', tool: 2, opacity: 100, x: 0, y: 10000 });
@@ -289,20 +290,24 @@ for (const mode of ['normal', 'experimental', 'freedraw'] as const) {
   room.gameState.drawHistory = [];
   rm.recordDrawCommand(room.id, 'draw_binary', v23);
   check(room.gameState.drawHistory.length === 1, `[${mode}] AGENTS.md first-action Type 4 on empty history succeeds`);
-
-  stopManagerTimer(rm);
+  } finally {
+    stopManagerTimer(rm);
+  }
 }
 
 // Verify Type 10 legacy compatibility preserved cleanly alongside explicit Type 4 branch
 {
   const { rm, room, drawerSocket, deps, broadcasts } = setupModeRoom('normal');
-  const legacyType10 = Buffer.from([10, 0x75, 0x31, 0, 0, 0, 0, 0, 99, 88]);
-  handleDrawBinary(drawerSocket, legacyType10, deps);
-  check(
-    room.gameState.drawHistory.length === 1 && broadcasts.length === 1,
-    'Legacy Type 10 (>8B) still passes to recordDrawCommand and broadcasts normally'
-  );
-  stopManagerTimer(rm);
+  try {
+    const legacyType10 = Buffer.from([10, 0x75, 0x31, 0, 0, 0, 0, 0, 99, 88]);
+    handleDrawBinary(drawerSocket, legacyType10, deps);
+    check(
+      room.gameState.drawHistory.length === 1 && broadcasts.length === 1,
+      'Legacy Type 10 (>8B) still passes to recordDrawCommand and broadcasts normally'
+    );
+  } finally {
+    stopManagerTimer(rm);
+  }
 }
 
 // O(1) throughput sanity benchmark for isValidType4Packet
@@ -631,3 +636,4 @@ console.log('=================================================================='
 if (failCount > 0) {
   process.exit(1);
 }
+process.exit(0);
