@@ -4,6 +4,7 @@ import {
   extractValidatedInstId,
   isAllowedStartOrEndTool,
   isValidInstIdBytes,
+  isValidType4Packet,
   isValidType9Packet
 } from './utils/binaryBufferHelpers.js';
 
@@ -282,8 +283,17 @@ export function handleDrawBinary(
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
+    } else if (type === 4) { // draw_action (bucket)
+      // Strict O(1) structural and field validation before history insertion, redoStack mutation, or broadcast
+      if (!isValidType4Packet(buf)) {
+        return;
+      }
+      roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+      if (socket.broadcast && typeof socket.broadcast.to === 'function') {
+        socket.broadcast.to(roomId).emit('draw_binary', buf);
+      }
     } else {
-      // Remaining supported types (Type 4 bucket, legacy Type 10)
+      // Remaining supported legacy type (Type 10 clear compatibility)
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);

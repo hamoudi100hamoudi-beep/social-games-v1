@@ -1058,9 +1058,16 @@ console.log('\n--- Test Group 11: SERVER-DRAW-AUTH-FIX-1 Tests ---');
   };
 
   const makeType4 = (instId: string = 'inst001') => {
-    const buf = Buffer.alloc(20);
-    buf.writeUInt8(4, 0);
+    const buf = Buffer.alloc(17);
+    buf.writeUInt8(4, 0); // MSG_DRAW_ACTION
     buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+    buf.writeUInt8(2, 8); // tool = bucket
+    buf.writeUInt8(255, 9); // r
+    buf.writeUInt8(0, 10); // g
+    buf.writeUInt8(0, 11); // b
+    buf.writeUInt8(100, 12); // opacity = 1.0 (0..100)
+    buf.writeUInt16LE(5000, 13); // x = 0.5 (0..10000)
+    buf.writeUInt16LE(5000, 15); // y = 0.5 (0..10000)
     return buf;
   };
 

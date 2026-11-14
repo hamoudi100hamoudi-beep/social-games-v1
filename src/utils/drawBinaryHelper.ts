@@ -401,7 +401,7 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       buffer = input;
     } else if (input && input.buffer instanceof ArrayBuffer) {
       const offset = input.byteOffset || 0;
-      const length = input.byteLength || input.buffer.byteLength;
+      const length = typeof input.byteLength === 'number' ? input.byteLength : input.buffer.byteLength;
       buffer = input.buffer.slice(offset, offset + length);
     } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(input)) {
       buffer = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
@@ -423,7 +423,6 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
   try {
     const view = new DataView(buffer);
     if (view.byteLength < 8) {
-      console.warn("[decodeBinaryDrawMessage] DataView byteLength is too small:", view.byteLength);
       return null;
     }
     
@@ -431,6 +430,7 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     const instId = readString7(view, 1);
     
     if (type === MSG_DRAW_START) {
+      if (view.byteLength !== 18) return null;
       const tool = getToolName(view.getUint8(8));
       const r = view.getUint8(9);
       const g = view.getUint8(10);
@@ -448,7 +448,9 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
     
     if (type === MSG_DRAW_MOVE) {
+      if (view.byteLength < 10) return null;
       const movesLength = view.getUint16(8, true);
+      if (view.byteLength !== 10 + movesLength * 4) return null;
       const moves = [];
       for (let i = 0; i < movesLength; i++) {
         const x = view.getInt16(10 + i * 4, true) / 10000;
@@ -530,6 +532,7 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
     
     if (type === MSG_DRAW_END) {
+      if (view.byteLength !== 23 && view.byteLength !== 27) return null;
       const tool = getToolName(view.getUint8(8));
       const r = view.getUint8(9);
       const g = view.getUint8(10);
@@ -542,7 +545,7 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       const x = view.getInt16(18, true) / 10000;
       const y = view.getInt16(20, true) / 10000;
       
-      const isCancelled = view.byteLength >= 23 ? (view.getUint8(22) === 1) : false;
+      const isCancelled = view.getUint8(22) === 1;
       
       return {
         event: 'draw_end',
@@ -551,16 +554,25 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
     
     if (type === MSG_DRAW_ACTION) {
-      const tool = getToolName(view.getUint8(8));
+      const len = view.byteLength;
+      if (len !== 17 && len !== 19 && len !== 21 && len !== 23) return null;
+      const toolIdx = view.getUint8(8);
+      if (toolIdx !== 2) return null; // Bucket only
+      const tool = getToolName(toolIdx);
       const r = view.getUint8(9);
       const g = view.getUint8(10);
       const b = view.getUint8(11);
       const color = formatRGBToHex(r, g, b);
-      const opacity = view.getUint8(12) / 100;
-      const x = view.getUint16(13, true) / 10000;
-      const y = view.getUint16(15, true) / 10000;
+      const rawOpacity = view.getUint8(12);
+      if (rawOpacity > 100) return null;
+      const opacity = rawOpacity / 100;
+      const rawX = view.getUint16(13, true);
+      const rawY = view.getUint16(15, true);
+      if (rawX > 10000 || rawY > 10000) return null;
+      const x = rawX / 10000;
+      const y = rawY / 10000;
       
-      const hasTarget = view.byteLength >= 21;
+      const hasTarget = len === 21 || len === 23;
       const targetRGBA = hasTarget ? {
         r: view.getUint8(17),
         g: view.getUint8(18),
@@ -569,9 +581,9 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       } : undefined;
       
       let strokeId: number | undefined;
-      if (hasTarget && view.byteLength >= 23) {
+      if (len === 23) {
         strokeId = view.getUint16(21, true);
-      } else if (!hasTarget && view.byteLength >= 19) {
+      } else if (len === 19) {
         strokeId = view.getUint16(17, true);
       }
 
@@ -582,6 +594,13 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
     
     if (type === MSG_DRAW_STROKE) {
+      if (view.byteLength < 16) return null;
+      const pointsLength = view.getUint16(14, true);
+      const expectedLen = 16 + pointsLength * 4;
+      if (view.byteLength !== expectedLen && view.byteLength !== expectedLen + 2) {
+        return null;
+      }
+
       const tool = getToolName(view.getUint8(8));
       const r = view.getUint8(9);
       const g = view.getUint8(10);
@@ -589,7 +608,6 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       const color = formatRGBToHex(r, g, b);
       const width = view.getUint8(12);
       const opacity = view.getUint8(13) / 100;
-      const pointsLength = view.getUint16(14, true);
       const points = [];
       for (let i = 0; i < pointsLength; i++) {
         const x = view.getInt16(16 + i * 4, true) / 10000;
@@ -597,11 +615,9 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
         points.push({ x, y });
       }
 
-      let strokeId: number | undefined;
-      const expectedLen = 16 + pointsLength * 4;
-      if (view.byteLength >= expectedLen + 2) {
-        strokeId = view.getUint16(expectedLen, true);
-      }
+      const strokeId = view.byteLength === expectedLen + 2
+        ? view.getUint16(expectedLen, true)
+        : undefined;
 
       return {
         event: 'draw_stroke',
@@ -610,6 +626,7 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
 
     if (type === MSG_DRAW_COMMIT) {
+      if (view.byteLength !== 12) return null;
       const strokeId = view.getUint16(8, true);
       const pointCount = view.getUint16(10, true);
       return {
@@ -619,6 +636,7 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
 
     if (type === MSG_DRAW_ABORT) {
+      if (view.byteLength !== 10) return null;
       const strokeId = view.getUint16(8, true);
       return {
         event: 'draw_abort',
@@ -626,7 +644,16 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
       };
     }
     
-    if (type === MSG_DRAW_CLEAR || type === 10) {
+    if (type === MSG_DRAW_CLEAR) {
+      if (view.byteLength !== 8) return null;
+      return {
+        event: 'draw_clear',
+        data: { instanceId: instId, strokeId: undefined }
+      };
+    }
+
+    if (type === 10) {
+      // Legacy clear marker: preserve minimum 8-byte contract without unverified upper length clamp
       return {
         event: 'draw_clear',
         data: { instanceId: instId, strokeId: undefined }
@@ -634,6 +661,7 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
 
     if (type === MSG_DRAW_CANCEL) {
+      if (view.byteLength !== 8) return null;
       return {
         event: 'draw_cancel',
         data: { instanceId: instId, strokeId: undefined }
@@ -641,7 +669,8 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
 
     if (type === MSG_DRAW_UNDO) {
-      const strokeId = view.byteLength >= 10 ? view.getUint16(8, true) : undefined;
+      if (view.byteLength !== 8 && view.byteLength !== 10) return null;
+      const strokeId = view.byteLength === 10 ? view.getUint16(8, true) : undefined;
       return {
         event: 'draw_undo',
         data: { instanceId: instId, strokeId }
@@ -649,6 +678,7 @@ export const decodeBinaryDrawMessage = (input: any): { event: string, data: any 
     }
 
     if (type === MSG_DRAW_REDO) {
+      if (view.byteLength !== 8) return null;
       return {
         event: 'draw_redo',
         data: { instanceId: instId, strokeId: undefined }

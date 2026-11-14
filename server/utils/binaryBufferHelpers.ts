@@ -239,3 +239,23 @@ export function isValidType9Packet(buf: Buffer, useCanonicalPipeline: boolean): 
   return buf.length === bodyEnd || buf.length === bodyEnd + 2;
 }
 
+/**
+ * Validates Type 4 (DRAW_ACTION / bucket fill) binary packet in O(1):
+ * - Length must be one of the 4 verified layouts: 17, 19, 21, or 23 bytes
+ *   (17: base; 19: +strokeId; 21: +targetRGBA; 23: +targetRGBA+strokeId).
+ * - Byte 0 === 4, valid non-empty ASCII instId, tool === 2 ('bucket'),
+ *   opacity <= 100, and normalized UInt16LE x/y coordinates <= 10000.
+ */
+export function isValidType4Packet(buf: Buffer): boolean {
+  if (!Buffer.isBuffer(buf) || buf[0] !== 4) return false;
+  const len = buf.length;
+  if (len !== 17 && len !== 19 && len !== 21 && len !== 23) return false;
+  if (!isValidInstIdBytes(buf, false)) return false;
+  if (buf[8] !== 2) return false;
+  if (buf[12] > 100) return false;
+  const x = buf.readUInt16LE(13);
+  const y = buf.readUInt16LE(15);
+  if (x > 10000 || y > 10000) return false;
+  return true;
+}
+

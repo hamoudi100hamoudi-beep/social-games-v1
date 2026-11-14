@@ -72,6 +72,35 @@ export function willCanonicalSegmentExceedLimit(
   return sentPointCount + pendingBatchCount + incomingPointCount + finishReserve > maxPoints;
 }
 
+export interface ValidBatchBucketPayload {
+  x: number;
+  y: number;
+  color: string;
+  opacity: number;
+  targetRGBA?: TargetRGBA;
+}
+
+/**
+ * Validates a decoded binary command for batch raster bucket replay, preventing
+ * malformed/null entries or non-bucket tools from passing NaN into executeRasterFloodFill.
+ */
+export function getValidBatchBucketPayload(
+  decoded: { event?: string; data?: any } | null | undefined
+): ValidBatchBucketPayload | null {
+  if (!decoded || decoded.event !== 'draw_action' || !decoded.data) return null;
+  const d = decoded.data;
+  if (d.tool !== 'bucket') return null;
+  if (typeof d.x !== 'number' || typeof d.y !== 'number') return null;
+  if (!Number.isFinite(d.x) || !Number.isFinite(d.y)) return null;
+  return {
+    x: d.x,
+    y: d.y,
+    color: typeof d.color === 'string' && d.color ? d.color : '#000000',
+    opacity: typeof d.opacity === 'number' && Number.isFinite(d.opacity) ? d.opacity : 1,
+    targetRGBA: d.targetRGBA
+  };
+}
+
 const DEFAULT_LOGICAL_WIDTH = CANVAS_WIDTH;
 const DEFAULT_LOGICAL_HEIGHT = CANVAS_HEIGHT;
 
@@ -2973,6 +3002,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
         if (useBatchReplay && isBucketCommand(commands[i])) {
           // --- Batch Bucket Replay Path ---
+          const cmdObj = commands[i];
+          const decoded = decodeBinaryDrawMessage(cmdObj.data);
+          const validBucket = getValidBatchBucketPayload(decoded);
+          if (!validBucket) {
+            continue;
+          }
+
           if (!batchImageData) {
             const setupStart = diag ? performance.now() : 0;
             if (!sharedOffscreenCanvas) {
@@ -3000,11 +3036,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             }
           }
 
-          const cmdObj = commands[i];
-          const decoded = decodeBinaryDrawMessage(cmdObj.data);
-          const data = decoded?.data || {};
-          const cmdColor = data.color || '#000000';
-          const cmdOpacity = data.opacity !== undefined ? data.opacity : 1;
+          const cmdColor = validBucket.color;
+          const cmdOpacity = validBucket.opacity;
 
           if (batchData && batchVisited && batchQueueX && batchQueueY) {
             if (diag) {
@@ -3016,13 +3049,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               batchData,
               batchCw,
               batchCh,
-              data.x * LOGICAL_WIDTH,
-              data.y * LOGICAL_HEIGHT,
+              validBucket.x * LOGICAL_WIDTH,
+              validBucket.y * LOGICAL_HEIGHT,
               cmdColor,
               cmdOpacity,
               LOGICAL_WIDTH,
               LOGICAL_HEIGHT,
-              data.targetRGBA,
+              validBucket.targetRGBA,
               batchVisited,
               batchQueueX,
               batchQueueY
