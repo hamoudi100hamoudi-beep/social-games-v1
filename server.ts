@@ -19,6 +19,7 @@ import { registerDrawingIdentityHandlers } from './server/registerDrawingIdentit
 import { registerVoteKickHandler } from './server/registerVoteKickHandler.js';
 
 import { checkRateLimit } from './server/rateLimit.js';
+import { defaultDrawRateLimiter } from './server/drawRateLimit.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -374,6 +375,8 @@ async function startServer() {
         roomManager.handleDisconnect(socket.id);
       } catch (e) {
         console.error("Error during disconnect handling:", e);
+      } finally {
+        defaultDrawRateLimiter.cleanupSocket(socket.id);
       }
     });
   });

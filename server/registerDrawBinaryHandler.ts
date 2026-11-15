@@ -1,5 +1,6 @@
 import { getToolName } from '../src/utils/drawBinaryHelper.js';
 import { createType2Buffer } from './rooms.js';
+import { defaultDrawRateLimiter, type DrawRateLimiter } from './drawRateLimit.js';
 import {
   extractValidatedInstId,
   isAllowedStartOrEndTool,
@@ -11,6 +12,8 @@ import {
 export interface DrawBinaryDependencies {
   io?: any;
   roomManager: any;
+  drawRateLimiter?: DrawRateLimiter;
+  now?: () => number;
   relayFreeDrawMove?: (
     roomId: string,
     senderSocket: any,
@@ -18,6 +21,58 @@ export interface DrawBinaryDependencies {
     instId: string,
     points: { x: number; y: number }[]
   ) => void;
+}
+
+function emitOneTimeAbort(io: any, roomId: string, instId: string, strokeId: number): void {
+  if (!io || typeof io.to !== 'function') return;
+  const abortBuf = Buffer.alloc(10);
+  abortBuf.writeUInt8(12, 0); // MSG_DRAW_ABORT = 12
+  abortBuf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+  abortBuf.writeUInt16LE(strokeId & 0xffff, 8);
+  io.to(roomId).emit('draw_binary', abortBuf);
+}
+
+function cleanupRejectedActiveStroke(
+  io: any,
+  roomManager: any,
+  room: any,
+  roomId: string,
+  socketId: string,
+  type: number,
+  buf: Buffer,
+  useCanonicalPipeline: boolean,
+  isContinuousTool: boolean,
+  instId: string | null
+): void {
+  if (!instId) return;
+
+  if (
+    useCanonicalPipeline &&
+    (type === 13 || type === 2 || type === 6 || ((type === 1 || type === 3) && isContinuousTool))
+  ) {
+    const key = `${socketId}_${instId}`;
+    const activeStroke = room.freeDrawStrokes?.get(key);
+    if (activeStroke && activeStroke.status === 'ACTIVE') {
+      const abortStrokeId = type === 3 && buf.length === 27 ? buf.readUInt16LE(23) : 0;
+      if (typeof roomManager.abortFreeDrawStroke === 'function') {
+        roomManager.abortFreeDrawStroke(roomId, socketId, instId, abortStrokeId);
+      } else {
+        room.freeDrawStrokes.delete(key);
+      }
+      return;
+    }
+    if (type !== 6) return;
+  }
+
+  if (
+    (!useCanonicalPipeline || !isContinuousTool) &&
+    (type === 2 || type === 3 || type === 6 || type === 9) &&
+    room.gameState?.isDrawingActive === true
+  ) {
+    room.gameState.isDrawingActive = false;
+    const abortStrokeId = type === 3 && buf.length === 27 ? buf.readUInt16LE(23) : 0;
+    emitOneTimeAbort(io, roomId, instId, abortStrokeId);
+  }
 }
 
 function defaultRelayFreeDrawMove(
@@ -132,9 +187,87 @@ export function handleDrawBinary(
     const toolName = buf.length >= 9 ? getToolName(buf[8]) : '';
     const isContinuousTool = toolName === 'pencil' || toolName === 'eraser';
 
+    // ── 2. O(1) STRUCTURAL HEADER VALIDATION & WORK COST (PRE-LIMITER) ──
+    let workCost = buf.length;
+    let instIdForCleanup: string | null = null;
+    let undoTargetInstId = '';
+    let undoTargetStrokeId = 0;
+
     if (type === 5) { // draw_clear
-      // Exact 8 bytes; allow all-zero empty instId ("") or valid ASCII instId
       if (buf.length !== 8 || !isValidInstIdBytes(buf, true)) return;
+    } else if (type === 6) { // draw_cancel
+      if (buf.length !== 8) return;
+      instIdForCleanup = extractValidatedInstId(buf, false);
+      if (!instIdForCleanup) return;
+    } else if (type === 7) { // draw_undo
+      if (isFreeDraw || isExperimental) {
+        if (buf.length !== 10) return;
+        undoTargetInstId = extractValidatedInstId(buf, false) || '';
+        if (!undoTargetInstId) return;
+        if (isFreeDraw) {
+          const identity = room.drawingIdentities?.[undoTargetInstId];
+          if (!identity || identity.socketId !== socket.id) {
+            return;
+          }
+        }
+        undoTargetStrokeId = buf.readUInt16LE(8);
+      } else {
+        if (buf.length !== 8 || !isValidInstIdBytes(buf, false)) return;
+      }
+    } else if (type === 8) { // draw_redo
+      if (isFreeDraw || isExperimental) return;
+      if (buf.length !== 8 || !isValidInstIdBytes(buf, false)) return;
+    } else if (type === 1) { // draw_start
+      if (buf.length !== 18 || !isAllowedStartOrEndTool(buf[8])) return;
+      instIdForCleanup = extractValidatedInstId(buf, false);
+      if (!instIdForCleanup) return;
+    } else if (type === 13) { // Canonical compressed draw_move
+      if (buf.length < 10) return;
+      instIdForCleanup = extractValidatedInstId(buf, false);
+      if (!instIdForCleanup) return;
+      const compressedCount = buf.readUInt16LE(8);
+      if (compressedCount > 3000) return;
+      if (compressedCount === 0 && buf.length !== 10) return;
+      if (compressedCount > 0 && buf.length <= 10) return;
+      workCost = Math.max(buf.length, compressedCount * 4);
+    } else if (type === 2) { // draw_move (uncompressed)
+      if (buf.length < 10) return;
+      instIdForCleanup = extractValidatedInstId(buf, false);
+      if (!instIdForCleanup) return;
+      const moveCount = buf.readUInt16LE(8);
+      if (buf.length !== 10 + moveCount * 4) return;
+    } else if (type === 3) { // draw_end
+      if ((buf.length !== 23 && buf.length !== 27) || !isAllowedStartOrEndTool(buf[8])) return;
+      instIdForCleanup = extractValidatedInstId(buf, false);
+      if (!instIdForCleanup) return;
+    } else if (type === 9) { // draw_stroke
+      if (!isValidType9Packet(buf, useCanonicalPipeline)) return;
+      instIdForCleanup = extractValidatedInstId(buf, false);
+    } else if (type === 4) { // draw_action (bucket)
+      if (!isValidType4Packet(buf)) return;
+    }
+
+    // ── 3. O(1) PER-SOCKET PACKET & WORK-UNIT TOKEN BUCKET (SLICE 5A) ──
+    const limiter = deps.drawRateLimiter ?? defaultDrawRateLimiter;
+    const nowMs = deps.now ? deps.now() : Date.now();
+    if (!limiter.consume(socket.id, workCost, nowMs)) {
+      cleanupRejectedActiveStroke(
+        io,
+        roomManager,
+        room,
+        roomId,
+        socket.id,
+        type,
+        buf,
+        useCanonicalPipeline,
+        isContinuousTool,
+        instIdForCleanup
+      );
+      return;
+    }
+
+    // ── 4. AUTHORIZED, VALIDATED & RATE-PERMITTED EXECUTION ──
+    if (type === 5) { // draw_clear
       if (isFreeDraw || isExperimental) {
         roomManager.handleFreeDrawClear(roomId, buf);
       } else {
@@ -144,59 +277,28 @@ export function handleDrawBinary(
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 6) { // draw_cancel
-      // Exact 8 bytes + valid non-empty ASCII instId
-      if (buf.length !== 8 || !isValidInstIdBytes(buf, false)) return;
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 7) { // draw_undo
       if (isFreeDraw || isExperimental) {
-        // In Free Draw and Experimental, type 7 MUST be an exact 10-byte stroke undo
-        // with a valid non-empty ASCII instId. Never fall back to global undoLastDrawing().
-        if (buf.length !== 10) return;
-
-        const targetInstId = extractValidatedInstId(buf, false);
-        if (!targetInstId) return;
-
-        // In Free Draw: targetInstId MUST exist in room.drawingIdentities AND belong to socket.id
-        if (isFreeDraw) {
-          const identity = room.drawingIdentities?.[targetInstId];
-          if (!identity || identity.socketId !== socket.id) {
-            return; // Silent reject if identity missing or belongs to another socket
-          }
-        }
-
-        const targetStrokeId = buf.readUInt16LE(8);
-        const removed = roomManager.undoFreeDrawStroke(roomId, targetInstId, targetStrokeId);
+        const removed = roomManager.undoFreeDrawStroke(roomId, undoTargetInstId, undoTargetStrokeId);
         if (removed && io && typeof io.to === 'function') {
           io.to(roomId).emit('draw_binary', buf);
         }
       } else {
-        // Normal / Competitive Rooms: exact 8-byte global undo with valid non-empty ASCII instId
-        if (buf.length !== 8 || !isValidInstIdBytes(buf, false)) return;
         roomManager.undoLastDrawing(roomId);
         if (io && typeof io.to === 'function') {
           io.to(roomId).emit('draw_binary', buf);
         }
       }
     } else if (type === 8) { // draw_redo
-      // Reject global redo (type 8) in Free Draw and Experimental modes;
-      // special modes handle collaborative redo individually per-stroke via client re-emission.
-      if (isFreeDraw || isExperimental) {
-        return;
-      }
-      // Normal / Competitive Rooms: exact 8-byte global redo with valid non-empty ASCII instId
-      if (buf.length !== 8 || !isValidInstIdBytes(buf, false)) return;
       roomManager.redoDrawing(roomId);
       if (io && typeof io.to === 'function') {
         io.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 1) { // draw_start
-      // Exact 18 bytes, valid non-empty ASCII instId, tool in {0, 1, 3, 4, 5, 6, 7}
-      if (buf.length !== 18 || !isAllowedStartOrEndTool(buf[8]) || !isValidInstIdBytes(buf, false)) {
-        return;
-      }
       if (useCanonicalPipeline && isContinuousTool) {
         const started = roomManager.handleFreeDrawStart(roomId, socket.id, buf);
         if (!started) return;
@@ -222,11 +324,6 @@ export function handleDrawBinary(
         defaultRelayFreeDrawMove(io, roomManager, roomId, socket, buf, res.instId, res.points);
       }
     } else if (type === 2) { // draw_move (uncompressed)
-      // Minimum 10 bytes, valid non-empty ASCII instId, exact length 10 + count * 4
-      if (buf.length < 10 || !isValidInstIdBytes(buf, false)) return;
-      const moveCount = buf.readUInt16LE(8);
-      if (buf.length !== 10 + moveCount * 4) return;
-
       if (useCanonicalPipeline) {
         const ok = roomManager.handleFreeDrawMove(roomId, socket.id, buf);
         if (!ok) return;
@@ -244,14 +341,6 @@ export function handleDrawBinary(
         }
       }
     } else if (type === 3) { // draw_end
-      // Exact 23 or 27 bytes, valid non-empty ASCII instId, tool in {0, 1, 3, 4, 5, 6, 7}
-      if (
-        (buf.length !== 23 && buf.length !== 27) ||
-        !isAllowedStartOrEndTool(buf[8]) ||
-        !isValidInstIdBytes(buf, false)
-      ) {
-        return;
-      }
       if (useCanonicalPipeline && isContinuousTool) {
         const commitResult = roomManager.handleFreeDrawEnd(roomId, socket.id, buf);
         if (commitResult && commitResult.committed) {
@@ -275,19 +364,11 @@ export function handleDrawBinary(
         }
       }
     } else if (type === 9) { // draw_stroke
-      // Strict O(1) structural validation before history insertion, redoStack clearing, or broadcast
-      if (!isValidType9Packet(buf, useCanonicalPipeline)) {
-        return;
-      }
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 4) { // draw_action (bucket)
-      // Strict O(1) structural and field validation before history insertion, redoStack mutation, or broadcast
-      if (!isValidType4Packet(buf)) {
-        return;
-      }
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);

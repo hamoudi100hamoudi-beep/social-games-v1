@@ -6,6 +6,7 @@ import {
 } from '../src/utils/drawBinaryHelper.js';
 import { willCanonicalSegmentExceedLimit } from '../src/components/game/DrawingCanvasCore.js';
 import { handleDrawBinary } from '../server/registerDrawBinaryHandler.js';
+import { DrawRateLimiter } from '../server/drawRateLimit.js';
 import { isValidType9Packet } from '../server/utils/binaryBufferHelpers.js';
 import { RoomManager } from '../server/rooms.js';
 
@@ -187,7 +188,7 @@ function setupModeRoom(mode: 'normal' | 'freedraw' | 'experimental') {
     }
   };
 
-  const deps = { io: mockIo, roomManager: rm };
+  const deps = { io: mockIo, roomManager: rm, drawRateLimiter: new DrawRateLimiter() };
 
   return { rm, mockRoom, mockSocket, mockIo, deps, instId, roomEmits, broadcasts, type13Broadcasts };
 }
@@ -640,7 +641,9 @@ for (const mode of ['freedraw', 'experimental'] as const) {
   const ctx = setupModeRoom(mode);
   const LOGICAL_WIDTH = 680;
   const LOGICAL_HEIGHT = 396;
-  const { rm, mockRoom, mockSocket, deps, instId, roomEmits } = ctx;
+  let simNowMs = 1_000_000;
+  const { rm, mockRoom, mockSocket, deps: baseDeps, instId, roomEmits } = ctx;
+  const deps = { ...baseDeps, now: () => simNowMs };
 
   try {
     // Client stroke simulator matching DrawingCanvasCore's canonical + D1 auto-split contract
@@ -729,9 +732,11 @@ for (const mode of ['freedraw', 'experimental'] as const) {
 
       // Simulate 200ms throttle flush every 40 points
       if (moveBatch.length >= 40) {
+        simNowMs += 200;
         flushBatch();
       }
     }
+    simNowMs += 200;
     finishSeg();
 
     // Verify server side results
