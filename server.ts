@@ -20,6 +20,7 @@ import { registerVoteKickHandler } from './server/registerVoteKickHandler.js';
 
 import { checkRateLimit } from './server/rateLimit.js';
 import { defaultDrawRateLimiter } from './server/drawRateLimit.js';
+import { MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES } from './server/transportConfig.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -112,7 +113,7 @@ async function startServer() {
   const io = new Server(httpServer, {
     cors: { origin: '*' },
     transports: ['websocket'],
-    maxHttpBufferSize: 1e8,
+    maxHttpBufferSize: MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES,
     parser: customParser
   });
 

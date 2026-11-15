@@ -8,13 +8,14 @@
 
 ## E. Current Checkpoint / Session Handoff
 
-- **Active Phase / Task:** `PHASE 9A — Binary Packet Contract & Input Safety` (`IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slice 5A AWAITING OWNER VERIFICATION; Slices 5B & 5C NOT STARTED`)
+- **Active Phase / Task:** `PHASE 9A — Binary Packet Contract & Input Safety` (`IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slices 5A & 5B AWAITING OWNER VERIFICATION; Slice 5C NOT STARTED`)
 - **Last Completed Milestone:**
   - **PHASE 9A Slice 1 (`COMPLETED & VERIFIED`):** Protocol direction filtering, non-canonical `Type 13` blocking, and explicit client decoder handling with unknown opcodes returning `null`. Manually verified by the project owner alongside passing `npx tsc --noEmit`, `npm run build`, `scripts/test_phase9a_slice1.ts` (89/89), and all 11 baseline regression suites.
   - **PHASE 9A Slice 2 (`COMPLETED & VERIFIED`):** Enforced allocation-free O(1) structural packet validation across `Types 1, 2, 3, 5, 6, 7, 8` (`server/utils/binaryBufferHelpers.ts`, `server/roomCanonicalStrokeEngine.ts`, `server/registerDrawBinaryHandler.ts`), removed spurious canonical continuous `Type 3` raw fallback broadcast after `Type 12` aborts or orphaned/duplicate ends, updated Normal `Type 7` fixtures (`AUTH-11.1`/`11.2`), added `scripts/test_phase9a_slice2.ts` (174/174), passed all 13 test suites plus `tsc --noEmit` and `npm run build`, and was manually verified by the project owner.
   - **PHASE 9A Slice 3 (`COMPLETED & VERIFIED`):** Implemented Hybrid Option D (Sub-slice 3A client originating `Type 12` Case 1/2 abort rollback + D1 prospective automatic long-stroke segmentation in `DrawingCanvasCore.tsx`; Sub-slice 3B O(1) `Type 9` server ingress validation in `binaryBufferHelpers.ts` & `registerDrawBinaryHandler.ts`; added `scripts/test_phase9a_slice3.ts` 71/71 passing). Reported manually verified in gameplay by the project owner alongside passing `tsc --noEmit`, `npm run build`, and all 14 existing regression suites.
   - **PHASE 9A Slice 4 (`COMPLETED & VERIFIED`):** Implemented `isValidType4Packet` (`{17, 19, 21, 23}`, `tool === 2`, `opacity <= 100`, `x/y <= 10000`), isolated `Type 4` in `registerDrawBinaryHandler.ts`, hardened client `decodeBinaryDrawMessage` (`DataView` pre-checks + pooled 0-length `Buffer` fix), added `getValidBatchBucketPayload` NaN guard in `DrawingCanvasCore.tsx`, updated `makeType4` (`scripts/test_session_identity_suite.ts:1060`), and added `scripts/test_phase9a_slice4.ts`. Fixed Slice 4 test-harness exit hang by wrapping `stopManagerTimer(rm)` in `try/finally` blocks and adding the Slices 1–3 `process.exit(0)` termination call on success (required because importing `DrawingCanvasCore.tsx` triggers `SocketProvider.tsx`'s module-level un-exported `socketInstance` auto-connect/reconnection loop). Verified: `scripts/test_phase9a_slice4.ts` passes (`36 passed, 0 failed`, exit code `0` without external timeout), `scripts/test_session_identity_suite.ts` passes (`626` passed, exit `0`), `npx tsc --noEmit` PASS, `npm run build` PASS, and *"The project owner tested the game manually and confirmed that it works normally."*
-  - **PHASE 9A Slice 5A (`AWAITING OWNER VERIFICATION`):** Implemented O(1) constant-memory per-socket dual token bucket protection for `draw_binary` ingress (`server/drawRateLimit.ts`, `server/registerDrawBinaryHandler.ts`, `server.ts` disconnect cleanup), pre-bucket O(1) header & `Type 13` work-cost accounting (`80` pkt burst / `35` pkt/s refill; `524,288` work burst / `65,536`/s refill), active-stroke cleanup on throttled stream/end packets to prevent ghost strokes or canvas desync, and `scripts/test_phase9a_slice5a.ts` (`26 passed, 0 failed`, exit `0`). **Slices 5B (`maxHttpBufferSize` / transport bounds) and 5C (control/join/identity throttles & bounds) remain `NOT STARTED`.**
+  - **PHASE 9A Slice 5A (`AWAITING OWNER VERIFICATION`):** Implemented O(1) constant-memory per-socket dual token bucket protection for `draw_binary` ingress (`server/drawRateLimit.ts`, `server/registerDrawBinaryHandler.ts`, `server.ts` disconnect cleanup), pre-bucket O(1) header & `Type 13` work-cost accounting (`80` pkt burst / `35` pkt/s refill; `524,288` work burst / `65,536`/s refill), active-stroke cleanup on throttled stream/end packets to prevent ghost strokes or canvas desync, and `scripts/test_phase9a_slice5a.ts` (`26 passed, 0 failed`, exit `0`).
+  - **PHASE 9A Slice 5B (`AWAITING OWNER VERIFICATION`):** Reduced Socket.IO server `maxHttpBufferSize` from `1e8` (100,000,000 B) to exact `512 * 1024` (`524,288` B / `512 KiB`) via shared constant `MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES` (`server/transportConfig.ts`, `server.ts`), preserving WebSocket-only transport, `socket.io-msgpack-parser` (`3.0.2`), client `SocketProvider.tsx`, and uncompressed transport config. Verified on live Socket.IO + Engine.IO + MsgPack WebSocket server (`scripts/test_phase9a_slice5b.ts`: `16 passed, 0 failed`, exit `0`) across exact `524,287` / `524,288` / `524,289` B wire boundaries, pre-handler `0`-invocation rejection (`'transport close'` on client from WebSocket `1009`), automatic transport reconnect + `reconnectSecret` room rejoin, and `751,559 B` (`> 512 KiB`) outbound `draw_history_sync` delivery. **Slice 5C (`control/join/identity throttles & bounds`) remains `NOT STARTED`.**
 - **Source Code Changes Made:**
   - **Slice 1:**
     - `server/registerDrawBinaryHandler.ts`: Added pre-routing guard rejecting client-originated `Type 11`, `Type 12`, `Type 0`, `Types 14..255`, and non-canonical `Type 13` (`!useCanonicalPipeline`) while preserving `Type 10` and `Types 1..9` / canonical `13`.
@@ -44,18 +45,22 @@
     - `server.ts`: Wired `defaultDrawRateLimiter.cleanupSocket(socket.id)` into `socket.on('disconnect', ...)` without modifying `maxHttpBufferSize` or unrelated handlers.
     - `scripts/test_phase9a_slice3.ts`: Advanced simulated clock by `+200ms` on Part 3B's simulated `200ms` batch flushes and isolated per-room `DrawRateLimiter` instances in `setupModeRoom` so real-time flood throttling does not trip a tight synchronous CPU loop claiming `200ms` pacing.
     - `scripts/test_phase9a_slice5a.ts`: New 26-assertion Slice 5A regression & flood-protection test suite (`26 passed, 0 failed`, exit `0`).
+  - **Slice 5B (`AWAITING OWNER VERIFICATION`):**
+    - `server/transportConfig.ts`: New standalone constant module exporting `MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES = 512 * 1024` (`524,288` bytes) so integration tests do not import `server.ts` side effects.
+    - `server.ts`: Updated `new Server(httpServer, ...)` `maxHttpBufferSize` from `1e8` to `MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES`, keeping WebSocket-only transport (`['websocket']`), `socket.io-msgpack-parser` (`3.0.2`), and Slice 5A cleanup unchanged.
+    - `scripts/test_phase9a_slice5b.ts`: New 16-check real Socket.IO + `socket.io-msgpack-parser` transport integration suite covering normal/max valid messages, exact `524,287` / `524,288` / `524,289` B wire boundaries, pre-handler rejection (`0` handler calls, `0` state/chat mutations, `0` bystander broadcasts, client `'transport close'`), automatic transport reconnect + `reconnectSecret` rejoin, and `751,559 B` (`> 512 KiB`) outbound `draw_history_sync` (`16 passed, 0 failed`, exit `0`).
 - **Key Audit & Implementation Takeaways (PHASE 9A):**
   - **Slice 1 (`COMPLETED & VERIFIED`):** Client-originated `0`, `11`, `12`, `14..255`, and non-canonical `13` are dropped silently; `decodeBinaryDrawMessage` returns `null` for `0` and `14..255`.
   - **Slice 2 (`COMPLETED & VERIFIED`):** `Types 1, 2, 3, 5, 6, 7, 8` enforce exact O(1) structural bounds, tool allowlists (`{0, 1, 3, 4, 5, 6, 7}`), and non-empty valid `[a-zA-Z0-9_-]{1,7}` ASCII `instId` (`Type 5` also preserves empty `""` Clear compatibility).
   - **Slice 3 (`COMPLETED & VERIFIED`):** Strict O(1) `Type 9` validation (`1..3000` canonical, `1..65535` Normal, `=== 2` shapes), originating-client `Type 12` Case 1/2 abort rollback, and prospective D1 auto-split strictly before `3,000` pts with per-segment Undo/Redo & late-joiner sync parity.
   - **Slice 4 (`COMPLETED & VERIFIED`):** Enforced O(1) `{17, 19, 21, 23}` `Type 4` validation (`tool === 2`, `opacity <= 100`, `x/y <= 10000`), full `DataView` pre-checks in `decodeBinaryDrawMessage`, and `getValidBatchBucketPayload` `NaN` protection; clean-exit lifecycle fix verified (`36 passed, 0 failed`, exit `0`), `test_session_identity_suite.ts` (`626` passed, exit `0`), `tsc --noEmit`, `vite build`, and owner-confirmed manual gameplay all passing.
   - **Slice 5A (`AWAITING OWNER VERIFICATION`):** `draw_binary` ingress now enforces per-socket packet (`80` burst / `35/s`) and work (`524,288` burst / `65,536/s`) budgets in O(1) memory/time after auth and O(1) header checks, before `Type 13` decoding, `drawHistory` writes, `redoStack` mutations, or broadcasts, with immediate disconnect cleanup and single-abort active-stroke sync on rejection.
+  - **Slice 5B (`AWAITING OWNER VERIFICATION`):** Socket.IO/Engine.IO incoming WebSocket payload cap is now `524,288` B (`512 KiB`), ~`190.7x` smaller than `1e8`. Empirically measured real `socket.io-client` MsgPack wire sizes stay far below `512 KiB` (`join_room` = `200 B`, `send_message` = `100 B`, `submit_guess` = `65 B`, small `Type 4` = `76 B`, canonical 3,000-pt `Type 13` = `18,064 B`, canonical 3,000-pt `Type 9` = `12,072 B`, theoretical 65,535-pt Normal `Type 9` = `262,214 B` — `2.00x` headroom), while incoming frames `>= 524,289 B` are terminated at WebSocket `ws` layer (close `1009`, client `'transport close'`) before MsgPack decoding or Socket.IO event dispatch, without restricting `> 512 KiB` outbound `draw_history_sync` (`751,559 B` delivered intact).
   - **Remaining Slice 5 Scope (Explicitly Deferred):**
-    - **Slice 5B (`NOT STARTED`):** Socket.IO `maxHttpBufferSize` tightening (`1e8` -> `524_288 B`) & transport bounds.
     - **Slice 5C (`NOT STARTED`):** Control/room/identity/join throttles & payload bounds (`start_free_draw`, `stop_free_draw`, `register_drawing_identity`, `client_capabilities`, `join_room`, `get_room_info`, etc.).
   - **`Type 10` Compatibility Limitation:** Legacy `Type 10` behavior is preserved (`server/roomDrawingHistory.ts:100`, `server.ts:79`, ingress pass-through, explicit `'draw_clear'` decode), but `.git` history and original producers are absent so its exact legacy wire format remains unverified; synthetic tests validate compatibility behavior only.
 - **Exact Next Action:**
-  `Manual gameplay verification by project owner for Slice 5A; once confirmed, proceed to Slice 5B (maxHttpBufferSize & transport bounds) or Slice 5C (control/join/identity guardrails).`
+  `Manual gameplay verification by project owner for Slices 5A and 5B; once confirmed, proceed to Slice 5C (control/join/identity guardrails).`
 
 ---
 
@@ -71,7 +76,7 @@ While the codebase already passes static compilation and targeted feature test s
 
 ## B. Master Task Checklist
 
-- [ ] **PHASE 9A — Binary Packet Contract & Input Safety** *(`IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slice 5A AWAITING OWNER VERIFICATION; Slices 5B & 5C NOT STARTED`)*
+- [ ] **PHASE 9A — Binary Packet Contract & Input Safety** *(`IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slices 5A & 5B AWAITING OWNER VERIFICATION; Slice 5C NOT STARTED`)*
 - [ ] **PHASE 9B — Free Draw History Lifecycle, Memory Growth & Sync Performance** *(`PLANNED`)*
 - [ ] **PHASE 9C — Reproducible Dependency Installation & Lockfile** *(`PLANNED`)*
 - [ ] **PHASE 9D — Unified Test Strategy & Safe Test Commands** *(`PLANNED`)*
@@ -122,7 +127,7 @@ This roadmap separates prior claims, independently verified code facts, unverifi
 
 - **Objective & Scope:**  
   Audit and harden every incoming `draw_binary` packet contract (Types `1`–`13` and unknown types) on both server ingress and client decode, prevent trailing-byte / oversized / direction-spoofed / out-of-bounds payloads, align Transport `maxHttpBufferSize` with real application needs, and enforce invariants without breaking canonical Free Draw/Experimental drawing, shape tools, bucket fill, undo/redo, or `AGENTS.md` rules.
-  *(Slices 1–4: `COMPLETED & VERIFIED`; Slice 5A: `AWAITING OWNER VERIFICATION`; Slices 5B & 5C: `NOT STARTED`.)*
+  *(Slices 1–4: `COMPLETED & VERIFIED`; Slices 5A & 5B: `AWAITING OWNER VERIFICATION`; Slice 5C: `NOT STARTED`.)*
 
 - **Relevant Files:**
   - `server.ts` (`maxHttpBufferSize`, `getJsonSafeHistory`, `draw_repair_req`, `relayFreeDrawMove`)
@@ -153,11 +158,13 @@ This roadmap separates prior claims, independently verified code facts, unverifi
   - **Slice 3 (`COMPLETED & VERIFIED`):** Implemented coordinated Hybrid Option D (Sub-slice 3A client `DrawingCanvasCore.tsx` originating `Type 12` Case 1/2 abort rollback + D1 prospective automatic long-stroke segmentation preserving pointer capture and exact endpoints; Sub-slice 3B O(1) `Type 9` server ingress validation in `server/utils/binaryBufferHelpers.ts` & `server/registerDrawBinaryHandler.ts`), preserving Normal `1..65,535` continuous compatibility, canonical `1..3,000` bounds, `Type 4` Bucket, and legacy `Type 10`, with automated tests + owner-reported gameplay verification.
   - **Slice 4 (`COMPLETED & VERIFIED`):** Implemented `isValidType4Packet`, isolated `Type 4` ingress validation, client `DataView` pre-checks + zero-length pooled `Buffer` fix, `getValidBatchBucketPayload` NaN guard, updated `makeType4`, and fixed the Slice 4 test harness exit lifecycle (`try/finally` `stopManagerTimer` + `process.exit(0)` on success matching Slices 1–3 convention to release `SocketProvider.tsx`'s module-level `socketInstance`); `36 passed, 0 failed` (exit `0`), `test_session_identity_suite.ts` (`626` passed, exit `0`), `npx tsc --noEmit`, `npm run build`, and owner-reported manual gameplay verification all passed.
   - **Slice 5A (`AWAITING OWNER VERIFICATION`):** Implemented O(1) constant-memory per-socket `draw_binary` dual token bucket (`server/drawRateLimit.ts`: `80` pkts burst / `35` pkts/s refill; `524,288` work units burst / `65,536`/s refill) inside `server/registerDrawBinaryHandler.ts` after auth & O(1) header validation and strictly prior to `decodeType13BufferSafely`, `recordDrawCommand`, undo/redo/clear mutations, or broadcasts, with active-stroke rejection cleanup (`abortFreeDrawStroke` / `isDrawingActive = false` + single `Type 12` abort) and immediate disconnect cleanup in `server.ts`.
-  - **Slice 5B (`NOT STARTED`) & Slice 5C (`NOT STARTED`):** Transport `maxHttpBufferSize` tightening (Slice 5B) and control/room/identity/join limits & payload bounds (Slice 5C) remain deferred.
+  - **Slice 5B (`AWAITING OWNER VERIFICATION`):** Tightened Socket.IO server `maxHttpBufferSize` from `1e8` (`100,000,000` B) to exact `512 * 1024` (`524,288` B / `512 KiB`) via `server/transportConfig.ts` (`MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES`), verified via live Socket.IO + Engine.IO + `socket.io-msgpack-parser` WebSocket tests (`scripts/test_phase9a_slice5b.ts`: `16 passed, 0 failed`, exit `0`). Preserved WebSocket-only transport, uncompressed framing, client `SocketProvider.tsx`, Slice 5A rate limiter, and outbound `draw_history_sync` (`751,559 B` tested unrestricted).
+  - **Slice 5C (`NOT STARTED`):** Control/room/identity/join limits & payload bounds remain deferred.
 
 - **Files Modified:**  
+  - `server/transportConfig.ts` (Slice 5B shared `MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES = 512 * 1024`)
   - `server/drawRateLimit.ts` (Slice 5A O(1) per-socket packet and work-unit token bucket `DrawRateLimiter`, `defaultDrawRateLimiter`, `cleanupDrawRateLimit`)
-  - `server.ts` (Slice 5A immediate `defaultDrawRateLimiter.cleanupSocket(socket.id)` on `disconnect`)
+  - `server.ts` (Slice 5A immediate `defaultDrawRateLimiter.cleanupSocket(socket.id)` on `disconnect`; Slice 5B `maxHttpBufferSize: MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES`)
   - `server/registerDrawBinaryHandler.ts` (Slice 1 ingress direction & non-canonical `Type 13` guard; Slice 2 structural validation on `Types 1, 2, 3, 5, 6, 7, 8` and canonical `Type 3` fallback broadcast removal; Slice 3 strict O(1) `Type 9` ingress validation; Slice 4 `isValidType4Packet` guard isolating `else` to legacy `Type 10`; Slice 5A pre-bucket O(1) header & `Type 13` cost accounting, token bucket gate, and `cleanupRejectedActiveStroke`)
   - `server/roomCanonicalStrokeEngine.ts` (Slice 2 `handleFreeDrawStart`, `handleFreeDrawMove`, and `handleFreeDrawEnd` structural/tool/`instId` enforcement)
   - `server/utils/binaryBufferHelpers.ts` (Slice 2 allocation-free `isValidInstIdBytes`, `extractValidatedInstId`, and `isAllowedStartOrEndTool`; Slice 3 `isValidType9Packet`; Slice 4 `isValidType4Packet`)
@@ -169,16 +176,19 @@ This roadmap separates prior claims, independently verified code facts, unverifi
   - `scripts/test_phase9a_slice3.ts` (Slice 3 regression test suite; Slice 5A simulated `+200ms` clock tick on Part 3B batched loop & per-fixture `DrawRateLimiter`)
   - `scripts/test_phase9a_slice4.ts` (Slice 4 regression test suite; `try/finally` `stopManagerTimer` + `process.exit(0)` clean exit fix; `36 passed, 0 failed`, exit `0`)
   - `scripts/test_phase9a_slice5a.ts` (Slice 5A O(1) token bucket, `Type 13` pre-decode/single-decode, active-stroke cleanup, disconnect cleanup, and `AGENTS.md` resource protection suite; `26 passed, 0 failed`, exit `0`)
+  - `scripts/test_phase9a_slice5b.ts` (Slice 5B real Socket.IO + Engine.IO + `socket.io-msgpack-parser` transport message size protection integration suite; `16 passed, 0 failed`, exit `0`)
   - `PRODUCTION_RELIABILITY_ROADMAP.md` (status, verification results, limitations, rollback record)
 
-- **Manual & Automated Verification Results (Slices 1–5A):**
+- **Manual & Automated Verification Results (Slices 1–5B):**
   - **Slice 1 Manual Verification:** Tested manually by the project owner and reported as working normally *(no individual unverified gameplay sub-tests claimed)*.
   - **Slice 2 Manual Verification:** Tested and manually verified by the project owner *(no individual unverified gameplay sub-tests claimed)*.
   - **Slice 3 Manual Verification:** Tested and manually verified by the project owner *(no individual unverified gameplay sub-tests claimed)*.
   - **Slice 4 Manual Verification:** `"The project owner tested the game manually and confirmed that it works normally."`
-  - **Slice 5A Manual Verification:** *Pending owner manual verification (`AWAITING OWNER VERIFICATION`).*
+  - **Slice 5A Manual Verification:** Reported manually verified in normal gameplay by the project owner (`test_phase9a_slice5a.ts` `26/26` PASS; formal Slice 5A status retained as `AWAITING OWNER VERIFICATION` per roadmap continuity until combined 5A+5B owner closeout if desired).
+  - **Slice 5B Manual Verification:** *Pending owner manual verification (`AWAITING OWNER VERIFICATION`).*
   - `npx tsc --noEmit` (`lint_applet`, current): **PASS** (0 errors).
   - `npm run build` (`compile_applet`, current): **PASS** (Vite build succeeded).
+  - `npx tsx scripts/test_phase9a_slice5b.ts`: **PASS** (`16 passed, 0 failed`, exit `0`).
   - `npx tsx scripts/test_phase9a_slice5a.ts`: **PASS** (`26 passed, 0 failed`, exit `0`).
   - `npx tsx scripts/test_phase9a_slice4.ts`: **PASS** (`36 passed, 0 failed`, exit `0`).
   - `npx tsx scripts/test_phase9a_slice3.ts`: **PASS** (`71 passed, 0 failed`, exit `0`).
@@ -188,19 +198,25 @@ This roadmap separates prior claims, independently verified code facts, unverifi
   - `npx tsx scripts/test_type13_hardening.ts`: **PASS** (exit `0`).
   - `npx tsx scripts/test_compressed_transport.ts`: **PASS** (exit `0`).
   - `npx tsx scripts/test_experimental_draw_trial.ts`: **PASS** (exit `0`).
-  - `npx tsx scripts/test_freedraw_bucket_undo_fastpath.ts`: **PASS** (`4 passed, 0 failed`, exit `0`).
+  - `npx tsx scripts/test_freedraw_bucket_undo_fastpath.ts`: **PASS** (exit `0`).
   - `npx tsx scripts/test_repair_seamless_handover.ts`: **PASS** (exit `0`).
   - `npx tsx scripts/test_controlled_fixes_suite.ts`: **PASS** (exit `0`).
-  - `npx tsx scripts/test_full_canvas_replay_experiment.ts`: **PASS** (`5 passed, 0 failed`, exit `0`).
+  - `npx tsx scripts/test_full_canvas_replay_experiment.ts`: **PASS** (exit `0`).
   - `npx tsx scripts/test_payload_validation_suite.ts`: **PASS** (`212 passed`, exit `0`).
   - `npx tsx scripts/test_codec.ts`: **PASS** (`13 passed`, exit `0`).
+  - `npx tsx scripts/test_leave_room_integrity.ts`: **PASS** (`78 passed`, exit `0`).
+  - `npx tsx scripts/test_state_transition_reset.ts`: **PASS** (`6 passed`, exit `0`).
+  - `npx tsx scripts/test_legacy1a_routing.ts`: **PASS** (exit `0`).
+  - `npx tsx scripts/test_legacy1c_unknown_room_routing.ts`: **PASS** (exit `0`).
 
 - **Performance & Compatibility Notes:**
-  - Slice 5A overhead is strictly $O(1)$ per packet (`7.02 ms` across `100,000` `DrawRateLimiter.consume` calls) with zero hot-path allocations, zero arrays/filters, zero `console.log` telemetry (`AGENTS.md` compliant), and immediate `disconnect` cleanup (`0` leaked map entries across `1,000` connect/cleanup cycles).
-  - Normal client drawing (~5 pkt/s `200ms` batches, `2,900`-pt auto-split 3-packet seams, rapid shape/stippling bursts, and `65,535`-pt `262,158 B` Normal `Type 9`) passes without throttling while packet floods (`> 80` burst / `35/s`), `Type 13` 3,000-pt decode floods, and `Type 9`/`Type 5` storms drop before decoding or mutating room state.
+  - Slice 5A overhead is strictly $O(1)$ per packet (`8.15 ms` latest run / `7.02 ms` initial run across `100,000` `DrawRateLimiter.consume` calls) with zero hot-path allocations, zero arrays/filters, zero `console.log` telemetry (`AGENTS.md` compliant), and immediate `disconnect` cleanup (`0` leaked map entries across `1,000` connect/cleanup cycles).
+  - Slice 5B overhead is **zero per-frame application cost** beyond Engine.IO / `ws@8.21.3`'s native `maxPayload: 524288` frame-length check prior to MsgPack decode. Oversized incoming payloads (`>= 524,289 B` wire) terminate at WebSocket layer (`1009`, client `'transport close'`) before touching `draw_binary` / `send_message` / `join_room` handlers or room state; healthy bystanders are unaffected, `reconnection: true` recovers with a new `socket.id` + `reconnectSecret` history sync, and outbound `draw_history_sync` (`751,559 B`) delivers unrestricted.
+  - Normal client drawing (~5 pkt/s `200ms` batches, `2,900`-pt auto-split 3-packet seams, rapid shape/stippling bursts, canonical 3,000-pt `Type 13`/`Type 9` at `18,064 B` / `12,072 B`, and `65,535`-pt `262,158 B` Normal `Type 9` at `262,214 B` wire) passes cleanly without throttling or transport rejection.
   - **`Type 10` Compatibility Limitation:** Legacy `Type 10` behavior is preserved (`server/roomDrawingHistory.ts:100`, `server.ts:79`, ingress pass-through, explicit `'draw_clear'` decode), but `.git` history and original producers are absent so its exact legacy packet format remains unverified; synthetic tests validate compatibility behavior only.
-  - **Remaining Risks (Targeted by Slices 5B & 5C — `NOT STARTED`):** `maxHttpBufferSize: 1e8` (`server.ts:114`), and unthrottled/unbounded control/room events (`start_free_draw`, `stop_free_draw`, `register_drawing_identity` unbounded per-socket keys, `client_capabilities` object spread, `join_room` strings, `get_room_info`, etc.).
+  - **Remaining Risks (Targeted by Slice 5C — `NOT STARTED`):** Unthrottled/unbounded control/room events (`start_free_draw`, `stop_free_draw`, `register_drawing_identity` unbounded per-socket keys, `client_capabilities` object spread, `join_room` strings, `get_rooms_info`, etc.).
   - **Rollback Instructions:**
+    - *Slice 5B:* Restore `maxHttpBufferSize: 1e8` (or a higher temporary ceiling such as `1024 * 1024`) in `server.ts`, optionally remove `server/transportConfig.ts` and `scripts/test_phase9a_slice5b.ts`, and re-run `npx tsc --noEmit` + `npm run build`.
     - *Slice 5A:* Remove `defaultDrawRateLimiter` / `now` / `cleanupRejectedActiveStroke` integration in `server/registerDrawBinaryHandler.ts` (restoring direct execution of validated blocks), remove `defaultDrawRateLimiter.cleanupSocket(socket.id)` from `server.ts`, delete `server/drawRateLimit.ts` and `scripts/test_phase9a_slice5a.ts`, revert the Slice 3 Part 3B `DrawRateLimiter`/`simNowMs` test helper additions if desired, and re-run `npx tsc --noEmit` + `npm run build`.
     - *Slice 4:* Revert `isValidType4Packet` in `server/utils/binaryBufferHelpers.ts` and `else if (type === 4)` in `server/registerDrawBinaryHandler.ts`, restore previous `decodeBinaryDrawMessage` & `getValidBatchBucketPayload` behavior in `src/utils/drawBinaryHelper.ts` / `DrawingCanvasCore.tsx`, remove `scripts/test_phase9a_slice4.ts`, and re-run `npx tsc --noEmit` + `npm run build`.
     - *Slice 3:* Revert `Type 9` validation branch in `server/registerDrawBinaryHandler.ts` and `isValidType9Packet` in `server/utils/binaryBufferHelpers.ts`; revert `DrawingCanvasCore.tsx` (`willCanonicalSegmentExceedLimit`, `processStrokeMove` split, `startPencilOrEraserStroke` `fromAutoSplit`, `finishCurrentStroke` anchor return, `3131` local `draw_abort` allowance, and `3394` Case 1/2 handlers); remove `scripts/test_phase9a_slice3.ts`; re-run `npx tsc --noEmit` + `npm run build`.
@@ -211,20 +227,20 @@ This roadmap separates prior claims, independently verified code facts, unverifi
   - Exact binary schemas, directionality, byte bounds, and field constraints defined and enforced at server ingress (`handleDrawBinary`) for every allowed packet type (`1`–`9`, `13`), with `Type 10` compatibility resolved separately and `server/roomDrawingHistory.ts:100` left unchanged. *(Slices 1–4 `COMPLETED & VERIFIED` across Types `1`–`9` and `13`.)*
   - Trailing-byte rejection on `Type 2`, `Type 7`, `Type 9`, etc., matching `Type 13` strictness. *(Enforced across `1`–`9` & `13` on server ingress and client `decodeBinaryDrawMessage`.)*
   - Client-originated `Type 11` / `Type 12` and truly unknown packet types (`0`, `14..255`) rejected cleanly on server ingress; client `decodeBinaryDrawMessage` no longer maps unknown packet types (`0`, `14..255`) to `'draw_clear'`. *(Slice 1: `COMPLETED & VERIFIED`.)*
-  - Per-socket O(1) `draw_binary` packet & decode/work protection enforced (`Slice 5A: AWAITING OWNER VERIFICATION`), `maxHttpBufferSize` tuned (`Slice 5B: NOT STARTED`), and control/join/identity guardrails enforced (`Slice 5C: NOT STARTED`).
-  - Automated validation test suite covering malformed, truncated, oversized, trailing-byte, spoofed, rate/byte-flooded, and valid packets passes cleanly with exit 0 alongside `npx tsc --noEmit`, `npm run build`, and existing Phase 5–8 test suites.
+  - Per-socket O(1) `draw_binary` packet & decode/work protection enforced (`Slice 5A: AWAITING OWNER VERIFICATION`), `maxHttpBufferSize: 524_288` (`512 KiB`) enforced (`Slice 5B: AWAITING OWNER VERIFICATION`), and control/join/identity guardrails enforced (`Slice 5C: NOT STARTED`).
+  - Automated validation test suite covering malformed, truncated, oversized, trailing-byte, spoofed, rate/byte-flooded, and transport-oversized packets passes cleanly with exit 0 alongside `npx tsc --noEmit`, `npm run build`, and existing Phase 5–8 test suites.
 
 - **Current Status:**  
-  `IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slice 5A AWAITING OWNER VERIFICATION; Slices 5B & 5C NOT STARTED`
+  `IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slices 5A & 5B AWAITING OWNER VERIFICATION; Slice 5C NOT STARTED`
 
 - **Next Exact Action:**  
-  `Owner manual gameplay verification of Slice 5A; afterward proceed to Slice 5B (maxHttpBufferSize & transport bounds) and Slice 5C (control/join/identity guardrails).`
+  `Owner manual gameplay verification of Slice 5B (and final sign-off on 5A); afterward proceed to Slice 5C (control/join/identity guardrails).`
 
 ---
 
 #### `PHASE 9A — Implementation Blueprint & Slice Tracker`
 
-**Status:** `IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slice 5A AWAITING OWNER VERIFICATION; Slices 5B & 5C NOT STARTED`
+**Status:** `IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slices 5A & 5B AWAITING OWNER VERIFICATION; Slice 5C NOT STARTED`
 
 ##### 1. Decisions Supported by Evidence (Resolved A–F & Decoder Null Safety)
 
@@ -415,17 +431,20 @@ This roadmap separates prior claims, independently verified code facts, unverifi
 4. **Slice 4 — `Type 4` (`draw_action`) Structural Hardening & Decoder Bounds Pre-Checks *(COMPLETED & VERIFIED)***
    - *(Implementation complete, Slice 4 harness clean-exit lifecycle fixed via `try/finally` `stopManagerTimer` + `process.exit(0)` on success, `scripts/test_phase9a_slice4.ts` passing `36 passed, 0 failed` with exit `0`, `scripts/test_session_identity_suite.ts` passing `626` tests with exit `0`, `tsc --noEmit` PASS, `npm run build` PASS, and "The project owner tested the game manually and confirmed that it works normally.")*
 
-5. **Slice 5 — Network Ingress Resource Protection *(Split: Slice 5A AWAITING OWNER VERIFICATION; Slice 5B NOT STARTED; Slice 5C NOT STARTED)***
-   - *Goal:* Protect `draw_binary` ingress in Slice 5A via O(1) per-socket packet and byte/decode-work token buckets; defer `maxHttpBufferSize` reduction & transport bounds (Slice 5B) and control/room/identity/join limits & payload bounds (Slice 5C) until explicit approval.
+5. **Slice 5 — Network Ingress Resource Protection *(Split: Slices 5A & 5B AWAITING OWNER VERIFICATION; Slice 5C NOT STARTED)***
+   - *Goal:* Protect `draw_binary` ingress in Slice 5A via O(1) per-socket packet and byte/decode-work token buckets; enforce `maxHttpBufferSize = 512 * 1024` (`524,288` B) on the production Socket.IO server in Slice 5B; defer control/room/identity/join limits & payload bounds (Slice 5C) until explicit approval.
    - **A. Slice 5A Implementation Summary (`AWAITING OWNER VERIFICATION`):**
      - **Finalized Thresholds (Validated Against Client Cadence):**
        - Packet Token Bucket: **`maxPackets = 80`**, **`packetRefillPerSec = 35`** (covers `200ms` continuous batches ~5 pkt/s, `2,900`-pt auto-split 3-packet seams, and rapid shape/stippling/undo bursts without dropping legitimate strokes).
        - Byte/Work Token Bucket: **`maxWorkUnits = 524_288`** (`512 KiB`), **`workRefillPerSec = 65_536`** (`64 KiB/s`) — covers full `262,158 B` Normal 65,535-pt `Type 9` + surrounding operations while capping `Type 13` 3,000-pt decode floods (`Math.max(buf.length, compressedCount * 4)` pre-decode work cost after O(1) header checks).
      - **Control Flow & Active-Stroke Sync Cleanup:** Runs in `server/registerDrawBinaryHandler.ts` *after* central room/drawer authorization, direction filtering, and O(1) structural header checks, and *strictly before* `decodeType13BufferSafely`, `recordDrawCommand`, `undo*`/`redo*`/`handleFreeDrawClear`, or broadcasts. If a throttled opcode (`1, 2, 3, 6, 9, 13`) leaves an open canonical `freeDrawStrokes` entry or Normal `room.gameState.isDrawingActive === true`, cleans it up once via `abortFreeDrawStroke` / `isDrawingActive = false` + single `Type 12` abort without touching `drawHistory` or `redoStack`, then drops repeat flood packets silently.
      - **Disconnect Cleanup:** `server.ts` invokes `defaultDrawRateLimiter.cleanupSocket(socket.id)` in `socket.on('disconnect', ...)`.
-   - **B. Slice 5B (`NOT STARTED`) & Slice 5C (`NOT STARTED`):**
-     - **Slice 5B:** `maxHttpBufferSize` reduction (`1e8` -> `524_288 B`) & transport bounds (`NOT STARTED`).
-     - **Slice 5C:** Control/room/identity/join throttles (`start_free_draw`, `stop_free_draw`, `register_drawing_identity`, `client_capabilities`, `join_room`, `get_room_info`, etc.) & payload bounds (`NOT STARTED`).
+   - **B. Slice 5B Implementation Summary (`AWAITING OWNER VERIFICATION`):**
+     - **Configured Transport Limit:** `MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES = 512 * 1024` (`524,288` B / `512 KiB`) exported from `server/transportConfig.ts` and applied to `new Server(httpServer, { ..., maxHttpBufferSize: MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES, ... })` in `server.ts`.
+     - **Unchanged Transport Invariants:** `transports: ['websocket']`, `socket.io-msgpack-parser@3.0.2`, client `SocketProvider.tsx` (`reconnection: true`, WebSocket-only, `customParser`), uncompressed transport, Slice 5A `draw_binary` limiter, and outbound `draw_history_sync` remain untouched.
+     - **Verified Wire Envelope & Boundary Behavior (`socket.io@4.8.4` / `engine.io@6.6.11` / `ws@8.21.3`):** Real `socket.io-client` attaches `options: { compress: true }` (+19 B over bare MsgPack headers), yielding +54 B (<64 KiB `ArrayBuffer`) / +56 B (>=64 KiB `ArrayBuffer`) on `draw_binary`: canonical max `Type 13` (`18,064 B`), canonical max `Type 9` (`12,072 B`), and theoretical 65,535-pt Normal `Type 9` (`262,214 B`) all pass intact; `524,287` B & `524,288` B pass, whereas `524,289` B (`MAX+1`) is closed at WebSocket `ws` layer (`1009`, client `'transport close'`) before MsgPack parsing or Socket.IO event dispatch.
+   - **C. Slice 5C (`NOT STARTED`):**
+     - Control/room/identity/join throttles (`start_free_draw`, `stop_free_draw`, `register_drawing_identity`, `client_capabilities`, `join_room`, `get_room_info`, etc.) & payload bounds (`NOT STARTED`).
 
 ##### 4. Tests & Acceptance Criteria Across Slices
 
@@ -468,14 +487,19 @@ This roadmap separates prior claims, independently verified code facts, unverifi
   3. Per-socket isolation, immediate `cleanupSocket` removal across `1,000` connect/cleanup cycles, fresh bucket on reconnect with new `socket.id`, and O(1) speed (`7.02 ms / 100,000` checks).
   4. `Type 13` pre-bucket invalid-header rejection, single-decode path on allowed packets, work-budget abort at packet `#44` with zero `decodeType13BufferSafely` invocations on rejected flood packets.
   5. Active-stroke sync cleanup (`abortFreeDrawStroke` / `isDrawingActive = false` + single `Type 12` abort) on throttled `Type 13`/`2`/`3`, zero `drawHistory`/`redoStack`/collaborator mutations on throttled `Type 4`/`5`/`9`/`10`, and `AGENTS.md` first-action `Type 4` invariant preserved.
-- **Slice 5B & 5C Planned Suites (`NOT STARTED`):**
-  - Transport `maxHttpBufferSize: 524_288` tests (Slice 5B) and control/room/identity/join limit tests (Slice 5C) will be implemented in their respective slices.
+- **Slice 5B Transport Protection Suite (`scripts/test_phase9a_slice5b.ts` — Executed, `16 passed, 0 failed`, Exit `0`):**
+  1. Valid `join_room` (`200 B`), `send_message` (`100 B`), `submit_guess` (`65 B`), small `Type 4` (`76 B`), max canonical `Type 13` (`18,064 B`), max canonical `Type 9` (`12,072 B`), and theoretical 65,535-pt Normal `Type 9` (`262,214 B`) succeed over real WebSocket + `socket.io-msgpack-parser`.
+  2. Exact live Engine.IO wire boundaries calibrated & verified: `524,287 B` & `524,288 B` accepted cleanly (`transport_probe` ack & `draw_binary`), while `524,289 B` (`MAX+1`) rejects pre-handler without ack or event dispatch (`'transport close'`).
+  3. Oversized binary (`draw_binary` `524,289 B`) & non-binary (`send_message` `540,062 B`, `join_room` `530,138 B`) disconnect pre-handler with `0` app handler calls, `0` `drawHistory`/`chatMessages` mutations, `0` bystander broadcasts, and intact healthy bystander functionality.
+  4. Real `reconnection: true` transport recovery assigns a new `socket.id` after oversized disconnect, restores `draw_history_sync` via `reconnectSecret` (`join_room` `reconnectOnly: true`), and resumes normal stroke commits; `751,559 B` (`> 512 KiB`) server→client `draw_history_sync` delivers without disconnect.
+- **Slice 5C Planned Suite (`NOT STARTED`):**
+  - Control/room/identity/join limit tests (Slice 5C) will be implemented in Slice 5C.
 
 - **Current Status:**  
-  `IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slice 5A AWAITING OWNER VERIFICATION; Slices 5B & 5C NOT STARTED`
+  `IN PROGRESS — Slices 1–4 COMPLETED & VERIFIED; Slices 5A & 5B AWAITING OWNER VERIFICATION; Slice 5C NOT STARTED`
 
 - **Next Exact Action:**  
-  `Owner manual gameplay verification of Slice 5A; afterward proceed to Slice 5B (maxHttpBufferSize & transport bounds) and Slice 5C (control/join/identity guardrails).`
+  `Owner manual gameplay verification of Slice 5B (and final sign-off on 5A); afterward proceed to Slice 5C (control/join/identity guardrails).`
 
 ---
 
