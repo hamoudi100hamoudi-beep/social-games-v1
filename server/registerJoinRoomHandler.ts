@@ -1,4 +1,5 @@
 import type { Server, Socket } from 'socket.io';
+import { CONTROL_CHAR_REGEX } from './controlInputValidation.js';
 
 export interface JoinRoomDependencies {
   io?: any;
@@ -45,22 +46,92 @@ export function handleJoinRoom(
   deps: JoinRoomDependencies
 ): void {
   const { io, roomManager, getRoomConfig, getJsonSafeHistory } = deps;
-  const { roomId, nickname, avatar, playerId, reconnectOnly, supportsType13, reconnectSecret } = payload || {};
+  const reply = (res: any) => {
+    if (typeof callback === 'function') {
+      callback(res);
+    }
+  };
 
-  if (supportsType13 && typeof roomManager.setClientCapabilities === 'function') {
-    roomManager.setClientCapabilities(socket.id, { supportsType13: true });
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    reply({ error: 'invalid_payload', success: false });
+    return;
+  }
+
+  const { roomId, nickname, avatar, playerId, reconnectOnly, supportsType13, reconnectSecret } = payload;
+
+  if (reconnectOnly !== undefined && typeof reconnectOnly !== 'boolean') {
+    reply({ error: 'invalid_payload', success: false, reason: 'invalid_reconnect_only' });
+    return;
+  }
+
+  if (supportsType13 !== undefined && typeof supportsType13 !== 'boolean') {
+    reply({ error: 'invalid_payload', success: false, reason: 'invalid_capabilities' });
+    return;
+  }
+
+  if (typeof roomId !== 'string' || roomId.length > 100 || CONTROL_CHAR_REGEX.test(roomId)) {
+    reply({ error: 'invalid_payload', success: false, reason: 'invalid_room_id' });
+    return;
+  }
+
+  if (
+    typeof nickname !== 'string' ||
+    nickname.length > 32 ||
+    CONTROL_CHAR_REGEX.test(nickname)
+  ) {
+    reply({ error: 'invalid_payload', success: false, reason: 'invalid_nickname' });
+    return;
+  }
+  const trimmedNickname = nickname.trim();
+  if (trimmedNickname.length === 0 || trimmedNickname.length > 24) {
+    reply({ error: 'invalid_payload', success: false, reason: 'invalid_nickname' });
+    return;
+  }
+
+  if (avatar !== undefined) {
+    if (
+      typeof avatar !== 'string' ||
+      avatar.length > 32 ||
+      CONTROL_CHAR_REGEX.test(avatar) ||
+      (avatar.length > 0 && avatar.trim().length === 0)
+    ) {
+      reply({ error: 'invalid_payload', success: false, reason: 'invalid_avatar' });
+      return;
+    }
+  }
+
+  if (!playerId || typeof playerId !== 'string') {
+    console.warn(`[Join Filter] Rejecting join without playerId from socket: ${socket.id}`);
+    reply({ error: 'unauthorized', success: false, reason: 'missing_player_id' });
+    return;
+  }
+  if (playerId.length > 64 || CONTROL_CHAR_REGEX.test(playerId)) {
+    reply({ error: 'unauthorized', success: false, reason: 'invalid_player_id' });
+    return;
+  }
+  const trimmedPlayerId = playerId.trim();
+  if (trimmedPlayerId.length === 0) {
+    console.warn(`[Join Filter] Rejecting join without playerId from socket: ${socket.id}`);
+    reply({ error: 'unauthorized', success: false, reason: 'missing_player_id' });
+    return;
+  }
+  if (trimmedPlayerId.length < 3) {
+    reply({ error: 'unauthorized', success: false, reason: 'invalid_player_id' });
+    return;
+  }
+
+  if (
+    reconnectSecret !== undefined &&
+    (typeof reconnectSecret !== 'string' || reconnectSecret.length > 128 || CONTROL_CHAR_REGEX.test(reconnectSecret))
+  ) {
+    reply({ error: 'unauthorized', success: false, reason: 'invalid_credentials' });
+    return;
   }
 
   try {
     if (!roomManager.isValidRoomId(roomId)) {
       console.warn(`[Join Filter] Rejecting join to invalid/non-existent room: ${roomId}`);
-      if (callback) callback({ error: 'room_not_found', success: false });
-      return;
-    }
-
-    if (!playerId || typeof playerId !== 'string' || playerId.trim().length === 0) {
-      console.warn(`[Join Filter] Rejecting join without playerId from socket: ${socket.id}`);
-      if (callback) callback({ error: 'unauthorized', success: false, reason: 'missing_player_id' });
+      reply({ error: 'room_not_found', success: false });
       return;
     }
 
@@ -72,7 +143,7 @@ export function handleJoinRoom(
       const isUserBanned = (playerId && checkRoom.bannedUsers.includes(playerId)) || checkRoom.bannedUsers.includes(socket.id);
       if (isUserBanned) {
         console.log(`[Ban Filter] Blocked join/reconnect for banned player ID: ${playerId || socket.id} in room: ${roomId}`);
-        if (callback) callback({ error: 'banned', success: false });
+        reply({ error: 'banned', success: false });
         return;
       }
     }
@@ -80,16 +151,19 @@ export function handleJoinRoom(
     const reconnectRes = roomManager.reconnectPlayer(roomId, playerId, nickname, socket.id, reconnectSecret);
     if (reconnectRes.status === 'auth_failed') {
       console.warn(`[AUTH REJECTED] Unauthorized reconnect attempt for player ID: ${playerId || 'N/A'} in room: ${roomId}`);
-      if (callback) callback({ error: 'unauthorized', success: false, reason: reconnectRes.reason });
+      reply({ error: 'unauthorized', success: false, reason: reconnectRes.reason });
       return;
     }
 
     if (reconnectRes.status === 'reconnected') {
+      if (supportsType13 && typeof roomManager.setClientCapabilities === 'function') {
+        roomManager.setClientCapabilities(socket.id, { supportsType13: true });
+      }
       const reconnectedRoom = reconnectRes.room;
       if (typeof socket.join === 'function') {
         socket.join(roomId);
       }
-      if (callback) callback({ success: true, reconnected: true });
+      reply({ success: true, reconnected: true });
 
       try {
         const player = reconnectedRoom.players.find((p: any) => p.id === socket.id);
@@ -163,6 +237,9 @@ export function handleJoinRoom(
       }
     }
 
+    if (supportsType13 && typeof roomManager.setClientCapabilities === 'function') {
+      roomManager.setClientCapabilities(socket.id, { supportsType13: true });
+    }
     if (typeof socket.join === 'function') {
       socket.join(roomId);
     }

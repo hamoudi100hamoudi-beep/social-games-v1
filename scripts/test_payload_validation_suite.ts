@@ -388,6 +388,7 @@ async function runTests() {
 
     // 3.6 Ban decision reached when quorum met
     {
+      voteKickLimits.delete(voterPid);
       // Add Player 3 to voter list
       const voter3Pid = 'pid-voter-3';
       const voter3SockId = 'sock-voter-3';

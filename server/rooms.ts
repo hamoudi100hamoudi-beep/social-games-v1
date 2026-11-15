@@ -3,6 +3,7 @@ import { Player, Room, GameState, getRoomConfig, ROOM_PRESETS } from "../src/typ
 import { sessionAuthStore, SessionAuthStore } from "./sessionAuth.js";
 import { normalizeArabic, isCloseGuess } from "./utils/arabicFuzzyMatch.js";
 import { ALL_WORDS } from "./data/wordsDictionary.js";
+import { sanitizeClientCapabilities } from "./controlInputValidation.js";
 
 export { normalizeArabic };
 
@@ -210,9 +211,16 @@ export class RoomManager {
     return { ok: true };
   }
 
-  public setClientCapabilities(socketId: string, caps: { supportsType13?: boolean }) {
-    const existing = this.clientCapabilities.get(socketId) || {};
-    this.clientCapabilities.set(socketId, { ...existing, ...caps });
+  public setClientCapabilities(socketId: string, caps: unknown) {
+    const parsed = sanitizeClientCapabilities(caps);
+    if (!parsed.valid) return;
+
+    const existing = this.clientCapabilities.get(socketId);
+    if (parsed.hasSupportsType13) {
+      this.clientCapabilities.set(socketId, { supportsType13: parsed.supportsType13 });
+    } else if (existing) {
+      this.clientCapabilities.set(socketId, { supportsType13: Boolean(existing.supportsType13) });
+    }
   }
 
   public removeClientCapabilities(socketId: string) {
@@ -1347,7 +1355,7 @@ const words = word.split(" ").filter(w => w.length > 0);
   }
 
   public registerDrawingIdentity(socketId: string, instanceId: string) {
-    if (!instanceId || typeof instanceId !== 'string') return;
+    if (!instanceId || typeof instanceId !== 'string' || instanceId.length > 64) return;
     const trimmedId = instanceId.trim();
     if (trimmedId.length === 0 || trimmedId.length > 7 || !/^[a-z0-9]+$/i.test(trimmedId)) {
       return;
@@ -1393,6 +1401,20 @@ const words = word.split(" ").filter(w => w.length > 0);
       return;
     }
 
+    // Enforce max 2 active drawing identities per socket per room for new or reclaimed slots
+    if (!existing || existing.socketId !== socketId) {
+      let ownedCount = 0;
+      for (const key in targetRoom.drawingIdentities) {
+        const info = targetRoom.drawingIdentities[key];
+        if (info && info.socketId === socketId) {
+          ownedCount++;
+          if (ownedCount >= 2) {
+            return;
+          }
+        }
+      }
+    }
+
     targetRoom.drawingIdentities[trimmedId] = { socketId, playerName };
 
     if (this.io) {
@@ -1405,7 +1427,7 @@ const words = word.split(" ").filter(w => w.length > 0);
   }
 
   public unregisterDrawingIdentity(socketId: string, instanceId: string) {
-    if (!instanceId || typeof instanceId !== 'string') return;
+    if (!instanceId || typeof instanceId !== 'string' || instanceId.length > 64) return;
     const trimmedId = instanceId.trim();
     if (trimmedId.length === 0 || trimmedId.length > 7 || !/^[a-z0-9]+$/i.test(trimmedId)) {
       return;

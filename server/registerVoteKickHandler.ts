@@ -1,4 +1,5 @@
 import { checkRateLimit } from './rateLimit.js';
+import { CONTROL_CHAR_REGEX } from './controlInputValidation.js';
 
 export interface VoteKickDependencies {
   io: any;
@@ -26,8 +27,17 @@ export function handleSubmitVoteKick(
       return;
     }
 
-    const targetPlayerId = typeof data.targetPlayerId === 'string' ? data.targetPlayerId.trim() : '';
-    if (!targetPlayerId) {
+    if (
+      typeof data.targetPlayerId !== 'string' ||
+      data.targetPlayerId.length > 64 ||
+      CONTROL_CHAR_REGEX.test(data.targetPlayerId)
+    ) {
+      if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
+      return;
+    }
+
+    const targetPlayerId = data.targetPlayerId.trim();
+    if (targetPlayerId.length === 0 || targetPlayerId.length > 64) {
       if (typeof callback === 'function') callback({ success: false, error: 'invalid_payload' });
       return;
     }
@@ -45,17 +55,18 @@ export function handleSubmitVoteKick(
       return;
     }
 
-    const targetPlayer = room.players.find((p: any) => p.persistentId === targetPlayerId);
-    if (!targetPlayer) {
-      if (typeof callback === 'function') callback({ error: 'target_not_found' });
-      return;
-    }
-
-    // Rate limit check: 3 requests per 2000ms using persistentId || socket.id
+    // Rate limit check BEFORE O(N) room.players.find lookup:
+    // 3 requests per 2000ms using persistentId || socket.id
     const rateLimitKey = player.persistentId || socket.id;
     const allowed = checkLimitFn(voteKickLimits, rateLimitKey, 3, 2000);
     if (!allowed) {
       if (typeof callback === 'function') callback({ success: false, error: 'rate_limited' });
+      return;
+    }
+
+    const targetPlayer = room.players.find((p: any) => p.persistentId === targetPlayerId);
+    if (!targetPlayer) {
+      if (typeof callback === 'function') callback({ error: 'target_not_found' });
       return;
     }
 

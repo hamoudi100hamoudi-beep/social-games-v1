@@ -57,6 +57,10 @@ export function handleSendMessage(
       return;
     }
 
+    if (data.text.length > 1000) {
+      return;
+    }
+
     const trimmedText = data.text.trim();
     if (trimmedText.length === 0 || trimmedText.length > 250) {
       return;

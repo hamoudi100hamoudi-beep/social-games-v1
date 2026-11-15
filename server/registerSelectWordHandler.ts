@@ -18,8 +18,12 @@ export function handleSelectWord(
 
     // Strict payload validation:
     // payload must be an object containing a valid, non-empty string in the `word` property
-    if (!data || typeof data !== 'object' || typeof data.word !== 'string') {
+    if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.word !== 'string') {
       return; // Silently reject null, undefined, non-objects, missing word, numbers, objects, arrays
+    }
+
+    if (data.word.length > 128) {
+      return;
     }
 
     const trimmedWord = data.word.trim();

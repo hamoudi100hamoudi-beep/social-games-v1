@@ -21,6 +21,11 @@ import { registerVoteKickHandler } from './server/registerVoteKickHandler.js';
 import { checkRateLimit } from './server/rateLimit.js';
 import { defaultDrawRateLimiter } from './server/drawRateLimit.js';
 import { MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES } from './server/transportConfig.js';
+import {
+  sanitizeClientCapabilities,
+  handleGetRoomInfo,
+  handleDrawRepairReq,
+} from './server/controlInputValidation.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
   if (!Array.isArray(history)) return [];
@@ -182,27 +187,10 @@ async function startServer() {
     });
     
     socket.on('get_room_info', (roomId, callback) => {
-      let roomInfo = { count: 0, max: 5, winningScore: 30, theme: 'General' };
-
-      try {
-        const room = roomManager.getRoom(roomId);
-        const config = getRoomConfig(roomId);
-        const count = room ? room.players.filter(p => !p.isOffline).length : 0;
-        const max = room?.maxPlayers ?? config.maxPlayers;
-        const winningScore = room?.winningScore ?? config.winningScore;
-        const theme = room?.theme ?? config.theme;
-        roomInfo = { count, max, winningScore, theme };
-      } catch (e) {
-        console.error("Error computing room info for get_room_info:", e);
-      }
-
-      if (typeof callback === 'function') {
-        try {
-          callback(roomInfo);
-        } catch (cbErr) {
-          console.error("Error executing get_room_info callback:", cbErr);
-        }
-      }
+      handleGetRoomInfo(roomId, callback, {
+        roomManager,
+        getRoomConfig,
+      });
     });
 
     registerGetRoomsInfoHandler(socket, {
@@ -213,8 +201,12 @@ async function startServer() {
 
     socket.on('client_capabilities', (caps) => {
       try {
-        if (caps && typeof caps === 'object') {
-          roomManager.setClientCapabilities(socket.id, caps);
+        const parsed = sanitizeClientCapabilities(caps);
+        if (parsed.valid) {
+          roomManager.setClientCapabilities(
+            socket.id,
+            parsed.hasSupportsType13 ? { supportsType13: parsed.supportsType13 } : {}
+          );
         }
       } catch (err) {
         console.error("Error setting client capabilities:", err);
@@ -247,37 +239,13 @@ async function startServer() {
     });
 
     socket.on('draw_repair_req', (data) => {
-      try {
-        const player = roomManager.getPlayer(socket.id);
-        if (!player || !player.roomId) return;
-        const roomId = player.roomId;
-
-        // 1. Strict Input Validation (silent rejection)
-        if (!data || typeof data !== 'object' || Array.isArray(data)) return;
-
-        if (typeof data.instId !== 'string') return;
-        const trimmedInstId = data.instId.trim();
-        if (trimmedInstId.length < 1 || trimmedInstId.length > 7 || !/^[a-zA-Z0-9]+$/.test(trimmedInstId)) {
-          return;
-        }
-
-        if (typeof data.strokeId !== 'number' || !Number.isInteger(data.strokeId)) return;
-        if (data.strokeId < 0 || data.strokeId > 65535) return;
-
-        // 2. Per-player room rate limiting
-        const rateLimitKey = `${roomId}:${player.persistentId || socket.id}`;
-        if (!checkRateLimit(drawRepairLimits, rateLimitKey, DRAW_REPAIR_LIMIT, DRAW_REPAIR_WINDOW_MS)) {
-          return;
-        }
-
-        // 3. Retrieve canonical Type 9 stroke from cache and emit ONLY to requesting socket
-        const canonicalStroke = roomManager.getCanonicalFreeDrawStroke(roomId, trimmedInstId, data.strokeId);
-        if (canonicalStroke) {
-          socket.emit('draw_binary', canonicalStroke);
-        }
-      } catch (err) {
-        console.error("Error handling draw_repair_req:", err);
-      }
+      handleDrawRepairReq(socket, data, {
+        roomManager,
+        drawRepairLimits,
+        checkRateLimit,
+        limit: DRAW_REPAIR_LIMIT,
+        windowMs: DRAW_REPAIR_WINDOW_MS,
+      });
     });
 
     socket.on('start_free_draw', () => {

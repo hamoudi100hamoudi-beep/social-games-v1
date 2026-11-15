@@ -14,8 +14,8 @@ export function handleRegisterDrawingIdentity(
     const { roomManager } = deps;
     if (!socket || !roomManager) return;
 
-    if (data && typeof data === 'object' && !Array.isArray(data)) {
-      const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
+    if (data && typeof data === 'object' && !Array.isArray(data) && typeof data.instanceId === 'string' && data.instanceId.length <= 64) {
+      const instanceId = data.instanceId.trim();
       if (instanceId.length > 0) {
         roomManager.registerDrawingIdentity(socket.id, instanceId);
       }
@@ -37,8 +37,8 @@ export function handleUnregisterDrawingIdentity(
     const { roomManager } = deps;
     if (!socket || !roomManager) return;
 
-    if (data && typeof data === 'object' && !Array.isArray(data)) {
-      const instanceId = typeof data.instanceId === 'string' ? data.instanceId.trim() : '';
+    if (data && typeof data === 'object' && !Array.isArray(data) && typeof data.instanceId === 'string' && data.instanceId.length <= 64) {
+      const instanceId = data.instanceId.trim();
       if (instanceId.length > 0) {
         roomManager.unregisterDrawingIdentity(socket.id, instanceId);
       }

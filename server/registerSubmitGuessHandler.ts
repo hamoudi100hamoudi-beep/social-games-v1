@@ -52,8 +52,12 @@ export function handleSubmitGuess(
 
     // Strict payload validation:
     // payload must be an object containing a valid, non-empty string in the `guess` property
-    if (!data || typeof data !== 'object' || typeof data.guess !== 'string') {
+    if (!data || typeof data !== 'object' || Array.isArray(data) || typeof data.guess !== 'string') {
       return; // Silently reject null, undefined, non-objects, missing guess, numbers, objects, arrays
+    }
+
+    if (data.guess.length > 1000) {
+      return;
     }
 
     const trimmedGuess = data.guess.trim();
