@@ -392,8 +392,8 @@ export function handleDrawBinary(
       }
     } else {
       // Remaining supported legacy type (Type 10 clear compatibility)
+      // Preserve history & broadcast compatibility without counting unverified legacy Type 10 as genuine AFK activity
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
-      markPlayerActive(player, nowMs);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }

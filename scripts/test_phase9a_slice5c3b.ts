@@ -148,6 +148,22 @@ function makeType3End(instId = 'inst001', tool = 0, strokeId = 1, expectedCount 
   return buf;
 }
 
+function makeType5Clear(instId = ''): Buffer {
+  const buf = Buffer.alloc(8);
+  buf.writeUInt8(5, 0);
+  if (instId.length > 0) {
+    buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+  }
+  return buf;
+}
+
+function makeType10LegacyClear(instId = 'legacy1'): Buffer {
+  const buf = Buffer.alloc(8);
+  buf.writeUInt8(10, 0);
+  buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
+  return buf;
+}
+
 function createMockIo() {
   const roomEmits: { roomId: string; event: string; payload: any }[] = [];
   const socketEmits: { targetId: string; event: string; payload: any }[] = [];
@@ -238,7 +254,7 @@ async function runDeterministicPartAandB() {
   let mockNow = 1_750_000_000_000;
   Date.now = () => mockNow;
 
-  const { io, registerSocket } = createMockIo();
+  const { io, roomEmits, registerSocket } = createMockIo();
   const rm = new RoomManager();
   rm.setIo(io as any);
   stopManagerTimers(rm);
@@ -485,6 +501,29 @@ async function runDeterministicPartAandB() {
       'B1d. Accepted Type 4 bucket fill updates lastActivity and resets afkWarningSent'
     );
 
+    setStale(drawerPlayer, staleTs);
+    mockNow += 1_000;
+    handleDrawBinary(drawerSock, makeType5Clear('clr1'), { io, roomManager: rm, drawRateLimiter, now: () => mockNow });
+    check(
+      isRefreshed(drawerPlayer, mockNow),
+      'B1e. Accepted Type 5 clear refreshes lastActivity and resets afkWarningSent'
+    );
+
+    setStale(drawerPlayer, staleTs);
+    mockNow += 1_000;
+    const type10Buf = makeType10LegacyClear('leg10');
+    const historyLenBefore10 = compRoom.gameState.drawHistory.length;
+    roomEmits.length = 0;
+    handleDrawBinary(drawerSock, type10Buf, { io, roomManager: rm, drawRateLimiter, now: () => mockNow });
+    const historyLenAfter10 = compRoom.gameState.drawHistory.length;
+    const type10Broadcasted = roomEmits.some(
+      (e) => e.roomId === compRoomId && e.event === 'draw_binary' && Buffer.isBuffer(e.payload) && e.payload.readUInt8(0) === 10
+    );
+    check(
+      historyLenAfter10 > historyLenBefore10 && type10Broadcasted && isUnchanged(drawerPlayer, staleTs),
+      'B1f. Legacy Type 10 preserves history & broadcast compatibility without refreshing activity'
+    );
+
     // B2. Valid chat
     mockNow += 5_000;
     setStale(guesserPlayer, staleTs);
@@ -604,13 +643,41 @@ async function runDeterministicPartAandB() {
       'B9c. Rate-limited stop_free_draw (Slice 5C-2) leaves activity unchanged'
     );
 
-    // B10. Explicit ping_activity preserves AFK modal recovery
-    setStale(fdPlayer, staleTs);
+    // B10. Explicit ping_activity requires afkWarningSent === true (closed bypass)
+    const noWarnTs = mockNow - 50_000;
+    fdPlayer.lastActivity = noWarnTs;
+    fdPlayer.afkWarningSent = false;
     mockNow += 1_000;
     handlePingActivity(fdSock, rm, mockNow);
     check(
-      isRefreshed(fdPlayer, mockNow),
-      'B10. Explicit ping_activity updates lastActivity and resets afkWarningSent'
+      fdPlayer.lastActivity === noWarnTs && readAfkWarning(fdPlayer) === false,
+      'B10a. ping_activity when afkWarningSent is false does not refresh activity'
+    );
+
+    mockNow += 2_000;
+    handlePingActivity(fdSock, rm, mockNow);
+    handlePingActivity(fdSock, rm, mockNow + 500);
+    handlePingActivity(fdSock, rm, mockNow + 1_000);
+    check(
+      fdPlayer.lastActivity === noWarnTs && readAfkWarning(fdPlayer) === false,
+      'B10b. Repeated ping_activity while no warning is active never refreshes activity'
+    );
+
+    setStale(fdPlayer, staleTs);
+    mockNow += 2_000;
+    const recoveryTs = mockNow;
+    handlePingActivity(fdSock, rm, recoveryTs);
+    check(
+      isRefreshed(fdPlayer, recoveryTs),
+      'B10c. ping_activity when afkWarningSent is true updates lastActivity and resets afkWarningSent'
+    );
+
+    mockNow += 5_000;
+    handlePingActivity(fdSock, rm, mockNow);
+    handlePingActivity(fdSock, rm, mockNow + 1_000);
+    check(
+      fdPlayer.lastActivity === recoveryTs && readAfkWarning(fdPlayer) === false,
+      'B10d. Repeated ping_activity after successful recovery is ignored'
     );
   } finally {
     Date.now = realDateNow;
@@ -924,12 +991,37 @@ async function runLiveSocketIoPartD() {
       'C2b. Failed join_room reconnect leaves lastActivity and afkWarningSent unchanged'
     );
 
-    // Genuine ping_activity over live Socket.IO refreshes p
+    // Unwarned ping_activity spam over live Socket.IO is ignored (cannot bypass AFK clock)
+    const unwarnedTs = Date.now() - 80_000;
+    p.lastActivity = unwarnedTs;
+    p.afkWarningSent = false;
+    c1.emit('ping_activity');
+    c1.emit('ping_activity');
     c1.emit('ping_activity');
     await new Promise((r) => setTimeout(r, 60));
     check(
-      (p.lastActivity || 0) > staleLiveTs && readAfkWarning(p) === false,
-      'Live ping_activity refreshes lastActivity and clears afkWarningSent'
+      p.lastActivity === unwarnedTs && readAfkWarning(p) === false,
+      'Live repeated ping_activity while afkWarningSent is false does not refresh activity'
+    );
+
+    // Genuine ping_activity over live Socket.IO when afkWarningSent === true refreshes p, then subsequent spam is ignored
+    p.lastActivity = staleLiveTs;
+    p.afkWarningSent = true;
+    c1.emit('ping_activity');
+    await new Promise((r) => setTimeout(r, 60));
+    const liveRecoveryTs = p.lastActivity || 0;
+    check(
+      liveRecoveryTs > staleLiveTs && readAfkWarning(p) === false,
+      'Live ping_activity when afkWarningSent is true refreshes lastActivity and clears afkWarningSent'
+    );
+
+    await new Promise((r) => setTimeout(r, 30));
+    c1.emit('ping_activity');
+    c1.emit('ping_activity');
+    await new Promise((r) => setTimeout(r, 60));
+    check(
+      p.lastActivity === liveRecoveryTs && readAfkWarning(p) === false,
+      'Live repeated ping_activity after recovery does not advance lastActivity'
     );
 
     // Genuine send_message over live Socket.IO refreshes p

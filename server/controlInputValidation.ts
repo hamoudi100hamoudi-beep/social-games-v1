@@ -292,6 +292,7 @@ export function handlePingActivity(
   try {
     if (!socket || !roomManager) return;
     const player = roomManager.getPlayer(socket.id);
+    if (!player || player.afkWarningSent !== true) return;
     markPlayerActive(player, now);
   } catch (e) {
     console.error('Error in ping_activity event:', e);
