@@ -1,4 +1,5 @@
 import { RoomConfig } from '../src/types/game.js';
+import { ControlRateLimiter, defaultControlRateLimiter } from './rateLimit.js';
 
 export const MAX_REQUESTED_ROOM_IDS = 10;
 
@@ -16,6 +17,7 @@ export interface GetRoomsInfoDependencies {
   };
   getRoomConfig: (roomId: string) => any;
   ROOM_PRESETS: RoomConfig[];
+  controlRateLimiter?: ControlRateLimiter;
 }
 
 export function handleGetRoomsInfo(
@@ -77,8 +79,22 @@ export function registerGetRoomsInfoHandler(
   socket: any,
   deps: GetRoomsInfoDependencies
 ) {
+  const limiter =
+    deps.controlRateLimiter ??
+    (typeof socket?.id === 'string' && socket.id.length > 0 ? defaultControlRateLimiter : undefined);
+
   socket.on('get_rooms_info', (roomIdsOrCallback: unknown, maybeCallback: unknown) => {
     try {
+      if (limiter && !limiter.consume(socket?.id, 'get_rooms_info')) {
+        const cb = typeof roomIdsOrCallback === 'function' ? roomIdsOrCallback : maybeCallback;
+        if (typeof cb === 'function') {
+          try {
+            cb(Object.create(null));
+          } catch {}
+        }
+        return;
+      }
+
       handleGetRoomsInfo(roomIdsOrCallback, maybeCallback, deps);
     } catch (e) {
       console.error("Error in get_rooms_info:", e);

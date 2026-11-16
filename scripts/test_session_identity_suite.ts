@@ -14,7 +14,7 @@ import { registerVoteKickHandler, handleSubmitVoteKick } from '../server/registe
 import { registerRequestRoundSyncHandler, handleRequestRoundSync } from '../server/registerRequestRoundSyncHandler.js';
 import { registerGetRoomsInfoHandler, handleGetRoomsInfo, MAX_REQUESTED_ROOM_IDS } from '../server/registerGetRoomsInfoHandler.js';
 import { getRoomConfig, ROOM_PRESETS } from '../src/types/game.js';
-import { checkRateLimit } from '../server/rateLimit.js';
+import { checkRateLimit, ControlRateLimiter } from '../server/rateLimit.js';
 
 console.log('====================================================');
 console.log('🛡️  SESSION IDENTITY & RECONNECT SECURITY TEST SUITE');
@@ -310,12 +310,15 @@ const netIo = new Server(netHttpServer);
 const netRm = new RoomManager();
 netRm.setIo(netIo);
 
+const netControlRateLimiter = new ControlRateLimiter({ join_room: { maxTokens: 20 } });
+
 netIo.on('connection', (socket) => {
   registerJoinRoomHandler(socket, {
     io: netIo,
     roomManager: netRm,
     getRoomConfig: () => ({ maxPlayers: 5, winningScore: 30, theme: 'General' }),
-    getJsonSafeHistory: (history) => history || []
+    getJsonSafeHistory: (history) => history || [],
+    controlRateLimiter: netControlRateLimiter
   });
   registerDrawBinaryHandler(socket, {
     io: netIo,

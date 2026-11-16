@@ -1,9 +1,13 @@
+import { ControlRateLimiter, defaultControlRateLimiter } from './rateLimit.js';
+
 export interface DrawingIdentityDependencies {
   roomManager: any;
+  controlRateLimiter?: ControlRateLimiter;
 }
 
 /**
- * Production handler for register_drawing_identity enforcing safe payload validation.
+ * Production handler for register_drawing_identity enforcing safe payload validation
+ * and shared per-socket drawing identity rate limiting.
  */
 export function handleRegisterDrawingIdentity(
   socket: any,
@@ -13,6 +17,13 @@ export function handleRegisterDrawingIdentity(
   try {
     const { roomManager } = deps;
     if (!socket || !roomManager) return;
+
+    const limiter =
+      deps.controlRateLimiter ??
+      (typeof socket.id === 'string' && socket.id.length > 0 ? defaultControlRateLimiter : undefined);
+    if (limiter && !limiter.consume(socket.id, 'drawing_identity')) {
+      return;
+    }
 
     if (data && typeof data === 'object' && !Array.isArray(data) && typeof data.instanceId === 'string' && data.instanceId.length <= 64) {
       const instanceId = data.instanceId.trim();
@@ -26,7 +37,8 @@ export function handleRegisterDrawingIdentity(
 }
 
 /**
- * Production handler for unregister_drawing_identity enforcing safe payload validation.
+ * Production handler for unregister_drawing_identity enforcing safe payload validation
+ * and shared per-socket drawing identity rate limiting.
  */
 export function handleUnregisterDrawingIdentity(
   socket: any,
@@ -36,6 +48,13 @@ export function handleUnregisterDrawingIdentity(
   try {
     const { roomManager } = deps;
     if (!socket || !roomManager) return;
+
+    const limiter =
+      deps.controlRateLimiter ??
+      (typeof socket.id === 'string' && socket.id.length > 0 ? defaultControlRateLimiter : undefined);
+    if (limiter && !limiter.consume(socket.id, 'drawing_identity')) {
+      return;
+    }
 
     if (data && typeof data === 'object' && !Array.isArray(data) && typeof data.instanceId === 'string' && data.instanceId.length <= 64) {
       const instanceId = data.instanceId.trim();

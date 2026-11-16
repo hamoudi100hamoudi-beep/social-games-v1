@@ -18,13 +18,16 @@ import { registerLeaveRoomHandler } from './server/registerLeaveRoomHandler.js';
 import { registerDrawingIdentityHandlers } from './server/registerDrawingIdentityHandlers.js';
 import { registerVoteKickHandler } from './server/registerVoteKickHandler.js';
 
-import { checkRateLimit } from './server/rateLimit.js';
+import { checkRateLimit, defaultControlRateLimiter } from './server/rateLimit.js';
 import { defaultDrawRateLimiter } from './server/drawRateLimit.js';
 import { MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES } from './server/transportConfig.js';
 import {
   sanitizeClientCapabilities,
   handleGetRoomInfo,
   handleDrawRepairReq,
+  handleStartFreeDraw,
+  handleStopFreeDraw,
+  handleRequestDrawingIdentities,
 } from './server/controlInputValidation.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
@@ -190,6 +193,8 @@ async function startServer() {
       handleGetRoomInfo(roomId, callback, {
         roomManager,
         getRoomConfig,
+        controlRateLimiter: defaultControlRateLimiter,
+        socketId: socket.id,
       });
     });
 
@@ -197,6 +202,7 @@ async function startServer() {
       roomManager,
       getRoomConfig,
       ROOM_PRESETS,
+      controlRateLimiter: defaultControlRateLimiter,
     });
 
     socket.on('client_capabilities', (caps) => {
@@ -218,6 +224,7 @@ async function startServer() {
       roomManager,
       getRoomConfig,
       getJsonSafeHistory,
+      controlRateLimiter: defaultControlRateLimiter,
     });
 
     registerRequestRoundSyncHandler(socket, {
@@ -249,35 +256,29 @@ async function startServer() {
     });
 
     socket.on('start_free_draw', () => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-        roomManager.startFreeDraw(player.roomId, socket.id);
-      }
+      handleStartFreeDraw(socket, {
+        roomManager,
+        controlRateLimiter: defaultControlRateLimiter,
+      });
     });
 
     registerDrawingIdentityHandlers(socket, {
       roomManager,
+      controlRateLimiter: defaultControlRateLimiter,
     });
 
     socket.on('request_drawing_identities', () => {
-      try {
-        const player = roomManager.getPlayer(socket.id);
-        if (player && player.roomId) {
-          const identities = roomManager.getDrawingIdentitiesForRoom(player.roomId);
-          if (identities) {
-            socket.emit('drawing_identities_update', identities);
-          }
-        }
-      } catch (err) {
-        console.error("Error handling request_drawing_identities:", err);
-      }
+      handleRequestDrawingIdentities(socket, {
+        roomManager,
+        controlRateLimiter: defaultControlRateLimiter,
+      });
     });
 
     socket.on('stop_free_draw', () => {
-      const player = roomManager.getPlayer(socket.id);
-      if (player && player.roomId) {
-        roomManager.stopFreeDraw(player.roomId, socket.id);
-      }
+      handleStopFreeDraw(socket, {
+        roomManager,
+        controlRateLimiter: defaultControlRateLimiter,
+      });
     });
 
     socket.on('skip_turn', () => {
@@ -345,7 +346,11 @@ async function startServer() {
       } catch (e) {
         console.error("Error during disconnect handling:", e);
       } finally {
-        defaultDrawRateLimiter.cleanupSocket(socket.id);
+        try {
+          defaultDrawRateLimiter.cleanupSocket(socket.id);
+        } finally {
+          defaultControlRateLimiter.cleanupSocket(socket.id);
+        }
       }
     });
   });

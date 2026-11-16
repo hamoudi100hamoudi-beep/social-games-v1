@@ -1,4 +1,4 @@
-import { checkRateLimit } from './rateLimit.js';
+import { checkRateLimit, ControlRateLimiter, defaultControlRateLimiter } from './rateLimit.js';
 
 export const CONTROL_CHAR_REGEX = /[\u0000-\u001F\u007F-\u009F]/;
 
@@ -41,17 +41,34 @@ export interface GetRoomInfoDependencies {
     winningScore: number;
     theme: string;
   };
+  controlRateLimiter?: ControlRateLimiter;
+  socketId?: string;
 }
 
 /**
  * Production handler for `get_room_info` enforcing early roomId type/length/non-empty checks
- * prior to calling `getRoom` / `getRoomConfig`, preventing TypeError or console.error spam.
+ * prior to calling `getRoom` / `getRoomConfig`, preventing TypeError or console.error spam,
+ * plus optional per-socket rate limiting with safe callback resolution.
  */
 export function handleGetRoomInfo(
   roomId: unknown,
   callback: unknown,
   deps: GetRoomInfoDependencies
-): { count: number; max: number; winningScore: number; theme: string } {
+): { count: number; max: number; winningScore: number; theme: string } | { error: 'rate_limited' } {
+  if (deps.controlRateLimiter) {
+    if (!deps.controlRateLimiter.consume(deps.socketId || '', 'get_room_info')) {
+      const rateLimitedRes = { error: 'rate_limited' as const };
+      if (typeof callback === 'function') {
+        try {
+          callback(rateLimitedRes);
+        } catch (cbErr) {
+          console.error('Error executing throttled get_room_info callback:', cbErr);
+        }
+      }
+      return rateLimitedRes;
+    }
+  }
+
   let roomInfo = { count: 0, max: 5, winningScore: 30, theme: 'General' };
 
   try {
@@ -143,5 +160,106 @@ export function handleDrawRepairReq(
     }
   } catch (err) {
     console.error('Error handling draw_repair_req:', err);
+  }
+}
+
+export interface FreeDrawToggleDependencies {
+  roomManager: {
+    getPlayer: (socketId: string) => any;
+    startFreeDraw: (roomId: string, socketId: string) => void;
+    stopFreeDraw: (roomId: string, socketId: string) => void;
+  };
+  controlRateLimiter?: ControlRateLimiter;
+}
+
+/**
+ * Production handler for `start_free_draw` enforcing shared per-socket toggle rate limit.
+ */
+export function handleStartFreeDraw(
+  socket: any,
+  deps: FreeDrawToggleDependencies
+): void {
+  try {
+    const { roomManager } = deps;
+    if (!socket || !roomManager) return;
+
+    const player = roomManager.getPlayer(socket.id);
+    if (!player || !player.roomId) return;
+
+    const limiter =
+      deps.controlRateLimiter ??
+      (typeof socket.id === 'string' && socket.id.length > 0 ? defaultControlRateLimiter : undefined);
+    if (limiter && !limiter.consume(socket.id, 'free_draw_toggle')) {
+      return;
+    }
+
+    roomManager.startFreeDraw(player.roomId, socket.id);
+  } catch (err) {
+    console.error('Error in handleStartFreeDraw:', err);
+  }
+}
+
+/**
+ * Production handler for `stop_free_draw` enforcing shared per-socket toggle rate limit.
+ */
+export function handleStopFreeDraw(
+  socket: any,
+  deps: FreeDrawToggleDependencies
+): void {
+  try {
+    const { roomManager } = deps;
+    if (!socket || !roomManager) return;
+
+    const player = roomManager.getPlayer(socket.id);
+    if (!player || !player.roomId) return;
+
+    const limiter =
+      deps.controlRateLimiter ??
+      (typeof socket.id === 'string' && socket.id.length > 0 ? defaultControlRateLimiter : undefined);
+    if (limiter && !limiter.consume(socket.id, 'free_draw_toggle')) {
+      return;
+    }
+
+    roomManager.stopFreeDraw(player.roomId, socket.id);
+  } catch (err) {
+    console.error('Error in handleStopFreeDraw:', err);
+  }
+}
+
+export interface RequestDrawingIdentitiesDependencies {
+  roomManager: {
+    getPlayer: (socketId: string) => any;
+    getDrawingIdentitiesForRoom: (roomId: string) => any;
+  };
+  controlRateLimiter?: ControlRateLimiter;
+}
+
+/**
+ * Production handler for `request_drawing_identities` enforcing per-socket rate limit.
+ */
+export function handleRequestDrawingIdentities(
+  socket: any,
+  deps: RequestDrawingIdentitiesDependencies
+): void {
+  try {
+    const { roomManager } = deps;
+    if (!socket || !roomManager) return;
+
+    const player = roomManager.getPlayer(socket.id);
+    if (!player || !player.roomId) return;
+
+    const limiter =
+      deps.controlRateLimiter ??
+      (typeof socket.id === 'string' && socket.id.length > 0 ? defaultControlRateLimiter : undefined);
+    if (limiter && !limiter.consume(socket.id, 'request_drawing_identities')) {
+      return;
+    }
+
+    const identities = roomManager.getDrawingIdentitiesForRoom(player.roomId);
+    if (identities) {
+      socket.emit('drawing_identities_update', identities);
+    }
+  } catch (err) {
+    console.error('Error handling request_drawing_identities:', err);
   }
 }

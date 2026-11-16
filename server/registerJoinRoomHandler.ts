@@ -1,11 +1,13 @@
 import type { Server, Socket } from 'socket.io';
 import { CONTROL_CHAR_REGEX } from './controlInputValidation.js';
+import { ControlRateLimiter, defaultControlRateLimiter } from './rateLimit.js';
 
 export interface JoinRoomDependencies {
   io?: any;
   roomManager: any;
   getRoomConfig?: (roomId: string) => any;
   getJsonSafeHistory?: (history: any[]) => any[];
+  controlRateLimiter?: ControlRateLimiter;
 }
 
 export interface JoinRoomPayload {
@@ -51,6 +53,14 @@ export function handleJoinRoom(
       callback(res);
     }
   };
+
+  const limiter =
+    deps.controlRateLimiter ??
+    (typeof socket?.id === 'string' && socket.id.length > 0 ? defaultControlRateLimiter : undefined);
+  if (limiter && !limiter.consume(socket?.id, 'join_room')) {
+    reply({ success: false, error: 'rate_limited' });
+    return;
+  }
 
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     reply({ error: 'invalid_payload', success: false });
