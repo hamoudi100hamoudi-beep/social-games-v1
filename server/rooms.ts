@@ -4,6 +4,7 @@ import { sessionAuthStore, SessionAuthStore } from "./sessionAuth.js";
 import { normalizeArabic, isCloseGuess } from "./utils/arabicFuzzyMatch.js";
 import { ALL_WORDS } from "./data/wordsDictionary.js";
 import { sanitizeClientCapabilities } from "./controlInputValidation.js";
+import { VOTEKICK_ALERT_COOLDOWN_MS } from "./registerVoteKickHandler.js";
 
 export { normalizeArabic };
 
@@ -1097,6 +1098,7 @@ const words = word.split(" ").filter(w => w.length > 0);
         guessMessages: [],
         bannedUsers: [],
         votekicks: {},
+        votekickAlertCooldowns: new Map(),
       });
     }
     return this.rooms.get(roomId)!;
@@ -1627,14 +1629,29 @@ const words = word.split(" ").filter(w => w.length > 0);
 
         if (room.players.length === 0) {
           this.clearPhaseDeadlineTimer(roomId);
-          // Immediately purge drawing history, redo stack, and chat to free memory
+          // Immediately purge drawing history, redo stack, chat, and cooldown maps to free memory
           if (room.gameState) {
             room.gameState.drawHistory = [];
             room.gameState.redoStack = [];
           }
           room.chatMessages = [];
+          room.votekickAlertCooldowns?.clear();
           this.rooms.delete(roomId);
           return undefined; // Room deleted
+        }
+
+        if (room.votekickAlertCooldowns) {
+          const now = Date.now();
+          for (const [key, entry] of room.votekickAlertCooldowns.entries()) {
+            if (
+              !entry ||
+              now - entry.sentAt >= VOTEKICK_ALERT_COOLDOWN_MS ||
+              entry.targetId === pId ||
+              entry.targetId === socketId
+            ) {
+              room.votekickAlertCooldowns.delete(key);
+            }
+          }
         }
 
         if (room.activeDrawers) {

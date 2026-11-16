@@ -1,6 +1,14 @@
 import { checkRateLimit } from './rateLimit.js';
 import { CONTROL_CHAR_REGEX } from './controlInputValidation.js';
 
+export const VOTEKICK_ALERT_COOLDOWN_MS = 60_000;
+
+export interface VotekickAlertCooldownEntry {
+  voterId: string;
+  targetId: string;
+  sentAt: number;
+}
+
 export interface VoteKickDependencies {
   io: any;
   roomManager: any;
@@ -10,7 +18,8 @@ export interface VoteKickDependencies {
 
 /**
  * Production handler for submit_vote_kick enforcing safe payload validation,
- * rate limiting, quorum calculation, vote toggling, chat announcements, and room eviction/banning.
+ * rate limiting, self-vote protection, quorum calculation, vote toggling,
+ * separated votekick_alert notification cooldowns, and room eviction/banning.
  */
 export function handleSubmitVoteKick(
   socket: any,
@@ -70,11 +79,26 @@ export function handleSubmitVoteKick(
       return;
     }
 
+    const selfId = player.persistentId || player.id;
+    const targetAuthId = targetPlayer.persistentId || targetPlayer.id;
+
+    // Authoritative self-vote protection using server-side voter and target identities
+    if (
+      targetPlayer === player ||
+      targetPlayer.id === socket.id ||
+      targetPlayer.id === player.id ||
+      (player.persistentId && targetPlayer.persistentId === player.persistentId) ||
+      targetPlayerId === selfId ||
+      targetAuthId === selfId
+    ) {
+      if (typeof callback === 'function') callback({ success: false, error: 'cannot_vote_self' });
+      return;
+    }
+
     if (!room.votekicks) room.votekicks = {};
     if (!room.bannedUsers) room.bannedUsers = [];
 
     const voters = room.votekicks[targetPlayerId] || [];
-    const selfId = player.persistentId || player.id;
     const alreadyVoted = voters.includes(selfId);
 
     // Get total active (not offline) players in the room representing the room's quorum
@@ -104,13 +128,15 @@ export function handleSubmitVoteKick(
 
       if (typeof callback === 'function') callback({ success: true, voted: false, count: currentCount, required: requiredVotes });
 
-      // Update state visually
-      roomManager.sendStateToPlayer(room, player);
-      roomManager.sendStateToPlayer(room, targetPlayer);
-      // Broadcast to all
+      // Broadcast updated room state to all room members (includes both voter and target)
+      let voterUpdated = false;
       room.players.forEach((p: any) => {
+        if (p === player || p.id === player.id) voterUpdated = true;
         roomManager.sendStateToPlayer(room, p);
       });
+      if (!voterUpdated) {
+        roomManager.sendStateToPlayer(room, player);
+      }
       return;
     }
 
@@ -119,17 +145,36 @@ export function handleSubmitVoteKick(
     room.votekicks[targetPlayerId] = voters;
     const currentCount = voters.length;
 
-    // Visual Chat alert styled dynamic
-    const announceMsg = {
-      id: 'votekick-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
-      text: `${player.name} voted to kick out ${targetPlayer.name}`,
-      voterName: player.name,
-      targetName: targetPlayer.name,
-      type: 'votekick_alert'
-    };
-    roomManager.saveChatMessage(roomId, announceMsg);
-    if (io) {
-      io.to(roomId).emit('receive_message', announceMsg);
+    // Separated notification cooldown (60,000ms per (voterId, targetPlayerId) pair)
+    // Vote state toggling & quorum checks above remain unaffected.
+    const now = Date.now();
+    if (!(room.votekickAlertCooldowns instanceof Map)) {
+      room.votekickAlertCooldowns = new Map<string, VotekickAlertCooldownEntry>();
+    }
+    const alertCooldowns: Map<string, VotekickAlertCooldownEntry> = room.votekickAlertCooldowns;
+    for (const [k, entry] of alertCooldowns.entries()) {
+      if (!entry || now - entry.sentAt >= VOTEKICK_ALERT_COOLDOWN_MS) {
+        alertCooldowns.delete(k);
+      }
+    }
+
+    const pairKey = `${selfId.length}:${selfId}:${targetAuthId}`;
+    const existingAlert = alertCooldowns.get(pairKey);
+    if (!existingAlert || now - existingAlert.sentAt >= VOTEKICK_ALERT_COOLDOWN_MS) {
+      alertCooldowns.set(pairKey, { voterId: selfId, targetId: targetAuthId, sentAt: now });
+
+      // Visual Chat alert styled dynamic
+      const announceMsg = {
+        id: 'votekick-' + now.toString() + Math.random().toString(36).substr(2, 5),
+        text: `${player.name} voted to kick out ${targetPlayer.name}`,
+        voterName: player.name,
+        targetName: targetPlayer.name,
+        type: 'votekick_alert'
+      };
+      roomManager.saveChatMessage(roomId, announceMsg);
+      if (io) {
+        io.to(roomId).emit('receive_message', announceMsg);
+      }
     }
 
     if (currentCount >= requiredVotes) {

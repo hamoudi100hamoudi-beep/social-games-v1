@@ -56,6 +56,7 @@ export interface Room {
   freeDrawStrokes?: Map<string, any>;
   freeDrawCanonicalCache?: Map<string, { buffer: Buffer; createdAt: number }>;
   drawingIdentities?: Record<string, { socketId: string; playerName: string }>;
+  votekickAlertCooldowns?: Map<string, { voterId: string; targetId: string; sentAt: number }>;
 }
 
 export interface RoomConfig {
