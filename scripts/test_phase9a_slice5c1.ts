@@ -617,12 +617,6 @@ async function runTests() {
   console.log('\n--- Part D: get_room_info Validation & Zero Error Spam ---');
   {
     const rm = new RoomManager();
-    const originalConsoleError = console.error;
-    const loggedErrors: any[][] = [];
-    console.error = (...args: any[]) => {
-      loggedErrors.push(args);
-    };
-
     try {
       rm.addPlayerToRoom('General #Test', {
         id: 's-info-1',
@@ -648,21 +642,36 @@ async function runTests() {
       const badInputs: any[] = [123, {}, ['General #Test'], null, undefined, '', '   ', 'a'.repeat(101), 'bad\nroom'];
       let allCallbacksClean = true;
       let threw = false;
-      for (const bad of badInputs) {
-        let cbRes: any = null;
-        try {
-          handleGetRoomInfo(bad, (r: any) => (cbRes = r), { roomManager: rm, getRoomConfig });
-        } catch {
-          threw = true;
+      const originalConsoleError = console.error;
+      const loggedErrors: any[][] = [];
+      console.error = (...args: any[]) => {
+        loggedErrors.push(args);
+      };
+      try {
+        for (const bad of badInputs) {
+          let cbRes: any = null;
+          try {
+            handleGetRoomInfo(bad, (r: any) => (cbRes = r), { roomManager: rm, getRoomConfig });
+          } catch {
+            threw = true;
+          }
+          if (
+            !cbRes ||
+            cbRes.count !== 0 ||
+            cbRes.max !== 5 ||
+            cbRes.winningScore !== 30 ||
+            cbRes.theme !== 'General'
+          ) {
+            allCallbacksClean = false;
+          }
         }
-        if (
-          !cbRes ||
-          cbRes.count !== 0 ||
-          cbRes.max !== 5 ||
-          cbRes.winningScore !== 30 ||
-          cbRes.theme !== 'General'
-        ) {
-          allCallbacksClean = false;
+      } finally {
+        console.error = originalConsoleError;
+      }
+
+      if (loggedErrors.length > 0) {
+        for (const errArgs of loggedErrors) {
+          console.error('  [Captured D2 console.error]:', ...errArgs);
         }
       }
       check(
@@ -670,7 +679,6 @@ async function runTests() {
         'D2. Invalid get_room_info inputs return default response without TypeError or console.error spam'
       );
     } finally {
-      console.error = originalConsoleError;
       stopManagerTimers(rm);
     }
   }
