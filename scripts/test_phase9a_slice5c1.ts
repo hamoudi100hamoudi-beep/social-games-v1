@@ -6,7 +6,7 @@ import customParser from 'socket.io-msgpack-parser';
 
 import { RoomManager, normalizeArabic } from '../server/rooms.js';
 import { MAX_SOCKET_HTTP_BUFFER_SIZE_BYTES } from '../server/transportConfig.js';
-import { getRoomConfig } from '../src/types/game.js';
+import { getRoomConfig, type GameState } from '../src/types/game.js';
 import { extractFirstEmoji } from '../src/components/game/CustomEmojiModal.js';
 import { handleJoinRoom } from '../server/registerJoinRoomHandler.js';
 import {
@@ -806,9 +806,11 @@ async function runTests() {
           handleSelectWord({ id: 'sock-e-drawer' }, { word: hugeWord }, { roomManager: rm });
           const stillChoosing = room.gameState.status === 'CHOOSING';
 
+          const readRoomStatus = (targetRoom: { gameState: GameState }): GameState['status'] => targetRoom.gameState.status;
           handleSelectWord({ id: 'sock-e-drawer' }, { word: 'سيارة' }, { roomManager: rm });
+          const statusAfterSelect = readRoomStatus(room);
           check(
-            hugeTrimCalls === 0 && stillChoosing && room.gameState.status === 'DRAWING' && room.gameState.currentWord === 'سيارة',
+            hugeTrimCalls === 0 && stillChoosing && statusAfterSelect === 'DRAWING' && room.gameState.currentWord === 'سيارة',
             'E3. select_word rejects Arrays & >128 raw pre-trim while preserving valid wordOptions matching'
           );
         } finally {
