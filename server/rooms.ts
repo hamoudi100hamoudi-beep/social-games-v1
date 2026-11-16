@@ -3,7 +3,7 @@ import { Player, Room, GameState, getRoomConfig, ROOM_PRESETS } from "../src/typ
 import { sessionAuthStore, SessionAuthStore } from "./sessionAuth.js";
 import { normalizeArabic, isCloseGuess } from "./utils/arabicFuzzyMatch.js";
 import { ALL_WORDS } from "./data/wordsDictionary.js";
-import { sanitizeClientCapabilities } from "./controlInputValidation.js";
+import { sanitizeClientCapabilities, markPlayerActive } from "./controlInputValidation.js";
 import { VOTEKICK_ALERT_COOLDOWN_MS } from "./registerVoteKickHandler.js";
 
 export { normalizeArabic };
@@ -713,14 +713,16 @@ export class RoomManager {
     if (!wordOptions.includes(trimmedWord)) return;
 
     this.clearPhaseDeadlineTimer(room.id);
+    const now = Date.now();
     room.gameState.currentWord = trimmedWord;
     room.gameState.status = "DRAWING";
     delete room.gameState.phaseEndsAt;
     delete room.gameState.phaseRemainingMs;
     room.gameState.wordOptions = [];
-    room.gameState.drawingStartTime = Date.now();
+    room.gameState.drawingStartTime = now;
     room.gameState.isFastAllGuessed = false;
     room.gameState.noOneGuessedVariant = undefined;
+    markPlayerActive(player, now);
     console.log(`[Room ${room.id}] Transitioning to DRAWING. Word: ${trimmedWord}`);
     this.broadcastState(room);
   }
@@ -737,6 +739,7 @@ export class RoomManager {
     )
       return;
 
+    markPlayerActive(player);
     this.transitionToRoundEnd(room, "skipped");
   }
 
@@ -761,6 +764,9 @@ export class RoomManager {
 
     // Reject if player already guessed
     if (room.gameState.correctGuessers.includes(pId)) return;
+
+    // Authorized non-duplicate guess (correct, close, or valid wrong guess) counts as genuine activity
+    markPlayerActive(player);
 
     const isCorrect =
       trimmedGuess.toLowerCase() === currentWord.toLowerCase().trim() ||
@@ -893,6 +899,7 @@ const words = word.split(" ").filter(w => w.length > 0);
     if (room.gameState.hintsUsed >= maxHints) return;
 
     room.gameState.hintsUsed++;
+    markPlayerActive(player);
 
     if (
       room.gameState.hintsUsed >= 2 ||
@@ -969,6 +976,7 @@ const words = word.split(" ").filter(w => w.length > 0);
     if (room.gameState.reports.includes(pId)) return;
 
     room.gameState.reports.push(pId);
+    markPlayerActive(player);
 
     // Broadcast report message to the guess/info logs feed exactly as shown: "⚠️ [PlayerName] reported!"
     this.broadcastGuess(room, {
@@ -1108,7 +1116,8 @@ const words = word.split(" ").filter(w => w.length > 0);
     const room = this.rooms.get(roomId);
     if (!room || !room.isFreeDraw) return;
     const player = this.players.get(socketId);
-    const pId = player?.persistentId || socketId;
+    if (!player || player.roomId !== roomId) return;
+    const pId = player.persistentId || socketId;
     if (!room.activeDrawers) room.activeDrawers = [];
 
     let hasChanged = false;
@@ -1127,6 +1136,7 @@ const words = word.split(" ").filter(w => w.length > 0);
     }
 
     if (hasChanged) {
+      markPlayerActive(player);
       this.broadcastState(room);
     }
   }
@@ -1135,7 +1145,8 @@ const words = word.split(" ").filter(w => w.length > 0);
     const room = this.rooms.get(roomId);
     if (!room || !room.isFreeDraw) return;
     const player = this.players.get(socketId);
-    const pId = player?.persistentId || socketId;
+    if (!player || player.roomId !== roomId) return;
+    const pId = player.persistentId || socketId;
 
     if (!room.activeDrawers || room.activeDrawers.length === 0) return;
 
@@ -1143,6 +1154,7 @@ const words = word.split(" ").filter(w => w.length > 0);
     room.activeDrawers = room.activeDrawers.filter((id) => id !== pId && id !== socketId);
 
     if (room.activeDrawers.length !== prevLength) {
+      markPlayerActive(player);
       this.broadcastState(room);
     }
   }
@@ -1583,7 +1595,7 @@ const words = word.split(" ").filter(w => w.length > 0);
     }
 
     player.roomId = roomId;
-    player.lastActivity = Date.now();
+    markPlayerActive(player);
     this.players.set(player.id, player);
 
     // Add to new room if not already in it
@@ -1746,7 +1758,7 @@ const words = word.split(" ").filter(w => w.length > 0);
         `[RECONNECT ATTEMPT] Searching for User: ${existingPlayer.name}, Found Match? Yes (${matchMethod}), Socket ID unchanged: ${newSocketId}`,
       );
       existingPlayer.isOffline = false;
-      existingPlayer.lastActivity = Date.now();
+      markPlayerActive(existingPlayer);
       delete existingPlayer.offlineSince;
       this.broadcastState(room);
       return { status: 'reconnected', room };
@@ -1770,7 +1782,7 @@ const words = word.split(" ").filter(w => w.length > 0);
     // Update Player ID mapping
     existingPlayer.id = newSocketId;
     existingPlayer.isOffline = false;
-    existingPlayer.lastActivity = Date.now();
+    markPlayerActive(existingPlayer);
     delete existingPlayer.offlineSince;
 
     // Update RoomManager players map

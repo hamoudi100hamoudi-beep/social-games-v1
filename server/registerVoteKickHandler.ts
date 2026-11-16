@@ -1,5 +1,5 @@
 import { checkRateLimit } from './rateLimit.js';
-import { CONTROL_CHAR_REGEX } from './controlInputValidation.js';
+import { CONTROL_CHAR_REGEX, markPlayerActive } from './controlInputValidation.js';
 
 export const VOTEKICK_ALERT_COOLDOWN_MS = 60_000;
 
@@ -125,6 +125,7 @@ export function handleSubmitVoteKick(
       const updatedVoters = voters.filter((vId: string) => vId !== selfId);
       room.votekicks[targetPlayerId] = updatedVoters;
       const currentCount = updatedVoters.length;
+      markPlayerActive(player);
 
       if (typeof callback === 'function') callback({ success: true, voted: false, count: currentCount, required: requiredVotes });
 
@@ -148,6 +149,7 @@ export function handleSubmitVoteKick(
     // Separated notification cooldown (60,000ms per (voterId, targetPlayerId) pair)
     // Vote state toggling & quorum checks above remain unaffected.
     const now = Date.now();
+    markPlayerActive(player, now);
     if (!(room.votekickAlertCooldowns instanceof Map)) {
       room.votekickAlertCooldowns = new Map<string, VotekickAlertCooldownEntry>();
     }

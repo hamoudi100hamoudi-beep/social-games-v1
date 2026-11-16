@@ -28,6 +28,7 @@ import {
   handleStartFreeDraw,
   handleStopFreeDraw,
   handleRequestDrawingIdentities,
+  handlePingActivity,
 } from './server/controlInputValidation.js';
 
 const getJsonSafeHistory = (history: any[]): any[] => {
@@ -173,22 +174,6 @@ async function startServer() {
   io.on('connection', (socket) => {
     console.log(`[Socket] Client connected: ${socket.id}`);
 
-    const PASSIVE_BACKGROUND_EVENTS = new Set([
-      'request_round_sync',
-      'get_room_info',
-    ]);
-
-    socket.onAny((eventName) => {
-      try {
-        if (PASSIVE_BACKGROUND_EVENTS.has(eventName)) return;
-        const player = roomManager.getPlayer(socket.id);
-        if (player) {
-          player.lastActivity = Date.now();
-          player.afkWarningSent = false;
-        }
-      } catch (err) {}
-    });
-    
     socket.on('get_room_info', (roomId, callback) => {
       handleGetRoomInfo(roomId, callback, {
         roomManager,
@@ -328,15 +313,7 @@ async function startServer() {
     });
 
     socket.on('ping_activity', () => {
-      try {
-        const player = roomManager.getPlayer(socket.id);
-        if (player) {
-          player.lastActivity = Date.now();
-          player.afkWarningSent = false;
-        }
-      } catch (e) {
-        console.error("Error in ping_activity event:", e);
-      }
+      handlePingActivity(socket, roomManager);
     });
 
     socket.on('disconnect', () => {

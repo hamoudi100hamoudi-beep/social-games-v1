@@ -263,3 +263,37 @@ export function handleRequestDrawingIdentities(
     console.error('Error handling request_drawing_identities:', err);
   }
 }
+
+export interface PlayerActivityTarget {
+  lastActivity?: number;
+  afkWarningSent?: boolean;
+}
+
+/**
+ * Updates player AFK activity timestamp and clears any prior warning flag in O(1) without allocations.
+ */
+export function markPlayerActive(
+  player: PlayerActivityTarget | null | undefined,
+  now: number = Date.now()
+): void {
+  if (!player) return;
+  player.lastActivity = now;
+  player.afkWarningSent = false;
+}
+
+/**
+ * Production handler for `ping_activity` preserving explicit AFK modal recovery.
+ */
+export function handlePingActivity(
+  socket: any,
+  roomManager: { getPlayer: (socketId: string) => PlayerActivityTarget | undefined },
+  now: number = Date.now()
+): void {
+  try {
+    if (!socket || !roomManager) return;
+    const player = roomManager.getPlayer(socket.id);
+    markPlayerActive(player, now);
+  } catch (e) {
+    console.error('Error in ping_activity event:', e);
+  }
+}

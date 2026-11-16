@@ -1,3 +1,5 @@
+import { markPlayerActive } from './controlInputValidation.js';
+
 export type CheckRateLimitFn = (
   limitsMap: Map<string, number[]>,
   key: string,
@@ -83,8 +85,11 @@ export function handleSendMessage(
        }
     }
 
+    const now = Date.now();
+    markPlayerActive(player, now);
+
     const msg = {
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+      id: now.toString() + Math.random().toString(36).substr(2, 5),
       text: trimmedText,
       sender: player.name,
       senderId: socket.id,

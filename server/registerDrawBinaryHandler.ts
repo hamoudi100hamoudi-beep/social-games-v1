@@ -8,6 +8,7 @@ import {
   isValidType4Packet,
   isValidType9Packet
 } from './utils/binaryBufferHelpers.js';
+import { markPlayerActive } from './controlInputValidation.js';
 
 export interface DrawBinaryDependencies {
   io?: any;
@@ -273,28 +274,35 @@ export function handleDrawBinary(
       } else {
         roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
       }
+      markPlayerActive(player, nowMs);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 6) { // draw_cancel
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+      markPlayerActive(player, nowMs);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 7) { // draw_undo
       if (isFreeDraw || isExperimental) {
         const removed = roomManager.undoFreeDrawStroke(roomId, undoTargetInstId, undoTargetStrokeId);
-        if (removed && io && typeof io.to === 'function') {
-          io.to(roomId).emit('draw_binary', buf);
+        if (removed) {
+          markPlayerActive(player, nowMs);
+          if (io && typeof io.to === 'function') {
+            io.to(roomId).emit('draw_binary', buf);
+          }
         }
       } else {
         roomManager.undoLastDrawing(roomId);
+        markPlayerActive(player, nowMs);
         if (io && typeof io.to === 'function') {
           io.to(roomId).emit('draw_binary', buf);
         }
       }
     } else if (type === 8) { // draw_redo
       roomManager.redoDrawing(roomId);
+      markPlayerActive(player, nowMs);
       if (io && typeof io.to === 'function') {
         io.to(roomId).emit('draw_binary', buf);
       }
@@ -302,6 +310,7 @@ export function handleDrawBinary(
       if (useCanonicalPipeline && isContinuousTool) {
         const started = roomManager.handleFreeDrawStart(roomId, socket.id, buf);
         if (!started) return;
+        markPlayerActive(player, nowMs);
         // Broadcast live draw_start so spectators initialize their local live layer
         if (socket.broadcast && typeof socket.broadcast.to === 'function') {
           socket.broadcast.to(roomId).emit('draw_binary', buf);
@@ -309,6 +318,7 @@ export function handleDrawBinary(
       } else {
         // Shape start in canonical rooms or any allowed tool start in Normal rooms
         roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+        markPlayerActive(player, nowMs);
         if (socket.broadcast && typeof socket.broadcast.to === 'function') {
           socket.broadcast.to(roomId).emit('draw_binary', buf);
         }
@@ -318,6 +328,7 @@ export function handleDrawBinary(
       if (!res || !res.success || !res.points || !res.instId) {
         return;
       }
+      markPlayerActive(player, nowMs);
       if (deps.relayFreeDrawMove) {
         deps.relayFreeDrawMove(roomId, socket, buf, res.instId, res.points);
       } else {
@@ -327,6 +338,7 @@ export function handleDrawBinary(
       if (useCanonicalPipeline) {
         const ok = roomManager.handleFreeDrawMove(roomId, socket.id, buf);
         if (!ok) return;
+        markPlayerActive(player, nowMs);
         if (socket.broadcast && typeof socket.broadcast.to === 'function') {
           if (socket.broadcast.to(roomId).volatile) {
             socket.broadcast.to(roomId).volatile.emit('draw_binary', buf);
@@ -336,6 +348,7 @@ export function handleDrawBinary(
         }
       } else {
         roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+        markPlayerActive(player, nowMs);
         if (socket.broadcast && typeof socket.broadcast.to === 'function') {
           socket.broadcast.to(roomId).emit('draw_binary', buf);
         }
@@ -344,6 +357,7 @@ export function handleDrawBinary(
       if (useCanonicalPipeline && isContinuousTool) {
         const commitResult = roomManager.handleFreeDrawEnd(roomId, socket.id, buf);
         if (commitResult && commitResult.committed) {
+          markPlayerActive(player, nowMs);
           const commitBuf = Buffer.alloc(12);
           commitBuf.writeUInt8(11, 0); // MSG_DRAW_COMMIT = 11
           commitBuf.write(commitResult.instId.padEnd(7, "\0").slice(0, 7), 1, 7, "ascii");
@@ -359,23 +373,27 @@ export function handleDrawBinary(
       } else {
         // Shape end in canonical rooms or any allowed tool end in Normal rooms
         roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+        markPlayerActive(player, nowMs);
         if (socket.broadcast && typeof socket.broadcast.to === 'function') {
           socket.broadcast.to(roomId).emit('draw_binary', buf);
         }
       }
     } else if (type === 9) { // draw_stroke
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+      markPlayerActive(player, nowMs);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 4) { // draw_action (bucket)
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+      markPlayerActive(player, nowMs);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else {
       // Remaining supported legacy type (Type 10 clear compatibility)
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+      markPlayerActive(player, nowMs);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
