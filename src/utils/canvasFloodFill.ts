@@ -61,6 +61,84 @@ const matchColor = (data: Uint8ClampedArray, i: number, r: number, g: number, b:
          Math.abs(data[i + 3] - a) <= tolerance;
 };
 
+const tryCompositePartialAlphaBoundary = (
+  data: Uint8ClampedArray,
+  visited: Uint8Array,
+  cw: number,
+  ch: number,
+  bx: number,
+  by: number,
+  fx: number,
+  fy: number,
+  bPixelIdx: number,
+  bIdx: number,
+  pr: number,
+  pg: number,
+  pb: number,
+  pa: number,
+  fr: number,
+  fg: number,
+  fb: number,
+  fillOpacity: number,
+  allowHighPartialAlpha: boolean
+): boolean => {
+  if (pa <= 10 || (allowHighPartialAlpha ? pa >= 255 : pa > 240)) {
+    return false;
+  }
+
+  const dx = bx - fx;
+  const dy = by - fy;
+  const ox = bx + dx;
+  const oy = by + dy;
+
+  if (ox < 0 || ox >= cw || oy < 0 || oy >= ch) {
+    return false;
+  }
+
+  const oPixelIdx = oy * cw + ox;
+  // Do not expand if outward neighbor is already part of the filled region
+  if (visited[oPixelIdx] === 1) {
+    return false;
+  }
+
+  const oIdx = oPixelIdx * 4;
+  const oa = data[oIdx + 3];
+
+  // Ascending Alpha Gradient Invariant:
+  // The outward neighbor O must provide convincing evidence of a stronger stroke edge than P.
+  // For repeated partial-alpha seeds and partial-alpha candidates under opaque seeds,
+  // also permit near-opaque stroke cores (oa >= 240 && oa > pa) so AA pixels > 220 can finish compositing safely.
+  const hasConvincingOutwardEdge = allowHighPartialAlpha
+    ? (oa >= pa + MIN_ALPHA_GRADIENT_STEP || (oa >= 240 && oa > pa))
+    : (oa >= pa + MIN_ALPHA_GRADIENT_STEP);
+
+  if (!hasConvincingOutwardEdge) {
+    return false;
+  }
+
+  // Standard source-over compositing of existing foreground pixel P over new fill background F:
+  // Aout = Ap + Af * (1 - Ap)
+  // Cout = (Ap * Cp + Af * (1 - Ap) * Cf) / Aout
+  const ap = pa / 255;
+  const af = fillOpacity;
+  const aOut = ap + af * (1 - ap);
+
+  if (aOut > 0.001) {
+    const weightP = ap / aOut;
+    const weightF = (af * (1 - ap)) / aOut;
+
+    data[bIdx]     = Math.min(255, Math.max(0, Math.round(weightP * pr + weightF * fr)));
+    data[bIdx + 1] = Math.min(255, Math.max(0, Math.round(weightP * pg + weightF * fg)));
+    data[bIdx + 2] = Math.min(255, Math.max(0, Math.round(weightP * pb + weightF * fb)));
+    data[bIdx + 3] = Math.min(255, Math.max(0, Math.round(aOut * 255)));
+
+    visited[bPixelIdx] = 1;
+    return true;
+  }
+
+  return false;
+};
+
 // Bounded seed recovery search offsets within Euclidean distance <= 2.0 physical pixels, ordered by distance
 const RECOVERY_NEIGHBOR_OFFSETS = [
   // Distance 1.0 (4 orthogonal neighbors)
@@ -314,20 +392,28 @@ export const executeRasterFloodFill = (
     const isPartiallyTransparentSeed = ta > 10 && ta < 255;
 
     const canRunPhase5 = isTransparentSeed && EXPERIMENTAL_ALPHA_AWARE_TRANSPARENT_EDGE_FILL;
+    // Partial-alpha seeds (10 < ta < 255) remain guarded from Phase 6 opaque RGB reconstruction (Phase 7),
+    // and instead use a dedicated Phase 5-style source-over edge-compositing path when transparent edge fill is active.
+    const canRunPartialAlphaEdge = (
+      isPartiallyTransparentSeed &&
+      EXPERIMENTAL_GUARD_PARTIAL_ALPHA_SEEDS_FROM_PHASE6 &&
+      EXPERIMENTAL_ALPHA_AWARE_TRANSPARENT_EDGE_FILL
+    );
     const canRunPhase6 = (
       EXPERIMENTAL_GUARD_PARTIAL_ALPHA_SEEDS_FROM_PHASE6
         ? isFullyOpaqueSeed
         : (isFullyOpaqueSeed || isPartiallyTransparentSeed)
     ) && EXPERIMENTAL_OPAQUE_BACKGROUND_EDGE_PRESERVATION;
 
-    // Phase 7: If neither Phase 5 nor Phase 6 can run (e.g. partially transparent seed with guard active),
-    // skip boundary edge processing cleanly without mutating candidate pixels.
-    const activeBoundaryCount = (canRunPhase5 || canRunPhase6) ? boundaryCount : 0;
+    const activeBoundaryCount = (canRunPhase5 || canRunPartialAlphaEdge || canRunPhase6) ? boundaryCount : 0;
 
     for (let b = 0; b < activeBoundaryCount; b++) {
       const bx = sharedBoundaryX[b];
       const by = sharedBoundaryY[b];
       const bPixelIdx = by * cw + bx;
+      if (visited[bPixelIdx] === 1) {
+        continue;
+      }
       const bIdx = bPixelIdx * 4;
 
       const pr = data[bIdx];
@@ -336,55 +422,84 @@ export const executeRasterFloodFill = (
       const pa = data[bIdx + 3];
 
       if (canRunPhase5) {
-        // Phase 5: Alpha-Aware Boundary Compositing for Transparent-Seeded Fills
-        // Candidate must have intermediate alpha: above transparent threshold (>10) and not already near-opaque (<=240)
-        if (pa <= 10 || pa > 240) {
+        // Phase 5: Original Alpha-Aware Boundary Compositing for Transparent-Seeded Fills (ta <= 10)
+        if (tryCompositePartialAlphaBoundary(
+          data,
+          visited,
+          cw,
+          ch,
+          bx,
+          by,
+          sharedBoundaryFromX[b],
+          sharedBoundaryFromY[b],
+          bPixelIdx,
+          bIdx,
+          pr,
+          pg,
+          pb,
+          pa,
+          fr,
+          fg,
+          fb,
+          fillOpacity,
+          false
+        )) {
+          filledPixelCount++;
+        }
+      } else if (canRunPartialAlphaEdge) {
+        // Repeated Partial-Alpha Boundary Compositing (10 < ta < 255) with Phase 7 Guard Active
+        if (tryCompositePartialAlphaBoundary(
+          data,
+          visited,
+          cw,
+          ch,
+          bx,
+          by,
+          sharedBoundaryFromX[b],
+          sharedBoundaryFromY[b],
+          bPixelIdx,
+          bIdx,
+          pr,
+          pg,
+          pb,
+          pa,
+          fr,
+          fg,
+          fb,
+          fillOpacity,
+          true
+        )) {
+          filledPixelCount++;
+        }
+      } else if (canRunPhase6) {
+        // Guard transition to fully opaque seed: partial-alpha boundary candidates must NOT enter opaque RGB reconstruction.
+        if (pa < 255) {
+          if (tryCompositePartialAlphaBoundary(
+            data,
+            visited,
+            cw,
+            ch,
+            bx,
+            by,
+            sharedBoundaryFromX[b],
+            sharedBoundaryFromY[b],
+            bPixelIdx,
+            bIdx,
+            pr,
+            pg,
+            pb,
+            pa,
+            fr,
+            fg,
+            fb,
+            fillOpacity,
+            true
+          )) {
+            filledPixelCount++;
+          }
           continue;
         }
 
-        const fx = sharedBoundaryFromX[b];
-        const fy = sharedBoundaryFromY[b];
-        const dx = bx - fx;
-        const dy = by - fy;
-        const ox = bx + dx;
-        const oy = by + dy;
-
-        if (ox >= 0 && ox < cw && oy >= 0 && oy < ch) {
-          const oPixelIdx = oy * cw + ox;
-          // Do not expand if outward neighbor is already part of the filled region
-          if (visited[oPixelIdx] === 1) {
-            continue;
-          }
-
-          const oIdx = oPixelIdx * 4;
-          const oa = data[oIdx + 3];
-
-          // Ascending Alpha Gradient Invariant:
-          // The outward neighbor O must have materially higher alpha than candidate P.
-          // If oa < pa + MIN_ALPHA_GRADIENT_STEP, P is the crest of a thin low-opacity line, flat, or ambiguous. DO NOT TOUCH.
-          if (oa >= pa + MIN_ALPHA_GRADIENT_STEP) {
-            // Standard source-over compositing of existing foreground pixel P over new fill background F:
-            // Aout = Ap + Af * (1 - Ap)
-            // Cout = (Ap * Cp + Af * (1 - Ap) * Cf) / Aout
-            const ap = pa / 255;
-            const af = fillOpacity;
-            const aOut = ap + af * (1 - ap);
-
-            if (aOut > 0.001) {
-              const weightP = ap / aOut;
-              const weightF = (af * (1 - ap)) / aOut;
-
-              data[bIdx]     = Math.min(255, Math.max(0, Math.round(weightP * pr + weightF * fr)));
-              data[bIdx + 1] = Math.min(255, Math.max(0, Math.round(weightP * pg + weightF * fg)));
-              data[bIdx + 2] = Math.min(255, Math.max(0, Math.round(weightP * pb + weightF * fb)));
-              data[bIdx + 3] = Math.min(255, Math.max(0, Math.round(aOut * 255)));
-
-              visited[bPixelIdx] = 1;
-              filledPixelCount++;
-            }
-          }
-        }
-      } else if (canRunPhase6) {
         // Phase 6: Opaque-Background Edge Preservation via Alpha Reconstruction
         const fx = sharedBoundaryFromX[b];
         const fy = sharedBoundaryFromY[b];
