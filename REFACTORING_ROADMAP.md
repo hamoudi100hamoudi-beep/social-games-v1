@@ -1,6 +1,6 @@
 # 🗺️ المرجع المعماري الموحد وخارطة الطريق (Unified Architecture Reference & Roadmap)
 ## Gartic Phone Architecture, Stability, Security & Decomposition Reference Guide
-> **المصدر الرسمي الإلزامي والموحد للمشروع (Single Project Source of Truth)** — تاريخ التحديث: 2026-11-08
+> **المصدر الرسمي الإلزامي والموحد للمشروع (Single Project Source of Truth)** — تاريخ التحديث: 2026-11-18
 
 ---
 
@@ -89,20 +89,22 @@
 
 ## 📍 القسم C — الحالة الحالية للمشروع (Current Project State & Architecture Tracker)
 
-> **تاريخ آخر تحديث وثائقي**: 2026-11-17  
-> **حالة التنفيذ الحالية**: أعمال التفكيك والتنظيم المعماري للملفات الكبيرة مغلقة ومكتملة عند `PHASE 8B` دون تعديل. أحدث دفعة برمجية منجزة هي **`PHASE 4G` (تحسين حواف Bucket Fill في `src/utils/canvasFloodFill.ts`)** — مطبقة ومبنية (`npm run build` ناجح) ومؤكد نجاحها يدوياً من المالك (`2026-11-17`) ضمن حدود الاختبار الآلي القائم. أما مسار الموثوقية الأمني النشط فيُتابع في `PRODUCTION_RELIABILITY_ROADMAP.md` (`PHASE 9A — Slice 5C-3B` بانتظار التحقق اليدوي من المالك على سلوك AFK).
+> **تاريخ آخر تحديث وثائقي**: 2026-11-18  
+> **حالة التنفيذ الحالية**: أعمال التفكيك والتنظيم المعماري للملفات الكبيرة مغلقة ومكتملة عند `PHASE 8B` دون تعديل. دفعة **`PHASE 4G` (تحسين حواف Bucket Fill في `src/utils/canvasFloodFill.ts`)** مكتملة ومبنية (`npm run build` — 2206 وحدة، Exit `0`) ومؤكد قبولها بصرياً يدوياً من المالك عبر ألوان ودرجات شفافية/كثافة مختلفة دون الحاجة لمزيد من تحسين الحواف حالياً. في مسار الموثوقية (`PRODUCTION_RELIABILITY_ROADMAP.md`), أكد المالك أن نظام `AFK` (`PHASE 9A — Slice 5C-3B`) يعمل بشكل طبيعي في اللعب، وتبقى مراحل `PHASE 9B`–`PHASE 9F` بحالة `PLANNED` ومؤجلة. **المهمة الوحيدة المعتمدة حالياً للبدء** هي **`PHASE 4H — POST-4D BUCKET UNDO PERFORMANCE & FREEZE INVESTIGATION`** بمرحلة **`OBSERVED — READ-ONLY AUDIT PENDING`** (تشخيص ثقل/تجمّد التراجع بعد تكرار عمليات Bucket Fill على هاتف Android ضعيف عبر أدوات التشخيص الموجودة قبل اقتراح أي تعديل برمجي).
 
 ### 📊 سجل التقدم المعماري المبسط (Simplified Architecture Tracker)
 
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
 | **المرحلة المعمارية الحالية** | `PHASE 8B — Active Stroke Rendering Audit` | `[x] CLOSED — OPTION A (NO RENDERING CHANGE WARRANTED)` — إغلاق تدقيق تصيير مسار الرسم اللحظي بالاعتماد النهائي للخيار A (الإبقاء على بنية إعادة رسم المسار الكامل الحالية دون تغيير معماري) |
-| **آخر دفعة تنفيذية (Bucket Fill)** | `PHASE 4G` (`4G-1` & `4G-2`) | `[x] IMPLEMENTED & OWNER-VERIFIED (AUTOMATED MULTI-COLOR COVERAGE BOUNDED)` — تطبيق `tryCompositePartialAlphaBoundary` (`924bd1a0ed861e76f2fef131e8e3b924b222c848`) ثم `Unified 4D Premultiplied RGBA Reconstruction` (`dc1253ebec8204f8ac1e308d0ae5a59fc88fd0b3`) في `src/utils/canvasFloodFill.ts`؛ نجاح `tsc --noEmit` و`npm run build` والاختبارات القائمة، وتأكيد التجربة اليدوية للمالك (`2026-11-17`) مع بقاء التغطية الآلية مقتصرة على تكرار لون واحد |
+| **آخر دفعة تنفيذية مكتملة (Bucket Fill)** | `PHASE 4G` (`4G-1` & `4G-2`) | `[x] COMPLETED & OWNER-VERIFIED (VISUAL ACCEPTANCE; NO FURTHER EDGE OPTIMIZATION NEEDED)` — تطبيق `tryCompositePartialAlphaBoundary` (`924bd1a0ed861e76f2fef131e8e3b924b222c848`) ثم `Unified 4D Premultiplied RGBA Reconstruction` (`dc1253ebec8204f8ac1e308d0ae5a59fc88fd0b3`) في `src/utils/canvasFloodFill.ts` مع إبقاء المسار القديم و`tryCompositePartialAlphaBoundary()` دون حذف؛ نجاح `npx tsc --noEmit` و`npm run build` (`2206 modules`, Exit `0`) والاختبارات القائمة؛ تأكيد المالك بصرياً (`2026-11-18`) عبر ألوان ودرجات Opacity/Density مختلفة، ونقل الفحوصات الآلية الإضافية غير المنفذة إلى الملاحظات التاريخية الاختيارية غير المعطلة |
+| **تحسينات Undo/Checkpoints & التشخيص القائمة** | `PHASE 1F.5`, `PHASE 1F.8`, `FreeDrawMobileDebug` | `[x] ALREADY IMPLEMENTED IN CODEBASE` — `CanvasCheckpointManager` (`MAX_HISTORY_CHECKPOINTS = 10` و`bucketCheckpointPolicy.ts` Minimax)، `Batch Bucket Replay` + `CanvasUndoCache` fast-path، ولوحة `FreeDrawMobileDebug.tsx` + `FREE_DRAW_UNDO_DIAG` / `FREE_DRAW_JOIN_DIAG` و`erudaManager.ts` (موثقة أدناه لمنع إعادة اقتراحها أو إعادة إنشائها) |
 | **آخر مراحل تفكيك وتنظيم منجزة** | `PHASE 8A`, `PHASE 8B` | `[x] COMPLETED` — توحيد سياسة أداء الرسم وإلغاء تصنيف العتاد القديم بـ Commit `6975924ce7fc1d9f5298fac41d5e1a833a2c3a11` (PHASE 8A)، وتدقيق تصيير الرسم اللحظي للقراءة فقط (PHASE 8B: مغلقة بلا تعديل كود) |
 | **تدقيق الغرف ومحركات السيرفر ومحرك الرسم** | `PHASE 5B-2 & 6C & 7C & 8A & 8B` | `[x] COMPLETED — CLOSED` — اكتمال وتوحيد بنية محرك الرسم، وشبكة الحزم الثنائية، ونواة السيرفر، وأغلفة الغرف، واكتمال جميع أعمال تنظيم وتفكيك الملفات المعتمدة مسبقاً |
-| **الدفعة الحالية قيد المتابعة** | `PHASE 9A — Slice 5C-3B` (في خارطة الموثوقية) | لا توجد دفعات تفكيك معماري جارية حالياً؛ متابعة حصانة تتبع النشاط و`AFK` في `PRODUCTION_RELIABILITY_ROADMAP.md` (`AWAITING OWNER VERIFICATION`) |
-| **النشاط التالي المعتمد** | تحقق المالك من `Slice 5C-3B` (AFK) | التحقق اليدوي من سلوك `AFK` بعد تحصين `Type 10` و`ping_activity` (`eb730b7597759b6e3f9242593345f3d1b8faa398`)؛ ولا يرى المالك حاجة لتحسين إضافي في Bucket Fill حالياً |
-| **المخاطر والحدود الموثقة** | حدود التغطية الآلية لـ `PHASE 4G` | تم حسم دقة الكانفاس (`CANVAS_DPR = 1.0`). في `PHASE 4G` لم تُكتب اختبارات آلية متعددة الألوان أو `99% vs 100%` أو مقارنة `flag = false` أو Benchmark عند `680×396`، ورُصدت في الاختبار المحدود القائم حالة `strokeCircle 2px / 50%` (`Gap = 57`, `Final Err = 4.38`) |
+| **المهمة الوحيدة المعتمدة حالياً** | `PHASE 4H — Post-4D Bucket Undo Freeze` | **`OBSERVED — READ-ONLY AUDIT PENDING`** — رصد المالك ثقل/تجمّد شديد على هاتف Android ضعيف عند الضغط على Undo بعد عدد كبير من عمليات Bucket Fill المتتالية (لوحظ بعد Unified 4D ولم يثبت سببه الجذري بعد) |
+| **مسار الموثوقية (`PRODUCTION_RELIABILITY_ROADMAP.md`)** | `PHASE 9A` مؤكد؛ `9B–9F` مؤجلة | أكد المالك عمل `AFK` (`Slice 5C-3B`) بشكل طبيعي في اللعب (مع حفظ سجلات `Type 10` و`ping_activity`)؛ وتبقى `PHASE 9B`–`PHASE 9F` بحالة `PLANNED` ومؤجلة حتى إنجاز ومراجعة تدقيق `PHASE 4H` |
+| **النشاط التالي المعتمد (`Next Action`)** | `PHASE 4H` Read-Only Audit | **`Audit the real Bucket Undo execution path using existing diagnostics on a weak Android device before proposing any code changes.`** — تشغيل `Undo Diagnostics` (`FREE_DRAW_UNDO_DIAG`) دون تغيير السلوك الحالي لفحص مسار التراجع على الهاتف الضعيف قبل أي كود |
+| **المخاطر والحدود الموثقة** | تجمّد `Bucket Undo` + حدود تغطية `4G` | **أولوية التحقيق**: ثقل/تجمّد Undo بعد تكرار Bucket Fill على Android الضعيف (السبب غير محسوم بعد). تاريخياً: دقة الكانفاس موحدة (`CANVAS_DPR = 1.0`)، وتغطية `4G` الآلية كانت مقتصرة على تكرار لون واحد (`strokeCircle 2px / 50%` أعطى `Gap = 57`, `Final Err = 4.38`) بينما قبول الألوان/الشفافيات المتعددة مبني على تحقق بصري يدوي للمالك |
 
 ### 🏷️ قاموس حالات دورة حياة الدفعات (Status Dictionary)
 * `[x] COMPLETED`: المهمة مكتملة ومحققة معمارياً ومثبتة في الكود ومفحوصة بالتجميع.
@@ -241,7 +243,7 @@
 
 #### 4. تطوير محرك تعبئة الدلو متعدد الألوان (`PHASE 4G — BUCKET FILL MULTI-COLOR EDGE RECONSTRUCTION`)
 
-- **حالة المرحلة**: **`[x] IMPLEMENTED & OWNER-VERIFIED (WITH DOCUMENTED AUTOMATED TEST BOUNDARIES)`** — مطبقة ومختبرة وفق الأدلة الآلية المتاحة واجتازت البناء (`npm run build`)، ومؤكد نجاحها يدوياً من مالك المشروع (`2026-11-17`)، مع إبقاء حدود التغطية الآلية الموثقة أدناه.
+- **حالة المرحلة**: **`[x] COMPLETED & OWNER-VERIFIED (VISUAL ACCEPTANCE — NO FURTHER EDGE OPTIMIZATION NEEDED)`** — مطبقة، ومبنية بنجاح (`npm run build` — `2206` وحدة، Exit `0`)، ومؤكد قبولها بصرياً يدوياً من مالك المشروع (`2026-11-18`) عبر ألوان ودرجات شفافية/كثافة مختلفة. تم إغلاق نقاط المتابعة غير الضرورية، ونقل الاختبارات الآلية الإضافية غير المنفذة إلى ملاحظات تاريخية اختيارية غير معطلة للمرحلة.
 
 - [x] **`PHASE 4G-1` — Partial Alpha Boundary Compositing** *(Commit: `924bd1a0ed861e76f2fef131e8e3b924b222c848`)*:
   - **ما نُفذ**:
@@ -265,30 +267,102 @@
     - الاحتفاظ بـ `tryCompositePartialAlphaBoundary()` كمسار رجوع (`fallback`) للحالات التي لا تسمح معلومات البكسل فيها بإعادة بناء موثوقة.
     - الإبقاء على `EXPERIMENTAL_GUARD_PARTIAL_ALPHA_SEEDS_FROM_PHASE6 = true`.
 
-- **قرارات الحماية المعمارية (`PHASE 4G` Architectural Covenant)**:
-  - يسمح مفتاح `EXPERIMENTAL_UNIFIED_4D_BUCKET_EDGE_RECONSTRUCTION` عند ضبطه على `false` بتعطيل المسار الجديد والعودة في الكود إلى المسار السابق *(تُظهر المراجعة البنيوية بقاء المسار القديم دون تغيير، دون وجود اختبار آلي مخصص لمقارنة التكافؤ عند قيمة `false`)*.
+- **قرارات الحماية المعمارية (`PHASE 4G` Architectural Covenant — Updated `2026-11-18`)**:
+  - **قرار المالك للإبقاء على الكود الاحتياطي دون حذف**: يبقى المفتاح `EXPERIMENTAL_UNIFIED_4D_BUCKET_EDGE_RECONSTRUCTION = true` والمسار القديم (`else`) والدالة `tryCompositePartialAlphaBoundary()` موجودة في `src/utils/canvasFloodFill.ts` ولا يتم حذفها أو تنظيفها حالياً؛ وذلك للحفاظ على سهولة الرجوع والمقارنة إن ظهر أي عطل مرتبط بها لاحقاً *(مراجعة الكود البنيوية تُظهر بقاء المسار القديم دون تغيير، دون وجود اختبار آلي مخصص لمقارنة التكافؤ عند قيمة `false`)*.
   - لم يتم إنشاء أي طبقة Canvas جديدة أو تغيير بنية الرسم (`Drawing Architecture`).
   - لم يتم تغيير البروتوكول الثنائي (`Binary Protocol`) أو Socket.IO أو أنظمة المزامنة.
   - لم يتم تغيير بنية التراجع/الإعادة (`Undo/Redo`) أو النقاط المرجعية (`CanvasCheckpointManager`).
   - التعديل الأساسي محصور في النواة الحسابية `src/utils/canvasFloodFill.ts`.
 
 - **نتائج الاختبارات والبناء والتحقق اليدوي**:
-  - **الفحص الآلي المنفذ فعلياً**:
-    - `npx tsx scripts/test_bucket_partial_alpha_repeated_fill.ts` — **PASSED** (اجتياز جميع حالات المصفوفة وتأكيدات الأمان وتكافؤ الإعادة). *(ملاحظة مسجلة من هذا الاختبار المحدود القائم: حالة `strokeCircle 2px / 50%` أعطت `Gap = 57` و`Final Err = 4.38`؛ وتُسجَّل بوصفها ملاحظة من الاختبار المحدود القائم لا بوصفها عطلاً مؤكداً في التجربة اليدوية الحالية ولا يُدَّعى حسم جميع الأشكال والظروف).*
+  - **الفحص والبناء المنفذ فعلياً (`COMPLETED — NOT PENDING`)**:
+    - `npm run build` (`vite build`) — **PASSED (COMPLETED)** (تحويل **2206 وحدة** وبناء إنتاجي كامل خلال `10.64s` برمز خروج `0`).
+    - `npx tsc --noEmit` — **PASSED** (0 أخطاء).
+    - `npx tsx scripts/test_bucket_partial_alpha_repeated_fill.ts` — **PASSED** (اجتياز جميع حالات المصفوفة وتأكيدات الأمان وتكافؤ الإعادة). *(ملاحظة مسجلة من هذا الاختبار المحدود القائم: حالة `strokeCircle 2px / 50%` أعطت `Gap = 57` و`Final Err = 4.38`؛ وتُسجَّل بوصفها حقيقة تقنية من الاختبار المحدود القائم لا بوصفها عطلاً مؤكداً في التجربة اليدوية)*.
     - `npx tsx --test scripts/test_bucket_checkpoint_suite.ts scripts/test_freedraw_bucket_undo_fastpath.ts` — **18/18 PASSED**.
     - `npx tsx scripts/test_phase9a_slice4.ts` — **36/36 PASSED**.
-    - `npx tsc --noEmit` — **PASSED** (0 أخطاء).
-    - `npm run build` (`vite build`) — **PASSED** (تحويل 2206 وحدة وبناء كامل خلال `10.64s` برمز خروج `0`).
-  - **التجربة اليدوية لصاحب المشروع (`Owner Manual Verification — 2026-11-17: PASSED`)**:
-    - جرّب صاحب المشروع اللعبة يدوياً بعد مزامنة التعديل وأكد أن إصلاح مشكلة Bucket Fill ناجح في الحالات التي اختبرها، ولا يرى حاجة إلى تحسين إضافي حالياً.
-  - **حدود التحقق الآلي الموثقة (`Verification Scope Boundaries`)**:
-    - يركز اختبار `scripts/test_bucket_partial_alpha_repeated_fill.ts` على تكرار لون التعبئة نفسه (`#0066ff`)، وليس تسلسلات متعددة الألوان.
-    - لم يُنشأ اختبار شامل مخصص لخوارزمية Unified 4D (`PHASE 4G-2`).
-    - لم تُغطَّ مقارنات RGB وPremultiplied RGBA للتعبئات متعددة الألوان في الاختبارات الحالية.
-    - لم يُنفذ اختبار `99%` مقابل `100%` أو التعبئات القريبة من لون الخط ضمن مصفوفة مستقلة.
-    - لم يُنفذ اختبار آلي شامل لمقارنة المسار الجديد بالقديم عند تعطيل المفتاح (`false`).
-    - لم يُنفذ Benchmark مخصص لقياس الزمن والذاكرة عند دقة `680×396`.
-    - اختبارات Undo/Redo وCheckpoints الموجودة لا تثبت وحدها تطابق ناتج بكسلات Unified 4D في كل الحالات.
+  - **التجربة اليدوية لصاحب المشروع (`Owner Manual Verification — 2026-11-17 & 2026-11-18: PASSED`)**:
+    - اختبر صاحب المشروع اللعبة يدوياً بعد تحديث Unified 4D باستخدام **ألوان تعبئة مختلفة** و**درجات شفافية/كثافة (Opacity/Density) مختلفة** في العمليات المتتالية، وأكد أن **النتائج جيدة ومقبولة بصرياً** ولا يرى حاجة إلى الاستمرار في تحسين خوارزمية الحواف حالياً.
+    - **توضيح الدقة المعرفية**: يمثل هذا التأكيد **تحققاً بصرياً يدوياً (`Manual Visual Verification`)** من مالك المشروع على سلوك اللعب الحقيقي، وليس اختباراً رقمياً لـ RGB/Premultiplied RGBA أو مصفوفة قياس آلية متعددة الألوان.
+  - **ملاحظات التحقق التاريخية الاختيارية (`Historical Optional Verification Notes — Non-Blocking`)**:
+    - *التالية كانت فحوصات آلية إضافية لم تُنفذ وتُسجل تاريخياً فقط لبيان حدود التغطية الآلية؛ وليست مهام متابعة نشطة ولا تُعيق إغلاق `PHASE 4G` ولا يُوصى بإعادة طلبها تلقائياً ما لم يظهر عطل مرتبط بها:*
+      - حصر الاختبار الآلي القائم (`scripts/test_bucket_partial_alpha_repeated_fill.ts`) في تكرار لون تعبئة واحد (`#0066ff`) على الكانفاس الشفاف دون مصفوفة آلية متعددة الألوان لـ RGB وPremultiplied RGBA.
+      - عدم إنشاء اختبار آلي مستقل لمقارنة `99%` مقابل `100%` أو التعبئات القريبة من لون الخط ضمن مصفوفة Unified 4D مخصصة.
+      - عدم تشغيل اختبار آلي مخصص لمقارنة التكافؤ عند تعطيل المفتاح (`EXPERIMENTAL_UNIFIED_4D_BUCKET_EDGE_RECONSTRUCTION = false`).
+      - عدم تنفيذ Benchmark آلي مخصص لقياس زمن وذاكرة Unified 4D وحدها عند دقة `680×396` (مع ملاحظة أن كلفة Replay أثناء Undo تتبع الآن ضمن `PHASE 4H` عند فحص التراجع الحقيقي).
+      - اختبارات Undo/Redo وCheckpoints الموجودة (`18/18`) لا تقيس وحدها بكسلات Unified 4D.
+
+#### 4.1 التوثيق المرجعي لتحسينات التراجع/النقاط المرجعية وأدوات التشخيص القائمة (`PHASE 1F.5` & `PHASE 1F.8` & Diagnostics Inventory)
+
+> **هدف هذا التوثيق**: تثبيت ما هو موجود ومنفذ فعلياً في المستودع حول `Bucket Undo / Replay / Checkpoints / Mobile Debug` لكي لا تعيد الجلسات المستقبلية اقتراحه أو بناءه من الصفر أثناء تشخيص `PHASE 4H`.
+
+1. **نظام النقاط المرجعية المفهرسة بالسجل (`PHASE 1F.5 — History-Indexed Checkpoints`)**:
+   - **`src/utils/canvasCheckpointManager.ts`**: يدير `baseCheckpoint` و`tailCheckpoint`، ومجموعة `historyCheckpoints` بحد أقصى **`MAX_HISTORY_CHECKPOINTS = 10`** لقطات كانفاس في Free Draw (بقيادة المفتاح `freedraw_bucket_checkpoint_exp` المفعّل افتراضياً ويُعطل فقط عند `'0'`). يشمل: التحقق من التطابق عبر `anchorSignature` و`lastClearIndex` (`findLatestClearIndex`), الإبطال بعد موضع التراجع (`invalidateCheckpointsAfterIndex`), التدوير المسبق واللاحق للدلو (`capturePreBucketCheckpoint` و`advanceCheckpointBucketPost`), خطوة الضربات التكيفية (`STRIDE = 8`), وإعادة تدوير الكانفاسات عبر `checkpointCanvasPool`.
+   - **`src/utils/bucketCheckpointPolicy.ts`**: سياسة `selectEvictionIndexMinimax()` التي تحمي النقطة الأولى (`index 0` في القائمة) وآخر 3 نقاط مرجعية في الذيل، وتحذف النقطة الداخلية التي تقلّل أسوأ فجوة أوامر دلو متبقية (`countBucketsBeforeIndex`).
+   - **الاختبارات والنتائج الفعلية المسجلة في المستودع**:
+     - `scripts/test_bucket_checkpoint_suite.ts` (مع `test_freedraw_bucket_undo_fastpath.ts` = **18/18 PASSED**): يثبت سياسة عتبة الدلو (`FREE_DRAW_BUCKET_TAIL_THRESHOLD = 3` مقابل `FREE_DRAW_TAIL_SIZE = 40` للفرشاة)، طرد Minimax عبر 100 دلو بفجوة مضبوطة، وإبطال ما بعد `Clear`.
+     - `scripts/test_phase1f_checkpoint_benchmark.ts` وملف نتيجته المحفوظ `scripts/test_phase1f_summary.json`: في ذلك التشغيل المسجل (`OFF` مقابل `ON`) أنجز `OFF` أربع عمليات دلو وعمليتي رسم (`undoDurationMs: 1166`, `redoDurationMs: 906`, `undoPixelDiffCount: 225`)، بينما سجل `ON` زمن `undoDurationMs: 1146` و`redoDurationMs: 911` مع `checkpointPathProven: false` وتوقف في مرحلة `SCENARIO_OBSERVER_C` بسبب `Timeout 10000ms` في محدد زر البدء (لذلك **لا يثبت ذلك السجل وحده تسريعاً مقاساً للـ Checkpoints على الأجهزة** ويبقى القياس على الجهاز الحقيقي من مهام `PHASE 4H`).
+
+2. **إعادة التشغيل المجمّعة للدلو ومسار التراجع السريع (`PHASE 1F.8 — Batch Bucket Replay & Fast-Path Undo`)**:
+   - **`DrawingCanvasCore.tsx` (`replayFreeDrawHistorySafely`)**: ينفذ **Batch Bucket Replay** في Free Draw (مفعّل افتراضياً عبر `freedraw_bucket_batch_replay_exp !== '0'`) بحيث تقرأ حزم الدلو المتتالية صورة الكانفاس مرة واحدة إلى `batchImageData` مشترك (`getImageData` واحد) وتعيد استخدام `batchVisited` و`batchQueueX` و`batchQueueY` وتُنفذ `executeRasterFloodFill` مباشرة قبل تفريغ النتيجة (`flushBatchBuffer` / `ctx.putImageData`) عند مواجهة أمر غير الدلو أو نهاية الإعادة؛ مع دعم `_replayHint` (`full_canvas_opaque` و`noop` داخل `canvasReplayEngine.ts`).
+   - **`src/utils/canvasUndoCache.ts` و`tryFastPathUndo`**: كاش نقطي بخطوة واحدة (`undoCanvas` / `redoCanvas` / `pendingCanvas`) مع تحقق `canRestoreFastPath()` (مطابقة `instanceId` و`strokeId` و`targetIndex` و`prevAnchorSignature`)، وقفل منع التداخل `undoInProgressRef` (Single-Flight Undo Guard)، وفصل توقيت `replayDurationMs` عن `totalUndoDurationMs` دون تكرار السجلات.
+   - **الاختبارات الفعلية المسجلة في المستودع**:
+     - `scripts/test_phase1f8_batch_replay.ts`: سكريبت Playwright يختبر محاكاة كانفاس 2D بمقارنة بايت-ببايت (`0` pixel diff) عبر 15 دلو، وأوامر مختلطة، وUndo/Redo، والشفافية المتداخلة، وسياسة `'0'` للتعطيل، وسيناريو 100 دلو/20 Undo/20 Redo داخل بيئة المحاكاة المستقلة في السكريبت.
+     - `scripts/test_bucket_checkpoint_suite.ts` + `scripts/test_freedraw_bucket_undo_fastpath.ts` (**18/18 PASSED**): يشمل `A -> B -> Bucket -> C -> Undo Bucket` بصفر تنفيذ `floodFill` عند تحقق شروط الكاش السريع، وتعطيل Batch Replay عند `'0'`، وعزل مؤقتات `local_undo` و`remote_undo`.
+
+3. **أدوات التشخيص القائمة في الهاتف والكونسول (`Existing Diagnostic Tools — DO NOT RE-INVENT`)**:
+   - **`src/components/game/FreeDrawMobileDebug.tsx`** (+ `scripts/test_mobile_debug_suite.ts`) و**`src/utils/erudaManager.ts`** (`Eruda v3.4.3`, يُفعّل عبر `?fddebug=1` أو `localStorage['freedraw_mobile_debug'] === '1'` في Free Draw):
+     - **`Undo Diagnostics`** (`freedraw_bucket_undo_diag`, افتراضياً **OFF**): تسجيل فقط (`console.log("[FREE_DRAW_UNDO_DIAG]", ...)` و`[FREE_DRAW_REDO_DIAG]`) دون تغيير أي سلوك تشغيلي.
+     - **`Room Join Diagnostics`** (`freedraw_bucket_join_diag`, افتراضياً **OFF**): تسجيل فقط (`console.log("[FREE_DRAW_JOIN_DIAG]", ...)`) عند مزامنة الدخول.
+     - **`Adaptive Bucket Checkpoints`** (`freedraw_bucket_checkpoint_exp`, افتراضياً **ON**, `'0' = تعطيل`): **علم سلوكي يغيّر مسار التنفيذ الفعلي**.
+     - **`Bucket Batch Replay`** (`freedraw_bucket_batch_replay_exp`, افتراضياً **ON**, `'0' = تعطيل`): **علم سلوكي يغيّر مسار التنفيذ الفعلي**.
+   - **الحقول المتوفرة أصلاً في `FREE_DRAW_UNDO_DIAG` (`DrawingCanvasCore.tsx:113-171`)**:
+     `fastPath` (`hit`/`miss`/`na`), `fastPathMissReason`, `historyLengthBefore`, `targetIndex`, `targetDistanceFromEnd`, `replayStartIndex`, `commandsReplayed`, `bucketCommandsEncountered`, `floodFillExecutions`, `cumulativeFillDurationMs`, `maxFillDurationMs`, `checkpointSelectionDurationMs`, `checkpointRestoreDurationMs`, `batchSetupDurationMs`, `checkpointCaptureDurationMs`, `checkpointCaptureAttempts` / `Successes`, `batchFlushDurationMs` / `Count`, `replayOtherDurationMs`, `cumulativeFilledPixels`, `maxFillPixelCount`, `replayDurationMs`, `totalUndoDurationMs`, `hints` (`existedBefore`, `discarded`, `usedShortcut`, `forcedFill`), و`checkpointFacts` (`bestCheckpointSlot`, `bestCheckpointIndex`, `checkpointCount`, `approximateRetainedMemoryMB`, `maxBucketGap`, `checkpointIndices`, `checkpointBucketCounts`).
+
+#### 5. التحقيق في أداء وتجمّد التراجع بعد تكرار الدلو (`PHASE 4H — POST-4D BUCKET UNDO PERFORMANCE & FREEZE INVESTIGATION`)
+
+- **الحالة الرسمية**: **`OBSERVED — READ-ONLY AUDIT PENDING`** *(المهمة الوحيدة المعتمدة حالياً للتنفيذ)*
+- **المشكلة المرصودة من المالك**:
+  - على هاتف **Android ضعيف**، يبدو الاستخدام العادي للرسم والتعبئة مقبولاً جداً، لكن عند تنفيذ **عدد كبير من عمليات `Bucket Fill` المتتالية** ثم الضغط على **`Undo`** يحدث **ثقل/تجمّد شديد (`severe lag / freeze`)**.
+  - لوحظت هذه المشكلة بعد دمج تعديلات `Unified 4D` (`PHASE 4G-2`)، **غير أنه لم يثبت بعد أن `Unified 4D` هي السبب الجذري**؛ فقد يكون التجمّد ناتجاً عن مسار Replay، أو فشل Fast-Path، أو Checkpoint, أو الذاكرة/GC، أو تفاعل مركب بينها.
+- **الهدف**:
+  - تحديد السبب الحقيقي لثقل/تجمّد `Bucket Undo` على الأجهزة الضعيفة عبر تدقيق قرائي وتشخيصي منضبط قبل اقتراح أو كتابة أي كود تغييري.
+- **الأسباب المحتملة غير المثبتة (`Candidate Causes — Hypotheses Only`)**:
+  1. **ارتفاع كلفة إعادة التشغيل (`Replay Cost Increase`)**: تكرار تنفيذ خوارزمية Fill ومسح الحواف عبر عشرات/مئات الأوامر أثناء Undo على معالج هاتف ضعيف.
+  2. **تفويت مسار التراجع السريع (`Bitmap Undo Fast Path Miss`)**: رجوع Undo من `CanvasUndoCache` (`fastPath === 'miss'`) إلى `replayFreeDrawHistorySafely()` بعد استهلاك الخطوة الواحدة (`consumeUndo()`), أو تغير الطول/الميتاداتا (`target_mismatch`, `base_history_length_mismatch`, `missing_cache`).
+  3. **إبطال النقاط المرجعية أو سقوطها (`Checkpoint Invalidation`)**: إبطال Checkpoints أو عدم مطابقة `bestCheckpointSlot` (`none`), أو فشل تغطية الفجوات في مسار معين (مثل مقارنة Free Draw مقابل Experimental التي لا تستخدم `historyCheckpoints` بنفس الكيفية).
+  4. **تضخم ذيل الإعادة (`Replay Tail Growth`)**: تزايد عدد أوامر الدلو التي يجب إعادة تنفيذها بعد أحدث نقطة مرجعية صالحة أو بعد موضع الحذف (`targetIndex`).
+  5. **ضغط المعالج والذاكرة وجامع القمامة (`CPU / RAM / GC Pressure`)**: تكرار قراءة/كتابة `ImageData` أو تخصيص مصفوفات أو احتفاظ بعدة كانفاسات Checkpoints (`MAX_HISTORY_CHECKPOINTS = 10` + `base`/`tail` + `undoCache`) على هاتف ضعيف الذاكرة.
+  6. **تفاعل غير متوقع بين `Unified 4D` ومسار `Undo / Batch Replay / Checkpoint`**: مثل زيادة كلفة `matchColorEdgeAware()` و`runUnified4DBoundaryPass()` أثناء الإعادة المتكررة مقارنة بالرسم المفرد، أو تأثر شروط `isNoOp` / `_replayHint` / تباين المسارين.
+- **الملفات المستهدفة للفحص في التدقيق القرائي (`PHASE 4H Audit Scope`)**:
+  - `src/utils/canvasFloodFill.ts`
+  - `src/components/game/DrawingCanvasCore.tsx`
+  - `src/utils/canvasCheckpointManager.ts`
+  - `src/utils/canvasUndoCache.ts`
+  - `src/utils/canvasReplayEngine.ts`
+  - `src/utils/bucketCheckpointPolicy.ts`
+  - `src/components/game/FreeDrawMobileDebug.tsx`
+  - اختبارات `PHASE 1F.5` و`PHASE 1F.8` القائمة في `scripts/` (`test_bucket_checkpoint_suite.ts`, `test_freedraw_bucket_undo_fastpath.ts`, `test_phase1f8_batch_replay.ts`, `test_phase1f_checkpoint_benchmark.ts`).
+- **منهجية التدقيق الموصى بها (`Read-Only Audit & Diagnostic Capture Methodology`)**:
+  1. الاعتماد على **التشخيصات القائمة بالفعل** (`FreeDrawMobileDebug` + `FREE_DRAW_UNDO_DIAG` + Eruda) دون إنشاء أي بنية تشخيص جديدة.
+  2. في أول قياس تشخيصي على الهاتف الضعيف: تفعيل **`Undo Diagnostics`** (`freedraw_bucket_undo_diag = '1'`) فقط، مع **الإبقاء على سلوك Checkpoints (`ON`), Batch Replay (`ON`), Unified 4D (`true`), وحدود Undo كما هي في الإنتاج** لقياس السلوك الحقيقي دون تحيّز. *(فقط في جولة عزل لاحقة عند الحاجة يمكن اختبار تعطيل علم سلوكي واحد مثل `freedraw_bucket_checkpoint_exp = '0'` أو `freedraw_bucket_batch_replay_exp = '0'` للمقارنة).*
+  3. التقاط وتتبع مؤشرات `FREE_DRAW_UNDO_DIAG` الفعلية أثناء التراجع الأول والتراجعات المتتالية بعد عدد كبير من عمليات Bucket Fill:
+     - `fastPath` و`fastPathMissReason`
+     - `historyLengthBefore`, `targetIndex`, `replayStartIndex`, `commandsReplayed`
+     - `bucketCommandsEncountered`, `floodFillExecutions`
+     - `cumulativeFillDurationMs`, `maxFillDurationMs`, `replayDurationMs`, `totalUndoDurationMs`
+     - `checkpointFacts`: `bestCheckpointSlot`, `bestCheckpointIndex`, `checkpointCount`, `approximateRetainedMemoryMB`, `maxBucketGap`
+     - `batchSetupDurationMs`, `batchFlushDurationMs`, `batchFlushCount`, `checkpointCaptureDurationMs`
+     - `hints`: `usedShortcut`, `forcedFill`, `discarded`
+- **مرشحات الإصلاح غير المعتمدة بعد (`Not Approved Yet — Pending Audit`)**:
+  - لا يُعتمد أي حل برمجي قبل ثبوت السبب الجذري من التدقيق والقياس الفعلي.
+  - **قيد صارم على حدّ عدد التراجعات (`Undo Count Limit`)**: يُصنّف **آخر خيار فقط (`Last Resort Only`)**؛ لأن تقييد عدد مرات التراجع يمس مباشرة تجربة اللاعب وجودة الأداة. يُمنع اقتراحه أو اعتماده ما لم تثبت استحالة معالجة المشكلة عبر إصلاح السبب التقني في Fast-Path / Checkpoints / Replay / GC / Unified 4D أولاً.
+- **القيود المعمارية المحمية**:
+  - الالتزام الصارم بوثيقة `AGENTS.md`: حماية `type === 4 || type === 10 || type === 5` كخطوة أولى، وحماية تراجع الخطوة الواحدة مع `isDrawingActive = false`, ومنع إضافة أي `console.log` غير محكوم ببوابة التشخيص في المسار الساخن، ومنع عودة مسح الحزم المسطح $O(N)$.
+  - عدم المساس ببروتوكول Socket.IO أو البروتوكول الثنائي أو خوارزميات حواف `Unified 4D` البصرية بدون دليل قياسي.
+- **الخطوة التالية المعتمدة (`Next Action`)**:
+  - **`Audit the real Bucket Undo execution path using existing diagnostics on a weak Android device before proposing any code changes.`**
+  - *(فحص مسار تنفيذ Bucket Undo الحقيقي باستخدام التشخيصات الموجودة على هاتف Android ضعيف قبل اقتراح أي تعديلات برمجية).*
 
 ---
 
@@ -739,4 +813,20 @@
 
 #### ج. ملاحظات مستقبليّة اختيارية (Optional Future Notes)
 - يمكن إجراء اختبارات توافق تكميلية اختيارية عبر أجهزة ومتصفحات مختلفة (مثل iOS Safari AudioContext unlock) في المستقبل عند الحاجة، دون أن يشكّل ذلك عائقاً أمام إغلاق واكتمال الإصلاح الحالي المعتمد.
+
+---
+
+## 🧭 القسم I — قرارات المالك وتسليم الجلسة (`OWNER DECISIONS & SESSION HANDOFF — 2026-11-18`)
+
+> **ملخص ملزم لأي جلسة عمل قادمة**: تم اعتماد القرارات الثمانية التالية مباشرة من مالك المشروع بتاريخ `2026-11-18` لتوجيه الأولويات ومنع إعادة فتح مهام مغلقة أو تكرار بنية موجودة مسبقاً:
+
+1. **إغلاق تحسينات حواف `PHASE 4G`**: أكد المالك بعد تجربة ألوان ودرجات Opacity/Density مختلفة في اللعب الفعلي أن النتائج البصرية لـ `Unified 4D` (`PHASE 4G-2`) جيدة ومقبولة ولا يرى حاجة لمواصلة تحسين الحواف. يُسجّل هذا التحقق كـ **تحقق بصري يدوي**، وتبقى الفحوصات الآلية الإضافية غير المنفذة كملاحظات تاريخية اختيارية غير معطلة ما لم يظهر عطل مرتبط بها.
+2. **إثبات اكتمال البناء (`npm run build`)**: اجتاز المشروع `npm run build` (`vite build` — `2206` وحدة، Exit `0`)، ولا يُذكر البناء كمهمة معلقة.
+3. **الإبقاء على مسار الرجوع والدوال الاحتياطية في `canvasFloodFill.ts`**: قرار صريح بالإبقاء على المفتاح `EXPERIMENTAL_UNIFIED_4D_BUCKET_EDGE_RECONSTRUCTION`, والمسار السابق, والدالة `tryCompositePartialAlphaBoundary()` دون حذف أو تنظيف حالياً لضمان سرعة الرجوع عند اللزوم.
+4. **الأولوية الوحيدة المعتمدة حالياً — `PHASE 4H`**: فتح **`PHASE 4H — POST-4D BUCKET UNDO PERFORMANCE & FREEZE INVESTIGATION`** بحالة **`OBSERVED — READ-ONLY AUDIT PENDING`** للتحقيق في التجمّد/الثقل الشديد على هاتف Android ضعيف عند الضغط على `Undo` بعد تكرار عمليات `Bucket Fill`، على أن يبدأ العمل حصرياً بـ **Read-Only Audit** باستخدام `FREE_DRAW_UNDO_DIAG` و`FreeDrawMobileDebug` قبل اقتراح أي تعديلات برمجية.
+5. **منع إعادة اختراع تحسينات أو تشخيصات قائمة، وتقييد حد `Undo`**: تم بالفعل تنفيذ `PHASE 1F.5` (`CanvasCheckpointManager` + `bucketCheckpointPolicy.ts`), و`PHASE 1F.8` (`Batch Bucket Replay` + `CanvasUndoCache` fast-path + `test_phase1f8_batch_replay.ts`), ولوحة `FreeDrawMobileDebug.tsx` + `erudaManager.ts` + `FREE_DRAW_UNDO_DIAG` / `FREE_DRAW_JOIN_DIAG`. يمنع إعادة تصميمها كأفكار جديدة أو تعطيل الأعلام السلوكية (`freedraw_bucket_checkpoint_exp`, `freedraw_bucket_batch_replay_exp`) افتراضياً، كما يُصنّف فرض حد أقصى لعدد عمليات `Undo` كـ **آخر خيار فقط (`Last Resort Only`)** بسبب أثره على تجربة اللعب.
+6. **تأكيد عمل `AFK` (`PHASE 9A — Slice 5C-3B`)**: أكد المالك أن نظام `AFK` يعمل بشكل طبيعي في اللعب؛ لا يُعاد فتح التحقق من `AFK`، وتُحفظ سجلات التحقق والموثوقية الخاصة بـ `Type 10` و`ping_activity` (`eb730b7597759b6e3f9242593345f3d1b8faa398`) كاملة في `PRODUCTION_RELIABILITY_ROADMAP.md`.
+7. **إبقاء `PHASE 9B`–`PHASE 9F` مؤجلة (`PLANNED`)**: تبقى جميع مراحل `PHASE 9B` إلى `PHASE 9F` في `PRODUCTION_RELIABILITY_ROADMAP.md` بحالة `PLANNED` ومؤجلة إلى ما بعد إكمال تدقيق `PHASE 4H` ومراجعته مع المالك.
+8. **احترام إغلاق المراحل السابقة**: تظل قرارات `PHASE 8A`, و`PHASE 8B` (`Option A`), وكافة مراحل التفكيك من `PHASE 1` إلى `PHASE 8B` مغلقة ومحمية دون تعديل.
+
 
