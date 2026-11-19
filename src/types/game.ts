@@ -1,5 +1,3 @@
-import type { CompetitiveLockedBoundaryTarget } from '../utils/competitiveUndoPolicy';
-
 export interface GameState {
   status: 'WAITING' | 'CHOOSING' | 'DRAWING' | 'ROUND_END' | 'PODIUM';
   currentDrawerId: string | null;
@@ -22,10 +20,6 @@ export interface GameState {
   redoStack?: any[];
   phaseEndsAt?: number; // Exact timestamp in ms when current phase ends (for ROUND_END and PODIUM)
   phaseRemainingMs?: number; // Remaining duration in ms computed by server for client smooth transition
-  drawEpochId?: number;
-  lockedBucketCount?: number;
-  lockedBoundaryTarget?: CompetitiveLockedBoundaryTarget | null;
-  competitiveUndoLimit?: number;
 }
 
 export interface Player {
@@ -63,8 +57,6 @@ export interface Room {
   freeDrawCanonicalCache?: Map<string, { buffer: Buffer; createdAt: number }>;
   drawingIdentities?: Record<string, { socketId: string; playerName: string }>;
   votekickAlertCooldowns?: Map<string, { voterId: string; targetId: string; sentAt: number }>;
-  competitiveEpochUsedIds?: Set<string>;
-  competitiveClearedIds?: Set<string>;
 }
 
 export interface RoomConfig {

@@ -234,14 +234,6 @@ export function handleFreeDrawEnd(
     return { committed: false, shouldAbort: true, instId, strokeId };
   }
 
-  // Competitive Stage 4A: Require non-zero strokeId and reject duplicate (instId, strokeId) in active epoch
-  if (room.isExperimental && !room.isFreeDraw) {
-    const usedKey = `${instId}_${strokeId & 0xFFFF}`;
-    if (strokeId <= 0 || room.competitiveEpochUsedIds?.has(usedKey)) {
-      return { committed: false, shouldAbort: true, instId, strokeId };
-    }
-  }
-
   // Check lifetime limit
   if (Date.now() - stroke.createdAt > 60000) {
     console.warn(`[FreeDraw Server] Stroke exceeded lifetime on draw_end. Aborting: ${key}`);
