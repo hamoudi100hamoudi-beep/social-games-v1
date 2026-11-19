@@ -22,7 +22,7 @@ export const isClearCommand = (c: any): boolean => {
     const byte0 = c.data instanceof ArrayBuffer 
       ? new Uint8Array(c.data)[0] 
       : (ArrayBuffer.isView(c.data) ? (c.data as Uint8Array)[0] : (Array.isArray(c.data) ? c.data[0] : 0));
-    return byte0 === 5;
+    return byte0 === 5 || byte0 === 10;
   }
   return false;
 };

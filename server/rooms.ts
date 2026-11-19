@@ -29,7 +29,19 @@ import {
   undoRoomFreeDrawStroke,
   undoRoomLastDrawing,
   redoRoomDrawing,
+  ensureCompetitiveRoomState,
+  advanceCompetitiveEpoch,
+  getCompetitiveUndoSummary,
+  recordCompetitiveDrawCommand,
+  undoCompetitiveCommand,
+  type CompetitiveRecordResult,
 } from "./roomDrawingHistory.js";
+import {
+  COMPETITIVE_BUCKET_UNDO_LIMIT,
+  isCompetitiveRoomMode,
+  type CompetitiveUndoSummary,
+  type CompetitiveUndoRejectReason,
+} from "../src/utils/competitiveUndoPolicy.js";
 
 import {
   getOrCreateFreeDrawStrokes as getOrCreateRoomFreeDrawStrokes,
@@ -420,6 +432,14 @@ export class RoomManager {
     const onlinePlayersCount = room.players.filter((p) => !p.isOffline).length;
     if (onlinePlayersCount >= 2) {
       return this.transitionToChoosing(room, lastDrawerBeforeWaiting);
+    }
+
+    if (isCompetitiveRoomMode(room)) {
+      advanceCompetitiveEpoch(room, { preserveClearedIds: false });
+      room.gameState.drawHistory = [];
+      //@ts-ignore
+      room.gameState.redoStack = [];
+      room.gameState.isDrawingActive = false;
     }
 
     this.broadcastState(room);
@@ -1046,6 +1066,7 @@ const words = word.split(" ").filter(w => w.length > 0);
         : undefined;
 
       const hasDrawHistory = Boolean(room.gameState.drawHistory && room.gameState.drawHistory.length > 0);
+      const competitiveMeta = isCompetitiveRoomMode(room) ? getCompetitiveUndoSummary(room) : null;
 
       this.io.to(p.id).emit("room_state_update", {
         roomId: room.id,
@@ -1057,6 +1078,14 @@ const words = word.split(" ").filter(w => w.length > 0);
         hasDrawHistory,
         gameState: {
           ...publicGameState,
+          ...(competitiveMeta
+            ? {
+                drawEpochId: competitiveMeta.drawEpochId,
+                lockedBucketCount: competitiveMeta.lockedBucketCount,
+                lockedBoundaryTarget: competitiveMeta.lockedBoundaryTarget,
+                competitiveUndoLimit: competitiveMeta.undoLimit,
+              }
+            : {}),
           phaseRemainingMs,
           phaseEndsAt: room.gameState.phaseEndsAt,
           hasDrawHistory,
@@ -1080,6 +1109,7 @@ const words = word.split(" ").filter(w => w.length > 0);
   createRoom(roomId: string): Room {
     if (!this.rooms.has(roomId)) {
       const config = getRoomConfig(roomId);
+      const isCompetitive = Boolean(config.isExperimental && !config.isFreeDraw);
       this.rooms.set(roomId, {
         id: roomId,
         maxPlayers: config.maxPlayers,
@@ -1100,7 +1130,21 @@ const words = word.split(" ").filter(w => w.length > 0);
           revealedIndices: [],
           drawHistory: [],
           isDrawingActive: false,
+          ...(isCompetitive
+            ? {
+                drawEpochId: 0,
+                lockedBucketCount: 0,
+                lockedBoundaryTarget: null,
+                competitiveUndoLimit: COMPETITIVE_BUCKET_UNDO_LIMIT,
+              }
+            : {}),
         },
+        ...(isCompetitive
+          ? {
+              competitiveEpochUsedIds: new Set<string>(),
+              competitiveClearedIds: new Set<string>(),
+            }
+          : {}),
         usedWords: [],
         chatMessages: [],
         guessMessages: [],
@@ -1200,6 +1244,10 @@ const words = word.split(" ").filter(w => w.length > 0);
       room.gameState.redoStack = [];
       room.gameState.isDrawingActive = false;
 
+      const compSummary = isCompetitiveRoomMode(room)
+        ? advanceCompetitiveEpoch(room, { preserveClearedIds: false })
+        : null;
+
       // Strict cleanup of in-memory stroke collectors and canonical caches
       if (room.freeDrawStrokes) {
         room.freeDrawStrokes.clear();
@@ -1213,6 +1261,12 @@ const words = word.split(" ").filter(w => w.length > 0);
       );
 
       if (this.io) {
+        if (compSummary) {
+          this.io.to(room.id).emit("competitive_undo_state", {
+            roomId: room.id,
+            ...compSummary,
+          });
+        }
         // Emit explicit draw_clear message to the room to wipe locally
         this.io
           .to(room.id)
@@ -1506,6 +1560,9 @@ const words = word.split(" ").filter(w => w.length > 0);
     if (room.freeDrawCanonicalCache) {
       room.freeDrawCanonicalCache.clear();
     }
+    if (isCompetitiveRoomMode(room)) {
+      advanceCompetitiveEpoch(room, { preserveClearedIds: true });
+    }
     room.gameState.drawHistory = [];
     //@ts-ignore
     room.gameState.redoStack = [];
@@ -1517,6 +1574,46 @@ const words = word.split(" ").filter(w => w.length > 0);
     const room = this.rooms.get(roomId);
     if (!room) return null;
     return getRoomCanonicalFreeDrawStroke(room, instId, strokeId);
+  }
+
+  public getCompetitiveUndoSummary(roomId: string): CompetitiveUndoSummary | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+    ensureCompetitiveRoomState(room);
+    return getCompetitiveUndoSummary(room);
+  }
+
+  public recordCompetitiveDrawCommand(
+    roomId: string,
+    event: string,
+    data: any,
+    customInstId?: string,
+    customStrokeId?: number
+  ): CompetitiveRecordResult | null {
+    const room = this.rooms.get(roomId);
+    if (!room) return null;
+    return recordCompetitiveDrawCommand(room, event, data, customInstId, customStrokeId);
+  }
+
+  public undoCompetitiveCommand(
+    roomId: string,
+    targetInstId: string,
+    targetStrokeId: number
+  ): { ok: boolean; reason?: CompetitiveUndoRejectReason; summary: CompetitiveUndoSummary } {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      return {
+        ok: false,
+        reason: 'not_found',
+        summary: {
+          drawEpochId: 0,
+          lockedBucketCount: 0,
+          lockedBoundaryTarget: null,
+          undoLimit: COMPETITIVE_BUCKET_UNDO_LIMIT,
+        },
+      };
+    }
+    return undoCompetitiveCommand(room, targetInstId, targetStrokeId);
   }
 
   recordDrawCommand(roomId: string, event: string, data: any, customInstId?: string, customStrokeId?: number) {
@@ -1570,6 +1667,9 @@ const words = word.split(" ").filter(w => w.length > 0);
     if (room && room.gameState.drawHistory) {
       if (room.isFreeDraw) {
         this.abortAllActiveFreeDrawStrokesForRoom(roomId);
+      }
+      if (isCompetitiveRoomMode(room)) {
+        advanceCompetitiveEpoch(room, { preserveClearedIds: false });
       }
       room.gameState.drawHistory = [];
       //@ts-ignore

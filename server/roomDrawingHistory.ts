@@ -1,4 +1,20 @@
 import type { Room } from "../src/types/game.js";
+import {
+  COMPETITIVE_BUCKET_UNDO_LIMIT,
+  type CompetitiveActionRejectReason,
+  type CompetitiveLockedBoundaryTarget,
+  type CompetitiveUndoRejectReason,
+  type CompetitiveUndoSummary,
+  extractCommandIdentity,
+  findLatestClearMarkerIndex,
+  getCommandPacketType,
+  isCompetitiveBucketCommand,
+  isCompetitiveDurableUndoableType,
+  isCompetitiveRoomMode,
+  makeCompetitiveIdentityKey,
+  recomputeCompetitiveBucketBoundary,
+  resolveLockedBoundaryIndex,
+} from "../src/utils/competitiveUndoPolicy.js";
 
 /**
  * Extracts a 7-character session instance ID from binary draw packets.
@@ -15,11 +31,232 @@ function extractInstanceIdFromBuffer(buf: any): string {
   return str;
 }
 
+export function ensureCompetitiveRoomState(room: Room): void {
+  if (!room || !room.gameState) return;
+  if (room.gameState.drawEpochId === undefined || !Number.isFinite(room.gameState.drawEpochId)) {
+    room.gameState.drawEpochId = 0;
+  }
+  if (room.gameState.lockedBucketCount === undefined || !Number.isFinite(room.gameState.lockedBucketCount)) {
+    room.gameState.lockedBucketCount = 0;
+  }
+  if (room.gameState.lockedBoundaryTarget === undefined) {
+    room.gameState.lockedBoundaryTarget = null;
+  }
+  if (isCompetitiveRoomMode(room)) {
+    room.gameState.competitiveUndoLimit = COMPETITIVE_BUCKET_UNDO_LIMIT;
+  }
+  if (!room.competitiveEpochUsedIds) {
+    room.competitiveEpochUsedIds = new Set<string>();
+  }
+  if (!room.competitiveClearedIds) {
+    room.competitiveClearedIds = new Set<string>();
+  }
+}
+
+export function getCompetitiveUndoSummary(room: Room): CompetitiveUndoSummary {
+  ensureCompetitiveRoomState(room);
+  return {
+    drawEpochId: room.gameState.drawEpochId ?? 0,
+    lockedBucketCount: room.gameState.lockedBucketCount ?? 0,
+    lockedBoundaryTarget: room.gameState.lockedBoundaryTarget ?? null,
+    undoLimit: COMPETITIVE_BUCKET_UNDO_LIMIT,
+  };
+}
+
 /**
- * Records a draw command into authoritative room drawing history.
- * Handles stroke consolidation, start/end validation, and atomic redo stack reset.
+ * Advances the authoritative Competitive draw epoch exactly once per logical reset/clear.
+ * When `preserveClearedIds` is true (mid-turn Clear), prior-epoch identities are moved into
+ * `competitiveClearedIds` so stale in-flight Type 7 requests return `stale_epoch`.
  */
-export function recordRoomDrawCommand(
+export function advanceCompetitiveEpoch(
+  room: Room,
+  options?: { preserveClearedIds?: boolean }
+): CompetitiveUndoSummary {
+  ensureCompetitiveRoomState(room);
+  room.gameState.drawEpochId = (room.gameState.drawEpochId ?? 0) + 1;
+  room.gameState.lockedBucketCount = 0;
+  room.gameState.lockedBoundaryTarget = null;
+
+  if (options?.preserveClearedIds) {
+    if (!room.competitiveClearedIds) room.competitiveClearedIds = new Set<string>();
+    if (room.competitiveEpochUsedIds) {
+      for (const k of room.competitiveEpochUsedIds) {
+        if (room.competitiveClearedIds.size < 2000) {
+          room.competitiveClearedIds.add(k);
+        }
+      }
+    }
+  } else {
+    room.competitiveClearedIds?.clear();
+  }
+  room.competitiveEpochUsedIds?.clear();
+
+  return getCompetitiveUndoSummary(room);
+}
+
+export interface CompetitiveRecordResult {
+  accepted: boolean;
+  reason?: CompetitiveActionRejectReason;
+  identity?: { instanceId: string; strokeId: number };
+  summary: CompetitiveUndoSummary;
+}
+
+/**
+ * Competitive-only draw command ingestion with O(1) duplicate (instanceId, strokeId) prevention
+ * and retained-suffix Bucket boundary update.
+ */
+export function recordCompetitiveDrawCommand(
+  room: Room,
+  event: string,
+  data: any,
+  customInstId?: string,
+  customStrokeId?: number
+): CompetitiveRecordResult {
+  ensureCompetitiveRoomState(room);
+  const summary = getCompetitiveUndoSummary(room);
+
+  if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
+  if (!room.gameState.redoStack) room.gameState.redoStack = [];
+
+  const isBinary = event === "draw_binary" && Buffer.isBuffer(data) && data.length > 0;
+  const type = isBinary ? data[0] : getCommandPacketType({ event, data });
+  const instId = customInstId || (isBinary ? extractInstanceIdFromBuffer(data) : "");
+  let strokeId = customStrokeId;
+
+  if (strokeId === undefined && isBinary && Buffer.isBuffer(data)) {
+    const extracted = extractCommandIdentity({ event, data, instanceId: instId });
+    if (extracted) strokeId = extracted.strokeId;
+  }
+
+  // Enforce unique non-zero (instId, strokeId) on durable Competitive commits (Type 4 Bucket & Type 9 Stroke)
+  if (isCompetitiveDurableUndoableType(type)) {
+    if (!instId || strokeId === undefined || strokeId <= 0) {
+      return { accepted: false, reason: "invalid_packet", summary };
+    }
+    const idKey = makeCompetitiveIdentityKey(instId, strokeId);
+    if (room.competitiveEpochUsedIds!.has(idKey)) {
+      return { accepted: false, reason: "duplicate_id", summary };
+    }
+    room.competitiveEpochUsedIds!.add(idKey);
+  }
+
+  // Standard consolidation / recording
+  recordRoomDrawCommandInternal(room, event, data, customInstId, customStrokeId);
+
+  // Recompute retained-suffix locked Bucket boundary ONLY on committed Bucket (Type 4)
+  if (type === 4) {
+    const epochId = room.gameState.drawEpochId ?? 0;
+    const boundary = recomputeCompetitiveBucketBoundary(
+      room.gameState.drawHistory,
+      room.gameState.lockedBucketCount ?? 0,
+      room.gameState.lockedBoundaryTarget ?? null,
+      epochId,
+      COMPETITIVE_BUCKET_UNDO_LIMIT
+    );
+    if (boundary.resolved) {
+      room.gameState.lockedBucketCount = boundary.lockedBucketCount;
+      room.gameState.lockedBoundaryTarget = boundary.lockedBoundaryTarget;
+    }
+  }
+
+  return {
+    accepted: true,
+    identity: instId && strokeId ? { instanceId: instId, strokeId } : undefined,
+    summary: getCompetitiveUndoSummary(room),
+  };
+}
+
+/**
+ * Authoritative Competitive Undo (Stage 4A):
+ * - Validates against server `drawHistory` and `lockedBoundaryTarget`
+ * - Rejects locked Buckets, pre-boundary commands, transient 1/2/3/6, missing, or stale-epoch targets
+ * - Never mutates history on rejection
+ * - Removes ONLY the targeted chronological top durable command on accept and preserves locked boundary
+ */
+export function undoCompetitiveCommand(
+  room: Room,
+  targetInstId: string,
+  targetStrokeId: number
+): { ok: boolean; reason?: CompetitiveUndoRejectReason; summary: CompetitiveUndoSummary } {
+  ensureCompetitiveRoomState(room);
+  const summary = getCompetitiveUndoSummary(room);
+
+  if (!room || !room.gameState.drawHistory || room.gameState.drawHistory.length === 0) {
+    const key = targetInstId && targetStrokeId > 0 ? makeCompetitiveIdentityKey(targetInstId, targetStrokeId) : "";
+    const reason: CompetitiveUndoRejectReason =
+      key && room?.competitiveClearedIds?.has(key) ? "stale_epoch" : "not_found";
+    return { ok: false, reason, summary };
+  }
+
+  if (!targetInstId || !Number.isFinite(targetStrokeId) || targetStrokeId <= 0) {
+    return { ok: false, reason: "not_found", summary };
+  }
+
+  const history = room.gameState.drawHistory;
+  const epochId = room.gameState.drawEpochId ?? 0;
+  const { resolved, lockedIndex } = resolveLockedBoundaryIndex(
+    history,
+    room.gameState.lockedBoundaryTarget ?? null,
+    epochId
+  );
+  if (!resolved) {
+    return { ok: false, reason: "not_found", summary };
+  }
+
+  const clearIdx = findLatestClearMarkerIndex(history);
+  let targetIndex = -1;
+  let newestDurableIndex = -1;
+
+  for (let i = history.length - 1; i > clearIdx; i--) {
+    const cmd = history[i];
+    const type = getCommandPacketType(cmd);
+    if (!isCompetitiveDurableUndoableType(type)) {
+      continue; // Transient 1/2/3/6 never act as valid Competitive Undo targets
+    }
+    if (newestDurableIndex === -1) {
+      newestDurableIndex = i;
+    }
+    const ident = extractCommandIdentity(cmd);
+    if (ident && ident.instanceId === targetInstId && ident.strokeId === (targetStrokeId & 0xffff)) {
+      targetIndex = i;
+      break;
+    }
+  }
+
+  if (targetIndex === -1) {
+    const key = makeCompetitiveIdentityKey(targetInstId, targetStrokeId);
+    const reason: CompetitiveUndoRejectReason = room.competitiveClearedIds?.has(key)
+      ? "stale_epoch"
+      : "not_found";
+    return { ok: false, reason, summary };
+  }
+
+  // Chronologically at or before locked boundary -> locked (never skip locked Bucket)
+  if (targetIndex <= lockedIndex) {
+    return { ok: false, reason: "locked", summary };
+  }
+
+  // Strict chronological Undo: target must be the latest durable command above clear barrier
+  if (targetIndex !== newestDurableIndex) {
+    return { ok: false, reason: "not_found", summary };
+  }
+
+  // Remove exact single command (leaving lockedBucketCount & lockedBoundaryTarget immutable)
+  history.splice(targetIndex, 1);
+  room.gameState.isDrawingActive = false;
+
+  if (room.freeDrawCanonicalCache) {
+    const cacheKey = `${targetInstId}_${targetStrokeId}`;
+    room.freeDrawCanonicalCache.delete(cacheKey);
+  }
+
+  return {
+    ok: true,
+    summary: getCompetitiveUndoSummary(room),
+  };
+}
+
+function recordRoomDrawCommandInternal(
   room: Room,
   event: string,
   data: any,
@@ -119,7 +356,28 @@ export function recordRoomDrawCommand(
 }
 
 /**
- * Performs an exact targeted removal of a stroke matching targetInstId and targetStrokeId in Free Draw mode.
+ * Records a draw command into authoritative room drawing history.
+ * Handles stroke consolidation, start/end validation, atomic redo stack reset,
+ * and delegates to Competitive Stage 4A tracking when in Competitive rooms.
+ */
+export function recordRoomDrawCommand(
+  room: Room,
+  event: string,
+  data: any,
+  customInstId?: string,
+  customStrokeId?: number
+): void {
+  if (!room) return;
+  if (isCompetitiveRoomMode(room)) {
+    recordCompetitiveDrawCommand(room, event, data, customInstId, customStrokeId);
+    return;
+  }
+  recordRoomDrawCommandInternal(room, event, data, customInstId, customStrokeId);
+}
+
+/**
+ * Performs an exact targeted removal of a stroke matching targetInstId and targetStrokeId.
+ * In Competitive mode, enforces Stage 4A locked Bucket boundary & chronological undo safety.
  * Evicts from room.freeDrawCanonicalCache if present. Returns true if removed, false otherwise (no-op).
  */
 export function undoRoomFreeDrawStroke(
@@ -127,7 +385,11 @@ export function undoRoomFreeDrawStroke(
   targetInstId: string,
   targetStrokeId: number
 ): boolean {
-  if (!room || !room.gameState.drawHistory || room.gameState.drawHistory.length === 0) {
+  if (!room) return false;
+  if (isCompetitiveRoomMode(room)) {
+    return undoCompetitiveCommand(room, targetInstId, targetStrokeId).ok;
+  }
+  if (!room.gameState.drawHistory || room.gameState.drawHistory.length === 0) {
     return false;
   }
 

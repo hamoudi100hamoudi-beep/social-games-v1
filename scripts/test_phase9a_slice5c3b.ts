@@ -89,8 +89,8 @@ function readAfkWarning(player: Player): boolean | undefined {
   return player.afkWarningSent;
 }
 
-function makeBucketType4(instId = 'inst001', x = 0.5, y = 0.5): Buffer {
-  const buf = Buffer.alloc(17);
+function makeBucketType4(instId = 'inst001', x = 0.5, y = 0.5, strokeId?: number): Buffer {
+  const buf = Buffer.alloc(strokeId !== undefined ? 19 : 17);
   buf.writeUInt8(4, 0);
   buf.write(instId.padEnd(7, '\0').slice(0, 7), 1, 7, 'ascii');
   buf.writeUInt8(2, 8); // bucket tool = 2
@@ -100,6 +100,9 @@ function makeBucketType4(instId = 'inst001', x = 0.5, y = 0.5): Buffer {
   buf.writeUInt8(100, 12);
   buf.writeUInt16LE(Math.round(x * 10000), 13);
   buf.writeUInt16LE(Math.round(y * 10000), 15);
+  if (strokeId !== undefined) {
+    buf.writeUInt16LE(strokeId & 0xFFFF, 17);
+  }
   return buf;
 }
 
@@ -495,7 +498,7 @@ async function runDeterministicPartAandB() {
 
     setStale(drawerPlayer, staleTs);
     mockNow += 1_000;
-    handleDrawBinary(drawerSock, makeBucketType4('bkt1'), { io, roomManager: rm, drawRateLimiter, now: () => mockNow });
+    handleDrawBinary(drawerSock, makeBucketType4('bkt1', 0.5, 0.5, 1), { io, roomManager: rm, drawRateLimiter, now: () => mockNow });
     check(
       isRefreshed(drawerPlayer, mockNow),
       'B1d. Accepted Type 4 bucket fill updates lastActivity and resets afkWarningSent'
@@ -512,16 +515,22 @@ async function runDeterministicPartAandB() {
     setStale(drawerPlayer, staleTs);
     mockNow += 1_000;
     const type10Buf = makeType10LegacyClear('leg10');
-    const historyLenBefore10 = compRoom.gameState.drawHistory.length;
+    const epochBefore10 = compRoom.gameState.drawEpochId ?? 0;
     roomEmits.length = 0;
     handleDrawBinary(drawerSock, type10Buf, { io, roomManager: rm, drawRateLimiter, now: () => mockNow });
     const historyLenAfter10 = compRoom.gameState.drawHistory.length;
+    const epochAfter10 = compRoom.gameState.drawEpochId ?? 0;
     const type10Broadcasted = roomEmits.some(
       (e) => e.roomId === compRoomId && e.event === 'draw_binary' && Buffer.isBuffer(e.payload) && e.payload.readUInt8(0) === 10
     );
     check(
-      historyLenAfter10 > historyLenBefore10 && type10Broadcasted && isUnchanged(drawerPlayer, staleTs),
-      'B1f. Legacy Type 10 preserves history & broadcast compatibility without refreshing activity'
+      historyLenAfter10 === 1 &&
+        Buffer.isBuffer(compRoom.gameState.drawHistory[0]?.data) &&
+        compRoom.gameState.drawHistory[0].data[0] === 10 &&
+        epochAfter10 === epochBefore10 + 1 &&
+        type10Broadcasted &&
+        isUnchanged(drawerPlayer, staleTs),
+      'B1f. Competitive Type 10 clear resets history to Type 10 marker, advances drawEpochId once, broadcasts cleanly without refreshing activity'
     );
 
     // B2. Valid chat

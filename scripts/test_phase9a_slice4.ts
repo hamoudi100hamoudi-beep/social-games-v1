@@ -214,23 +214,52 @@ for (const mode of ['normal', 'experimental', 'freedraw'] as const) {
   const v21 = makeRawType4({ length: 21, instId: 'u000001', tool: 2, opacity: 0, x: 10000, y: 0, targetRGBA: { r: 255, g: 254, b: 253, a: 255 } });
   const v23 = makeRawType4({ length: 23, instId: 'u000001', tool: 2, opacity: 80, x: 5000, y: 5000, targetRGBA: { r: 10, g: 20, b: 30, a: 255 }, strokeId: 99, strokeIdOffset: 21 });
 
-  handleDrawBinary(drawerSocket, v17, deps);
-  check(room.gameState.drawHistory.length === 1 && broadcasts.length === 1, `[${mode}] accepts valid 17B Type 4 (including first-action bucket on empty history)`);
+  if (mode === 'experimental') {
+    // Stage 4A Competitive policy: 17B/21B Type 4 (no strokeId) and strokeId=0 must be rejected cleanly
+    handleDrawBinary(drawerSocket, v17, deps);
+    check(room.gameState.drawHistory.length === 0 && broadcasts.length === 0, `[experimental] rejects legacy 17B Type 4 without strokeId (Stage 4A)`);
 
-  handleDrawBinary(drawerSocket, v19, deps);
-  check(room.gameState.drawHistory.length === 2 && broadcasts.length === 2, `[${mode}] accepts valid 19B Type 4 (strokeId only)`);
+    handleDrawBinary(drawerSocket, v21, deps);
+    check(room.gameState.drawHistory.length === 0 && broadcasts.length === 0, `[experimental] rejects legacy 21B Type 4 without strokeId (Stage 4A)`);
 
-  handleDrawBinary(drawerSocket, v21, deps);
-  check(room.gameState.drawHistory.length === 3 && broadcasts.length === 3, `[${mode}] accepts valid 21B Type 4 (targetRGBA only)`);
+    const v19Zero = makeRawType4({ length: 19, instId: 'u000001', tool: 2, opacity: 50, x: 2500, y: 7500, strokeId: 0, strokeIdOffset: 17 });
+    handleDrawBinary(drawerSocket, v19Zero, deps);
+    check(room.gameState.drawHistory.length === 0 && broadcasts.length === 0, `[experimental] rejects 19B Type 4 with strokeId === 0 (Stage 4A)`);
 
-  handleDrawBinary(drawerSocket, v23, deps);
-  check(room.gameState.drawHistory.length === 4 && broadcasts.length === 4, `[${mode}] accepts valid 23B Type 4 (targetRGBA + strokeId)`);
+    handleDrawBinary(drawerSocket, v19, deps);
+    check(room.gameState.drawHistory.length === 1 && broadcasts.length === 1, `[experimental] accepts valid 19B Type 4 (strokeId=42)`);
 
-  // Verify AGENTS.md invariant: valid Type 4 clears redoStack & records strokeId
-  room.gameState.redoStack = [{ event: 'draw_binary', data: Buffer.from([9]) }];
-  room.gameState.isDrawingActive = true;
-  handleDrawBinary(drawerSocket, v23, deps);
-  check(room.gameState.drawHistory.length === 5 && room.gameState.redoStack.length === 0, `[${mode}] valid Type 4 clears redoStack & appends history`);
+    handleDrawBinary(drawerSocket, v23, deps);
+    check(room.gameState.drawHistory.length === 2 && broadcasts.length === 2, `[experimental] accepts valid 23B Type 4 (targetRGBA + strokeId=99)`);
+
+    // Stage 4A duplicate (instId, strokeId) rejection & distinct ID clearing redoStack
+    handleDrawBinary(drawerSocket, v23, deps);
+    check(room.gameState.drawHistory.length === 2 && broadcasts.length === 2, `[experimental] rejects duplicate (instId, strokeId=99) Type 4`);
+
+    room.gameState.redoStack = [{ event: 'draw_binary', data: Buffer.from([9]) }];
+    room.gameState.isDrawingActive = true;
+    const v23Next = makeRawType4({ length: 23, instId: 'u000001', tool: 2, opacity: 80, x: 5000, y: 5000, targetRGBA: { r: 10, g: 20, b: 30, a: 255 }, strokeId: 100, strokeIdOffset: 21 });
+    handleDrawBinary(drawerSocket, v23Next, deps);
+    check(room.gameState.drawHistory.length === 3 && room.gameState.redoStack.length === 0, `[experimental] valid distinct Type 4 clears redoStack & appends history`);
+  } else {
+    handleDrawBinary(drawerSocket, v17, deps);
+    check(room.gameState.drawHistory.length === 1 && broadcasts.length === 1, `[${mode}] accepts valid 17B Type 4 (including first-action bucket on empty history)`);
+
+    handleDrawBinary(drawerSocket, v19, deps);
+    check(room.gameState.drawHistory.length === 2 && broadcasts.length === 2, `[${mode}] accepts valid 19B Type 4 (strokeId only)`);
+
+    handleDrawBinary(drawerSocket, v21, deps);
+    check(room.gameState.drawHistory.length === 3 && broadcasts.length === 3, `[${mode}] accepts valid 21B Type 4 (targetRGBA only)`);
+
+    handleDrawBinary(drawerSocket, v23, deps);
+    check(room.gameState.drawHistory.length === 4 && broadcasts.length === 4, `[${mode}] accepts valid 23B Type 4 (targetRGBA + strokeId)`);
+
+    // Verify AGENTS.md invariant: valid Type 4 clears redoStack & records strokeId
+    room.gameState.redoStack = [{ event: 'draw_binary', data: Buffer.from([9]) }];
+    room.gameState.isDrawingActive = true;
+    handleDrawBinary(drawerSocket, v23, deps);
+    check(room.gameState.drawHistory.length === 5 && room.gameState.redoStack.length === 0, `[${mode}] valid Type 4 clears redoStack & appends history`);
+  }
 
   // Prepare sentinel state to verify ZERO mutation on rejected Type 4 packets
   const histBefore = room.gameState.drawHistory.length;

@@ -259,3 +259,28 @@ export function isValidType4Packet(buf: Buffer): boolean {
   return true;
 }
 
+export function extractType4StrokeId(buf: Buffer): number {
+  if (!Buffer.isBuffer(buf) || buf[0] !== 4) return 0;
+  if (buf.length === 19) return buf.readUInt16LE(17);
+  if (buf.length === 23) return buf.readUInt16LE(21);
+  return 0;
+}
+
+export function extractType9StrokeId(buf: Buffer): number {
+  if (!Buffer.isBuffer(buf) || buf.length < 18 || buf[0] !== 9) return 0;
+  const pointsLen = buf.readUInt16LE(14);
+  const expectedLen = 16 + pointsLen * 4;
+  if (buf.length !== expectedLen + 2) return 0;
+  return buf.readUInt16LE(expectedLen);
+}
+
+/**
+ * Competitive-only strict Type 4 validator (Stage 4A):
+ * Requires 19-byte or 23-byte layout with a non-zero 16-bit strokeId.
+ * Rejects 17-byte and 21-byte forms that omit strokeId, as well as strokeId === 0.
+ */
+export function isValidCompetitiveType4Packet(buf: Buffer): boolean {
+  if (!isValidType4Packet(buf)) return false;
+  if (buf.length !== 19 && buf.length !== 23) return false;
+  return extractType4StrokeId(buf) > 0;
+}
