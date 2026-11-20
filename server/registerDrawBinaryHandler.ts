@@ -144,6 +144,7 @@ export function handleDrawBinary(
 
     const isFreeDraw = Boolean(room.isFreeDraw);
     const isExperimental = Boolean(room.isExperimental);
+    const isCompetitiveExperimental = isExperimental && !isFreeDraw;
     const useCanonicalPipeline = isFreeDraw || isExperimental;
     const pId = player.persistentId || player.id;
 
@@ -278,6 +279,14 @@ export function handleDrawBinary(
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
+      if (
+        isCompetitiveExperimental &&
+        io &&
+        typeof io.to === 'function' &&
+        typeof roomManager.getBucketLockSyncPayload === 'function'
+      ) {
+        io.to(roomId).emit('bucket_lock_sync', roomManager.getBucketLockSyncPayload(roomId));
+      }
     } else if (type === 6) { // draw_cancel
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
       markPlayerActive(player, nowMs);
@@ -285,7 +294,25 @@ export function handleDrawBinary(
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 7) { // draw_undo
-      if (isFreeDraw || isExperimental) {
+      if (isCompetitiveExperimental && typeof roomManager.undoCompetitiveExperimentalStroke === 'function') {
+        const undoRes = roomManager.undoCompetitiveExperimentalStroke(roomId, undoTargetInstId, undoTargetStrokeId);
+        if (undoRes.removed) {
+          markPlayerActive(player, nowMs);
+          if (io && typeof io.to === 'function') {
+            io.to(roomId).emit('draw_binary', buf);
+          }
+        } else {
+          if (socket && typeof socket.emit === 'function') {
+            socket.emit('draw_undo_rejected', {
+              reason: undoRes.reason || 'bucket_locked',
+              strokeId: undoTargetStrokeId,
+              instId: undoTargetInstId,
+              drawEpoch: undoRes.drawEpoch,
+              lockedBucket: undoRes.lockedBucket,
+            });
+          }
+        }
+      } else if (isFreeDraw || isExperimental) {
         const removed = roomManager.undoFreeDrawStroke(roomId, undoTargetInstId, undoTargetStrokeId);
         if (removed) {
           markPlayerActive(player, nowMs);
@@ -385,10 +412,30 @@ export function handleDrawBinary(
         socket.broadcast.to(roomId).emit('draw_binary', buf);
       }
     } else if (type === 4) { // draw_action (bucket)
+      const prevLock =
+        isCompetitiveExperimental && typeof roomManager.getBucketLockSyncPayload === 'function'
+          ? roomManager.getBucketLockSyncPayload(roomId)
+          : null;
       roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
       markPlayerActive(player, nowMs);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
+      }
+      if (
+        isCompetitiveExperimental &&
+        io &&
+        typeof io.to === 'function' &&
+        typeof roomManager.getBucketLockSyncPayload === 'function'
+      ) {
+        const nextLock = roomManager.getBucketLockSyncPayload(roomId);
+        const lockChanged =
+          !prevLock ||
+          prevLock.drawEpoch !== nextLock.drawEpoch ||
+          prevLock.lockedBucket?.instId !== nextLock.lockedBucket?.instId ||
+          prevLock.lockedBucket?.strokeId !== nextLock.lockedBucket?.strokeId;
+        if (lockChanged) {
+          io.to(roomId).emit('bucket_lock_sync', nextLock);
+        }
       }
     } else {
       // Remaining supported legacy type (Type 10 clear compatibility)

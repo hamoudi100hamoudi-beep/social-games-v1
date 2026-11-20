@@ -1,3 +1,14 @@
+export interface BucketLockTarget {
+  drawEpoch: number;
+  instId: string;
+  strokeId: number;
+}
+
+export interface BucketLockSyncPayload {
+  drawEpoch: number;
+  lockedBucket: { instId: string; strokeId: number } | null;
+}
+
 export interface GameState {
   status: 'WAITING' | 'CHOOSING' | 'DRAWING' | 'ROUND_END' | 'PODIUM';
   currentDrawerId: string | null;
@@ -14,6 +25,8 @@ export interface GameState {
   noOneGuessedVariant?: 1 | 2;
   drawingStartTime?: number;
   drawHistory?: {event: string, data: any}[];
+  drawEpoch?: number;
+  lockedBucketTarget?: BucketLockTarget | null;
   reports?: string[]; // Player persistentIds/socketIds who reported the current turn
   isDrawingActive?: boolean; // GATEKEEPER FLAG FOR UNDO SAFETY
   lastStrokeIndex?: number | null;

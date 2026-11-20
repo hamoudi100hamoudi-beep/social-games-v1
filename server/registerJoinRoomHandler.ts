@@ -191,6 +191,13 @@ export function handleJoinRoom(
             socket.emit('draw_history_sync', reconnectedRoom.gameState?.drawHistory || []);
             socket.emit('draw_redo_sync', reconnectedRoom.gameState?.redoStack || []);
           }
+          if (
+            reconnectedRoom.isExperimental &&
+            !reconnectedRoom.isFreeDraw &&
+            typeof roomManager.getBucketLockSyncPayload === 'function'
+          ) {
+            socket.emit('bucket_lock_sync', roomManager.getBucketLockSyncPayload(roomId));
+          }
           if (typeof roomManager.syncActiveFreeDrawStrokesToSocket === 'function') {
             roomManager.syncActiveFreeDrawStrokesToSocket(reconnectedRoom, socket);
           }
@@ -273,6 +280,13 @@ export function handleJoinRoom(
       } else {
         socket.emit('draw_history_sync', room.gameState?.drawHistory || []);
         socket.emit('draw_redo_sync', room.gameState?.redoStack || []);
+      }
+      if (
+        room.isExperimental &&
+        !room.isFreeDraw &&
+        typeof roomManager.getBucketLockSyncPayload === 'function'
+      ) {
+        socket.emit('bucket_lock_sync', roomManager.getBucketLockSyncPayload(roomId));
       }
       if (typeof roomManager.syncActiveFreeDrawStrokesToSocket === 'function') {
         roomManager.syncActiveFreeDrawStrokesToSocket(room, socket);

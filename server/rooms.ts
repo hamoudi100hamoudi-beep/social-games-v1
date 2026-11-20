@@ -1,5 +1,5 @@
 import { Server } from "socket.io";
-import { Player, Room, GameState, getRoomConfig, ROOM_PRESETS } from "../src/types/game.js";
+import { Player, Room, GameState, getRoomConfig, ROOM_PRESETS, BucketLockSyncPayload } from "../src/types/game.js";
 import { sessionAuthStore, SessionAuthStore } from "./sessionAuth.js";
 import { normalizeArabic, isCloseGuess } from "./utils/arabicFuzzyMatch.js";
 import { ALL_WORDS } from "./data/wordsDictionary.js";
@@ -27,8 +27,13 @@ export {
 import {
   recordRoomDrawCommand,
   undoRoomFreeDrawStroke,
+  undoRoomCompetitiveExperimentalStroke,
   undoRoomLastDrawing,
   redoRoomDrawing,
+  advanceRoomDrawEpoch,
+  resolveRoomBucketLockState,
+  isCompetitiveExperimentalRoom,
+  type CompetitiveUndoResult,
 } from "./roomDrawingHistory.js";
 
 import {
@@ -1046,6 +1051,8 @@ const words = word.split(" ").filter(w => w.length > 0);
         : undefined;
 
       const hasDrawHistory = Boolean(room.gameState.drawHistory && room.gameState.drawHistory.length > 0);
+      const isCompetitiveExp = isCompetitiveExperimentalRoom(room);
+      const lockState = isCompetitiveExp ? resolveRoomBucketLockState(room) : null;
 
       this.io.to(p.id).emit("room_state_update", {
         roomId: room.id,
@@ -1057,6 +1064,14 @@ const words = word.split(" ").filter(w => w.length > 0);
         hasDrawHistory,
         gameState: {
           ...publicGameState,
+          drawEpoch: room.gameState.drawEpoch ?? 0,
+          lockedBucketTarget: isCompetitiveExp && lockState?.lockedBucket
+            ? {
+                drawEpoch: lockState.drawEpoch,
+                instId: lockState.lockedBucket.instId,
+                strokeId: lockState.lockedBucket.strokeId
+              }
+            : null,
           phaseRemainingMs,
           phaseEndsAt: room.gameState.phaseEndsAt,
           hasDrawHistory,
@@ -1099,6 +1114,8 @@ const words = word.split(" ").filter(w => w.length > 0);
           hintsUsed: 0,
           revealedIndices: [],
           drawHistory: [],
+          drawEpoch: 0,
+          lockedBucketTarget: null,
           isDrawingActive: false,
         },
         usedWords: [],
@@ -1199,6 +1216,7 @@ const words = word.split(" ").filter(w => w.length > 0);
       //@ts-ignore
       room.gameState.redoStack = [];
       room.gameState.isDrawingActive = false;
+      advanceRoomDrawEpoch(room);
 
       // Strict cleanup of in-memory stroke collectors and canonical caches
       if (room.freeDrawStrokes) {
@@ -1223,6 +1241,13 @@ const words = word.split(" ").filter(w => w.length > 0);
         clearBuf.writeUInt8(5, 0); // MSG_DRAW_CLEAR type
         clearBuf.write("server", 1, 7, "ascii"); // string padding or server identification
         this.io.to(room.id).emit("draw_binary", clearBuf);
+
+        if (isCompetitiveExperimentalRoom(room)) {
+          this.io.to(room.id).emit("bucket_lock_sync", {
+            drawEpoch: room.gameState.drawEpoch ?? 0,
+            lockedBucket: null,
+          });
+        }
       }
     }
   }
@@ -1510,7 +1535,8 @@ const words = word.split(" ").filter(w => w.length > 0);
     //@ts-ignore
     room.gameState.redoStack = [];
     room.gameState.isDrawingActive = false;
-    this.recordDrawCommand(roomId, 'draw_binary', buf);
+    advanceRoomDrawEpoch(room);
+    recordRoomDrawCommand(room, 'draw_binary', buf, undefined, undefined, { skipEpochAdvance: true });
   }
 
   public getCanonicalFreeDrawStroke(roomId: string, instId: string, strokeId: number): Buffer | null {
@@ -1529,6 +1555,30 @@ const words = word.split(" ").filter(w => w.length > 0);
     const room = this.rooms.get(roomId);
     if (!room) return false;
     return undoRoomFreeDrawStroke(room, targetInstId, targetStrokeId);
+  }
+
+  public undoCompetitiveExperimentalStroke(
+    roomId: string,
+    targetInstId: string,
+    targetStrokeId: number
+  ): CompetitiveUndoResult {
+    const room = this.rooms.get(roomId);
+    if (!room) {
+      return { removed: false, reason: 'not_found', drawEpoch: 0, lockedBucket: null };
+    }
+    return undoRoomCompetitiveExperimentalStroke(room, targetInstId, targetStrokeId);
+  }
+
+  public getBucketLockSyncPayload(roomId: string): BucketLockSyncPayload {
+    const room = this.rooms.get(roomId);
+    if (!room || !isCompetitiveExperimentalRoom(room)) {
+      return { drawEpoch: room?.gameState?.drawEpoch ?? 0, lockedBucket: null };
+    }
+    const resolved = resolveRoomBucketLockState(room);
+    return {
+      drawEpoch: resolved.drawEpoch,
+      lockedBucket: resolved.lockedBucket,
+    };
   }
 
   private getLastStrokeStartIndex(drawHistory: any[]): number {
@@ -1567,14 +1617,17 @@ const words = word.split(" ").filter(w => w.length > 0);
 
   clearDrawHistory(roomId: string) {
     const room = this.rooms.get(roomId);
-    if (room && room.gameState.drawHistory) {
-      if (room.isFreeDraw) {
+    if (room) {
+      if (room.isFreeDraw || room.isExperimental) {
         this.abortAllActiveFreeDrawStrokesForRoom(roomId);
       }
-      room.gameState.drawHistory = [];
+      if (room.gameState.drawHistory) {
+        room.gameState.drawHistory = [];
+      }
       //@ts-ignore
       room.gameState.redoStack = [];
       room.gameState.isDrawingActive = false;
+      advanceRoomDrawEpoch(room);
     }
   }
 

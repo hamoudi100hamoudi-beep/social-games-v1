@@ -43,8 +43,10 @@ export class CanvasUndoCache {
   private hasUndo: boolean = false;
   private hasRedo: boolean = false;
   private hasPending: boolean = false;
+  private hasTransientRollback: boolean = false;
 
   private meta: FreeDrawUndoCacheMeta | null = null;
+  private transientRollbackMeta: { instId: string; strokeId: number } | null = null;
   private deps: CanvasUndoCacheDependencies;
 
   constructor(deps: CanvasUndoCacheDependencies) {
@@ -304,6 +306,45 @@ export class CanvasUndoCache {
     this.meta = null;
   }
 
+  captureTransientRollbackSnapshot(instId: string, strokeId: number): boolean {
+    const canvas = this.deps.getCanvas();
+    if (!canvas) return false;
+
+    this.redoCanvas = this.ensureCanvas(this.redoCanvas, canvas);
+    const copied = this.copyContent(canvas, this.redoCanvas);
+    if (copied) {
+      this.hasTransientRollback = true;
+      this.transientRollbackMeta = { instId, strokeId };
+      return true;
+    }
+    this.hasTransientRollback = false;
+    this.transientRollbackMeta = null;
+    return false;
+  }
+
+  restoreTransientRollbackSnapshot(instId: string, strokeId: number): boolean {
+    const canvas = this.deps.getCanvas();
+    if (
+      !canvas ||
+      !this.hasTransientRollback ||
+      !this.redoCanvas ||
+      !this.transientRollbackMeta ||
+      this.transientRollbackMeta.instId !== instId ||
+      this.transientRollbackMeta.strokeId !== strokeId
+    ) {
+      return false;
+    }
+    const restored = this.restore(this.redoCanvas, canvas);
+    this.hasTransientRollback = false;
+    this.transientRollbackMeta = null;
+    return restored;
+  }
+
+  invalidateTransientRollbackSnapshot(): void {
+    this.hasTransientRollback = false;
+    this.transientRollbackMeta = null;
+  }
+
   /**
    * Fully resets all caches (Undo, Redo, Pending) and metadata.
    * Used for clear epochs, resets, and full server history synchronization.
@@ -313,6 +354,7 @@ export class CanvasUndoCache {
     this.hasRedo = false;
     this.hasPending = false;
     this.meta = null;
+    this.invalidateTransientRollbackSnapshot();
   }
 
   /**

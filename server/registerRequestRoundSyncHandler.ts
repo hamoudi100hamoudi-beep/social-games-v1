@@ -32,6 +32,13 @@ export function handleRequestRoundSync(
         deps.roomManager.sendStateToPlayer(room, player);
         socket.emit('draw_history_sync', deps.getJsonSafeHistory(room.gameState.drawHistory || []));
         socket.emit('draw_redo_sync', deps.getJsonSafeHistory(room.gameState.redoStack || []));
+        if (
+          room.isExperimental &&
+          !room.isFreeDraw &&
+          typeof deps.roomManager.getBucketLockSyncPayload === 'function'
+        ) {
+          socket.emit('bucket_lock_sync', deps.roomManager.getBucketLockSyncPayload(room.id));
+        }
         deps.roomManager.syncActiveFreeDrawStrokesToSocket(room, socket);
 
         if (typeof callback === 'function') {
