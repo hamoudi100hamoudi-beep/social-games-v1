@@ -4532,7 +4532,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     const onDrawRedoSync = (commands: any[]) => {
       console.log("[DrawingCanvasCore] Received draw_redo_sync event, payload length:", commands?.length);
-      localRedoStackRef.current = commands || [];
+      const isCompetitiveExperimental = Boolean(propsRef.current.isExperimental && !propsRef.current.isFreeDraw);
+      const incoming = Array.isArray(commands) ? commands : [];
+      if (isCompetitiveExperimental && incoming.length === 0) {
+        syncHistoryButtons();
+        return;
+      }
+      localRedoStackRef.current = incoming;
       syncHistoryButtons();
     };
 
