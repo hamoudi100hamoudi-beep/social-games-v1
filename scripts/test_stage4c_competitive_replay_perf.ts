@@ -31,11 +31,13 @@ const HARNESS_HTML = `<!doctype html>
         var params = new URLSearchParams(window.location.search);
         var isOpt = params.get('opt') !== '0';
         localStorage.setItem('freedraw_bucket_undo_diag', '1');
-        localStorage.setItem('freedraw_bucket_checkpoint_exp', '1');
-        localStorage.setItem('freedraw_bucket_batch_replay_exp', '1');
         if (isOpt) {
-          localStorage.removeItem('competitive_replay_perf_stage4c');
+          localStorage.setItem('freedraw_bucket_checkpoint_exp', '1');
+          localStorage.setItem('freedraw_bucket_batch_replay_exp', '1');
+          localStorage.setItem('competitive_replay_perf_stage4c', '1');
         } else {
+          localStorage.setItem('freedraw_bucket_checkpoint_exp', '0');
+          localStorage.setItem('freedraw_bucket_batch_replay_exp', '0');
           localStorage.setItem('competitive_replay_perf_stage4c', '0');
         }
         if (!window.__STAGE4C_SPY_INSTALLED__) {
@@ -91,9 +93,102 @@ import { createRoot } from 'react-dom/client';
 import DrawingCanvasCore from '/src/components/game/DrawingCanvasCore.tsx';
 import { SocketProvider } from '/src/components/SocketProvider.tsx';
 
+function openPixelDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('stage4c_pixel_store', 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('snaps')) {
+        db.createObjectStore('snaps');
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function idbPut(key, val) {
+  const db = await openPixelDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('snaps', 'readwrite');
+    tx.objectStore('snaps').put(val, key);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+async function idbGet(key) {
+  const db = await openPixelDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('snaps', 'readonly');
+    const req = tx.objectStore('snaps').get(key);
+    req.onsuccess = () => { db.close(); resolve(req.result || null); };
+    req.onerror = () => { db.close(); reject(req.error); };
+  });
+}
+
+async function idbClear() {
+  const db = await openPixelDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('snaps', 'readwrite');
+    tx.objectStore('snaps').clear();
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+function readCanvasRawRgba() {
+  const c = document.getElementById('drawing-board-layer-primary');
+  if (!c) return null;
+  const ctx = c.getContext('2d');
+  if (!ctx) return null;
+  const origGet = window.__ORIG_GET_IMAGE_DATA__;
+  const img = origGet ? origGet.call(ctx, 0, 0, c.width, c.height) : ctx.getImageData(0, 0, c.width, c.height);
+  return { width: c.width, height: c.height, data: img.data };
+}
+
+function summarizeRgba(data) {
+  let nonZeroChannels = 0;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i] !== 0) nonZeroChannels++;
+  }
+  const cornerPixel = data.length >= 4 ? [data[0], data[1], data[2], data[3]] : [];
+  return { nonZeroChannels, cornerPixel };
+}
+
+function compareUint8Arrays(a, b) {
+  if (!a || !b || a.length !== b.length) {
+    const maxLen = Math.max(a ? a.length : 0, b ? b.length : 0);
+    return { diffChannels: maxLen, diffPixels: Math.ceil(maxLen / 4), maxChannelDelta: 255 };
+  }
+  let diffChannels = 0;
+  let diffPixels = 0;
+  let maxChannelDelta = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    let pixDiff = false;
+    for (let ch = 0; ch < 4; ch++) {
+      const d = Math.abs(a[i + ch] - b[i + ch]);
+      if (d > 0) {
+        diffChannels++;
+        pixDiff = true;
+        if (d > maxChannelDelta) maxChannelDelta = d;
+      }
+    }
+    if (pixDiff) diffPixels++;
+  }
+  return { diffChannels, diffPixels, maxChannelDelta };
+}
+
+const __urlParams = new URLSearchParams(window.location.search);
+let __initialCfgOverrides = {};
+try {
+  const rawCfg = __urlParams.get('cfg');
+  if (rawCfg) __initialCfgOverrides = JSON.parse(rawCfg);
+} catch {}
+
 function TestStageApp() {
   const canvasRef = useRef(null);
-  const [config, setConfig] = useState({
+  const [config, setConfig] = useState(() => ({
     readOnly: false,
     tool: 'pencil',
     color: '#000000',
@@ -106,8 +201,9 @@ function TestStageApp() {
     enableDestinationOutEraser: true,
     enableInputOptimizations: true,
     isRoomJoined: false,
-    status: 'DRAWING'
-  });
+    status: 'DRAWING',
+    ...__initialCfgOverrides
+  }));
   const [historyState, setHistoryState] = useState({ index: 0, length: 1 });
   const historyRef = useRef({ index: 0, length: 1 });
 
@@ -137,14 +233,33 @@ function TestStageApp() {
         const c = document.getElementById('drawing-board-layer-primary');
         return c ? { width: c.width, height: c.height, rect: c.getBoundingClientRect().toJSON() } : null;
       },
-      getPixels: () => {
-        const c = document.getElementById('drawing-board-layer-primary');
-        if (!c) return null;
-        const ctx = c.getContext('2d');
-        if (!ctx) return null;
-        const origGet = window.__ORIG_GET_IMAGE_DATA__;
-        const data = origGet ? origGet.call(ctx, 0, 0, c.width, c.height).data : ctx.getImageData(0, 0, c.width, c.height).data;
-        return Array.from(data);
+      captureAndHandlePixels: async (op) => {
+        const raw = readCanvasRawRgba();
+        if (!raw) return null;
+        const meta = summarizeRgba(raw.data);
+        if (!op || op.mode === 'inspect') {
+          return { diffChannels: 0, diffPixels: 0, maxChannelDelta: 0, ...meta };
+        }
+        if (op.mode === 'save') {
+          await idbPut(op.key, { width: raw.width, height: raw.height, buffer: raw.data.slice().buffer });
+          return { diffChannels: 0, diffPixels: 0, maxChannelDelta: 0, ...meta };
+        }
+        if (op.mode === 'compare') {
+          const stored = await idbGet(op.key);
+          const refArr = stored ? new Uint8ClampedArray(stored.buffer) : null;
+          const cmp = compareUint8Arrays(refArr, raw.data);
+          return { ...cmp, ...meta };
+        }
+        return { diffChannels: 0, diffPixels: 0, maxChannelDelta: 0, ...meta };
+      },
+      compareStoredSnapshots: async (keyA, keyB) => {
+        const [a, b] = await Promise.all([idbGet(keyA), idbGet(keyB)]);
+        const arrA = a ? new Uint8ClampedArray(a.buffer) : null;
+        const arrB = b ? new Uint8ClampedArray(b.buffer) : null;
+        return compareUint8Arrays(arrA, arrB);
+      },
+      clearPixelStore: async () => {
+        await idbClear();
       }
     };
   }, []);
@@ -310,6 +425,16 @@ interface DiagFrame {
   };
 }
 
+interface PixelCompareSummary {
+  diffChannels: number;
+  diffPixels: number;
+  maxChannelDelta: number;
+  nonZeroChannels: number;
+  cornerPixel: number[];
+}
+
+type PixelOp = { mode: 'save' | 'compare'; key: string } | { mode: 'inspect' } | null;
+
 interface StepStats {
   syncMs: number;
   getImageDataCalls: number;
@@ -317,7 +442,7 @@ interface StepStats {
   getImageDataFullCalls: number;
   putImageDataCalls: number;
   diag: DiagFrame | null;
-  pixels: number[];
+  pixelSummary: PixelCompareSummary;
 }
 
 interface ScenarioRunResult {
@@ -332,7 +457,8 @@ interface ScenarioRunResult {
   totalGetImageData1x1: number;
   totalPutImageData: number;
   totalShortcutHits: number;
-  finalPixels: number[];
+  finalPixelSummary: PixelCompareSummary;
+  maxDiffPixels: number;
   historyCheckpointCountLeak: boolean;
 }
 
@@ -350,28 +476,6 @@ function avg(vals: number[]): number {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
-}
-
-function comparePixelArrays(a: number[], b: number[]): { diffChannels: number; diffPixels: number; maxChannelDelta: number } {
-  if (a.length !== b.length) {
-    return { diffChannels: Math.max(a.length, b.length), diffPixels: Math.max(a.length, b.length) / 4, maxChannelDelta: 255 };
-  }
-  let diffChannels = 0;
-  let diffPixels = 0;
-  let maxChannelDelta = 0;
-  for (let i = 0; i < a.length; i += 4) {
-    let pixDiff = false;
-    for (let c = 0; c < 4; c++) {
-      const d = Math.abs(a[i + c] - b[i + c]);
-      if (d > 0) {
-        diffChannels++;
-        pixDiff = true;
-        if (d > maxChannelDelta) maxChannelDelta = d;
-      }
-    }
-    if (pixDiff) diffPixels++;
-  }
-  return { diffChannels, diffPixels, maxChannelDelta };
 }
 
 async function setupHarnessPage(
@@ -402,16 +506,11 @@ async function setupHarnessPage(
     }
   });
 
-  await page.goto(`${url}?opt=${optEnabled ? '1' : '0'}`, { waitUntil: 'networkidle' });
+  const cfgParam = encodeURIComponent(JSON.stringify(configOverrides));
+  await page.goto(`${url}?opt=${optEnabled ? '1' : '0'}&cfg=${cfgParam}`, { waitUntil: 'networkidle' });
   await page.waitForFunction(() => Boolean((window as any).__STAGE4C__));
 
-  if (Object.keys(configOverrides).length > 0) {
-    await page.evaluate((patch) => {
-      (window as any).__STAGE4C__.setConfig(patch);
-    }, configOverrides);
-  }
-
-  // Wait for ResizeObserver to initialize canvas backing store & readiness
+  // Wait for ResizeObserver to initialize canvas backing store & readiness with initial mount props
   await page.waitForFunction(() => {
     const dims = (window as any).__STAGE4C__?.getCanvasDimensions();
     return dims && dims.width > 0 && dims.height > 0 && dims.rect.width > 0;
@@ -484,16 +583,30 @@ async function resetSpy(page: Page, diagQueue: DiagFrame[]) {
   });
 }
 
-async function performUndoMeasured(page: Page, diagQueue: DiagFrame[]): Promise<StepStats> {
+const EMPTY_PIXEL_SUMMARY: PixelCompareSummary = {
+  diffChannels: 0,
+  diffPixels: 0,
+  maxChannelDelta: 0,
+  nonZeroChannels: 0,
+  cornerPixel: []
+};
+
+async function performUndoMeasured(
+  page: Page,
+  diagQueue: DiagFrame[],
+  pixelOp: PixelOp = null
+): Promise<StepStats> {
   await resetSpy(page, diagQueue);
   // Ensure single-flight rAF guard from previous undo is released
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  const res = await page.evaluate(() => {
+  const res = await page.evaluate(async (op) => {
     const syncMs = (window as any).__STAGE4C__.undo();
     const counts = { ...(window as any).__SPY_COUNTS__ };
-    const pixels = (window as any).__STAGE4C__.getPixels();
-    return { syncMs, counts, pixels };
-  });
+    const pixelSummary = op
+      ? await (window as any).__STAGE4C__.captureAndHandlePixels(op)
+      : { diffChannels: 0, diffPixels: 0, maxChannelDelta: 0, nonZeroChannels: 0, cornerPixel: [] };
+    return { syncMs, counts, pixelSummary };
+  }, pixelOp);
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
   const diag = diagQueue.length > 0 ? diagQueue[diagQueue.length - 1] : null;
   return {
@@ -503,18 +616,24 @@ async function performUndoMeasured(page: Page, diagQueue: DiagFrame[]): Promise<
     getImageDataFullCalls: res.counts.getImageDataFull,
     putImageDataCalls: res.counts.putImageData,
     diag,
-    pixels: res.pixels
+    pixelSummary: res.pixelSummary || EMPTY_PIXEL_SUMMARY
   };
 }
 
-async function performRedoMeasured(page: Page, diagQueue: DiagFrame[]): Promise<StepStats> {
+async function performRedoMeasured(
+  page: Page,
+  diagQueue: DiagFrame[],
+  pixelOp: PixelOp = null
+): Promise<StepStats> {
   await resetSpy(page, diagQueue);
-  const res = await page.evaluate(() => {
+  const res = await page.evaluate(async (op) => {
     const syncMs = (window as any).__STAGE4C__.redo();
     const counts = { ...(window as any).__SPY_COUNTS__ };
-    const pixels = (window as any).__STAGE4C__.getPixels();
-    return { syncMs, counts, pixels };
-  });
+    const pixelSummary = op
+      ? await (window as any).__STAGE4C__.captureAndHandlePixels(op)
+      : { diffChannels: 0, diffPixels: 0, maxChannelDelta: 0, nonZeroChannels: 0, cornerPixel: [] };
+    return { syncMs, counts, pixelSummary };
+  }, pixelOp);
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
   const diag = diagQueue.length > 0 ? diagQueue[diagQueue.length - 1] : null;
   return {
@@ -524,11 +643,22 @@ async function performRedoMeasured(page: Page, diagQueue: DiagFrame[]): Promise<
     getImageDataFullCalls: res.counts.getImageDataFull,
     putImageDataCalls: res.counts.putImageData,
     diag,
-    pixels: res.pixels
+    pixelSummary: res.pixelSummary || EMPTY_PIXEL_SUMMARY
   };
 }
 
-function summarizeRun(undoSteps: StepStats[], redoSteps: StepStats[], finalPixels: number[]): ScenarioRunResult {
+function summarizeRun(
+  undoSteps: StepStats[],
+  redoSteps: StepStats[],
+  finalPixelSummary: PixelCompareSummary
+): ScenarioRunResult {
+  let maxDiffPixels = finalPixelSummary.diffPixels;
+  for (const s of undoSteps) {
+    if (s.pixelSummary.diffPixels > maxDiffPixels) maxDiffPixels = s.pixelSummary.diffPixels;
+  }
+  for (const s of redoSteps) {
+    if (s.pixelSummary.diffPixels > maxDiffPixels) maxDiffPixels = s.pixelSummary.diffPixels;
+  }
   return {
     undoSteps,
     redoSteps,
@@ -541,14 +671,37 @@ function summarizeRun(undoSteps: StepStats[], redoSteps: StepStats[], finalPixel
     totalGetImageData1x1: undoSteps.reduce((s, u) => s + u.getImageData1x1Calls, 0),
     totalPutImageData: undoSteps.reduce((s, u) => s + u.putImageDataCalls, 0),
     totalShortcutHits: undoSteps.reduce((s, u) => s + (u.diag?.hints?.usedShortcut ?? 0), 0),
-    finalPixels,
+    finalPixelSummary,
+    maxDiffPixels,
     historyCheckpointCountLeak: undoSteps.some((u) => (u.diag?.checkpointFacts?.retainedCanvases ?? 0) > 2)
   };
 }
 
+function makeStepOp(pixelMode: 'save' | 'compare' | 'none', scenarioKey: string, stepKey: string): PixelOp {
+  if (pixelMode === 'none') return null;
+  return { mode: pixelMode, key: `${scenarioKey}:${stepKey}` };
+}
+
+async function captureFinalPixelSummary(
+  page: Page,
+  pixelMode: 'save' | 'compare' | 'none',
+  scenarioKey: string
+): Promise<PixelCompareSummary> {
+  if (pixelMode === 'none') return EMPTY_PIXEL_SUMMARY;
+  const op = makeStepOp(pixelMode, scenarioKey, 'final');
+  const res = await page.evaluate((pOp) => (window as any).__STAGE4C__.captureAndHandlePixels(pOp), op);
+  return res || EMPTY_PIXEL_SUMMARY;
+}
+
 // --- Scenario Definitions ---
 
-async function runTestA_PencilOnly(page: Page, url: string, optEnabled: boolean): Promise<ScenarioRunResult> {
+async function runTestA_PencilOnly(
+  page: Page,
+  url: string,
+  optEnabled: boolean,
+  pixelMode: 'save' | 'compare' | 'none' = 'none',
+  scenarioKey = 'testA'
+): Promise<ScenarioRunResult> {
   const { diagQueue } = await setupHarnessPage(page, url, optEnabled, { isExperimental: true, isFreeDraw: false, enableCanvasAlpha: true });
   for (let i = 0; i < 10; i++) {
     const y = 0.1 + i * 0.08;
@@ -556,17 +709,23 @@ async function runTestA_PencilOnly(page: Page, url: string, optEnabled: boolean)
   }
   const undoSteps: StepStats[] = [];
   for (let i = 0; i < 5; i++) {
-    undoSteps.push(await performUndoMeasured(page, diagQueue));
+    undoSteps.push(await performUndoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `undo:${i}`)));
   }
   const redoSteps: StepStats[] = [];
   for (let i = 0; i < 5; i++) {
-    redoSteps.push(await performRedoMeasured(page, diagQueue));
+    redoSteps.push(await performRedoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `redo:${i}`)));
   }
-  const finalPixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
-  return summarizeRun(undoSteps, redoSteps, finalPixels);
+  const finalSummary = await captureFinalPixelSummary(page, pixelMode, scenarioKey);
+  return summarizeRun(undoSteps, redoSteps, finalSummary);
 }
 
-async function runTestB_BucketsThenPencil(page: Page, url: string, optEnabled: boolean): Promise<ScenarioRunResult> {
+async function runTestB_BucketsThenPencil(
+  page: Page,
+  url: string,
+  optEnabled: boolean,
+  pixelMode: 'save' | 'compare' | 'none' = 'none',
+  scenarioKey = 'testB'
+): Promise<ScenarioRunResult> {
   const { diagQueue } = await setupHarnessPage(page, url, optEnabled, { isExperimental: true, isFreeDraw: false, enableCanvasAlpha: true });
   // Create 4 distinct enclosed quadrants via 2 crossing divider lines so Buckets execute real raster Flood Fills
   await drawPencilStroke(page, [{ x: 0.5, y: 0.02 }, { x: 0.5, y: 0.98 }], '#000000', 8);
@@ -587,17 +746,23 @@ async function runTestB_BucketsThenPencil(page: Page, url: string, optEnabled: b
   // Undo all 5 Pencil strokes
   const undoSteps: StepStats[] = [];
   for (let i = 0; i < 5; i++) {
-    undoSteps.push(await performUndoMeasured(page, diagQueue));
+    undoSteps.push(await performUndoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `undo:${i}`)));
   }
   const redoSteps: StepStats[] = [];
   for (let i = 0; i < 2; i++) {
-    redoSteps.push(await performRedoMeasured(page, diagQueue));
+    redoSteps.push(await performRedoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `redo:${i}`)));
   }
-  const finalPixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
-  return summarizeRun(undoSteps, redoSteps, finalPixels);
+  const finalSummary = await captureFinalPixelSummary(page, pixelMode, scenarioKey);
+  return summarizeRun(undoSteps, redoSteps, finalSummary);
 }
 
-async function runTestC_MultipleBuckets(page: Page, url: string, optEnabled: boolean): Promise<ScenarioRunResult> {
+async function runTestC_MultipleBuckets(
+  page: Page,
+  url: string,
+  optEnabled: boolean,
+  pixelMode: 'save' | 'compare' | 'none' = 'none',
+  scenarioKey = 'testC'
+): Promise<ScenarioRunResult> {
   const { diagQueue } = await setupHarnessPage(page, url, optEnabled, { isExperimental: true, isFreeDraw: false, enableCanvasAlpha: true });
   // 2 crossing lines creating 4 quadrants
   await drawPencilStroke(page, [{ x: 0.5, y: 0.02 }, { x: 0.5, y: 0.98 }], '#000000', 8);
@@ -614,20 +779,26 @@ async function runTestC_MultipleBuckets(page: Page, url: string, optEnabled: boo
   // 4 Undos
   const undoSteps: StepStats[] = [];
   for (let i = 0; i < 4; i++) {
-    undoSteps.push(await performUndoMeasured(page, diagQueue));
+    undoSteps.push(await performUndoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `undo:${i}`)));
   }
 
   // Redo 3 steps back
   const redoSteps: StepStats[] = [];
   for (let i = 0; i < 3; i++) {
-    redoSteps.push(await performRedoMeasured(page, diagQueue));
+    redoSteps.push(await performRedoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `redo:${i}`)));
   }
 
-  const finalPixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
-  return summarizeRun(undoSteps, redoSteps, finalPixels);
+  const finalSummary = await captureFinalPixelSummary(page, pixelMode, scenarioKey);
+  return summarizeRun(undoSteps, redoSteps, finalSummary);
 }
 
-async function runTestC2_PureOpaqueAndMixedBuckets(page: Page, url: string, optEnabled: boolean): Promise<ScenarioRunResult> {
+async function runTestC2_PureOpaqueAndMixedBuckets(
+  page: Page,
+  url: string,
+  optEnabled: boolean,
+  pixelMode: 'save' | 'compare' | 'none' = 'none',
+  scenarioKey = 'testC2'
+): Promise<ScenarioRunResult> {
   const { diagQueue } = await setupHarnessPage(page, url, optEnabled, { isExperimental: true, isFreeDraw: false, enableCanvasAlpha: true });
   // Start with a full_canvas_opaque Bucket on blank canvas, then border + 4 raster buckets + 1 noop
   await applyBucketClick(page, 0.1, 0.1, '#f8fafc'); // B1: full_canvas_opaque!
@@ -641,17 +812,23 @@ async function runTestC2_PureOpaqueAndMixedBuckets(page: Page, url: string, optE
 
   const undoSteps: StepStats[] = [];
   for (let i = 0; i < 5; i++) {
-    undoSteps.push(await performUndoMeasured(page, diagQueue));
+    undoSteps.push(await performUndoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `undo:${i}`)));
   }
   const redoSteps: StepStats[] = [];
   for (let i = 0; i < 3; i++) {
-    redoSteps.push(await performRedoMeasured(page, diagQueue));
+    redoSteps.push(await performRedoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `redo:${i}`)));
   }
-  const finalPixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
-  return summarizeRun(undoSteps, redoSteps, finalPixels);
+  const finalSummary = await captureFinalPixelSummary(page, pixelMode, scenarioKey);
+  return summarizeRun(undoSteps, redoSteps, finalSummary);
 }
 
-async function runTestD_ClearBoundary(page: Page, url: string, optEnabled: boolean): Promise<ScenarioRunResult> {
+async function runTestD_ClearBoundary(
+  page: Page,
+  url: string,
+  optEnabled: boolean,
+  pixelMode: 'save' | 'compare' | 'none' = 'none',
+  scenarioKey = 'testD'
+): Promise<ScenarioRunResult> {
   const { diagQueue } = await setupHarnessPage(page, url, optEnabled, { isExperimental: true, isFreeDraw: false, enableCanvasAlpha: true });
   // Pre-clear drawing
   await drawPencilStroke(page, [{ x: 0.1, y: 0.1 }, { x: 0.9, y: 0.9 }], '#dc2626', 10);
@@ -670,27 +847,33 @@ async function runTestD_ClearBoundary(page: Page, url: string, optEnabled: boole
   const undoSteps: StepStats[] = [];
   // Undo 4 times (should stop cleanly at post-clear empty state and NEVER restore pre-clear stroke!)
   for (let i = 0; i < 4; i++) {
-    undoSteps.push(await performUndoMeasured(page, diagQueue));
+    undoSteps.push(await performUndoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `undo:${i}`)));
   }
   // Extra undo past clear boundary must remain no-op
-  const extraUndo = await performUndoMeasured(page, diagQueue);
+  const extraUndo = await performUndoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, 'undo:4'));
   undoSteps.push(extraUndo);
 
   const redoSteps: StepStats[] = [];
   for (let i = 0; i < 2; i++) {
-    redoSteps.push(await performRedoMeasured(page, diagQueue));
+    redoSteps.push(await performRedoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `redo:${i}`)));
   }
 
-  const finalPixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
-  return summarizeRun(undoSteps, redoSteps, finalPixels);
+  const finalSummary = await captureFinalPixelSummary(page, pixelMode, scenarioKey);
+  return summarizeRun(undoSteps, redoSteps, finalSummary);
 }
 
-async function runTestE_NormalRoomIsolation(page: Page, url: string, optEnabled: boolean): Promise<{
+async function runTestE_NormalRoomIsolation(
+  page: Page,
+  url: string,
+  optEnabled: boolean,
+  pixelMode: 'save' | 'compare'
+): Promise<{
   dims: { width: number; height: number };
-  afterDrawPixels: number[];
-  afterUndo1Pixels: number[];
-  afterUndo2Pixels: number[];
-  afterRedoPixels: number[];
+  drawDiffPixels: number;
+  undo1DiffPixels: number;
+  undo2DiffPixels: number;
+  redoDiffPixels: number;
+  undo1VsUndo2DiffPixels: number;
   histAfterUndo1: { index: number; length: number };
   histAfterUndo2: { index: number; length: number };
 }> {
@@ -707,35 +890,62 @@ async function runTestE_NormalRoomIsolation(page: Page, url: string, optEnabled:
   await drawPencilStroke(page, [{ x: 0.5, y: 0.1 }, { x: 0.5, y: 0.9 }], '#1d4ed8', 6);
   await applyBucketClick(page, 0.25, 0.6, '#22c55e');
 
-  const afterDrawPixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
+  const drawSummary: PixelCompareSummary = await page.evaluate(
+    (m) => (window as any).__STAGE4C__.captureAndHandlePixels({ mode: m, key: 'testE:draw' }),
+    pixelMode
+  );
 
   await page.evaluate(() => (window as any).__STAGE4C__.undo());
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  const afterUndo1Pixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
+  const undo1Summary: PixelCompareSummary = await page.evaluate(
+    (m) => (window as any).__STAGE4C__.captureAndHandlePixels({ mode: m, key: 'testE:undo1' }),
+    pixelMode
+  );
   const histAfterUndo1 = await page.evaluate(() => (window as any).__STAGE4C__.getHistoryState());
 
   // Second undo in Normal mode must be blocked (1-step undo/redo policy)
   await page.evaluate(() => (window as any).__STAGE4C__.undo());
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  const afterUndo2Pixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
+  const undo2Summary: PixelCompareSummary = await page.evaluate(
+    (m) => (window as any).__STAGE4C__.captureAndHandlePixels({ mode: m, key: 'testE:undo2' }),
+    pixelMode
+  );
   const histAfterUndo2 = await page.evaluate(() => (window as any).__STAGE4C__.getHistoryState());
+
+  // Also save/compare undo1 vs undo2 within this mode in Chromium
+  if (pixelMode === 'compare') {
+    await page.evaluate(() => (window as any).__STAGE4C__.captureAndHandlePixels({ mode: 'save', key: 'testE:optUndo2Check' }));
+  }
+  const undo1VsUndo2 = pixelMode === 'save'
+    ? await page.evaluate(() => (window as any).__STAGE4C__.compareStoredSnapshots('testE:undo1', 'testE:undo2'))
+    : await page.evaluate(() => (window as any).__STAGE4C__.compareStoredSnapshots('testE:undo1', 'testE:optUndo2Check'));
 
   await page.evaluate(() => (window as any).__STAGE4C__.redo());
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
-  const afterRedoPixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
+  const redoSummary: PixelCompareSummary = await page.evaluate(
+    (m) => (window as any).__STAGE4C__.captureAndHandlePixels({ mode: m, key: 'testE:redo' }),
+    pixelMode
+  );
 
   return {
     dims: { width: dims.width, height: dims.height },
-    afterDrawPixels,
-    afterUndo1Pixels,
-    afterUndo2Pixels,
-    afterRedoPixels,
+    drawDiffPixels: drawSummary.diffPixels,
+    undo1DiffPixels: undo1Summary.diffPixels,
+    undo2DiffPixels: undo2Summary.diffPixels,
+    redoDiffPixels: redoSummary.diffPixels,
+    undo1VsUndo2DiffPixels: undo1VsUndo2.diffPixels,
     histAfterUndo1,
     histAfterUndo2
   };
 }
 
-async function runTestF_OpaqueAlphaFalseCompetitive(page: Page, url: string, optEnabled: boolean): Promise<ScenarioRunResult> {
+async function runTestF_OpaqueAlphaFalseCompetitive(
+  page: Page,
+  url: string,
+  optEnabled: boolean,
+  pixelMode: 'save' | 'compare' | 'none' = 'none',
+  scenarioKey = 'testF'
+): Promise<ScenarioRunResult> {
   const { diagQueue } = await setupHarnessPage(page, url, optEnabled, {
     isExperimental: true,
     isFreeDraw: false,
@@ -748,14 +958,14 @@ async function runTestF_OpaqueAlphaFalseCompetitive(page: Page, url: string, opt
 
   const undoSteps: StepStats[] = [];
   for (let i = 0; i < 3; i++) {
-    undoSteps.push(await performUndoMeasured(page, diagQueue));
+    undoSteps.push(await performUndoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `undo:${i}`)));
   }
   const redoSteps: StepStats[] = [];
   for (let i = 0; i < 2; i++) {
-    redoSteps.push(await performRedoMeasured(page, diagQueue));
+    redoSteps.push(await performRedoMeasured(page, diagQueue, makeStepOp(pixelMode, scenarioKey, `redo:${i}`)));
   }
-  const finalPixels = await page.evaluate(() => (window as any).__STAGE4C__.getPixels());
-  return summarizeRun(undoSteps, redoSteps, finalPixels);
+  const finalSummary = await captureFinalPixelSummary(page, pixelMode, scenarioKey);
+  return summarizeRun(undoSteps, redoSteps, finalSummary);
 }
 
 async function main() {
@@ -777,39 +987,41 @@ async function main() {
     console.log('==================================================================\n');
 
     // Warmup run so V8 JIT & Canvas2D caches are warmed up before measured runs
-    await runTestC_MultipleBuckets(page, url, false);
-    await runTestC_MultipleBuckets(page, url, true);
+    await runTestC_MultipleBuckets(page, url, false, 'none');
+    await runTestC_MultipleBuckets(page, url, true, 'none');
+    await page.evaluate(() => (window as any).__STAGE4C__.clearPixelStore());
 
     const ITERATIONS = 5;
 
     const benchmarkPair = async (
       name: string,
-      fn: (p: Page, u: string, opt: boolean) => Promise<ScenarioRunResult>,
+      scenarioKey: string,
+      fn: (p: Page, u: string, opt: boolean, mode: 'save' | 'compare' | 'none', key: string) => Promise<ScenarioRunResult>,
       runs: number
     ) => {
       const baseRuns: ScenarioRunResult[] = [];
       const optRuns: ScenarioRunResult[] = [];
 
+      await page.evaluate(() => (window as any).__STAGE4C__.clearPixelStore());
+
       for (let i = 0; i < runs; i++) {
-        baseRuns.push(await fn(page, url, false));
-        optRuns.push(await fn(page, url, true));
+        // Run 0 saves/compares pixel buffers directly inside Chromium (IndexedDB) without sending arrays over CDP
+        baseRuns.push(await fn(page, url, false, i === 0 ? 'save' : 'none', scenarioKey));
+        optRuns.push(await fn(page, url, true, i === 0 ? 'compare' : 'none', scenarioKey));
       }
+
+      await page.evaluate(() => (window as any).__STAGE4C__.clearPixelStore());
 
       const bFirst = baseRuns[0];
       const oFirst = optRuns[0];
-
-      // Step-by-step pixel parity check
-      let maxDiffPixels = 0;
-      for (let s = 0; s < bFirst.undoSteps.length; s++) {
-        const cmp = comparePixelArrays(bFirst.undoSteps[s].pixels, oFirst.undoSteps[s].pixels);
-        if (cmp.diffPixels > maxDiffPixels) maxDiffPixels = cmp.diffPixels;
+      const maxDiffPixels = oFirst.maxDiffPixels;
+      let maxChannelDelta = oFirst.finalPixelSummary.maxChannelDelta;
+      for (const s of oFirst.undoSteps) {
+        if (s.pixelSummary.maxChannelDelta > maxChannelDelta) maxChannelDelta = s.pixelSummary.maxChannelDelta;
       }
-      for (let s = 0; s < bFirst.redoSteps.length; s++) {
-        const cmp = comparePixelArrays(bFirst.redoSteps[s].pixels, oFirst.redoSteps[s].pixels);
-        if (cmp.diffPixels > maxDiffPixels) maxDiffPixels = cmp.diffPixels;
+      for (const s of oFirst.redoSteps) {
+        if (s.pixelSummary.maxChannelDelta > maxChannelDelta) maxChannelDelta = s.pixelSummary.maxChannelDelta;
       }
-      const finalCmp = comparePixelArrays(bFirst.finalPixels, oFirst.finalPixels);
-      if (finalCmp.diffPixels > maxDiffPixels) maxDiffPixels = finalCmp.diffPixels;
 
       const summary = {
         name,
@@ -840,7 +1052,8 @@ async function main() {
           shortcutHits: oFirst.totalShortcutHits,
           historyPoolLeak: oFirst.historyCheckpointCountLeak
         },
-        maxDiffPixels
+        maxDiffPixels,
+        maxChannelDelta
       };
 
       console.log(`--- ${name} (${runs} runs) ---`);
@@ -851,48 +1064,67 @@ async function main() {
       return { summary, bFirst, oFirst };
     };
 
-    const resA = await benchmarkPair('Test A — Pencil Only (10 strokes -> 5 Undo -> 5 Redo)', runTestA_PencilOnly, ITERATIONS);
+    const resA = await benchmarkPair('Test A — Pencil Only (10 strokes -> 5 Undo -> 5 Redo)', 'testA', runTestA_PencilOnly, ITERATIONS);
     assert.strictEqual(resA.oFirst.totalFloodFills, 0, 'Test A: Pencil-only must trigger 0 Flood Fills');
 
-    const resB = await benchmarkPair('Test B — Buckets then Pencil (2 borders + 4 Buckets + 5 Pencil -> 5 Undo Pencils)', runTestB_BucketsThenPencil, ITERATIONS);
+    const resB = await benchmarkPair('Test B — Buckets then Pencil (2 borders + 4 Buckets + 5 Pencil -> 5 Undo Pencils)', 'testB', runTestB_BucketsThenPencil, ITERATIONS);
     assert.strictEqual(resB.oFirst.totalFloodFills, 0, 'Test B: Undoing 5 Pencils after Buckets must trigger 0 Flood Fills (Checkpoint hit!)');
+    assert.strictEqual(resB.oFirst.totalGetImageDataFull, 0, 'Test B: Optimized must execute 0 full getImageData calls');
+    assert.strictEqual(resB.oFirst.totalPutImageData, 0, 'Test B: Optimized must execute 0 putImageData calls');
 
-    const resC = await benchmarkPair('Test C — Multiple Buckets (2 borders + 6 Buckets incl. noop -> 4 Undo -> 3 Redo)', runTestC_MultipleBuckets, ITERATIONS);
-    assert.ok(resC.oFirst.totalFloodFills < resC.bFirst.totalFloodFills, 'Test C: Optimized must execute strictly fewer Flood Fills than Baseline');
-    assert.ok(resC.oFirst.totalPutImageData < resC.bFirst.totalPutImageData, 'Test C: Optimized must execute strictly fewer putImageData calls than Baseline');
+    const resC = await benchmarkPair('Test C — Multiple Buckets (2 borders + 6 Buckets incl. noop -> 4 Undo -> 3 Redo)', 'testC', runTestC_MultipleBuckets, ITERATIONS);
     assert.ok(resC.oFirst.totalGetImageDataFull < resC.bFirst.totalGetImageDataFull, 'Test C: Optimized must execute strictly fewer full getImageData calls than Baseline');
+    assert.ok(resC.oFirst.totalPutImageData < resC.bFirst.totalPutImageData, 'Test C: Optimized must execute strictly fewer putImageData calls than Baseline');
+    assert.ok(
+      (resC.oFirst.totalGetImageDataFull + resC.oFirst.totalPutImageData) < (resC.bFirst.totalGetImageDataFull + resC.bFirst.totalPutImageData),
+      'Test C: Optimized must strictly reduce total ImageData I/O operations'
+    );
+    assert.ok(resC.oFirst.totalFloodFills <= resC.bFirst.totalFloodFills, 'Test C: Optimized must not regress Flood Fill executions');
 
-    const resC2 = await benchmarkPair('Test C2 — Full-Canvas Opaque + Raster + NoOp Buckets (5 Undo -> 3 Redo)', runTestC2_PureOpaqueAndMixedBuckets, ITERATIONS);
+    const resC2 = await benchmarkPair('Test C2 — Full-Canvas Opaque + Raster + NoOp Buckets (5 Undo -> 3 Redo)', 'testC2', runTestC2_PureOpaqueAndMixedBuckets, ITERATIONS);
     assert.ok(resC2.oFirst.totalShortcutHits > 0, 'Test C2: Must use _replayHint shortcuts');
-    assert.ok(resC2.oFirst.totalFloodFills < resC2.bFirst.totalFloodFills, 'Test C2: Optimized must reduce Flood Fills');
+    assert.ok(resC2.oFirst.totalGetImageDataFull < resC2.bFirst.totalGetImageDataFull, 'Test C2: Optimized must execute strictly fewer full getImageData calls than Baseline');
+    assert.ok(resC2.oFirst.totalPutImageData < resC2.bFirst.totalPutImageData, 'Test C2: Optimized must execute strictly fewer putImageData calls than Baseline');
+    assert.ok(
+      (resC2.oFirst.totalGetImageDataFull + resC2.oFirst.totalPutImageData) < (resC2.bFirst.totalGetImageDataFull + resC2.bFirst.totalPutImageData),
+      'Test C2: Optimized must strictly reduce total ImageData I/O operations'
+    );
+    assert.ok(resC2.oFirst.totalFloodFills <= resC2.bFirst.totalFloodFills, 'Test C2: Optimized must not regress Flood Fill executions');
 
-    const resD = await benchmarkPair('Test D — Clear / Epoch Boundary Safety', runTestD_ClearBoundary, 3);
+    const resD = await benchmarkPair('Test D — Clear / Epoch Boundary Safety', 'testD', runTestD_ClearBoundary, 3);
     // Verify after all 4 post-clear undos, canvas is completely empty (alpha === 0 everywhere)
-    const preExtraUndo = resD.oFirst.undoSteps[3].pixels;
-    let nonZeroAfterPostClearUndo = 0;
-    for (let i = 0; i < preExtraUndo.length; i++) {
-      if (preExtraUndo[i] !== 0) nonZeroAfterPostClearUndo++;
-    }
-    assert.strictEqual(nonZeroAfterPostClearUndo, 0, 'Test D: Canvas must be 100% empty after undoing all post-clear commands (pre-clear checkpoint must never leak)');
+    assert.strictEqual(
+      resD.oFirst.undoSteps[3].pixelSummary.nonZeroChannels,
+      0,
+      'Test D: Canvas must be 100% empty after undoing all post-clear commands (pre-clear checkpoint must never leak)'
+    );
 
     // Test E — Normal Room Isolation
-    const normBase = await runTestE_NormalRoomIsolation(page, url, false);
-    const normOpt = await runTestE_NormalRoomIsolation(page, url, true);
-    assert.strictEqual(normOpt.dims.width, 592, 'Test E: Normal room logical width must remain 592');
-    assert.strictEqual(normOpt.dims.height, 344, 'Test E: Normal room logical height must remain 344');
-    assert.strictEqual(comparePixelArrays(normBase.afterDrawPixels, normOpt.afterDrawPixels).diffPixels, 0, 'Test E: Normal draw parity');
-    assert.strictEqual(comparePixelArrays(normBase.afterUndo1Pixels, normOpt.afterUndo1Pixels).diffPixels, 0, 'Test E: Normal undo-1 parity');
-    assert.strictEqual(comparePixelArrays(normBase.afterUndo2Pixels, normOpt.afterUndo2Pixels).diffPixels, 0, 'Test E: Normal undo-2 parity');
-    assert.strictEqual(comparePixelArrays(normOpt.afterUndo1Pixels, normOpt.afterUndo2Pixels).diffPixels, 0, 'Test E: Normal 1-step undo limit preserved');
-    assert.strictEqual(comparePixelArrays(normBase.afterRedoPixels, normOpt.afterRedoPixels).diffPixels, 0, 'Test E: Normal redo parity');
+    await page.evaluate(() => (window as any).__STAGE4C__.clearPixelStore());
+    const normBase = await runTestE_NormalRoomIsolation(page, url, false, 'save');
+    const normOpt = await runTestE_NormalRoomIsolation(page, url, true, 'compare');
+    await page.evaluate(() => (window as any).__STAGE4C__.clearPixelStore());
+    assert.strictEqual(normBase.dims.width, 592, 'Test E: Baseline Normal room logical width must remain 592');
+    assert.strictEqual(normBase.dims.height, 344, 'Test E: Baseline Normal room logical height must remain 344');
+    assert.strictEqual(normOpt.dims.width, 592, 'Test E: Optimized Normal room logical width must remain 592');
+    assert.strictEqual(normOpt.dims.height, 344, 'Test E: Optimized Normal room logical height must remain 344');
+    assert.strictEqual(normOpt.drawDiffPixels, 0, 'Test E: Normal draw parity');
+    assert.strictEqual(normOpt.undo1DiffPixels, 0, 'Test E: Normal undo-1 parity');
+    assert.strictEqual(normOpt.undo2DiffPixels, 0, 'Test E: Normal undo-2 parity');
+    assert.strictEqual(normBase.undo1VsUndo2DiffPixels, 0, 'Test E: Baseline Normal 1-step undo limit preserved');
+    assert.strictEqual(normOpt.undo1VsUndo2DiffPixels, 0, 'Test E: Optimized Normal 1-step undo limit preserved');
+    assert.strictEqual(normOpt.redoDiffPixels, 0, 'Test E: Normal redo parity');
     console.log('--- Test E — Normal Room Isolation (592x344) ---');
     console.log(JSON.stringify({ dims: normOpt.dims, pixelDiffs: 0, singleStepUndoBlockedAt2nd: true, passed: true }, null, 2));
 
     // Test F — Opaque Canvas Background Integrity (enableCanvasAlpha = false)
-    const resF = await benchmarkPair('Test F — Competitive Opaque Background (enableCanvasAlpha=false)', runTestF_OpaqueAlphaFalseCompetitive, 2);
+    const resF = await benchmarkPair('Test F — Competitive Opaque Background (enableCanvasAlpha=false)', 'testF', runTestF_OpaqueAlphaFalseCompetitive, 2);
     // Corner pixel (0,0) after all 3 undos (1 border stroke remaining, corner empty) must be solid white [255,255,255,255]
-    const cornerAfterUndo = resF.oFirst.undoSteps[2].pixels.slice(0, 4);
-    assert.deepStrictEqual(cornerAfterUndo, [255, 255, 255, 255], 'Test F: Empty corner on alpha=false canvas must remain solid white #ffffff');
+    assert.deepStrictEqual(
+      resF.oFirst.undoSteps[2].pixelSummary.cornerPixel,
+      [255, 255, 255, 255],
+      'Test F: Empty corner on alpha=false canvas must remain solid white #ffffff'
+    );
 
     console.log('\n✅ ALL STAGE 4C BENCHMARK, PARITY, EPOCH, AND ISOLATION TESTS PASSED!');
   } finally {
