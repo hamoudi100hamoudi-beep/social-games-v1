@@ -242,7 +242,8 @@ const floodFill = (
   logicalWidth: number = DEFAULT_LOGICAL_WIDTH,
   logicalHeight: number = DEFAULT_LOGICAL_HEIGHT,
   expectedTarget?: TargetRGBA,
-  joinDiag?: JoinSyncDiagnostics | null
+  joinDiag?: JoinSyncDiagnostics | null,
+  onBeforePaint?: (fillRes: TargetRGBA) => void
 ): (TargetRGBA & { isFullCanvasOpaque?: boolean; fillHex?: string; isNoOp?: boolean; filledPixelCount?: number }) | null => {
   const canvas = ctx.canvas;
   const cw = canvas.width;
@@ -290,7 +291,13 @@ const floodFill = (
     joinDiag.cumulativeRasterKernelDurationMs += performance.now() - tKernelStart;
   }
 
-  if (fillRes && !fillRes.isNoOp) {
+  const isConfirmedNoOp = Boolean(
+    fillRes &&
+    (fillRes.isNoOp === true || (typeof fillRes.filledPixelCount === 'number' && fillRes.filledPixelCount === 0))
+  );
+
+  if (fillRes && !isConfirmedNoOp) {
+    onBeforePaint?.(fillRes);
     const tPutStart = joinDiag ? performance.now() : 0;
     ctx.putImageData(imageData, 0, 0);
     if (joinDiag) {
@@ -5564,6 +5571,83 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     if (activeTool === 'bucket') {
       const runBucket = () => {
+        const isCompetitiveExperimental = Boolean(propsRef.current.isExperimental && !propsRef.current.isFreeDraw);
+
+        if (isCompetitiveExperimental) {
+          let allocatedStrokeId: number | null = null;
+          const sampledTarget = floodFill(
+            ctx,
+            x,
+            y,
+            activeColor,
+            activeOpacity,
+            LOGICAL_WIDTH,
+            LOGICAL_HEIGHT,
+            undefined,
+            null,
+            () => {
+              // Allocate strokeId and capture Undo/Checkpoint caches ONLY when pixels will actually be painted
+              currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
+              if (currentLocalStrokeIdRef.current === 0) currentLocalStrokeIdRef.current = 1;
+              allocatedStrokeId = currentLocalStrokeIdRef.current;
+
+              captureDirectFreeDrawUndoCache(instanceId, allocatedStrokeId);
+              capturePreBucketCheckpoint(localCommandsRef.current.length);
+            }
+          );
+
+          if (!sampledTarget) {
+            const cw = ctx.canvas.width;
+            const ch = ctx.canvas.height;
+            const sx = Math.floor(x * (cw / LOGICAL_WIDTH));
+            const sy = Math.floor(y * (ch / LOGICAL_HEIGHT));
+            const isOutOfBounds = sx < 0 || sx >= cw || sy < 0 || sy >= ch;
+            if (!isOutOfBounds) {
+              console.warn('[DrawingCanvasCore] Competitive bucket floodFill returned null despite in-bounds seed.', { x, y, sx, sy, cw, ch });
+            }
+            return;
+          }
+
+          const isConfirmedNoOp =
+            sampledTarget.isNoOp === true ||
+            (typeof sampledTarget.filledPixelCount === 'number' && sampledTarget.filledPixelCount === 0);
+
+          if (isConfirmedNoOp || allocatedStrokeId === null) {
+            return;
+          }
+
+          if (sampledTarget.isFullCanvasOpaque) {
+            lastBucketHintRef.current = {
+              hint: 'full_canvas_opaque',
+              color: sampledTarget.fillHex || activeColor,
+              opacity: activeOpacity
+            };
+          } else {
+            lastBucketHintRef.current = null;
+          }
+
+          if (localRedoStackRef.current.length > 0) {
+            localRedoStackRef.current = [];
+            syncHistoryButtons();
+          }
+
+          emitDrawCommand('draw_action', {
+            tool: 'bucket',
+            color: activeColor,
+            opacity: activeOpacity,
+            strokeId: allocatedStrokeId,
+            x: x / LOGICAL_WIDTH,
+            y: y / LOGICAL_HEIGHT,
+            targetR: sampledTarget.r,
+            targetG: sampledTarget.g,
+            targetB: sampledTarget.b,
+            targetA: sampledTarget.a
+          });
+          saveSnapshot();
+          return;
+        }
+
+        // Free Draw & Normal Rooms: preserve existing path untouched
         // Increment monotonic strokeId for this Bucket operation
         currentLocalStrokeIdRef.current = ((currentLocalStrokeIdRef.current || 0) + 1) & 0xFFFF;
         if (currentLocalStrokeIdRef.current === 0) currentLocalStrokeIdRef.current = 1;
