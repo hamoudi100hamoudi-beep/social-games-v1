@@ -19,6 +19,7 @@ import {
   FreeDrawCheckpoint,
   HistoryCheckpoint,
   isBucketCheckpointExpEnabled,
+  isCompetitiveReplayOptEnabled,
   MAX_HISTORY_CHECKPOINTS
 } from '../../utils/canvasCheckpointManager';
 import {
@@ -217,7 +218,7 @@ export const isJoinDiagEnabled = (): boolean => {
   }
 };
 
-export { isBucketCheckpointExpEnabled };
+export { isBucketCheckpointExpEnabled, isCompetitiveReplayOptEnabled };
 
 export const isBucketBatchReplayExpEnabled = (): boolean => {
   if (typeof window === 'undefined') return true;
@@ -752,6 +753,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const captureHistoryCheckpoint = (index: number, commandList?: any[], sourceImageData?: ImageData) => checkpointManager.captureHistoryCheckpoint(index, commandList, sourceImageData);
   const getBestCheckpoint = (commands: any[], targetIndex?: number) => checkpointManager.getBestCheckpoint(commands, targetIndex);
   const isCheckpointValid = (cp: FreeDrawCheckpoint | HistoryCheckpoint, commands: any[], targetIndex?: number) => checkpointManager.isCheckpointValid(cp, commands, targetIndex);
+  const isCompetitivePerfActive = () => Boolean(!propsRef.current.isFreeDraw && propsRef.current.isExperimental && isCompetitiveReplayOptEnabled());
 
   // Buffering history syncing before ref ready
   const bufferedSyncRef = useRef<any[] | null>(null);
@@ -1570,7 +1572,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           lastBucketHintRef.current = null;
         }
         localCommandsRef.current.push(cmdRecord);
-        if (event === 'draw_action' && payload.tool === 'bucket' && isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+        if (
+          event === 'draw_action' &&
+          payload.tool === 'bucket' &&
+          ((isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) || isCompetitivePerfActive())
+        ) {
           advanceCheckpointBucketPost(localCommandsRef.current.length);
         } else {
           advanceCheckpointIncremental();
@@ -2007,6 +2013,21 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       activeTempCtx.restore();
       activeTempCtx.beginPath();
     }
+  };
+
+  // Clears ONLY the committed base canvas while strictly preserving tempCtx (ongoing live strokes).
+  // Respects alpha vs opaque backing-store modes (transparent when enableCanvasAlpha/isFreeDraw, white #ffffff otherwise).
+  const clearPrimaryCanvasOnly = (targetCtx: CanvasRenderingContext2D) => {
+    if (!targetCtx || !targetCtx.canvas) return;
+    targetCtx.save();
+    targetCtx.setTransform(1, 0, 0, 1, 0, 0);
+    if (propsRef.current.isFreeDraw || propsRef.current.enableCanvasAlpha) {
+      targetCtx.clearRect(0, 0, targetCtx.canvas.width, targetCtx.canvas.height);
+    } else {
+      targetCtx.fillStyle = '#ffffff';
+      targetCtx.fillRect(0, 0, targetCtx.canvas.width, targetCtx.canvas.height);
+    }
+    targetCtx.restore();
   };
 
   const executeResetState = () => {
@@ -2566,8 +2587,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         // 1. Capture single-step Undo bitmap cache before applying the redone command
         captureDirectFreeDrawUndoCache(instanceId, newStrokeId);
 
-        if (decoded.event === 'draw_action' && isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
-          captureHistoryCheckpoint(localCommandsRef.current.length);
+        if (decoded.event === 'draw_action') {
+          if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+            captureHistoryCheckpoint(localCommandsRef.current.length);
+          } else if (isCompetitivePerfActive()) {
+            capturePreBucketCheckpoint(localCommandsRef.current.length);
+          }
         }
 
         const newCmdRecord = {
@@ -2592,7 +2617,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         undoCache.markUndoValid();
         undoCache.consumeRedo();
 
-        if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+        if ((isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) || isCompetitivePerfActive()) {
           if (decoded.event === 'draw_action') {
             advanceCheckpointBucketPost(localCommandsRef.current.length);
           } else {
@@ -2773,6 +2798,13 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   // Strictly PRESERVES tempCtx, activeSessionsRef, and drainingStrokesRef so ongoing live drawing is never interrupted.
   const replayFreeDrawHistorySafely = (commands: any[], diag?: UndoDiagnostics | null) => {
     const replayStartTime = diag ? performance.now() : 0;
+    const isCompetitivePerf = isCompetitivePerfActive();
+    let batchImageData: ImageData | null = null;
+    let batchData: Uint8ClampedArray | null = null;
+    let batchVisited: Uint8Array | null = null;
+    let batchQueueX: number[] | null = null;
+    let batchQueueY: number[] | null = null;
+    let batchDirty = false;
     try {
       const ctx = ctxRef.current;
       if (!ctx) return;
@@ -2837,8 +2869,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       const cpRestoreStart = diag ? performance.now() : 0;
       if (bestCp && bestCp.index > lastClearIndex) {
-        // 1. Clear ONLY the permanent base canvas
-        ctx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
+        // 1. Clear ONLY the permanent base canvas (respecting alpha/opaque canvas backing rules)
+        clearPrimaryCanvasOnly(ctx);
         // 2. Blit baked checkpoint canvas instantly (1:1 pixel exact copy)
         ctx.save();
         ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -2848,7 +2880,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       } else {
         // Fallback: Safe Clear-Barrier replay
         invalidateCheckpoint('all');
-        ctx.clearRect(0, 0, LOGICAL_WIDTH * CANVAS_DPR, LOGICAL_HEIGHT * CANVAS_DPR);
+        clearPrimaryCanvasOnly(ctx);
         startIndex = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
       }
       if (diag) {
@@ -2864,6 +2896,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const M = N - activeStart;
       let candidateBaseIndex = -1;
       let candidateTailIndex = -1;
+      let postReplayTailIndex = -1;
 
       const STRIDE = 8;
       const isExp = isBucketCheckpointExpEnabled() && (propsRef.current.isFreeDraw || propsRef.current.isExperimental);
@@ -2893,6 +2926,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               const afterCount = N - (lastB + 1);
               candidateTailIndex = afterCount >= STRIDE ? lastB + 1 + STRIDE : -1;
             }
+          }
+          if (isCompetitivePerf && candidateTailIndex === N) {
+            postReplayTailIndex = N;
           }
           if (candidateTailIndex >= N) candidateTailIndex = -1;
           if (candidateBaseIndex >= N) candidateBaseIndex = -1;
@@ -2930,27 +2966,72 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const replayPaths: Record<string, { x: number; y: number }[]> = {};
       const replaySessions: Record<string, { tool: ToolType; color: string; width: number; opacity: number }> = {};
 
-      const useBatchReplay = isBucketBatchReplayExpEnabled() && propsRef.current.isFreeDraw;
-      let batchImageData: ImageData | null = null;
-      let batchData: Uint8ClampedArray | null = null;
+      const useFreeDrawBatchReplay = isBucketBatchReplayExpEnabled() && propsRef.current.isFreeDraw;
+      const useBatchReplay = useFreeDrawBatchReplay || isCompetitivePerf;
       const effectiveDPR = CANVAS_DPR;
       const batchCw = Math.round(LOGICAL_WIDTH * effectiveDPR);
       const batchCh = Math.round(LOGICAL_HEIGHT * effectiveDPR);
-      let batchVisited: Uint8Array | null = null;
-      let batchQueueX: number[] | null = null;
-      let batchQueueY: number[] | null = null;
+
+      const ensureCompetitiveBatchInitialized = () => {
+        if (batchImageData) return;
+        const setupStart = diag ? performance.now() : 0;
+        if (!sharedOffscreenCanvas) {
+          sharedOffscreenCanvas = document.createElement('canvas');
+        }
+        if (sharedOffscreenCanvas.width !== batchCw || sharedOffscreenCanvas.height !== batchCh) {
+          sharedOffscreenCanvas.width = batchCw;
+          sharedOffscreenCanvas.height = batchCh;
+          sharedOffscreenCtx = null;
+        }
+        if (!sharedOffscreenCtx) {
+          sharedOffscreenCtx = sharedOffscreenCanvas.getContext('2d', { willReadFrequently: true });
+        }
+        if (sharedOffscreenCtx) {
+          sharedOffscreenCtx.save();
+          sharedOffscreenCtx.setTransform(1, 0, 0, 1, 0, 0);
+          sharedOffscreenCtx.clearRect(0, 0, batchCw, batchCh);
+          sharedOffscreenCtx.drawImage(ctx.canvas, 0, 0);
+          sharedOffscreenCtx.restore();
+          batchImageData = sharedOffscreenCtx.getImageData(0, 0, batchCw, batchCh);
+          batchData = batchImageData.data;
+        }
+        if (!batchVisited) batchVisited = new Uint8Array(batchCw * batchCh);
+        if (!batchQueueX) batchQueueX = [];
+        if (!batchQueueY) batchQueueY = [];
+        batchDirty = false;
+        if (diag) {
+          diag.batchSetupDurationMs += (performance.now() - setupStart);
+        }
+      };
+
+      const hasUpcomingCompetitiveRasterBucket = (fromIdx: number): boolean => {
+        for (let j = fromIdx + 1; j < N; j++) {
+          const nextCmd = commands[j];
+          if (!isBucketCommand(nextCmd)) return false;
+          if (nextCmd?._replayHint === 'full_canvas_opaque') {
+            const nextOp = nextCmd._replayOpacity;
+            if (nextOp === undefined || nextOp >= 0.95) return false;
+          }
+          if (nextCmd?._replayHint === 'noop') continue;
+          return true;
+        }
+        return false;
+      };
 
       const flushBatchBuffer = () => {
         if (batchImageData && ctx) {
-          const flushStart = diag ? performance.now() : 0;
-          ctx.putImageData(batchImageData, 0, 0);
-          if (diag) {
-            diag.batchFlushCount++;
-            diag.batchFlushDurationMs += (performance.now() - flushStart);
+          if (!isCompetitivePerf || batchDirty) {
+            const flushStart = diag ? performance.now() : 0;
+            ctx.putImageData(batchImageData, 0, 0);
+            if (diag) {
+              diag.batchFlushCount++;
+              diag.batchFlushDurationMs += (performance.now() - flushStart);
+            }
           }
-          batchImageData = null;
-          batchData = null;
         }
+        batchImageData = null;
+        batchData = null;
+        batchDirty = false;
       };
 
       for (let i = startIndex; i < N; i++) {
@@ -3000,8 +3081,156 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
 
-        if (useBatchReplay && isBucketCommand(commands[i])) {
-          // --- Batch Bucket Replay Path ---
+        if (isCompetitivePerf && isBucketCommand(commands[i])) {
+          // --- Competitive Stage 4C Hint-Preserving Lazy Batch Bucket Path ---
+          const cmdObj = commands[i];
+          const decoded = decodeBinaryDrawMessage(cmdObj.data);
+          const validBucket = getValidBatchBucketPayload(decoded);
+          if (!validBucket) {
+            continue;
+          }
+
+          const cmdColor = validBucket.color;
+          const cmdOpacity = validBucket.opacity;
+
+          // 1. Preserve full_canvas_opaque shortcut without allocating/reading ImageData
+          if (cmdObj._replayHint === 'full_canvas_opaque' && cmdOpacity >= 0.95) {
+            if (diag) diag.hints.usedShortcut++;
+            // Opaque full-canvas fill overwrites 100% of prior pixels; discard any un-flushed batch buffer without wasted putImageData.
+            batchImageData = null;
+            batchData = null;
+            batchDirty = false;
+            const fillHex = cmdObj._replayColor || cmdColor;
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.fillStyle = fillHex;
+            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.restore();
+            continue;
+          }
+
+          // 2. Verify & skip noop bucket fills without running flood fill or allocating batch buffers
+          let noopDiscarded = false;
+          if (cmdObj._replayHint === 'noop') {
+            if (diag) diag.hints.usedShortcut++;
+            let isVerifiedNoOp = false;
+            try {
+              const sx = Math.floor(validBucket.x * batchCw);
+              const sy = Math.floor(validBucket.y * batchCh);
+              if (sx >= 0 && sx < batchCw && sy >= 0 && sy < batchCh && cmdOpacity >= 0.95) {
+                let fillHex = cmdColor;
+                if (fillHex.length === 4) {
+                  fillHex = '#' + fillHex[1] + fillHex[1] + fillHex[2] + fillHex[2] + fillHex[3] + fillHex[3];
+                }
+                const fr = parseInt(fillHex.slice(1, 3), 16) || 0;
+                const fg = parseInt(fillHex.slice(3, 5), 16) || 0;
+                const fb = parseInt(fillHex.slice(5, 7), 16) || 0;
+                let pr = 0;
+                let pg = 0;
+                let pb = 0;
+                let pa = 0;
+                if (batchData) {
+                  const pIdx = (sy * batchCw + sx) * 4;
+                  pr = batchData[pIdx];
+                  pg = batchData[pIdx + 1];
+                  pb = batchData[pIdx + 2];
+                  pa = batchData[pIdx + 3];
+                } else {
+                  const p = ctx.getImageData(sx, sy, 1, 1).data;
+                  pr = p[0];
+                  pg = p[1];
+                  pb = p[2];
+                  pa = p[3];
+                }
+                const matchesSeedTarget = !validBucket.targetRGBA || (
+                  pa >= 240 &&
+                  validBucket.targetRGBA.a > 10 &&
+                  Math.abs(pr - validBucket.targetRGBA.r) <= 40 &&
+                  Math.abs(pg - validBucket.targetRGBA.g) <= 40 &&
+                  Math.abs(pb - validBucket.targetRGBA.b) <= 40 &&
+                  Math.abs(pa - validBucket.targetRGBA.a) <= 40
+                );
+                if (pa >= 240 && matchesSeedTarget &&
+                    Math.abs(pr - fr) <= 5 && Math.abs(pg - fg) <= 5 && Math.abs(pb - fb) <= 5) {
+                  isVerifiedNoOp = true;
+                }
+              }
+            } catch (pErr) {
+              isVerifiedNoOp = false;
+            }
+            if (isVerifiedNoOp) {
+              continue;
+            }
+            noopDiscarded = true;
+          }
+
+          // 3. Do not force batch buffer allocation for a standalone single raster bucket when no batch is open
+          const shouldUseBatchNow = Boolean(batchData) || hasUpcomingCompetitiveRasterBucket(i);
+          if (!shouldUseBatchNow) {
+            if (noopDiscarded) {
+              delete cmdObj._replayHint;
+              delete cmdObj._replayColor;
+              delete cmdObj._replayOpacity;
+              if (diag) diag.hints.discarded++;
+            }
+            applyReplayCommand(ctx, cmdObj, replayPaths, replaySessions, diag);
+            continue;
+          }
+
+          // 4. Lazy batch buffer initialization & raster flood fill execution
+          ensureCompetitiveBatchInitialized();
+          if (batchData && batchVisited && batchQueueX && batchQueueY) {
+            if (diag) {
+              diag.hints.forcedFill++;
+              if (cmdObj?._replayHint || noopDiscarded) diag.hints.discarded++;
+            }
+            const fillStart = diag ? performance.now() : 0;
+            const fillRes = executeRasterFloodFill(
+              batchData,
+              batchCw,
+              batchCh,
+              validBucket.x * LOGICAL_WIDTH,
+              validBucket.y * LOGICAL_HEIGHT,
+              cmdColor,
+              cmdOpacity,
+              LOGICAL_WIDTH,
+              LOGICAL_HEIGHT,
+              validBucket.targetRGBA,
+              batchVisited,
+              batchQueueX,
+              batchQueueY
+            );
+            if (fillRes && !fillRes.isNoOp) {
+              batchDirty = true;
+            }
+            if (diag) {
+              diag.floodFillExecutions++;
+              const dur = performance.now() - fillStart;
+              diag.cumulativeFillDurationMs += dur;
+              if (dur > diag.maxFillDurationMs) diag.maxFillDurationMs = dur;
+              if (fillRes?.filledPixelCount) {
+                diag.cumulativeFilledPixels += fillRes.filledPixelCount;
+                if (fillRes.filledPixelCount > diag.maxFillPixelCount) {
+                  diag.maxFillPixelCount = fillRes.filledPixelCount;
+                }
+              }
+            }
+            if (cmdObj) {
+              if (fillRes?.isFullCanvasOpaque) {
+                cmdObj._replayHint = 'full_canvas_opaque';
+                cmdObj._replayColor = fillRes.fillHex || cmdColor;
+                cmdObj._replayOpacity = cmdOpacity;
+              } else if (fillRes?.isNoOp) {
+                cmdObj._replayHint = 'noop';
+              } else {
+                delete cmdObj._replayHint;
+                delete cmdObj._replayColor;
+                delete cmdObj._replayOpacity;
+              }
+            }
+          }
+        } else if (useFreeDrawBatchReplay && isBucketCommand(commands[i])) {
+          // --- Free Draw Batch Bucket Replay Path (unchanged) ---
           const cmdObj = commands[i];
           const decoded = decodeBinaryDrawMessage(cmdObj.data);
           const validBucket = getValidBatchBucketPayload(decoded);
@@ -3129,6 +3358,22 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         diag.replayOtherDurationMs += (performance.now() - leftoverStart);
       }
 
+      // In Competitive Stage 4C mode, capture final tail checkpoint at N after buckets finish so subsequent undos/draws benefit immediately
+      if (
+        isCompetitivePerf &&
+        postReplayTailIndex === N &&
+        N > activeStart &&
+        !checkpointManager.isTailValid(commands)
+      ) {
+        const capStart = diag ? performance.now() : 0;
+        if (diag) diag.checkpointCaptureAttempts++;
+        const captured = checkpointManager.captureCandidateSlot('tail', N, commands);
+        if (captured && diag) diag.checkpointCaptureSuccesses++;
+        if (diag) {
+          diag.checkpointCaptureDurationMs += (performance.now() - capStart);
+        }
+      }
+
       if (diag) {
         diag.baseIndexAfter = checkpointManager.getBaseIndex();
         diag.tailIndexAfter = checkpointManager.getTailIndex();
@@ -3138,6 +3383,12 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     } catch (err) {
       console.error("[DrawingCanvasCore] Error in replayFreeDrawHistorySafely: ", err);
     } finally {
+      batchImageData = null;
+      batchData = null;
+      batchVisited = null;
+      batchQueueX = null;
+      batchQueueY = null;
+      batchDirty = false;
       isReplayingRef.current = false;
       saveSnapshot();
       syncHistoryButtons();
@@ -3642,9 +3893,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             remoteCmdRecord._replayHint = 'full_canvas_opaque';
             remoteCmdRecord._replayColor = fillRes.fillHex || remoteColor;
             remoteCmdRecord._replayOpacity = remoteOpacity;
+          } else if (fillRes?.isNoOp) {
+            remoteCmdRecord._replayHint = 'noop';
           }
           localCommandsRef.current.push(remoteCmdRecord);
-          if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) {
+          if ((isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw) || isCompetitivePerfActive()) {
             advanceCheckpointBucketPost(localCommandsRef.current.length);
           } else {
             advanceCheckpointIncremental();

@@ -36,6 +36,15 @@ export const isBucketCheckpointExpEnabled = (): boolean => {
   }
 };
 
+export const isCompetitiveReplayOptEnabled = (): boolean => {
+  if (typeof window === 'undefined') return true;
+  try {
+    return localStorage.getItem('competitive_replay_perf_stage4c') !== '0';
+  } catch (e) {
+    return true;
+  }
+};
+
 export interface CanvasCheckpointDependencies {
   getCtx: () => CanvasRenderingContext2D | null;
   getCommands: () => any[];
@@ -67,6 +76,11 @@ export class CanvasCheckpointManager {
 
   constructor(deps: CanvasCheckpointDependencies) {
     this.deps = deps;
+  }
+
+  private isCompetitiveCheckpointEnabled(): boolean {
+    const config = this.deps.getConfig();
+    return !config.isFreeDraw && Boolean(config.isExperimental) && isCompetitiveReplayOptEnabled();
   }
 
   // --- Diagnostic & Inspection Accessors ---
@@ -365,15 +379,23 @@ export class CanvasCheckpointManager {
 
   capturePreBucketCheckpoint(targetIndex: number): void {
     const config = this.deps.getConfig();
-    if (!config.isFreeDraw || !isBucketCheckpointExpEnabled()) return;
+    const isFreeDrawExp = config.isFreeDraw && isBucketCheckpointExpEnabled();
+    const isCompetitiveExp = this.isCompetitiveCheckpointEnabled();
+    if (!isFreeDrawExp && !isCompetitiveExp) return;
     const ctx = this.deps.getCtx();
     if (!ctx || !ctx.canvas) return;
 
-    this.captureHistoryCheckpoint(targetIndex);
+    if (isFreeDrawExp) {
+      this.captureHistoryCheckpoint(targetIndex);
+    }
 
     const list = this.deps.getCommands();
     const lastClearIndex = findLatestClearIndex(list);
     if (targetIndex <= lastClearIndex) return;
+    if (isCompetitiveExp) {
+      const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+      if (targetIndex <= activeStart || targetIndex > list.length) return;
+    }
 
     const priorBucketCount = countBucketsBeforeIndex(list, targetIndex, lastClearIndex);
     const baseValid = this.isCheckpointValid(this.baseCheckpoint, list);
@@ -401,7 +423,9 @@ export class CanvasCheckpointManager {
 
   advanceCheckpointBucketPost(postIndex: number): void {
     const config = this.deps.getConfig();
-    if (!config.isFreeDraw || !isBucketCheckpointExpEnabled()) {
+    const isFreeDrawExp = config.isFreeDraw && isBucketCheckpointExpEnabled();
+    const isCompetitiveExp = this.isCompetitiveCheckpointEnabled();
+    if (!isFreeDrawExp && !isCompetitiveExp) {
       this.advanceCheckpointIncremental();
       return;
     }
@@ -409,11 +433,14 @@ export class CanvasCheckpointManager {
     const ctx = this.deps.getCtx();
     if (!ctx || !ctx.canvas) return;
 
-    this.captureHistoryCheckpoint(postIndex);
+    if (isFreeDrawExp) {
+      this.captureHistoryCheckpoint(postIndex);
+    }
 
     const list = this.deps.getCommands();
     const lastClearIndex = findLatestClearIndex(list);
     if (postIndex <= lastClearIndex) return;
+    if (isCompetitiveExp && (postIndex <= 0 || postIndex > list.length)) return;
 
     const priorBucketCount = countBucketsBeforeIndex(list, postIndex - 1, lastClearIndex);
     const tailValid = this.isCheckpointValid(this.tailCheckpoint, list);
@@ -475,8 +502,8 @@ export class CanvasCheckpointManager {
     const lastClearIndex = findLatestClearIndex(list);
     const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
 
-    // 🛡️ Adaptive Checkpoint Stride Adjustment (when experimental flag is enabled in Free Draw)
-    if (isBucketCheckpointExpEnabled() && config.isFreeDraw) {
+    // 🛡️ Adaptive Checkpoint Stride Adjustment (Free Draw Exp & Competitive Experimental Stage 4C)
+    if ((isBucketCheckpointExpEnabled() && config.isFreeDraw) || this.isCompetitiveCheckpointEnabled()) {
       let latestBucketIdx = -1;
       for (let i = N - 1; i >= activeStart; i--) {
         if (isBucketCommand(list[i])) {
