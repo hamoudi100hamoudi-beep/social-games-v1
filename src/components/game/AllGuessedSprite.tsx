@@ -244,19 +244,8 @@ export const AllGuessedSprite: React.FC<AllGuessedSpriteProps> = ({
 
   return (
     <div className={`relative flex items-center justify-center ${className}`}>
-      {/* Contact shadow */}
       <div
-        className="absolute bg-slate-800/25 rounded-[100%] blur-[0.5px] pointer-events-none z-0"
-        style={{
-          left: '20%',
-          width: '60%',
-          bottom: '0.2%',
-          height: '3.5%',
-        }}
-        aria-hidden="true"
-      />
-      <div
-        className="w-full h-full aspect-[2444/2500] bg-no-repeat pointer-events-none select-none relative z-10"
+        className="w-full h-full aspect-[245/250] bg-no-repeat pointer-events-none select-none relative z-10"
         style={{
           backgroundImage: `url('/all_guessed.webp')`,
           backgroundSize: `${COLS * 100}% ${ROWS * 100}%`,

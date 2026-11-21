@@ -287,7 +287,7 @@ export function MiniBoardOverlay({
                     ) : (
                       <AllGuessedSprite
                         mode="all_guessed"
-                        className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]"
+                        className="w-[108px] h-[110px] sm:w-[147px] sm:h-[150px] shrink-0"
                         animationKey={activeAnimationKeyRef.current}
                       />
                     )
@@ -304,7 +304,7 @@ export function MiniBoardOverlay({
                   ) : (
                     <AllGuessedSprite
                       mode="no_one_guessed"
-                      className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]"
+                      className="w-[108px] h-[110px] sm:w-[147px] sm:h-[150px] shrink-0"
                       animationKey={activeAnimationKeyRef.current}
                     />
                   )}
