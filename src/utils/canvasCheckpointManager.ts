@@ -18,6 +18,8 @@ export interface FreeDrawCheckpoint {
 // Maintains an ordered, history-indexed collection of global canvas snapshots,
 // bounded by MAX_HISTORY_CHECKPOINTS to guarantee predictable RAM usage.
 export const MAX_HISTORY_CHECKPOINTS = 10;
+export const COMPETITIVE_DEFAULT_STRIDE = 8;
+export const COMPETITIVE_POST_BUCKET_STRIDE = 16;
 
 export interface HistoryCheckpoint {
   canvas: HTMLCanvasElement;
@@ -110,6 +112,75 @@ export class CanvasCheckpointManager {
       }
     }
     return count;
+  }
+
+  private computeCompetitiveTailTarget(
+    commands: any[],
+    baseAnchor: number,
+    confirmedEnd: number
+  ): {
+    desiredTailIndex: number;
+    unlockedBucketCount: number;
+    lastB: number;
+    postLastBucket: number;
+    trailingCount: number;
+  } {
+    if (confirmedEnd <= baseAnchor) {
+      return {
+        desiredTailIndex: -1,
+        unlockedBucketCount: 0,
+        lastB: -1,
+        postLastBucket: -1,
+        trailingCount: 0
+      };
+    }
+
+    const unlockedBuckets: number[] = [];
+    for (let i = baseAnchor; i < confirmedEnd; i++) {
+      if (isBucketCommand(commands[i])) {
+        unlockedBuckets.push(i);
+      }
+    }
+
+    if (unlockedBuckets.length === 0) {
+      const span = confirmedEnd - baseAnchor;
+      const numStrides = Math.floor(span / COMPETITIVE_DEFAULT_STRIDE);
+      return {
+        desiredTailIndex:
+          numStrides >= 1 ? baseAnchor + numStrides * COMPETITIVE_DEFAULT_STRIDE : -1,
+        unlockedBucketCount: 0,
+        lastB: -1,
+        postLastBucket: -1,
+        trailingCount: 0
+      };
+    }
+
+    const lastB = unlockedBuckets[unlockedBuckets.length - 1];
+    const postLastBucket = lastB + 1;
+    const trailingCount = confirmedEnd - postLastBucket;
+    let desiredTailIndex = -1;
+
+    if (trailingCount > 0) {
+      if (trailingCount >= COMPETITIVE_POST_BUCKET_STRIDE) {
+        const k = Math.floor(trailingCount / COMPETITIVE_POST_BUCKET_STRIDE);
+        desiredTailIndex = postLastBucket + k * COMPETITIVE_POST_BUCKET_STRIDE;
+      } else {
+        desiredTailIndex = postLastBucket;
+      }
+    } else if (unlockedBuckets.length >= 2) {
+      const pivotPos = unlockedBuckets.length <= 3 ? 0 : unlockedBuckets.length - 3;
+      desiredTailIndex = unlockedBuckets[pivotPos] + 1;
+    } else if (postLastBucket <= confirmedEnd) {
+      desiredTailIndex = postLastBucket;
+    }
+
+    return {
+      desiredTailIndex,
+      unlockedBucketCount: unlockedBuckets.length,
+      lastB,
+      postLastBucket,
+      trailingCount
+    };
   }
 
   // --- Diagnostic & Inspection Accessors ---
@@ -537,22 +608,57 @@ export class CanvasCheckpointManager {
       return;
     }
 
-    const bucketsSinceBase = this.countBucketsInRange(list, baseAnchor, N);
     const tailUsableAboveBase = tailValid && this.tailCheckpoint.index > baseAnchor;
+    const {
+      desiredTailIndex,
+      unlockedBucketCount,
+      trailingCount
+    } = this.computeCompetitiveTailTarget(list, baseAnchor, N);
+
+    if (unlockedBucketCount === 0) {
+      if (!tailUsableAboveBase) {
+        if ((N - baseAnchor) >= COMPETITIVE_DEFAULT_STRIDE) {
+          this.captureCandidateSlot('tail', N, list);
+        }
+        return;
+      }
+
+      if (
+        this.tailCheckpoint.index < N &&
+        (N - this.tailCheckpoint.index) >= COMPETITIVE_DEFAULT_STRIDE
+      ) {
+        this.captureCandidateSlot('tail', N, list);
+      }
+      return;
+    }
 
     if (!tailUsableAboveBase) {
-      if (bucketsSinceBase >= 2 || (N - baseAnchor) >= 8) {
+      if (
+        (trailingCount === 0 &&
+          (unlockedBucketCount >= 2 || (N - baseAnchor) >= COMPETITIVE_DEFAULT_STRIDE)) ||
+        trailingCount >= COMPETITIVE_POST_BUCKET_STRIDE
+      ) {
         this.captureCandidateSlot('tail', N, list);
       }
       return;
     }
 
     if (this.tailCheckpoint.index < N) {
-      const bucketsBeforeTail = this.countBucketsInRange(list, baseAnchor, this.tailCheckpoint.index);
-      const bucketsAfterTail = this.countBucketsInRange(list, this.tailCheckpoint.index, N);
-      if (
-        (bucketsBeforeTail === 0 && bucketsAfterTail >= 2) ||
-        (bucketsBeforeTail === 0 && bucketsAfterTail === 0 && (N - this.tailCheckpoint.index) >= 8)
+      if (trailingCount === 0) {
+        const bucketsBeforeTail = this.countBucketsInRange(list, baseAnchor, this.tailCheckpoint.index);
+        const bucketsAfterTail = this.countBucketsInRange(list, this.tailCheckpoint.index, N);
+        const tailIsOnBucket =
+          this.tailCheckpoint.index > 0 && isBucketCommand(list[this.tailCheckpoint.index - 1]);
+        if (
+          !tailIsOnBucket ||
+          (bucketsBeforeTail === 0 && bucketsAfterTail >= 2)
+        ) {
+          this.captureCandidateSlot('tail', N, list);
+        }
+      } else if (
+        trailingCount >= COMPETITIVE_POST_BUCKET_STRIDE &&
+        desiredTailIndex > baseAnchor &&
+        this.tailCheckpoint.index < desiredTailIndex
       ) {
         this.captureCandidateSlot('tail', N, list);
       }
@@ -608,43 +714,11 @@ export class CanvasCheckpointManager {
         : (baseValid ? this.baseCheckpoint.index : activeStart)
     );
 
-    const unlockedBuckets: number[] = [];
-    for (let i = effectiveBaseAnchor; i < effectiveConfEnd; i++) {
-      if (isBucketCommand(commands[i])) {
-        unlockedBuckets.push(i);
-      }
-    }
-
-    let desiredTailIndex = -1;
-    const STRIDE = 8;
-    if (unlockedBuckets.length >= 2) {
-      const pivotPos = unlockedBuckets.length <= 3 ? 0 : unlockedBuckets.length - 3;
-      const postPivot = unlockedBuckets[pivotPos] + 1;
-      const lastB = unlockedBuckets[unlockedBuckets.length - 1];
-      const trailingCount = effectiveConfEnd - (lastB + 1);
-      if (trailingCount >= STRIDE) {
-        const k = Math.floor(trailingCount / STRIDE);
-        desiredTailIndex = lastB + 1 + k * STRIDE;
-      } else {
-        desiredTailIndex = postPivot;
-      }
-    } else if (unlockedBuckets.length === 1) {
-      const onlyB = unlockedBuckets[0];
-      const postSingle = onlyB + 1;
-      const trailingCount = effectiveConfEnd - postSingle;
-      if (trailingCount >= STRIDE) {
-        const k = Math.floor(trailingCount / STRIDE);
-        desiredTailIndex = postSingle + k * STRIDE;
-      } else if (postSingle <= effectiveConfEnd) {
-        desiredTailIndex = postSingle;
-      }
-    } else {
-      const span = effectiveConfEnd - effectiveBaseAnchor;
-      const numStrides = Math.floor(span / STRIDE);
-      if (numStrides >= 1) {
-        desiredTailIndex = effectiveBaseAnchor + numStrides * STRIDE;
-      }
-    }
+    let { desiredTailIndex } = this.computeCompetitiveTailTarget(
+      commands,
+      effectiveBaseAnchor,
+      effectiveConfEnd
+    );
 
     if (desiredTailIndex <= effectiveBaseAnchor) {
       desiredTailIndex = -1;

@@ -1348,6 +1348,127 @@ async function runTests() {
       console.log('✅ Test 6 (Free Draw & Normal Room Isolation) PASSED');
     }
 
+    // =========================================================================
+    // TEST 7: 20 Confirmed Buckets -> 16 Consecutive Pencil Strokes -> Repeated Pencil Undo
+    // =========================================================================
+    {
+      const sess = await setupRoomPages(drawerPage, spectatorPage, url, 'General #Test', { opt: true });
+      await drawStrokeLine(drawerPage, 'pencil', { x: 0.1, y: 0.05 }, { x: 0.1, y: 0.95 }, '#000000', 8);
+      for (let i = 0; i < 20; i++) {
+        await clickBucket(drawerPage, 0.5, 0.5, BUCKET_COLORS[i]);
+      }
+      await sess.flushDelivery();
+      await waitRaf(drawerPage, 4);
+      await waitRaf(spectatorPage, 5);
+
+      const cpAtB20 = await drawerPage.evaluate(() => (window as any).__STAGE4F2__.getCompetitiveCheckpointSnapshot());
+      const spAtB20 = await spectatorPage.evaluate(() => (window as any).__STAGE4F2__.getCompetitiveCheckpointSnapshot());
+      assert.strictEqual(cpAtB20.baseIndex, 18, `Drawer Base at Divider+B20 must be 18, got ${cpAtB20.baseIndex}`);
+      assert.strictEqual(cpAtB20.tailIndex, 21, `Drawer Tail at Divider+B20 must be 21, got ${cpAtB20.tailIndex}`);
+      assert.strictEqual(spAtB20.baseIndex, 18, `Spectator Base at Divider+B20 must be 18, got ${spAtB20.baseIndex}`);
+      assert.strictEqual(spAtB20.tailIndex, 21, `Spectator Tail at Divider+B20 must be 21, got ${spAtB20.tailIndex}`);
+      const hashAtB20 = await drawerPage.evaluate(() => (window as any).__STAGE4F2__.getCanvasHash());
+
+      // Draw 16 consecutive Pencil strokes after the 20 Buckets (P1..P16)
+      for (let i = 0; i < 16; i++) {
+        const y = 0.14 + i * 0.048;
+        await drawStrokeLine(drawerPage, 'pencil', { x: 0.25, y }, { x: 0.85, y }, '#111827', 6);
+        if (i === 7 || i === 14) {
+          await sess.flushDelivery();
+          await waitRaf(spectatorPage, 5);
+          const drMidCp = await drawerPage.evaluate(() => (window as any).__STAGE4F2__.getCompetitiveCheckpointSnapshot());
+          const spMidCp = await spectatorPage.evaluate(() => (window as any).__STAGE4F2__.getCompetitiveCheckpointSnapshot());
+          assert.strictEqual(
+            drMidCp.tailIndex,
+            21,
+            `Drawer Tail after Pencil #${i + 1} must remain aligned at 21 (stride=16), got ${drMidCp.tailIndex}`
+          );
+          assert.strictEqual(
+            spMidCp.tailIndex,
+            21,
+            `Spectator Tail after Pencil #${i + 1} must remain aligned at 21 (stride=16), got ${spMidCp.tailIndex}`
+          );
+        }
+      }
+
+      await sess.flushDelivery();
+      await waitRaf(drawerPage, 4);
+      await waitRaf(spectatorPage, 5);
+
+      const cpAtP16 = await drawerPage.evaluate(() => (window as any).__STAGE4F2__.getCompetitiveCheckpointSnapshot());
+      const spAtP16 = await spectatorPage.evaluate(() => (window as any).__STAGE4F2__.getCompetitiveCheckpointSnapshot());
+      assert.strictEqual(cpAtP16.baseIndex, 18);
+      assert.strictEqual(cpAtP16.tailIndex, 37, `Drawer live Tail at Pencil #16 must advance to 37 (21+16), got ${cpAtP16.tailIndex}`);
+      assert.strictEqual(spAtP16.baseIndex, 18);
+      assert.strictEqual(spAtP16.tailIndex, 37, `Spectator live Tail at Pencil #16 must advance to 37 (21+16), got ${spAtP16.tailIndex}`);
+      assert.strictEqual(cpAtP16.historyCheckpointCount, 0);
+      assert.strictEqual(await drawerPage.evaluate(() => (window as any).__STAGE4F2__.getDomCanvasCount()), 2);
+
+      // Undo all 16 Pencil strokes sequentially and track Flood Fill executions on both Drawer & Spectator
+      const drawerPencilFills: number[] = [];
+      const specPencilFills: number[] = [];
+
+      for (let step = 0; step < 16; step++) {
+        specDiag.length = 0;
+        const drUndo = await runUndoWithDiag(drawerPage, drawerDiag);
+        await sess.flushDelivery();
+        await waitRaf(spectatorPage, 5);
+        const spUndo = specDiag[specDiag.length - 1] || null;
+        assert.ok(drUndo && spUndo, `Step ${step + 1} must emit diag for both Drawer and Spectator`);
+        drawerPencilFills.push(drUndo.floodFillExecutions);
+        specPencilFills.push(spUndo.floodFillExecutions);
+
+        if (step === 0) {
+          // Step 1 (P16 undone): Drawer hits fast-path (0 fills); Spectator crosses Tail(37) -> captures Tail=21 (NOT postPivot 19!)
+          assert.strictEqual(drUndo.floodFillExecutions, 0, `Drawer Undo 1 must execute 0 fills, got ${drUndo.floodFillExecutions}`);
+          assert.ok(spUndo.floodFillExecutions <= 3, `Spectator Undo 1 crosses Tail(37) with <=3 fills, got ${spUndo.floodFillExecutions}`);
+          assert.strictEqual(
+            spUndo.tailIndexAfter,
+            21,
+            `Spectator Replay must place Tail at lastB+1 (21), not postPivot (19); got ${spUndo.tailIndexAfter}`
+          );
+        } else if (step === 1) {
+          // Step 2 (P15 undone): Drawer crosses Tail(37) -> captures Tail=21; Spectator hits Tail=21 with 0 fills!
+          assert.ok(drUndo.floodFillExecutions <= 3, `Drawer Undo 2 crosses Tail(37) with <=3 fills, got ${drUndo.floodFillExecutions}`);
+          assert.strictEqual(
+            drUndo.tailIndexAfter,
+            21,
+            `Drawer Replay must place Tail at lastB+1 (21), not postPivot (19); got ${drUndo.tailIndexAfter}`
+          );
+          assert.strictEqual(spUndo.floodFillExecutions, 0, `Spectator Undo 2 must hit Tail(21) with 0 fills, got ${spUndo.floodFillExecutions}`);
+        } else {
+          // Steps 3..16 (P14..P1): BOTH Drawer and Spectator must execute 0 Flood Fills on every subsequent Pencil Undo!
+          assert.strictEqual(
+            drUndo.floodFillExecutions,
+            0,
+            `Drawer Pencil Undo step ${step + 1} must execute 0 Flood Fills, got ${drUndo.floodFillExecutions}`
+          );
+          assert.strictEqual(
+            spUndo.floodFillExecutions,
+            0,
+            `Spectator Pencil Undo step ${step + 1} must execute 0 Flood Fills, got ${spUndo.floodFillExecutions}`
+          );
+          assert.strictEqual(drUndo.tailIndexAfter, 21);
+          assert.strictEqual(spUndo.tailIndexAfter, 21);
+        }
+      }
+
+      assert.strictEqual(
+        await drawerPage.evaluate(() => (window as any).__STAGE4F2__.getCanvasHash()),
+        hashAtB20,
+        'Drawer canvas after undoing all 16 Pencils must match post-B20 hash'
+      );
+      assert.strictEqual(
+        await spectatorPage.evaluate(() => (window as any).__STAGE4F2__.getCanvasHash()),
+        hashAtB20,
+        'Spectator canvas after undoing all 16 Pencils must match post-B20 hash'
+      );
+      console.log('✅ Test 7 (20 Buckets -> 16 Pencils -> Repeated Pencil Undo) PASSED', {
+        drawerPencilFills,
+        specPencilFills
+      });
+    }
+
     console.log('\n✅ ALL STAGE 4F-2 COMPETITIVE CHECKPOINT ALIGNMENT TESTS PASSED!');
   } finally {
     await browser.close();
@@ -1355,7 +1476,11 @@ async function runTests() {
   }
 }
 
-runTests().catch((err) => {
-  console.error('❌ STAGE 4F-2 TEST FAILED:', err);
-  process.exit(1);
-});
+runTests()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('❌ STAGE 4F-2 TEST FAILED:', err);
+    process.exit(1);
+  });
