@@ -315,6 +315,13 @@ export interface DrawingCanvasCoreRef {
   resetState: () => void;
   getCanvasSnapshot: () => string | null;
   resetZoom?: () => void;
+  getCompetitiveCommandSnapshot?: () => {
+    instId?: string;
+    strokeId?: number;
+    serverConfirmed?: boolean;
+    drawEpoch?: number;
+    isBucket: boolean;
+  }[];
 }
 
 // Turn angle threshold for cusp clamping (~60 degrees) in Hybrid Spline Renderer (re-exported from canvasPathRenderer)
@@ -778,6 +785,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     removedCommands: any[];
     pushedToRedo: boolean;
     expectedLenAfterUndo: number;
+  } | null>(null);
+
+  const pendingRedoOriginsRef = useRef<{
+    drawEpoch: number;
+    instId: string;
+    strokeId: number;
+    redoItem: any;
+  }[]>([]);
+  const suppressedRejectedUndoRef = useRef<{
+    drawEpoch: number;
+    instId: string;
+    strokeId: number;
   } | null>(null);
 
   const invalidatePendingUndoRollback = () => {
@@ -1624,7 +1643,18 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       transformRef.current = { scale: 1, x: initialX, y: initialY };
       hasManuallyZoomedOrPanned.current = false;
       applyTransform(targetScale);
-    }
+    },
+    getCompetitiveCommandSnapshot: () =>
+      localCommandsRef.current.map((cmd: any) => {
+        const { instId, strokeId } = getCommandInstAndStroke(cmd);
+        return {
+          instId,
+          strokeId,
+          serverConfirmed: cmd?._serverConfirmed,
+          drawEpoch: cmd?._drawEpoch,
+          isBucket: isBucketCommand(cmd)
+        };
+      })
   }));
 
   // Binary Command Dispatch helper
@@ -1641,6 +1671,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       // Record local durable drawing history for deterministic undo / redo
       if (event === 'draw_stroke' || (event === 'draw_action' && payload.tool === 'bucket')) {
         invalidatePendingUndoRollback();
+        pendingRedoOriginsRef.current = [];
         prevCommandsCountRef.current = localCommandsRef.current.length;
         const cmdRecord: any = {
           event: 'draw_binary',
@@ -1648,6 +1679,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           instanceId,
           strokeId: payload.strokeId ?? currentLocalStrokeIdRef.current
         };
+        if (isCompetitiveExperimentalMode() && event === 'draw_action' && payload.tool === 'bucket') {
+          cmdRecord._serverConfirmed = false;
+          cmdRecord._drawEpoch = serverBucketLockRef.current.drawEpoch;
+        }
         if (event === 'draw_action' && payload.tool === 'bucket' && lastBucketHintRef.current) {
           cmdRecord._replayHint = lastBucketHintRef.current.hint;
           cmdRecord._replayColor = lastBucketHintRef.current.color;
@@ -1801,6 +1836,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       advanceCheckpointIncremental();
       if (!propsRef.current.isFreeDraw) {
         localRedoStackRef.current = [];
+        pendingRedoOriginsRef.current = [];
       }
       saveSnapshot();
       syncHistoryButtons();
@@ -1970,6 +2006,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           });
           if (!propsRef.current.isFreeDraw) {
             localRedoStackRef.current = [];
+            pendingRedoOriginsRef.current = [];
           }
           didFlushAnything = true;
         }
@@ -2039,6 +2076,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           advanceCheckpointIncremental();
           if (!propsRef.current.isFreeDraw) {
             localRedoStackRef.current = [];
+            pendingRedoOriginsRef.current = [];
           }
           saveSnapshot();
           syncHistoryButtons();
@@ -2171,6 +2209,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     localRedoStackRef.current = [];
     prevCommandsCountRef.current = -1;
     invalidatePendingUndoRollback();
+    pendingRedoOriginsRef.current = [];
+    suppressedRejectedUndoRef.current = null;
     clearedEpochCutoffRef.current = -1;
     serverBucketLockRef.current = {
       drawEpoch: serverBucketLockRef.current.drawEpoch,
@@ -2217,6 +2257,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     const tempCtx = tempCtxRef.current;
 
     invalidatePendingUndoRollback();
+    pendingRedoOriginsRef.current = [];
+    suppressedRejectedUndoRef.current = null;
     if (isCompetitiveExperimentalMode()) {
       clearedEpochCutoffRef.current = Math.max(
         clearedEpochCutoffRef.current,
@@ -2517,6 +2559,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         const earliestTargetIndex = matchingIndices.length > 0 ? matchingIndices[0] : targetIndex;
 
         if (isCompetitiveExp && emit) {
+          suppressedRejectedUndoRef.current = null;
           const snapCaptured = undoCache.captureTransientRollbackSnapshot(instanceId, targetStrokeId);
           if (snapCaptured) {
             const removedCmds =
@@ -2769,12 +2812,16 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
 
-        const newCmdRecord = {
+        const newCmdRecord: any = {
           event: 'draw_binary',
           data: newMsg,
           instanceId,
           strokeId: newStrokeId
         };
+        if (isCompetitiveExperimentalMode() && decoded.event === 'draw_action') {
+          newCmdRecord._serverConfirmed = !(emit && socket?.connected);
+          newCmdRecord._drawEpoch = serverBucketLockRef.current.drawEpoch;
+        }
         localCommandsRef.current.push(newCmdRecord);
 
         // 2. Apply ONLY the redone command incrementally without full history rebuild
@@ -2804,6 +2851,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         saveSnapshot();
 
         if (emit && socket?.connected) {
+          if (isCompetitiveExperimentalMode() && decoded.event === 'draw_action') {
+            if (pendingRedoOriginsRef.current.length >= 16) {
+              pendingRedoOriginsRef.current.shift();
+            }
+            pendingRedoOriginsRef.current.push({
+              drawEpoch: serverBucketLockRef.current.drawEpoch,
+              instId: instanceId,
+              strokeId: newStrokeId,
+              redoItem: cmdToRestore
+            });
+          }
           socket.emit('draw_binary', newMsg);
         }
 
@@ -3666,6 +3724,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             advanceCheckpointIncremental();
             if (!propsRef.current.isFreeDraw) {
               localRedoStackRef.current = [];
+              pendingRedoOriginsRef.current = [];
             }
             saveSnapshot();
             syncHistoryButtons();
@@ -3688,6 +3747,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             advanceCheckpointIncremental();
             if (!propsRef.current.isFreeDraw) {
               localRedoStackRef.current = [];
+              pendingRedoOriginsRef.current = [];
             }
             saveSnapshot();
             syncHistoryButtons();
@@ -4066,6 +4126,10 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             instanceId: data.instanceId,
             strokeId: data.strokeId
           };
+          if (isCompetitiveExperimentalMode()) {
+            remoteCmdRecord._serverConfirmed = true;
+            remoteCmdRecord._drawEpoch = serverBucketLockRef.current.drawEpoch;
+          }
           if (fillRes?.isFullCanvasOpaque) {
             remoteCmdRecord._replayHint = 'full_canvas_opaque';
             remoteCmdRecord._replayColor = fillRes.fillHex || remoteColor;
@@ -4081,6 +4145,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
           if (!propsRef.current.isFreeDraw) {
             localRedoStackRef.current = [];
+            pendingRedoOriginsRef.current = [];
           }
           saveSnapshot();
           syncHistoryButtons();
@@ -4392,9 +4457,17 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
 
         invalidatePendingUndoRollback();
+        pendingRedoOriginsRef.current = [];
+        suppressedRejectedUndoRef.current = null;
         undoCache.invalidateAll();
 
-        localCommandsRef.current = [...commands];
+        if (isCompetitiveExperimentalMode()) {
+          localCommandsRef.current = commands.map((cmd: any) =>
+            cmd && isBucketCommand(cmd) ? { ...cmd, _serverConfirmed: true } : cmd
+          );
+        } else {
+          localCommandsRef.current = [...commands];
+        }
         prevCommandsCountRef.current = -1;
 
         isReplayingRef.current = true;
@@ -4723,6 +4796,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         syncHistoryButtons();
         return;
       }
+      pendingRedoOriginsRef.current = [];
       localRedoStackRef.current = incoming;
       syncHistoryButtons();
     };
@@ -4732,6 +4806,180 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       if (typeof payload.drawEpoch === 'number') {
         applyAuthoritativeBucketLockStateRef.current?.(payload.drawEpoch, payload.lockedBucket ?? null);
       }
+    };
+
+    const onDrawActionAck = (payload: any) => {
+      if (!isCompetitiveExperimentalMode() || !payload || typeof payload !== 'object') return;
+      const { drawEpoch, instId, strokeId } = payload;
+      if (
+        typeof drawEpoch !== 'number' ||
+        typeof instId !== 'string' ||
+        !instId ||
+        typeof strokeId !== 'number' ||
+        strokeId <= 0
+      ) {
+        return;
+      }
+
+      const currentEpoch = serverBucketLockRef.current.drawEpoch;
+      if (drawEpoch <= clearedEpochCutoffRef.current || drawEpoch < currentEpoch) {
+        return;
+      }
+
+      const redoOrigins = pendingRedoOriginsRef.current;
+      for (let i = redoOrigins.length - 1; i >= 0; i--) {
+        if (
+          redoOrigins[i].instId === instId &&
+          redoOrigins[i].strokeId === strokeId &&
+          redoOrigins[i].drawEpoch <= drawEpoch
+        ) {
+          redoOrigins.splice(i, 1);
+        }
+      }
+
+      const list = localCommandsRef.current;
+      const lastClearIdx = findLatestClearIndex(list);
+      const epochStart = lastClearIdx >= 0 ? lastClearIdx + 1 : 0;
+
+      for (let i = list.length - 1; i >= epochStart; i--) {
+        const cmd = list[i];
+        if (!cmd || !isBucketCommand(cmd)) continue;
+        const { instId: cmdInst, strokeId: cmdStrokeId } = getCommandInstAndStroke(cmd);
+        if (cmdInst === instId && cmdStrokeId === strokeId) {
+          cmd._serverConfirmed = true;
+          cmd._drawEpoch = drawEpoch;
+          break;
+        }
+      }
+
+      if (drawEpoch > currentEpoch) {
+        applyAuthoritativeBucketLockStateRef.current?.(drawEpoch, null);
+      }
+    };
+
+    const onDrawActionRejected = (payload: any) => {
+      if (!isCompetitiveExperimentalMode() || !payload || typeof payload !== 'object') return;
+      const { drawEpoch, instId, strokeId } = payload;
+      if (
+        typeof drawEpoch !== 'number' ||
+        typeof instId !== 'string' ||
+        !instId ||
+        typeof strokeId !== 'number' ||
+        strokeId <= 0
+      ) {
+        return;
+      }
+
+      const currentEpoch = serverBucketLockRef.current.drawEpoch;
+      if (drawEpoch <= clearedEpochCutoffRef.current || drawEpoch < currentEpoch) {
+        return;
+      }
+
+      const list = localCommandsRef.current;
+      const lastClearIdx = findLatestClearIndex(list);
+      const epochStart = lastClearIdx >= 0 ? lastClearIdx + 1 : 0;
+
+      if (drawEpoch > currentEpoch && lastClearIdx === -1 && clearedEpochCutoffRef.current < 0) {
+        invalidatePendingUndoRollback();
+        pendingRedoOriginsRef.current = [];
+        requestAuthoritativeRoundSyncRef.current?.();
+        return;
+      }
+
+      if (drawEpoch > currentEpoch) {
+        applyAuthoritativeBucketLockStateRef.current?.(drawEpoch, null);
+      }
+
+      const pendingUndo = pendingUndoRollbackRef.current;
+      if (
+        pendingUndo &&
+        pendingUndo.instId === instId &&
+        pendingUndo.strokeId === strokeId &&
+        pendingUndo.drawEpoch <= drawEpoch
+      ) {
+        invalidatePendingUndoRollback();
+        suppressedRejectedUndoRef.current = { drawEpoch, instId, strokeId };
+      }
+
+      const redoStack = localRedoStackRef.current;
+      for (let i = redoStack.length - 1; i >= 0; i--) {
+        const entry = Array.isArray(redoStack[i]) ? redoStack[i][0] : redoStack[i];
+        const { instId: rInst, strokeId: rStrokeId } = getCommandInstAndStroke(entry);
+        if (rInst === instId && rStrokeId === strokeId) {
+          redoStack.splice(i, 1);
+        }
+      }
+
+      const redoOrigins = pendingRedoOriginsRef.current;
+      for (let i = redoOrigins.length - 1; i >= 0; i--) {
+        const origin = redoOrigins[i];
+        if (origin.instId === instId && origin.strokeId === strokeId) {
+          redoOrigins.splice(i, 1);
+          if (origin.redoItem) {
+            redoStack.push(origin.redoItem);
+          }
+          break;
+        }
+      }
+
+      let targetIndex = -1;
+      for (let i = list.length - 1; i >= epochStart; i--) {
+        const cmd = list[i];
+        if (!cmd || !isBucketCommand(cmd)) continue;
+        const { instId: cmdInst, strokeId: cmdStrokeId } = getCommandInstAndStroke(cmd);
+        if (cmdInst === instId && cmdStrokeId === strokeId) {
+          targetIndex = i;
+          break;
+        }
+      }
+
+      if (targetIndex === -1) {
+        syncHistoryButtons();
+        return;
+      }
+
+      const ctx = ctxRef.current;
+      if (!ctx) {
+        invalidatePendingUndoRollback();
+        pendingRedoOriginsRef.current = [];
+        requestAuthoritativeRoundSyncRef.current?.();
+        return;
+      }
+
+      const hadActiveNewerStroke = isDrawingRef.current;
+      const isLastCommand = targetIndex === list.length - 1;
+      const restoredViaFastPath =
+        isLastCommand &&
+        undoCache.canRestoreFastPath(instId, strokeId, targetIndex) &&
+        undoCache.restoreFromUndoCache();
+
+      invalidateCheckpointsAfterIndex(targetIndex);
+      list.splice(targetIndex, 1);
+      prevCommandsCountRef.current = list.length;
+
+      if (targetIndex < list.length) {
+        for (let i = targetIndex; i < list.length; i++) {
+          if (list[i]?._replayHint) {
+            delete list[i]._replayHint;
+            delete list[i]._replayColor;
+            delete list[i]._replayOpacity;
+          }
+        }
+      }
+
+      undoCache.invalidateCommittedCaches();
+
+      if (!restoredViaFastPath) {
+        replayFreeDrawHistorySafely(list);
+      }
+
+      if (hadActiveNewerStroke && undoCache.hasPendingCache()) {
+        stageFreeDrawPendingCache();
+      }
+
+      saveSnapshot();
+      syncHistoryButtons();
+      executeRedrawTempLayer();
     };
 
     const onDrawUndoRejected = (payload: any) => {
@@ -4745,6 +4993,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const list = localCommandsRef.current;
       const targetInst = payload.instId;
       const targetStrId = payload.strokeId;
+
+      if (
+        !pending &&
+        payload.reason === 'not_found' &&
+        suppressedRejectedUndoRef.current &&
+        suppressedRejectedUndoRef.current.instId === targetInst &&
+        suppressedRejectedUndoRef.current.strokeId === targetStrId &&
+        (typeof payload.drawEpoch !== 'number' || suppressedRejectedUndoRef.current.drawEpoch === payload.drawEpoch)
+      ) {
+        suppressedRejectedUndoRef.current = null;
+        syncHistoryButtons();
+        return;
+      }
 
       const canSafeLocalRollback = Boolean(
         pending &&
@@ -4802,6 +5063,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
     socket.on('draw_history_sync', onDrawHistorySync);
     socket.on('draw_redo_sync', onDrawRedoSync);
     socket.on('bucket_lock_sync', onBucketLockSync);
+    socket.on('draw_action_ack', onDrawActionAck);
+    socket.on('draw_action_rejected', onDrawActionRejected);
     socket.on('draw_undo_rejected', onDrawUndoRejected);
 
     return () => {
@@ -4811,6 +5074,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       socket.off('draw_history_sync', onDrawHistorySync);
       socket.off('draw_redo_sync', onDrawRedoSync);
       socket.off('bucket_lock_sync', onBucketLockSync);
+      socket.off('draw_action_ack', onDrawActionAck);
+      socket.off('draw_action_rejected', onDrawActionRejected);
       socket.off('draw_undo_rejected', onDrawUndoRejected);
       activeJoinDiagRef.current = null;
       historySyncInProgressRef.current = false;
@@ -5695,6 +5960,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             });
             advanceCheckpointIncremental();
             localRedoStackRef.current = [];
+            pendingRedoOriginsRef.current = [];
             syncHistoryButtons();
           }
         } else {

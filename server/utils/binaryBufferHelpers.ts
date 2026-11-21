@@ -259,3 +259,27 @@ export function isValidType4Packet(buf: Buffer): boolean {
   return true;
 }
 
+/**
+ * Extracts UInt16LE strokeId from a Type 4 packet when present (19B or 23B layout).
+ */
+export function extractType4StrokeId(buf: Buffer): number | undefined {
+  if (!Buffer.isBuffer(buf) || buf[0] !== 4) return undefined;
+  if (buf.length === 19) return buf.readUInt16LE(17);
+  if (buf.length === 23) return buf.readUInt16LE(21);
+  return undefined;
+}
+
+/**
+ * Validates and extracts a trusted (instId, strokeId) identity from a Type 4 packet.
+ * Returns null if instId bytes are invalid/empty or if strokeId is missing or 0.
+ */
+export function extractValidatedType4Identity(buf: Buffer): { instId: string; strokeId: number } | null {
+  if (!Buffer.isBuffer(buf) || buf[0] !== 4) return null;
+  if (buf.length !== 19 && buf.length !== 23) return null;
+  const instId = extractValidatedInstId(buf, false);
+  if (!instId) return null;
+  const strokeId = extractType4StrokeId(buf);
+  if (!strokeId) return null;
+  return { instId, strokeId };
+}
+

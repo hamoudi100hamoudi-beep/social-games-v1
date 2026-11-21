@@ -1545,10 +1545,16 @@ const words = word.split(" ").filter(w => w.length > 0);
     return getRoomCanonicalFreeDrawStroke(room, instId, strokeId);
   }
 
-  recordDrawCommand(roomId: string, event: string, data: any, customInstId?: string, customStrokeId?: number) {
+  recordDrawCommand(
+    roomId: string,
+    event: string,
+    data: any,
+    customInstId?: string,
+    customStrokeId?: number
+  ): { recorded: boolean; drawEpoch: number } {
     const room = this.rooms.get(roomId);
-    if (!room) return;
-    recordRoomDrawCommand(room, event, data, customInstId, customStrokeId);
+    if (!room) return { recorded: false, drawEpoch: 0 };
+    return recordRoomDrawCommand(room, event, data, customInstId, customStrokeId);
   }
 
   public undoFreeDrawStroke(roomId: string, targetInstId: string, targetStrokeId: number): boolean {

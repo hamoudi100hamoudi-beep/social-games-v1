@@ -3,6 +3,7 @@ import { createType2Buffer } from './rooms.js';
 import { defaultDrawRateLimiter, type DrawRateLimiter } from './drawRateLimit.js';
 import {
   extractValidatedInstId,
+  extractValidatedType4Identity,
   isAllowedStartOrEndTool,
   isValidInstIdBytes,
   isValidType4Packet,
@@ -148,6 +149,10 @@ export function handleDrawBinary(
     const useCanonicalPipeline = isFreeDraw || isExperimental;
     const pId = player.persistentId || player.id;
 
+    const type = buf[0];
+    const competitiveBucketIdentity =
+      isCompetitiveExperimental && type === 4 ? extractValidatedType4Identity(buf) : null;
+
     // ── 1. CENTRAL AUTHORIZATION GATE ──
     if (isFreeDraw) {
       // Free Draw mode: Player must be in activeDrawers
@@ -162,6 +167,14 @@ export function handleDrawBinary(
       // Normal competitive or Experimental room:
       // Status must be 'DRAWING' AND sender must be the current round drawer
       if (room.gameState?.status !== 'DRAWING') {
+        if (isCompetitiveExperimental && type === 4 && competitiveBucketIdentity && typeof socket?.emit === 'function') {
+          socket.emit('draw_action_rejected', {
+            drawEpoch: room.gameState?.drawEpoch ?? 0,
+            instId: competitiveBucketIdentity.instId,
+            strokeId: competitiveBucketIdentity.strokeId,
+            reason: 'turn_ended',
+          });
+        }
         return; // Silent reject during WAITING, CHOOSING, ROUND_END, PODIUM, etc.
       }
       const currentDrawerId = room.gameState?.currentDrawerId;
@@ -170,11 +183,17 @@ export function handleDrawBinary(
         (currentDrawerId === pId || currentDrawerId === player.id || currentDrawerId === socket.id)
       );
       if (!isCurrentDrawer) {
+        if (isCompetitiveExperimental && type === 4 && competitiveBucketIdentity && typeof socket?.emit === 'function') {
+          socket.emit('draw_action_rejected', {
+            drawEpoch: room.gameState?.drawEpoch ?? 0,
+            instId: competitiveBucketIdentity.instId,
+            strokeId: competitiveBucketIdentity.strokeId,
+            reason: 'not_drawer',
+          });
+        }
         return; // Silent reject for guessers or non-drawers
       }
     }
-
-    const type = buf[0];
 
     // Slice 1: Reject server-only control types (11, 12), unsupported/unknown types (0, 14..255),
     // and non-canonical Type 13 before any history insertion, broadcast, or state mutation.
@@ -246,7 +265,20 @@ export function handleDrawBinary(
       if (!isValidType9Packet(buf, useCanonicalPipeline)) return;
       instIdForCleanup = extractValidatedInstId(buf, false);
     } else if (type === 4) { // draw_action (bucket)
-      if (!isValidType4Packet(buf)) return;
+      if (!isValidType4Packet(buf)) {
+        if (isCompetitiveExperimental && competitiveBucketIdentity && typeof socket?.emit === 'function') {
+          socket.emit('draw_action_rejected', {
+            drawEpoch: room.gameState?.drawEpoch ?? 0,
+            instId: competitiveBucketIdentity.instId,
+            strokeId: competitiveBucketIdentity.strokeId,
+            reason: 'invalid_packet',
+          });
+        }
+        return;
+      }
+      if (competitiveBucketIdentity) {
+        instIdForCleanup = competitiveBucketIdentity.instId;
+      }
     }
 
     // ── 3. O(1) PER-SOCKET PACKET & WORK-UNIT TOKEN BUCKET (SLICE 5A) ──
@@ -265,6 +297,14 @@ export function handleDrawBinary(
         isContinuousTool,
         instIdForCleanup
       );
+      if (isCompetitiveExperimental && type === 4 && competitiveBucketIdentity && typeof socket?.emit === 'function') {
+        socket.emit('draw_action_rejected', {
+          drawEpoch: room.gameState?.drawEpoch ?? 0,
+          instId: competitiveBucketIdentity.instId,
+          strokeId: competitiveBucketIdentity.strokeId,
+          reason: 'rate_limit',
+        });
+      }
       return;
     }
 
@@ -416,10 +456,28 @@ export function handleDrawBinary(
         isCompetitiveExperimental && typeof roomManager.getBucketLockSyncPayload === 'function'
           ? roomManager.getBucketLockSyncPayload(roomId)
           : null;
-      roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+      const recordRes = roomManager.recordDrawCommand(roomId, 'draw_binary', buf);
+      if (isCompetitiveExperimental && (!recordRes || !recordRes.recorded)) {
+        if (competitiveBucketIdentity && typeof socket?.emit === 'function') {
+          socket.emit('draw_action_rejected', {
+            drawEpoch: recordRes?.drawEpoch ?? room.gameState?.drawEpoch ?? 0,
+            instId: competitiveBucketIdentity.instId,
+            strokeId: competitiveBucketIdentity.strokeId,
+            reason: 'not_recorded',
+          });
+        }
+        return;
+      }
       markPlayerActive(player, nowMs);
       if (socket.broadcast && typeof socket.broadcast.to === 'function') {
         socket.broadcast.to(roomId).emit('draw_binary', buf);
+      }
+      if (isCompetitiveExperimental && competitiveBucketIdentity && typeof socket?.emit === 'function') {
+        socket.emit('draw_action_ack', {
+          drawEpoch: recordRes?.drawEpoch ?? room.gameState?.drawEpoch ?? 0,
+          instId: competitiveBucketIdentity.instId,
+          strokeId: competitiveBucketIdentity.strokeId,
+        });
       }
       if (
         isCompetitiveExperimental &&

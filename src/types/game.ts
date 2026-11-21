@@ -9,6 +9,19 @@ export interface BucketLockSyncPayload {
   lockedBucket: { instId: string; strokeId: number } | null;
 }
 
+export interface DrawActionAckPayload {
+  drawEpoch: number;
+  instId: string;
+  strokeId: number;
+}
+
+export interface DrawActionRejectedPayload {
+  drawEpoch: number;
+  instId: string;
+  strokeId: number;
+  reason: 'rate_limit' | 'turn_ended' | 'not_drawer' | 'invalid_packet' | 'not_recorded';
+}
+
 export interface GameState {
   status: 'WAITING' | 'CHOOSING' | 'DRAWING' | 'ROUND_END' | 'PODIUM';
   currentDrawerId: string | null;

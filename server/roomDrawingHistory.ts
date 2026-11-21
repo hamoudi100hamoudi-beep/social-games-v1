@@ -226,8 +226,8 @@ export function recordRoomDrawCommand(
   customInstId?: string,
   customStrokeId?: number,
   options?: { skipEpochAdvance?: boolean }
-): void {
-  if (!room) return;
+): { recorded: boolean; drawEpoch: number } {
+  if (!room || !room.gameState) return { recorded: false, drawEpoch: 0 };
   if (!room.gameState.drawHistory) room.gameState.drawHistory = [];
   //@ts-ignore
   if (!room.gameState.redoStack) room.gameState.redoStack = [];
@@ -252,7 +252,7 @@ export function recordRoomDrawCommand(
       return false;
     });
     if (hasStroke) {
-      return; // Ignore duplicated transient live packet as it's already recorded in a completed stroke object!
+      return { recorded: false, drawEpoch: room.gameState.drawEpoch }; // Ignore duplicated transient live packet as it's already recorded in a completed stroke object!
     }
   }
 
@@ -264,7 +264,7 @@ export function recordRoomDrawCommand(
       isValidStart = true;
     } else if (type === 2) { // draw_move
       if (room.gameState.isDrawingActive === false) {
-        return;
+        return { recorded: false, drawEpoch: room.gameState.drawEpoch };
       }
     } else if (type === 3 || type === 6) { // draw_end أو draw_cancel
       room.gameState.isDrawingActive = false;
@@ -294,7 +294,7 @@ export function recordRoomDrawCommand(
 
   // Protection to avoid orphaned packages on an empty draw history
   if (room.gameState.drawHistory.length === 0 && !isValidStart) {
-    return;
+    return { recorded: false, drawEpoch: room.gameState.drawEpoch };
   }
 
   const isClearCmd = (isBinary && (type === 5 || type === 10)) || event === "draw_clear";
@@ -312,6 +312,7 @@ export function recordRoomDrawCommand(
   }
 
   room.gameState.redoStack = [];
+  return { recorded: true, drawEpoch: room.gameState.drawEpoch };
 }
 
 /**
