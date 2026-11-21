@@ -1,6 +1,6 @@
 # 🗺️ المرجع المعماري الموحد وخارطة الطريق (Unified Architecture Reference & Roadmap)
 ## Gartic Phone Architecture, Stability, Security & Decomposition Reference Guide
-> **المصدر الرسمي الإلزامي والموحد للمشروع (Single Project Source of Truth)** — تاريخ التحديث: 2026-11-18
+> **المصدر الرسمي الإلزامي والموحد للمشروع (Single Project Source of Truth)** — تاريخ التحديث: 2026-11-21 (مرجع المستودع: `hamoudi100hamoudi-beep/social-games-v1` — آخر Commit موثق: `ed1feb8f1aea55f141531ae8cab7c3d4c0726abb`)
 
 ---
 
@@ -89,22 +89,24 @@
 
 ## 📍 القسم C — الحالة الحالية للمشروع (Current Project State & Architecture Tracker)
 
-> **تاريخ آخر تحديث وثائقي**: 2026-11-18  
-> **حالة التنفيذ الحالية**: أعمال التفكيك والتنظيم المعماري للملفات الكبيرة مغلقة ومكتملة عند `PHASE 8B` دون تعديل. دفعة **`PHASE 4G` (تحسين حواف Bucket Fill في `src/utils/canvasFloodFill.ts`)** مكتملة ومبنية (`npm run build` — 2206 وحدة، Exit `0`) ومؤكد قبولها بصرياً يدوياً من المالك عبر ألوان ودرجات شفافية/كثافة مختلفة دون الحاجة لمزيد من تحسين الحواف حالياً. في مسار الموثوقية (`PRODUCTION_RELIABILITY_ROADMAP.md`), أكد المالك أن نظام `AFK` (`PHASE 9A — Slice 5C-3B`) يعمل بشكل طبيعي في اللعب، وتبقى مراحل `PHASE 9B`–`PHASE 9F` بحالة `PLANNED` ومؤجلة. **المهمة الوحيدة المعتمدة حالياً للبدء** هي **`PHASE 4H — POST-4D BUCKET UNDO PERFORMANCE & FREEZE INVESTIGATION`** بمرحلة **`OBSERVED — READ-ONLY AUDIT PENDING`** (تشخيص ثقل/تجمّد التراجع بعد تكرار عمليات Bucket Fill على هاتف Android ضعيف عبر أدوات التشخيص الموجودة قبل اقتراح أي تعديل برمجي).
+> **تاريخ آخر تحديث وثائقي**: 2026-11-21  
+> **المرجع الموثق في المستودع**: `hamoudi100hamoudi-beep/social-games-v1` (آخر Commit: `ed1feb8f1aea55f141531ae8cab7c3d4c0726abb`)  
+> **حالة التنفيذ الحالية**: أعمال التفكيك والتنظيم المعماري للملفات الكبيرة مغلقة ومكتملة عند `PHASE 8B` دون تعديل، ودفعة `PHASE 4G` (حواف `Bucket Fill`) مكتملة ومؤكد قبولها بصرياً من المالك دون حاجة لمزيد من تحسين الحواف. في مسار **`PHASE 4H`** (حصراً للوضع التنافسي `isExperimental === true && isFreeDraw === false`)، تم تنفيذ مراحل `4E-1` (`587097661be7a7a9ad558764127f27bb9e297120`) و`4E-2` (`4c06d4d82eed2e30e52a4cc82e8ba45c905d72bd`) و`4F-1` (`c7817f200fee7b13cf4e5f6c0d811479c3d07437`) و`4F-2` (`ed1feb8f1aea55f141531ae8cab7c3d4c0726abb`)، وأكد المالك في أحدث تجربة يدوية اختفاء التجمّد الشديد عند `Bucket Undo` بعد ~20 عملية Bucket مع بقاء مسألة اختبارات `Stage 4F-2` الآلية دون تقرير تشغيل نهائي موثوق. الحالة الرسمية لـ `PHASE 4H` هي **`IMPLEMENTED — BUCKET UNDO OWNER-VERIFIED — PENCIL UNDO FOLLOW-UP OPEN`**. في مسار الموثوقية (`PRODUCTION_RELIABILITY_ROADMAP.md`)، يعمل `AFK` (`PHASE 9A`) بشكل طبيعي وتبقى `PHASE 9B`–`PHASE 9F` بحالة `PLANNED` ومؤجلة. **المهمة المفتوحة والمعتمدة حالياً للبدء** هي **`POST-BUCKET PENCIL UNDO PERFORMANCE INVESTIGATION`** بوضع **`Strict Read-Only Audit`** لفحص مسار Checkpoints وReplay لأوامر Pencil بعد عمليات Bucket المتكررة (خاصة `STRIDE = 8` ومحاذاة `Tail` أثناء الرسم الحي مقابل Replay) قبل اقتراح أي تعديل برمجي.
 
 ### 📊 سجل التقدم المعماري المبسط (Simplified Architecture Tracker)
 
 | البند | الحالة الحالية | التفاصيل والملاحظات |
 | :--- | :--- | :--- |
 | **المرحلة المعمارية الحالية** | `PHASE 8B — Active Stroke Rendering Audit` | `[x] CLOSED — OPTION A (NO RENDERING CHANGE WARRANTED)` — إغلاق تدقيق تصيير مسار الرسم اللحظي بالاعتماد النهائي للخيار A (الإبقاء على بنية إعادة رسم المسار الكامل الحالية دون تغيير معماري) |
-| **آخر دفعة تنفيذية مكتملة (Bucket Fill)** | `PHASE 4G` (`4G-1` & `4G-2`) | `[x] COMPLETED & OWNER-VERIFIED (VISUAL ACCEPTANCE; NO FURTHER EDGE OPTIMIZATION NEEDED)` — تطبيق `tryCompositePartialAlphaBoundary` (`924bd1a0ed861e76f2fef131e8e3b924b222c848`) ثم `Unified 4D Premultiplied RGBA Reconstruction` (`dc1253ebec8204f8ac1e308d0ae5a59fc88fd0b3`) في `src/utils/canvasFloodFill.ts` مع إبقاء المسار القديم و`tryCompositePartialAlphaBoundary()` دون حذف؛ نجاح `npx tsc --noEmit` و`npm run build` (`2206 modules`, Exit `0`) والاختبارات القائمة؛ تأكيد المالك بصرياً (`2026-11-18`) عبر ألوان ودرجات Opacity/Density مختلفة، ونقل الفحوصات الآلية الإضافية غير المنفذة إلى الملاحظات التاريخية الاختيارية غير المعطلة |
-| **تحسينات Undo/Checkpoints & التشخيص القائمة** | `PHASE 1F.5`, `PHASE 1F.8`, `FreeDrawMobileDebug` | `[x] ALREADY IMPLEMENTED IN CODEBASE` — `CanvasCheckpointManager` (`MAX_HISTORY_CHECKPOINTS = 10` و`bucketCheckpointPolicy.ts` Minimax)، `Batch Bucket Replay` + `CanvasUndoCache` fast-path، ولوحة `FreeDrawMobileDebug.tsx` + `FREE_DRAW_UNDO_DIAG` / `FREE_DRAW_JOIN_DIAG` و`erudaManager.ts` (موثقة أدناه لمنع إعادة اقتراحها أو إعادة إنشائها) |
+| **آخر دفعة تنفيذية مكتملة (Bucket Fill)** | `PHASE 4G` (`4G-1` & `4G-2`) | `[x] COMPLETED & OWNER-VERIFIED (VISUAL ACCEPTANCE; NO FURTHER EDGE OPTIMIZATION NEEDED)` — تطبيق `tryCompositePartialAlphaBoundary` (`924bd1a0ed861e76f2fef131e8e3b924b222c848`) ثم `Unified 4D Premultiplied RGBA Reconstruction` (`dc1253ebec8204f8ac1e308d0ae5a59fc88fd0b3`) في `src/utils/canvasFloodFill.ts` مع إبقاء المسار القديم و`tryCompositePartialAlphaBoundary()` دون حذف؛ تأكيد المالك بصرياً (`2026-11-18`) عبر ألوان ودرجات Opacity/Density مختلفة |
+| **حالة `PHASE 4H` (Competitive Bucket Undo & Checkpoints)** | `4E-1`, `4E-2`, `4F-1`, `4F-2` | **`IMPLEMENTED — BUCKET UNDO OWNER-VERIFIED — PENCIL UNDO FOLLOW-UP OPEN`** — تنفيذ No-op handling (`4E-1` — `587097661be7a7a9ad558764127f27bb9e297120`)، وحد 3 تراجعات Bucket بهوية ثابتة على الخادم (`4E-2` — `4c06d4d82eed2e30e52a4cc82e8ba45c905d72bd`)، وACK/REJECT للنوع 4 (`4F-1` — `c7817f200fee7b13cf4e5f6c0d811479c3d07437`)، ومحاذاة `Base`/`Tail` لحد القفل والتأكيد مع الإبقاء على حد أقصى 2 كانفاس (`4F-2` — `ed1feb8f1aea55f141531ae8cab7c3d4c0726abb`). **التجربة اليدوية**: أكد المالك اختفاء التجمّد الشديد عند Bucket Undo بعد ~20 Bucket. **تنبيه التحقق الآلي**: لا يُسجّل نجاح جميع اختبارات `Stage 4F-2` الآلية لعدم توفر تقرير تشغيل نهائي موثوق لها |
+| **تحسينات Undo/Checkpoints & التشخيص القائمة** | `PHASE 1F.5`, `PHASE 1F.8`, `FreeDrawMobileDebug` | `[x] ALREADY IMPLEMENTED IN CODEBASE` — `CanvasCheckpointManager` (`MAX_HISTORY_CHECKPOINTS = 10` لـ Free Draw مقابل حد أقصى 2 كانفاس `Base`/`Tail` في الوضع التنافسي)، `Batch Bucket Replay` + `CanvasUndoCache` fast-path، ولوحة `FreeDrawMobileDebug.tsx` + `FREE_DRAW_UNDO_DIAG` / `FREE_DRAW_JOIN_DIAG` و`erudaManager.ts` |
 | **آخر مراحل تفكيك وتنظيم منجزة** | `PHASE 8A`, `PHASE 8B` | `[x] COMPLETED` — توحيد سياسة أداء الرسم وإلغاء تصنيف العتاد القديم بـ Commit `6975924ce7fc1d9f5298fac41d5e1a833a2c3a11` (PHASE 8A)، وتدقيق تصيير الرسم اللحظي للقراءة فقط (PHASE 8B: مغلقة بلا تعديل كود) |
 | **تدقيق الغرف ومحركات السيرفر ومحرك الرسم** | `PHASE 5B-2 & 6C & 7C & 8A & 8B` | `[x] COMPLETED — CLOSED` — اكتمال وتوحيد بنية محرك الرسم، وشبكة الحزم الثنائية، ونواة السيرفر، وأغلفة الغرف، واكتمال جميع أعمال تنظيم وتفكيك الملفات المعتمدة مسبقاً |
-| **المهمة الوحيدة المعتمدة حالياً** | `PHASE 4H — Post-4D Bucket Undo Freeze` | **`OBSERVED — READ-ONLY AUDIT PENDING`** — رصد المالك ثقل/تجمّد شديد على هاتف Android ضعيف عند الضغط على Undo بعد عدد كبير من عمليات Bucket Fill المتتالية (لوحظ بعد Unified 4D ولم يثبت سببه الجذري بعد) |
-| **مسار الموثوقية (`PRODUCTION_RELIABILITY_ROADMAP.md`)** | `PHASE 9A` مؤكد؛ `9B–9F` مؤجلة | أكد المالك عمل `AFK` (`Slice 5C-3B`) بشكل طبيعي في اللعب (مع حفظ سجلات `Type 10` و`ping_activity`)؛ وتبقى `PHASE 9B`–`PHASE 9F` بحالة `PLANNED` ومؤجلة حتى إنجاز ومراجعة تدقيق `PHASE 4H` |
-| **النشاط التالي المعتمد (`Next Action`)** | `PHASE 4H` Read-Only Audit | **`Audit the real Bucket Undo execution path using existing diagnostics on a weak Android device before proposing any code changes.`** — تشغيل `Undo Diagnostics` (`FREE_DRAW_UNDO_DIAG`) دون تغيير السلوك الحالي لفحص مسار التراجع على الهاتف الضعيف قبل أي كود |
-| **المخاطر والحدود الموثقة** | تجمّد `Bucket Undo` + حدود تغطية `4G` | **أولوية التحقيق**: ثقل/تجمّد Undo بعد تكرار Bucket Fill على Android الضعيف (السبب غير محسوم بعد). تاريخياً: دقة الكانفاس موحدة (`CANVAS_DPR = 1.0`)، وتغطية `4G` الآلية كانت مقتصرة على تكرار لون واحد (`strokeCircle 2px / 50%` أعطى `Gap = 57`, `Final Err = 4.38`) بينما قبول الألوان/الشفافيات المتعددة مبني على تحقق بصري يدوي للمالك |
+| **المهمة المفتوحة الوحيدة المعتمدة حالياً** | `POST-BUCKET PENCIL UNDO PERFORMANCE INVESTIGATION` | **`OPEN — STRICT READ-ONLY AUDIT PENDING`** — رصد المالك بطئاً عند التراجع عن خطوات `Pencil` بعد ~20 عملية `Bucket` ثم رسم خطوط Pencil كثيرة، خاصة حول الخطوة الثامنة (طفيف على هاتف عادي وأوضح على Android ضعيف، وليس تجمّداً شديداً كالسابق). **السبب الجذري غير مثبت بعد** |
+| **مسار الموثوقية (`PRODUCTION_RELIABILITY_ROADMAP.md`)** | `PHASE 9A` مؤكد؛ `9B–9F` مؤجلة | أكد المالك عمل `AFK` (`Slice 5C-3B`) بشكل طبيعي في اللعب (مع حفظ سجلات `Type 10` و`ping_activity`)؛ وتبقى `PHASE 9B`–`PHASE 9F` بحالة `PLANNED` ومؤجلة |
+| **النشاط التالي المعتمد (`Next Action`)** | Strict Read-Only Audit (`Pencil Undo` بعد `Buckets`) | **`Strict Read-Only Audit of the Checkpoint & Replay path for Pencil commands after repeated Buckets (specifically inspecting STRIDE = 8 and live Tail alignment vs Replay Tail alignment) — NO code changes before presenting audit findings.`** |
+| **المخاطر والحدود الموثقة** | بطء `Pencil Undo` بعد `Buckets` + سقف `2` Checkpoints | الالتزام الصارم بعدم زيادة عدد كانفاسات Checkpoint عن 2 (`Base` و`Tail`)، والحفاظ على حد 3 عمليات Bucket Undo في الغرفة التنافسية، وعدم إعادة فتح تحقيقات `4E-1` و`4E-2` و`4F-1` |
 
 ### 🏷️ قاموس حالات دورة حياة الدفعات (Status Dictionary)
 * `[x] COMPLETED`: المهمة مكتملة ومحققة معمارياً ومثبتة في الكود ومفحوصة بالتجميع.
@@ -319,50 +321,66 @@
    - **الحقول المتوفرة أصلاً في `FREE_DRAW_UNDO_DIAG` (`DrawingCanvasCore.tsx:113-171`)**:
      `fastPath` (`hit`/`miss`/`na`), `fastPathMissReason`, `historyLengthBefore`, `targetIndex`, `targetDistanceFromEnd`, `replayStartIndex`, `commandsReplayed`, `bucketCommandsEncountered`, `floodFillExecutions`, `cumulativeFillDurationMs`, `maxFillDurationMs`, `checkpointSelectionDurationMs`, `checkpointRestoreDurationMs`, `batchSetupDurationMs`, `checkpointCaptureDurationMs`, `checkpointCaptureAttempts` / `Successes`, `batchFlushDurationMs` / `Count`, `replayOtherDurationMs`, `cumulativeFilledPixels`, `maxFillPixelCount`, `replayDurationMs`, `totalUndoDurationMs`, `hints` (`existedBefore`, `discarded`, `usedShortcut`, `forcedFill`), و`checkpointFacts` (`bestCheckpointSlot`, `bestCheckpointIndex`, `checkpointCount`, `approximateRetainedMemoryMB`, `maxBucketGap`, `checkpointIndices`, `checkpointBucketCounts`).
 
-#### 5. التحقيق في أداء وتجمّد التراجع بعد تكرار الدلو (`PHASE 4H — POST-4D BUCKET UNDO PERFORMANCE & FREEZE INVESTIGATION`)
+#### 5. مسار التراجع ونقاط الاستعادة وأداة الدلو في الوضع التنافسي (`PHASE 4H — COMPETITIVE UNDO / REDO & BUCKET FILL`)
 
-- **الحالة الرسمية**: **`OBSERVED — READ-ONLY AUDIT PENDING`** *(المهمة الوحيدة المعتمدة حالياً للتنفيذ)*
-- **المشكلة المرصودة من المالك**:
-  - على هاتف **Android ضعيف**، يبدو الاستخدام العادي للرسم والتعبئة مقبولاً جداً، لكن عند تنفيذ **عدد كبير من عمليات `Bucket Fill` المتتالية** ثم الضغط على **`Undo`** يحدث **ثقل/تجمّد شديد (`severe lag / freeze`)**.
-  - لوحظت هذه المشكلة بعد دمج تعديلات `Unified 4D` (`PHASE 4G-2`)، **غير أنه لم يثبت بعد أن `Unified 4D` هي السبب الجذري**؛ فقد يكون التجمّد ناتجاً عن مسار Replay، أو فشل Fast-Path، أو Checkpoint, أو الذاكرة/GC، أو تفاعل مركب بينها.
-- **الهدف**:
-  - تحديد السبب الحقيقي لثقل/تجمّد `Bucket Undo` على الأجهزة الضعيفة عبر تدقيق قرائي وتشخيصي منضبط قبل اقتراح أو كتابة أي كود تغييري.
-- **الأسباب المحتملة غير المثبتة (`Candidate Causes — Hypotheses Only`)**:
-  1. **ارتفاع كلفة إعادة التشغيل (`Replay Cost Increase`)**: تكرار تنفيذ خوارزمية Fill ومسح الحواف عبر عشرات/مئات الأوامر أثناء Undo على معالج هاتف ضعيف.
-  2. **تفويت مسار التراجع السريع (`Bitmap Undo Fast Path Miss`)**: رجوع Undo من `CanvasUndoCache` (`fastPath === 'miss'`) إلى `replayFreeDrawHistorySafely()` بعد استهلاك الخطوة الواحدة (`consumeUndo()`), أو تغير الطول/الميتاداتا (`target_mismatch`, `base_history_length_mismatch`, `missing_cache`).
-  3. **إبطال النقاط المرجعية أو سقوطها (`Checkpoint Invalidation`)**: إبطال Checkpoints أو عدم مطابقة `bestCheckpointSlot` (`none`), أو فشل تغطية الفجوات في مسار معين (مثل مقارنة Free Draw مقابل Experimental التي لا تستخدم `historyCheckpoints` بنفس الكيفية).
-  4. **تضخم ذيل الإعادة (`Replay Tail Growth`)**: تزايد عدد أوامر الدلو التي يجب إعادة تنفيذها بعد أحدث نقطة مرجعية صالحة أو بعد موضع الحذف (`targetIndex`).
-  5. **ضغط المعالج والذاكرة وجامع القمامة (`CPU / RAM / GC Pressure`)**: تكرار قراءة/كتابة `ImageData` أو تخصيص مصفوفات أو احتفاظ بعدة كانفاسات Checkpoints (`MAX_HISTORY_CHECKPOINTS = 10` + `base`/`tail` + `undoCache`) على هاتف ضعيف الذاكرة.
-  6. **تفاعل غير متوقع بين `Unified 4D` ومسار `Undo / Batch Replay / Checkpoint`**: مثل زيادة كلفة `matchColorEdgeAware()` و`runUnified4DBoundaryPass()` أثناء الإعادة المتكررة مقارنة بالرسم المفرد، أو تأثر شروط `isNoOp` / `_replayHint` / تباين المسارين.
-- **الملفات المستهدفة للفحص في التدقيق القرائي (`PHASE 4H Audit Scope`)**:
-  - `src/utils/canvasFloodFill.ts`
-  - `src/components/game/DrawingCanvasCore.tsx`
-  - `src/utils/canvasCheckpointManager.ts`
-  - `src/utils/canvasUndoCache.ts`
-  - `src/utils/canvasReplayEngine.ts`
-  - `src/utils/bucketCheckpointPolicy.ts`
-  - `src/components/game/FreeDrawMobileDebug.tsx`
-  - اختبارات `PHASE 1F.5` و`PHASE 1F.8` القائمة في `scripts/` (`test_bucket_checkpoint_suite.ts`, `test_freedraw_bucket_undo_fastpath.ts`, `test_phase1f8_batch_replay.ts`, `test_phase1f_checkpoint_benchmark.ts`).
-- **منهجية التدقيق الموصى بها (`Read-Only Audit & Diagnostic Capture Methodology`)**:
-  1. الاعتماد على **التشخيصات القائمة بالفعل** (`FreeDrawMobileDebug` + `FREE_DRAW_UNDO_DIAG` + Eruda) دون إنشاء أي بنية تشخيص جديدة.
-  2. في أول قياس تشخيصي على الهاتف الضعيف: تفعيل **`Undo Diagnostics`** (`freedraw_bucket_undo_diag = '1'`) فقط، مع **الإبقاء على سلوك Checkpoints (`ON`), Batch Replay (`ON`), Unified 4D (`true`), وحدود Undo كما هي في الإنتاج** لقياس السلوك الحقيقي دون تحيّز. *(فقط في جولة عزل لاحقة عند الحاجة يمكن اختبار تعطيل علم سلوكي واحد مثل `freedraw_bucket_checkpoint_exp = '0'` أو `freedraw_bucket_batch_replay_exp = '0'` للمقارنة).*
-  3. التقاط وتتبع مؤشرات `FREE_DRAW_UNDO_DIAG` الفعلية أثناء التراجع الأول والتراجعات المتتالية بعد عدد كبير من عمليات Bucket Fill:
-     - `fastPath` و`fastPathMissReason`
-     - `historyLengthBefore`, `targetIndex`, `replayStartIndex`, `commandsReplayed`
-     - `bucketCommandsEncountered`, `floodFillExecutions`
-     - `cumulativeFillDurationMs`, `maxFillDurationMs`, `replayDurationMs`, `totalUndoDurationMs`
-     - `checkpointFacts`: `bestCheckpointSlot`, `bestCheckpointIndex`, `checkpointCount`, `approximateRetainedMemoryMB`, `maxBucketGap`
-     - `batchSetupDurationMs`, `batchFlushDurationMs`, `batchFlushCount`, `checkpointCaptureDurationMs`
-     - `hints`: `usedShortcut`, `forcedFill`, `discarded`
-- **مرشحات الإصلاح غير المعتمدة بعد (`Not Approved Yet — Pending Audit`)**:
-  - لا يُعتمد أي حل برمجي قبل ثبوت السبب الجذري من التدقيق والقياس الفعلي.
-  - **قيد صارم على حدّ عدد التراجعات (`Undo Count Limit`)**: يُصنّف **آخر خيار فقط (`Last Resort Only`)**؛ لأن تقييد عدد مرات التراجع يمس مباشرة تجربة اللاعب وجودة الأداة. يُمنع اقتراحه أو اعتماده ما لم تثبت استحالة معالجة المشكلة عبر إصلاح السبب التقني في Fast-Path / Checkpoints / Replay / GC / Unified 4D أولاً.
-- **القيود المعمارية المحمية**:
+- **الحالة الرسمية**: **`IMPLEMENTED — BUCKET UNDO OWNER-VERIFIED — PENCIL UNDO FOLLOW-UP OPEN`**
+- **النطاق المرجعي**: الوضع التنافسي فقط (`isExperimental === true && isFreeDraw === false`) — آخر Commit مرجعي: `ed1feb8f1aea55f141531ae8cab7c3d4c0726abb`.
+- **المشكلة التاريخية السابقة (تمت معالجتها في مراحل `4E-1` حتى `4F-2`)**: رُصد سابقاً ثقل وتجمّد شديد على هاتف Android ضعيف عند تنفيذ `Undo` بعد تكرار عمليات `Bucket Fill`، وتبين في التحقيق والتنفيذ اللاحقين الحاجة إلى معالجة `No-op`، وضبط حد التراجع عن الدلو على الخادم، وتأكيد/رفض حزم الدلو من الخادم، ومحاذاة نقطتي `Base` و`Tail` دون تجاوز حد الـ 2 كانفاس.
+
+##### أ. المراحل المنجزة ضمن `PHASE 4H`
+
+1. **`PHASE 4E-1 — Competitive Bucket No-op Handling`**
+   - **Commit**: `587097661be7a7a9ad558764127f27bb9e297120` | **الحالة**: `[x] IMPLEMENTED & OWNER-VERIFIED`
+   - **ما تم تنفيذه**:
+     - منع تسجيل عمليات Bucket التي لا تغيّر أي بكسلات (`filledPixelCount === 0`) في `localCommandsRef` أو إرسال `Type 4` للشبكة.
+     - الحفاظ على `localRedoStackRef` و`Undo Cache` و`Checkpoints` وعدم استهلاك `strokeId` عند تحقق `No-op` حقيقي.
+     - التفريق الصريح بين `No-op` حقيقي وبين فشل تنفيذ `floodFill` (`null`) مع إظهار التشخيص المناسب دون معاملته كـ `No-op` ناجح.
+     - تأكيد المالك نجاح التجربة اليدوية. *(ملاحظة: يجب عدم إعادة فتح أو تكرار تحقيقات هذه المرحلة).*
+
+2. **`PHASE 4E-2 — Competitive Bucket Undo Limit`**
+   - **Commit**: `4c06d4d82eed2e30e52a4cc82e8ba45c905d72bd` | **الحالة**: `[x] IMPLEMENTED & OWNER-VERIFIED`
+   - **ما تم تنفيذه**:
+     - فرض حد تراجع قدره 3 عمليات Bucket في الوضع التنافسي (`COMPETITIVE_BUCKET_UNDO_LIMIT = 3`) ضمن `drawEpoch` الحالي بسلطة الخادم (`server/roomDrawingHistory.ts`).
+     - استخدام هوية ثابتة لقفل Bucket (`drawEpoch + instId + strokeId`) بدلاً من الاعتماد على فهارس التاريخ الخام القابلة للتغير عند التراجع أو الحذف.
+     - الحفاظ على الترتيب الزمني للأوامر؛ بحيث لا تستهلك أدوات القلم والممحاة والأشكال حد Bucket Undo، لكن قفل أي Bucket يمنع التراجع عنه أو عن أي أمر أقدم منه دون تجاوز القفل.
+     - تأكيد المالك نجاح التجربة لحد التراجع ومزامنة الرسام والمتفرجين (`Drawer / Spectator sync`). *(ملاحظة: يجب عدم إعادة فتح أو تكرار تحقيقات هذه المرحلة).*
+
+3. **`PHASE 4F-1 — Competitive Bucket Server ACK / REJECT`**
+   - **Commit**: `c7817f200fee7b13cf4e5f6c0d811479c3d07437` | **الحالة**: `[x] IMPLEMENTED & OWNER-VERIFIED`
+   - **ما تم تنفيذه**:
+     - إرسال `draw_action_ack` من الخادم إلى الرسام فقط بعد تسجيل `Type 4` بنجاح فعلياً في سجل الغرفة، وإرسال `draw_action_rejected` إلى الرسام فقط عند الرفض (مثل تجاوز Rate Limiter أو رفض التحقق).
+     - حماية `Checkpoints` من أي Bucket غير مؤكد أو مرفوض، ومعالجة التراجع المحلي النظيف عند الرفض المتأخر وحالات السباق بين `Undo / Redo` و`ACK / REJECT`.
+     - إضافة ملف الاختبار الموجه: `scripts/test_stage4f1_bucket_ack_reject.ts`.
+     - تأكيد المالك نجاح التجربة اليدوية. *(ملاحظة: يجب عدم إعادة فتح أو تكرار تحقيقات هذه المرحلة).*
+
+4. **`PHASE 4F-2 — Competitive Checkpoint Alignment`**
+   - **Commit**: `ed1feb8f1aea55f141531ae8cab7c3d4c0726abb` | **الحالة**: `[x] IMPLEMENTED — BUCKET UNDO OWNER-VERIFIED (AUTOMATED PASS REPORT UNCONFIRMED)`
+   - **ما تم تنفيذه**:
+     - محاذاة `Base` و`Tail` Checkpoints في `src/utils/canvasCheckpointManager.ts` و`src/components/game/DrawingCanvasCore.tsx` مع حدود القفل والتأكيد من الخادم (`reconcileCompetitiveCheckpoints`).
+     - حظر التقاط أو اعتماد أي Checkpoint يحتوي على عملية Bucket غير مؤكدة من الخادم.
+     - الإبقاء الصارم على **حد أقصى 2 Checkpoint canvases فقط (`Base` و`Tail`)** في الوضع التنافسي دون استخدام `10-checkpoint pool`.
+     - تحسين مسار `Replay` بعد عمليات Bucket المتكررة عبر `computeCompetitiveReplayPlan()`.
+     - إضافة ملف الاختبار: `scripts/test_stage4f2_competitive_checkpoint_alignment.ts`.
+     - **حالة التحقق اليدوي**: أكد المالك في أحدث اختبار يدوي اختفاء التجمّد الشديد عند التراجع عن Bucket بعد تنفيذ ~20 عملية Bucket متتالية.
+     - **حالة التحقق الآلي (التزام الصدق)**: **لا يُسجل أن جميع اختبارات `Stage 4F-2` الآلية قد نجحت**؛ إذ لا يتوفر تقرير تشغيل نهائي موثوق يثبت اجتياز كامل مجموعة اختبارات `Stage 4F-2` الآلية.
+
+##### ب. المتابعة المفتوحة المستقلة (`POST-BUCKET PENCIL UNDO PERFORMANCE INVESTIGATION`)
+
+- **الحالة الرسمية**: **`OPEN — STRICT READ-ONLY AUDIT PENDING`** *(المهمة المفتوحة الوحيدة المعتمدة حالياً)*
+- **الأعراض المرصودة بعد اختبار `4F-2`**:
+  - بعد تنفيذ ~20 عملية `Bucket Fill` متتالية، ثم رسم عدد كبير من خطوط القلم (`Pencil`)، لوحظ بطء عند التراجع المتتالي عن خطوات `Pencil`.
+  - يظهر هذا البطء بشكل أوضح حول **الخطوة الثامنة (`~8th Undo step`)**.
+  - شدة العرض: **طفيف على الهاتف العادي** و**أوضح على هاتف Android ضعيف**، لكنه **ليس التجمّد الشديد السابق** الذي كان يظهر في `Bucket Undo`.
+- **السبب الجذري**: **غير مثبت بعد (`Not Proven Yet`)** — لا تُعتمد أي فرضية بوصفها سبباً مثبتاً قبل انتهاء التدقيق القرائي.
+- **نطاق المهمة التالية (`Next Task — Strict Read-Only Audit ONLY`)**:
+  - تنفيذ **Read-Only Audit** كامل ومنضبط لمسار `Checkpoint` و`Replay` الخاص بأوامر `Pencil` بعد عمليات `Bucket` المتكررة في الوضع التنافسي (`isExperimental === true && isFreeDraw === false`).
+  - فحص خاص ومباشر لقيمة **`STRIDE = 8`** ومحاذاة `Tail` أثناء الرسم الحي (`Live Drawing Tail Alignment`) مقارنة بمحاذاة `Tail` أثناء الإعادة (`Replay Tail Alignment`) في كل من:
+    - `src/utils/canvasCheckpointManager.ts`
+    - `src/components/game/DrawingCanvasCore.tsx`
+    - `src/utils/canvasReplayEngine.ts`
+  - **قيد صارم**: يمنع اقتراح أو كتابة أي تعديل برمجي أو إصلاح قبل عرض نتائج التدقيق القرائي واعتمادها، مع الالتزام بعدم زيادة عدد Checkpoint canvases عن 2 وببقاء حد 3 عمليات Bucket Undo دون تغيير.
+- **القيود المعمارية المحمية في `PHASE 4H`**:
   - الالتزام الصارم بوثيقة `AGENTS.md`: حماية `type === 4 || type === 10 || type === 5` كخطوة أولى، وحماية تراجع الخطوة الواحدة مع `isDrawingActive = false`, ومنع إضافة أي `console.log` غير محكوم ببوابة التشخيص في المسار الساخن، ومنع عودة مسح الحزم المسطح $O(N)$.
-  - عدم المساس ببروتوكول Socket.IO أو البروتوكول الثنائي أو خوارزميات حواف `Unified 4D` البصرية بدون دليل قياسي.
-- **الخطوة التالية المعتمدة (`Next Action`)**:
-  - **`Audit the real Bucket Undo execution path using existing diagnostics on a weak Android device before proposing any code changes.`**
-  - *(فحص مسار تنفيذ Bucket Undo الحقيقي باستخدام التشخيصات الموجودة على هاتف Android ضعيف قبل اقتراح أي تعديلات برمجية).*
 
 ---
 
@@ -751,19 +769,23 @@
 
 ## 🧪 القسم G — سياسة الاختبارات والموارد (Testing & Resource Policy)
 
-تلتزم جميع عمليات الفحص والتحقق بالضوابط التقنية التالية:
-1. **الأولوية المطلقة للفحص الثابت المباشر**:
-   الاعتماد بالدرجة الأولى على قراءة الكود الذكية، وتدقيق الـ Diff السطري، والمشاهدة الاستاتيكية لضمان عدم وجود تغييرات جانبية أو تجاوز للنطاق.
-2. **فحص الأنواع والتجميع للمهام البرمجية**:
-   عند إجراء أي تعديل في السورس كود، يجب تشغيل:
-   - فحص الأنواع الصارم: `tsc --noEmit` بنسبة 100% دون أي خطأ.
-   - بناء التطبيق الكامل: `npm run build` بنجاح تام.
-3. **الاختبارات الآلية الموجهة والخفيفة فقط**:
-   تشغيل الاختبارات الآلية الموجودة في `scripts/` ذات الصلة المباشرة بمهمة الخادم أو محرك الرسم فقط عند وجود مبرر تقني حقيقي (مثل `scripts/test_session_identity_suite.ts`). ولا يتم تشغيل حزم اختبارات ثقيلة أو غير ذات صلة لمهام التوثيق أو المهام العرضية البسيطة.
-4. **الاختبار اليدوي بواسطة المستخدم**:
-   محاكاة تجارب اللعب بالمتصفح، واختبار سلوك الواجهة والتفاعل اليدوي يتولاه المستخدم بنفسه بعد جاهزية البناء؛ ولا يُطلب من الذكاء الاصطناعي محاكاة تجارب لعب يدوية.
-5. **التدقيق المتناسب مع المخاطر**:
-   التعديلات في محركات الرسم أو المقابس أو السيرفر (الفئة C) تتطلب مستوى أعلى من التحقق والاحتياط مقارنة بمكونات العرض المستقلة (الفئة A).
+تلتزم جميع عمليات الفحص والتحقق والموارد بالضوابط الصارمة التالية:
+1. **الاختبار اليدوي بواسطة مالك المشروع**:
+   الاختبار اليدوي للاعبين والمتفرجين وعلى الهواتف المحمولة يتولاه مالك المشروع مباشرة عبر المتصفح والأجهزة الحقيقية.
+2. **حظر محاكاة اللعب الثقيلة بالمتصفح**:
+   لا يُطلب من الذكاء الاصطناعي محاكاة تجارب اللعب اليدوية عبر `Playwright` أو تشغيل اختبارات متصفح ثقيلة عندما يستطيع المالك اختبارها مباشرة على المتصفح أو الهاتف.
+3. **منع الـ Benchmarks الطويلة والمجموعات الواسعة بلا ضرورة**:
+   يُمنع تشغيل قياسات أداء طويلة (`long benchmarks`) أو مجموعات اختبارات واسعة وشاملة ما لم توجد ضرورة تقنية واضحة ومحددة.
+4. **أولوية الفحص الاستاتيكي والاختبارات الصغيرة الموجهة**:
+   إعطاء الأولوية الأولى لقراءة الكود، وتدقيق الـ Diff السطري، والمشاهدة الاستاتيكية، والاختبارات الصغيرة الموجهة المرتبطة مباشرة بالتعديل المنفذ (مثل `scripts/test_session_identity_suite.ts` أو اختبار مرحلة محدد)، دون تشغيل اختبارات ثقيلة لمهام التوثيق أو المهام العرضية البسيطة.
+5. **فحص TypeScript والبناء عند وجود تغييرات كود مبررة**:
+   عند تعديل الكود بما يستدعي التحقق، يُشغّل:
+   - فحص الأنواع الصارم: `npx tsc --noEmit`
+   - بناء التطبيق الكامل: `npm run build`
+6. **حظر ادعاء نجاح أي اختبار دون تشغيل فعلي**:
+   يُمنع منعاً باتاً تسجيل أو ادعاء نجاح أي اختبار دون وجود نتيجة تنفيذ فعلية موثوقة لنفس الحالة الحالية للكود.
+7. **عدم إعادة تشغيل اختبارات ناجحة مسبقاً بلا سبب**:
+   لا تُعاد اختبارات ثبت نجاحها سابقاً ما لم يتغير مسارها أو يظهر سبب تقني واضح يبرر إعادة التشغيل، مع مراعاة التدقيق الأعلى لمكونات الفئة C (محرك الرسم، المقابس، السيرفر).
 
 ---
 
@@ -816,17 +838,27 @@
 
 ---
 
-## 🧭 القسم I — قرارات المالك وتسليم الجلسة (`OWNER DECISIONS & SESSION HANDOFF — 2026-11-18`)
+## 🧭 القسم I — قرارات المالك وتسليم الجلسة (`OWNER DECISIONS & SESSION HANDOFF — 2026-11-21`)
 
-> **ملخص ملزم لأي جلسة عمل قادمة**: تم اعتماد القرارات الثمانية التالية مباشرة من مالك المشروع بتاريخ `2026-11-18` لتوجيه الأولويات ومنع إعادة فتح مهام مغلقة أو تكرار بنية موجودة مسبقاً:
+> **ملخص ملزم لأي جلسة عمل قادمة**: تم اعتماد القرارات السبعة التالية مباشرة من مالك المشروع بتاريخ `2026-11-21` (المرجع: `hamoudi100hamoudi-beep/social-games-v1` عند Commit `ed1feb8f1aea55f141531ae8cab7c3d4c0726abb`) لتوجيه العمل القادم بدقة ومنع تكرار التحقيقات السابقة:
 
-1. **إغلاق تحسينات حواف `PHASE 4G`**: أكد المالك بعد تجربة ألوان ودرجات Opacity/Density مختلفة في اللعب الفعلي أن النتائج البصرية لـ `Unified 4D` (`PHASE 4G-2`) جيدة ومقبولة ولا يرى حاجة لمواصلة تحسين الحواف. يُسجّل هذا التحقق كـ **تحقق بصري يدوي**، وتبقى الفحوصات الآلية الإضافية غير المنفذة كملاحظات تاريخية اختيارية غير معطلة ما لم يظهر عطل مرتبط بها.
-2. **إثبات اكتمال البناء (`npm run build`)**: اجتاز المشروع `npm run build` (`vite build` — `2206` وحدة، Exit `0`)، ولا يُذكر البناء كمهمة معلقة.
-3. **الإبقاء على مسار الرجوع والدوال الاحتياطية في `canvasFloodFill.ts`**: قرار صريح بالإبقاء على المفتاح `EXPERIMENTAL_UNIFIED_4D_BUCKET_EDGE_RECONSTRUCTION`, والمسار السابق, والدالة `tryCompositePartialAlphaBoundary()` دون حذف أو تنظيف حالياً لضمان سرعة الرجوع عند اللزوم.
-4. **الأولوية الوحيدة المعتمدة حالياً — `PHASE 4H`**: فتح **`PHASE 4H — POST-4D BUCKET UNDO PERFORMANCE & FREEZE INVESTIGATION`** بحالة **`OBSERVED — READ-ONLY AUDIT PENDING`** للتحقيق في التجمّد/الثقل الشديد على هاتف Android ضعيف عند الضغط على `Undo` بعد تكرار عمليات `Bucket Fill`، على أن يبدأ العمل حصرياً بـ **Read-Only Audit** باستخدام `FREE_DRAW_UNDO_DIAG` و`FreeDrawMobileDebug` قبل اقتراح أي تعديلات برمجية.
-5. **منع إعادة اختراع تحسينات أو تشخيصات قائمة، وتقييد حد `Undo`**: تم بالفعل تنفيذ `PHASE 1F.5` (`CanvasCheckpointManager` + `bucketCheckpointPolicy.ts`), و`PHASE 1F.8` (`Batch Bucket Replay` + `CanvasUndoCache` fast-path + `test_phase1f8_batch_replay.ts`), ولوحة `FreeDrawMobileDebug.tsx` + `erudaManager.ts` + `FREE_DRAW_UNDO_DIAG` / `FREE_DRAW_JOIN_DIAG`. يمنع إعادة تصميمها كأفكار جديدة أو تعطيل الأعلام السلوكية (`freedraw_bucket_checkpoint_exp`, `freedraw_bucket_batch_replay_exp`) افتراضياً، كما يُصنّف فرض حد أقصى لعدد عمليات `Undo` كـ **آخر خيار فقط (`Last Resort Only`)** بسبب أثره على تجربة اللعب.
-6. **تأكيد عمل `AFK` (`PHASE 9A — Slice 5C-3B`)**: أكد المالك أن نظام `AFK` يعمل بشكل طبيعي في اللعب؛ لا يُعاد فتح التحقق من `AFK`، وتُحفظ سجلات التحقق والموثوقية الخاصة بـ `Type 10` و`ping_activity` (`eb730b7597759b6e3f9242593345f3d1b8faa398`) كاملة في `PRODUCTION_RELIABILITY_ROADMAP.md`.
-7. **إبقاء `PHASE 9B`–`PHASE 9F` مؤجلة (`PLANNED`)**: تبقى جميع مراحل `PHASE 9B` إلى `PHASE 9F` في `PRODUCTION_RELIABILITY_ROADMAP.md` بحالة `PLANNED` ومؤجلة إلى ما بعد إكمال تدقيق `PHASE 4H` ومراجعته مع المالك.
-8. **احترام إغلاق المراحل السابقة**: تظل قرارات `PHASE 8A`, و`PHASE 8B` (`Option A`), وكافة مراحل التفكيك من `PHASE 1` إلى `PHASE 8B` مغلقة ومحمية دون تعديل.
+1. **التركيز الحصري على الغرفة التنافسية**: يقتصر نطاق العمل الحالي على الوضع التنافسي فقط (`isExperimental === true && isFreeDraw === false`).
+2. **اعتماد نجاح تحسين `Bucket Undo` يدوياً**: نجاح تحسين التراجع عن أداة الدلو (`Bucket Undo`) مؤكد من المالك في أحدث تجربة يدوية (اختفاء التجمّد الشديد بعد ~20 عملية Bucket).
+3. **الحفاظ على حد 3 عمليات `Bucket Undo`**: يُحفظ حد الثلاث عمليات للتراجع عن Bucket Fill في الوضع التنافسي دون تغيير أو إضعاف.
+4. **عدم زيادة عدد Checkpoint Canvases**: يظل الحد الأقصى لنقاط الاستعادة في الوضع التنافسي `2` فقط (`Base` و`Tail`)، ويُمنع إضافة كانفاسات جديدة أو توسيع Pool النقاط المرجعية.
+5. **تحديد المشكلة الجديدة بدقة**: المشكلة الجديدة المفتوحة هي بطء التراجع عن `Pencil` بعد عمليات `Bucket` المتكررة (خصوصاً حول الخطوة الثامنة على الهاتف الضعيف)، وسببها الجذري غير مثبت بعد.
+6. **الخطوة التالية هي `Read-Only Audit` فقط**: تبدأ الجلسة القادمة حصراً بتدقيق قرائي (`Strict Read-Only Audit`) لمسار Checkpoint وReplay لأوامر Pencil بعد Buckets (مع فحص `STRIDE = 8` ومحاذاة `Tail` الحي مقابل Replay)، وليس بتعديل الكود.
+7. **عدم إعادة فتح أو تكرار التحقيقات السابقة**: تُغلق ملفات التحقيق السابقة الخاصة بمراحل `4E-1` و`4E-2` و`4F-1` ولا يُعاد فتحها أو تكرار نقاشها.
+
+### 📜 أرشيف قرارات المالك السابقة (`2026-11-18` — مرجع تاريخي)
+1. **إغلاق تحسينات حواف `PHASE 4G`**: قبول بصري يدوي لـ `Unified 4D` (`PHASE 4G-2`) دون حاجة لمواصلة تحسين الحواف.
+2. **إثبات اكتمال البناء (`npm run build`)** لمرحلة `4G` (`2206` وحدة، Exit `0`).
+3. **الإبقاء على مسار الرجوع والدوال الاحتياطية في `canvasFloodFill.ts`** (`EXPERIMENTAL_UNIFIED_4D_BUCKET_EDGE_RECONSTRUCTION` و`tryCompositePartialAlphaBoundary()`).
+4. **الاعتماد السابق لـ `PHASE 4H`**: فتح تحقيق `Bucket Undo` قبل تنفيذ `4E-1`–`4F-2` (نُفذ مسار Bucket Undo لاحقاً كما هو موثق أعلاه، وبقيت متابعة `Pencil Undo` المفتوحة حالياً).
+5. **منع إعادة اختراع تحسينات أو تشخيصات قائمة** (`PHASE 1F.5`, `PHASE 1F.8`, `FreeDrawMobileDebug.tsx`, `erudaManager.ts`, `FREE_DRAW_UNDO_DIAG` / `FREE_DRAW_JOIN_DIAG`).
+6. **تأكيد عمل `AFK` (`PHASE 9A — Slice 5C-3B`)** وحفظ سجلاته في `PRODUCTION_RELIABILITY_ROADMAP.md`.
+7. **إبقاء `PHASE 9B`–`PHASE 9F` مؤجلة (`PLANNED`)**.
+8. **احترام إغلاق مراحل التفكيك السابقة** (`PHASE 1` إلى `PHASE 8B`).
+
 
 
