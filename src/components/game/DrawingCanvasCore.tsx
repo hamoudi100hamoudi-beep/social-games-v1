@@ -16,6 +16,8 @@ import {
 } from '../../utils/drawBinaryHelper';
 import {
   CanvasCheckpointManager,
+  CompetitiveCheckpointBounds,
+  CompetitiveReplayCheckpointPlan,
   FreeDrawCheckpoint,
   HistoryCheckpoint,
   isBucketCheckpointExpEnabled,
@@ -322,6 +324,16 @@ export interface DrawingCanvasCoreRef {
     drawEpoch?: number;
     isBucket: boolean;
   }[];
+  getCompetitiveCheckpointSnapshot?: (sampleNormX?: number, sampleNormY?: number) => {
+    baseIndex: number;
+    tailIndex: number;
+    baseValid: boolean;
+    tailValid: boolean;
+    historyCheckpointCount: number;
+    bounds: CompetitiveCheckpointBounds;
+    baseSampleRGBA: number[] | null;
+    tailSampleRGBA: number[] | null;
+  };
 }
 
 // Turn angle threshold for cusp clamping (~60 degrees) in Hybrid Spline Renderer (re-exported from canvasPathRenderer)
@@ -739,7 +751,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const captureDirectFreeDrawUndoCache = (targetInstId?: string, targetStrId?: number) => undoCache.captureDirect(targetInstId, targetStrId);
   const invalidateFreeDrawCaches = () => undoCache.invalidateIfEnabled();
 
-  // 🛡️ Canvas Checkpoint Manager (Phase 4E / Sub-Batch 4E-1A)
+  // 🛡️ Canvas Checkpoint Manager (Phase 4E / Sub-Batch 4E-1A + Stage 4F-2)
+  const getCompetitiveCheckpointBoundsRef = useRef<((commands: any[]) => CompetitiveCheckpointBounds) | null>(null);
   const checkpointManagerRef = useRef<CanvasCheckpointManager | null>(null);
   if (!checkpointManagerRef.current) {
     checkpointManagerRef.current = new CanvasCheckpointManager({
@@ -753,7 +766,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       getConfig: () => ({
         isFreeDraw: propsRef.current.isFreeDraw,
         isExperimental: propsRef.current.isExperimental
-      })
+      }),
+      getCompetitiveCheckpointBounds: (commands) => getCompetitiveCheckpointBoundsRef.current!(commands)
     });
   }
   const checkpointManager = checkpointManagerRef.current;
@@ -764,6 +778,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
   const capturePreBucketCheckpoint = (targetIndex: number) => checkpointManager.capturePreBucketCheckpoint(targetIndex);
   const advanceCheckpointBucketPost = (postIndex: number) => checkpointManager.advanceCheckpointBucketPost(postIndex);
   const advanceCheckpointIncremental = () => checkpointManager.advanceCheckpointIncremental();
+  const reconcileCompetitiveCheckpoints = () => checkpointManager.reconcileCompetitiveCheckpoints();
   const captureHistoryCheckpoint = (index: number, commandList?: any[], sourceImageData?: ImageData) => checkpointManager.captureHistoryCheckpoint(index, commandList, sourceImageData);
   const getBestCheckpoint = (commands: any[], targetIndex?: number) => checkpointManager.getBestCheckpoint(commands, targetIndex);
   const isCheckpointValid = (cp: FreeDrawCheckpoint | HistoryCheckpoint, commands: any[], targetIndex?: number) => checkpointManager.isCheckpointValid(cp, commands, targetIndex);
@@ -855,6 +870,43 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     return { lockIdx: list.length - 1, lockMissing: true };
   };
+
+  const getCompetitiveCheckpointBounds = (list: any[]): CompetitiveCheckpointBounds => {
+    const lastClearIndex = findLatestClearIndex(list);
+    const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
+
+    let maxConfirmedIdx = list.length;
+    for (let i = activeStart; i < list.length; i++) {
+      const cmd = list[i];
+      if (cmd && isBucketCommand(cmd) && cmd._serverConfirmed !== true) {
+        maxConfirmedIdx = i;
+        break;
+      }
+    }
+
+    const { lockIdx, lockMissing } = getCompetitiveLockBoundary(list);
+    if (lockMissing) {
+      return {
+        lastClearIndex,
+        activeStart,
+        maxConfirmedIdx,
+        lockIdx,
+        lockMissing: true,
+        safeBaseUpperBound: -1
+      };
+    }
+
+    const lockFrontier = lockIdx >= activeStart ? lockIdx + 1 : activeStart;
+    return {
+      lastClearIndex,
+      activeStart,
+      maxConfirmedIdx,
+      lockIdx,
+      lockMissing: false,
+      safeBaseUpperBound: Math.min(lockFrontier, maxConfirmedIdx)
+    };
+  };
+  getCompetitiveCheckpointBoundsRef.current = getCompetitiveCheckpointBounds;
 
   // Buffering history syncing before ref ready
   const bufferedSyncRef = useRef<any[] | null>(null);
@@ -1654,7 +1706,31 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           drawEpoch: cmd?._drawEpoch,
           isBucket: isBucketCommand(cmd)
         };
-      })
+      }),
+    getCompetitiveCheckpointSnapshot: (sampleNormX?: number, sampleNormY?: number) => {
+      const list = localCommandsRef.current;
+      const baseCp = checkpointManager.getBaseCheckpoint();
+      const tailCp = checkpointManager.getTailCheckpoint();
+      const readSample = (c: HTMLCanvasElement | null): number[] | null => {
+        if (!c || sampleNormX === undefined || sampleNormY === undefined) return null;
+        const cCtx = c.getContext('2d');
+        if (!cCtx) return null;
+        const sx = Math.max(0, Math.min(c.width - 1, Math.floor(sampleNormX * c.width)));
+        const sy = Math.max(0, Math.min(c.height - 1, Math.floor(sampleNormY * c.height)));
+        const d = cCtx.getImageData(sx, sy, 1, 1).data;
+        return [d[0], d[1], d[2], d[3]];
+      };
+      return {
+        baseIndex: checkpointManager.getBaseIndex(),
+        tailIndex: checkpointManager.getTailIndex(),
+        baseValid: checkpointManager.isBaseValid(list),
+        tailValid: checkpointManager.isTailValid(list),
+        historyCheckpointCount: checkpointManager.getHistoryCheckpointCount(),
+        bounds: getCompetitiveCheckpointBounds(list),
+        baseSampleRGBA: readSample(baseCp.canvas),
+        tailSampleRGBA: readSample(tailCp.canvas)
+      };
+    }
   }));
 
   // Binary Command Dispatch helper
@@ -2217,7 +2293,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       lockedBucket: null
     };
 
-    // Reinitialize Free Draw Caches
+    // Reinitialize Free Draw & Experimental Checkpoints and Caches
+    invalidateCheckpoint('all');
     undoCache.invalidateAll();
 
     if (ctx && tempCtx) {
@@ -3128,12 +3205,19 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const M = N - activeStart;
       let candidateBaseIndex = -1;
       let candidateTailIndex = -1;
+      let postReplayBaseIndex = -1;
       let postReplayTailIndex = -1;
 
       const STRIDE = 8;
       const isExp = isBucketCheckpointExpEnabled() && (propsRef.current.isFreeDraw || propsRef.current.isExperimental);
 
-      if (isExp) {
+      if (isCompetitivePerf) {
+        const plan = checkpointManager.computeCompetitiveReplayPlan(commands, N);
+        candidateBaseIndex = plan.candidateBaseIndex;
+        candidateTailIndex = plan.candidateTailIndex;
+        postReplayBaseIndex = plan.postReplayBaseIndex;
+        postReplayTailIndex = plan.postReplayTailIndex;
+      } else if (isExp) {
         // Adaptive Checkpoint Recovery:
         // Find buckets in replayed commands:
         const bucketIndices: number[] = [];
@@ -3158,9 +3242,6 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               const afterCount = N - (lastB + 1);
               candidateTailIndex = afterCount >= STRIDE ? lastB + 1 + STRIDE : -1;
             }
-          }
-          if (isCompetitivePerf && candidateTailIndex === N) {
-            postReplayTailIndex = N;
           }
           if (candidateTailIndex >= N) candidateTailIndex = -1;
           if (candidateBaseIndex >= N) candidateBaseIndex = -1;
@@ -3281,7 +3362,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
 
-        if (i === candidateBaseIndex && !checkpointManager.isBaseValid(commands)) {
+        if (
+          i === candidateBaseIndex &&
+          (!checkpointManager.isBaseValid(commands) ||
+            (isCompetitivePerf && checkpointManager.getBaseIndex() < candidateBaseIndex))
+        ) {
           const capStart = diag ? performance.now() : 0;
           if (diag) diag.checkpointCaptureAttempts++;
           const captured = checkpointManager.captureCandidateSlot(
@@ -3297,7 +3382,11 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
           }
         }
 
-        if (i === candidateTailIndex && !checkpointManager.isTailValid(commands)) {
+        if (
+          i === candidateTailIndex &&
+          (!checkpointManager.isTailValid(commands) ||
+            (isCompetitivePerf && checkpointManager.getTailIndex() !== candidateTailIndex))
+        ) {
           const capStart = diag ? performance.now() : 0;
           if (diag) diag.checkpointCaptureAttempts++;
           const captured = checkpointManager.captureCandidateSlot(
@@ -3590,12 +3679,27 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         diag.replayOtherDurationMs += (performance.now() - leftoverStart);
       }
 
-      // In Competitive Stage 4C mode, capture final tail checkpoint at N after buckets finish so subsequent undos/draws benefit immediately
+      // In Competitive Stage 4F-2 mode, capture aligned post-replay Base / Tail checkpoint at N if planned
+      if (
+        isCompetitivePerf &&
+        postReplayBaseIndex === N &&
+        N > activeStart &&
+        (!checkpointManager.isBaseValid(commands) || checkpointManager.getBaseIndex() < N)
+      ) {
+        const capStart = diag ? performance.now() : 0;
+        if (diag) diag.checkpointCaptureAttempts++;
+        const captured = checkpointManager.captureCandidateSlot('base', N, commands);
+        if (captured && diag) diag.checkpointCaptureSuccesses++;
+        if (diag) {
+          diag.checkpointCaptureDurationMs += (performance.now() - capStart);
+        }
+      }
+
       if (
         isCompetitivePerf &&
         postReplayTailIndex === N &&
         N > activeStart &&
-        !checkpointManager.isTailValid(commands)
+        (!checkpointManager.isTailValid(commands) || checkpointManager.getTailIndex() !== N)
       ) {
         const capStart = diag ? performance.now() : 0;
         if (diag) diag.checkpointCaptureAttempts++;
@@ -4027,6 +4131,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
                 isReplayingRef.current = false;
               }
               undoCache.invalidateCommittedCaches();
+              if (isCompetitivePerfActive()) {
+                reconcileCompetitiveCheckpoints();
+              }
               saveSnapshot();
             } else {
               undoCache.invalidateCommittedCaches();
@@ -4461,13 +4568,14 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         suppressedRejectedUndoRef.current = null;
         undoCache.invalidateAll();
 
-        if (isCompetitiveExperimentalMode()) {
-          localCommandsRef.current = commands.map((cmd: any) =>
-            cmd && isBucketCommand(cmd) ? { ...cmd, _serverConfirmed: true } : cmd
-          );
-        } else {
-          localCommandsRef.current = [...commands];
-        }
+        const normalizedCommands = isCompetitiveExperimentalMode()
+          ? commands.map((cmd: any) =>
+              cmd && isBucketCommand(cmd) ? { ...cmd, _serverConfirmed: true } : cmd
+            )
+          : commands;
+        localCommandsRef.current = isCompetitiveExperimentalMode()
+          ? normalizedCommands
+          : [...commands];
         prevCommandsCountRef.current = -1;
 
         isReplayingRef.current = true;
@@ -4513,7 +4621,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         }
 
         let currentIndex = 0;
-        const CHUNK_SIZE = 50; 
+        const CHUNK_SIZE = 50;
+        let competitivePlan: CompetitiveReplayCheckpointPlan | null = null;
 
         const processChunk = () => {
           // If a newer sync has started, abort this chunk loop immediately
@@ -4531,19 +4640,64 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
             return;
           }
 
+          if (competitivePlan === null && isCompetitivePerfActive()) {
+            competitivePlan = checkpointManager.computeCompetitiveReplayPlan(
+              normalizedCommands,
+              normalizedCommands.length
+            );
+          }
+
           const chunkStartTime = joinDiag ? performance.now() : 0;
-          const endIndex = Math.min(currentIndex + CHUNK_SIZE, commands.length);
+          const endIndex = Math.min(currentIndex + CHUNK_SIZE, normalizedCommands.length);
           
           for (let i = currentIndex; i < endIndex; i++) {
+            if (competitivePlan) {
+              if (
+                i === competitivePlan.candidateBaseIndex &&
+                (!checkpointManager.isBaseValid(normalizedCommands) ||
+                  checkpointManager.getBaseIndex() < competitivePlan.candidateBaseIndex)
+              ) {
+                const cpStart = joinDiag ? performance.now() : 0;
+                const success = checkpointManager.captureCandidateSlot(
+                  'base',
+                  competitivePlan.candidateBaseIndex,
+                  normalizedCommands
+                );
+                if (joinDiag) {
+                  joinDiag.checkpointCaptureAttempts++;
+                  joinDiag.checkpointCaptureDurationMs += performance.now() - cpStart;
+                  if (success) joinDiag.checkpointCaptureSuccesses++;
+                }
+              }
+
+              if (
+                i === competitivePlan.candidateTailIndex &&
+                (!checkpointManager.isTailValid(normalizedCommands) ||
+                  checkpointManager.getTailIndex() !== competitivePlan.candidateTailIndex)
+              ) {
+                const cpStart = joinDiag ? performance.now() : 0;
+                const success = checkpointManager.captureCandidateSlot(
+                  'tail',
+                  competitivePlan.candidateTailIndex,
+                  normalizedCommands
+                );
+                if (joinDiag) {
+                  joinDiag.checkpointCaptureAttempts++;
+                  joinDiag.checkpointCaptureDurationMs += performance.now() - cpStart;
+                  if (success) joinDiag.checkpointCaptureSuccesses++;
+                }
+              }
+            }
+
             const cmdReplayStart = joinDiag ? performance.now() : 0;
-            applyReplayCommand(ctx, commands[i], replayPaths, replaySessions, undefined, joinDiag);
+            applyReplayCommand(ctx, normalizedCommands[i], replayPaths, replaySessions, undefined, joinDiag);
             if (joinDiag) {
               joinDiag.totalReplayDurationMs += performance.now() - cmdReplayStart;
             }
 
-            if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw && isBucketCommand(commands[i])) {
+            if (isBucketCheckpointExpEnabled() && propsRef.current.isFreeDraw && isBucketCommand(normalizedCommands[i])) {
               const cpStart = joinDiag ? performance.now() : 0;
-              const success = captureHistoryCheckpoint(i + 1, commands);
+              const success = captureHistoryCheckpoint(i + 1, normalizedCommands);
               if (joinDiag) {
                 joinDiag.checkpointCaptureAttempts++;
                 joinDiag.checkpointCaptureDurationMs += performance.now() - cpStart;
@@ -4565,7 +4719,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
           currentIndex = endIndex;
 
-          if (currentIndex < commands.length) {
+          if (currentIndex < normalizedCommands.length) {
             syncChunkRafRef.current = requestAnimationFrame(processChunk);
           } else {
             syncChunkRafRef.current = null;
@@ -4588,6 +4742,36 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
               undefined,
               true
             );
+
+            if (competitivePlan) {
+              const syncN = normalizedCommands.length;
+              if (
+                competitivePlan.postReplayBaseIndex === syncN &&
+                syncN > 0 &&
+                (!checkpointManager.isBaseValid(normalizedCommands) || checkpointManager.getBaseIndex() < syncN)
+              ) {
+                const cpStart = joinDiag ? performance.now() : 0;
+                const success = checkpointManager.captureCandidateSlot('base', syncN, normalizedCommands);
+                if (joinDiag) {
+                  joinDiag.checkpointCaptureAttempts++;
+                  joinDiag.checkpointCaptureDurationMs += performance.now() - cpStart;
+                  if (success) joinDiag.checkpointCaptureSuccesses++;
+                }
+              }
+              if (
+                competitivePlan.postReplayTailIndex === syncN &&
+                syncN > 0 &&
+                (!checkpointManager.isTailValid(normalizedCommands) || checkpointManager.getTailIndex() !== syncN)
+              ) {
+                const cpStart = joinDiag ? performance.now() : 0;
+                const success = checkpointManager.captureCandidateSlot('tail', syncN, normalizedCommands);
+                if (joinDiag) {
+                  joinDiag.checkpointCaptureAttempts++;
+                  joinDiag.checkpointCaptureDurationMs += performance.now() - cpStart;
+                  if (success) joinDiag.checkpointCaptureSuccesses++;
+                }
+              }
+            }
 
             // IMPORTANT: DO NOT wipe activeSessionsRef.current = {} here!
             // Live drawing sessions by other users that arrived while chunks were rendering are preserved.
@@ -4840,6 +5024,7 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
       const list = localCommandsRef.current;
       const lastClearIdx = findLatestClearIndex(list);
       const epochStart = lastClearIdx >= 0 ? lastClearIdx + 1 : 0;
+      let confirmedTarget = false;
 
       for (let i = list.length - 1; i >= epochStart; i--) {
         const cmd = list[i];
@@ -4848,12 +5033,20 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         if (cmdInst === instId && cmdStrokeId === strokeId) {
           cmd._serverConfirmed = true;
           cmd._drawEpoch = drawEpoch;
+          confirmedTarget = true;
           break;
         }
       }
 
       if (drawEpoch > currentEpoch) {
         applyAuthoritativeBucketLockStateRef.current?.(drawEpoch, null);
+      } else if (
+        confirmedTarget &&
+        isCompetitivePerfActive() &&
+        !isReplayingRef.current &&
+        !historySyncInProgressRef.current
+      ) {
+        reconcileCompetitiveCheckpoints();
       }
     };
 
@@ -4971,6 +5164,8 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
       if (!restoredViaFastPath) {
         replayFreeDrawHistorySafely(list);
+      } else if (isCompetitivePerfActive()) {
+        reconcileCompetitiveCheckpoints();
       }
 
       if (hadActiveNewerStroke && undoCache.hasPendingCache()) {
@@ -5297,6 +5492,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
         invalidatePendingUndoRollback();
       }
       syncHistoryButtons();
+      if (isCompetitivePerfActive() && !isReplayingRef.current && !historySyncInProgressRef.current) {
+        reconcileCompetitiveCheckpoints();
+      }
       return;
     }
 
@@ -5329,6 +5527,9 @@ const DrawingCanvasCore = forwardRef<DrawingCanvasCoreRef, DrawingCanvasCoreProp
 
     serverBucketLockRef.current = { drawEpoch: epoch, lockedBucket: normalizedLock };
     syncHistoryButtons();
+    if (isCompetitivePerfActive() && !isReplayingRef.current && !historySyncInProgressRef.current) {
+      reconcileCompetitiveCheckpoints();
+    }
   };
 
   const applyAuthoritativeBucketLockStateRef = useRef(applyAuthoritativeBucketLockState);

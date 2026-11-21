@@ -45,6 +45,22 @@ export const isCompetitiveReplayOptEnabled = (): boolean => {
   }
 };
 
+export interface CompetitiveCheckpointBounds {
+  lastClearIndex: number;
+  activeStart: number;
+  maxConfirmedIdx: number;
+  lockIdx: number;
+  lockMissing: boolean;
+  safeBaseUpperBound: number;
+}
+
+export interface CompetitiveReplayCheckpointPlan {
+  candidateBaseIndex: number;
+  candidateTailIndex: number;
+  postReplayBaseIndex: number;
+  postReplayTailIndex: number;
+}
+
 export interface CanvasCheckpointDependencies {
   getCtx: () => CanvasRenderingContext2D | null;
   getCommands: () => any[];
@@ -53,6 +69,7 @@ export interface CanvasCheckpointDependencies {
     isFreeDraw: boolean;
     isExperimental: boolean;
   };
+  getCompetitiveCheckpointBounds?: (commands: any[]) => CompetitiveCheckpointBounds;
 }
 
 export class CanvasCheckpointManager {
@@ -81,6 +98,18 @@ export class CanvasCheckpointManager {
   private isCompetitiveCheckpointEnabled(): boolean {
     const config = this.deps.getConfig();
     return !config.isFreeDraw && Boolean(config.isExperimental) && isCompetitiveReplayOptEnabled();
+  }
+
+  private countBucketsInRange(commands: any[], startInclusive: number, endExclusive: number): number {
+    const start = Math.max(0, startInclusive);
+    const end = Math.min(commands.length, endExclusive);
+    let count = 0;
+    for (let i = start; i < end; i++) {
+      if (isBucketCommand(commands[i])) {
+        count++;
+      }
+    }
+    return count;
   }
 
   // --- Diagnostic & Inspection Accessors ---
@@ -329,6 +358,14 @@ export class CanvasCheckpointManager {
     const sig = getCommandSignature(commands[cp.index - 1]);
     if (!cp.anchorSignature || sig !== cp.anchorSignature) return false;
 
+    if (this.isCompetitiveCheckpointEnabled() && this.deps.getCompetitiveCheckpointBounds) {
+      const cBounds = this.deps.getCompetitiveCheckpointBounds(commands);
+      if (cp.index > cBounds.maxConfirmedIdx) return false;
+      if (cp === this.baseCheckpoint) {
+        if (cBounds.lockMissing || cp.index > cBounds.safeBaseUpperBound) return false;
+      }
+    }
+
     return true;
   }
 
@@ -395,6 +432,10 @@ export class CanvasCheckpointManager {
     if (isCompetitiveExp) {
       const activeStart = lastClearIndex >= 0 ? lastClearIndex + 1 : 0;
       if (targetIndex <= activeStart || targetIndex > list.length) return;
+      const cBounds = this.deps.getCompetitiveCheckpointBounds?.(list);
+      if (!cBounds || cBounds.lockMissing || targetIndex > cBounds.safeBaseUpperBound) {
+        return;
+      }
     }
 
     const priorBucketCount = countBucketsBeforeIndex(list, targetIndex, lastClearIndex);
@@ -421,7 +462,217 @@ export class CanvasCheckpointManager {
     }
   }
 
+  reconcileCompetitiveCheckpoints(): void {
+    if (!this.isCompetitiveCheckpointEnabled()) return;
+    const ctx = this.deps.getCtx();
+    if (!ctx || !ctx.canvas) return;
+
+    const list = this.deps.getCommands();
+    const N = list.length;
+    const bounds = this.deps.getCompetitiveCheckpointBounds?.(list);
+    if (!bounds) return;
+
+    const { activeStart, maxConfirmedIdx, lockMissing, safeBaseUpperBound } = bounds;
+    if (N <= activeStart) return;
+
+    if (this.baseCheckpoint.index > 0 && !this.isCheckpointValid(this.baseCheckpoint, list)) {
+      this.invalidateCheckpoint('base');
+    }
+    if (this.tailCheckpoint.index > 0 && !this.isCheckpointValid(this.tailCheckpoint, list)) {
+      this.invalidateCheckpoint('tail');
+    }
+
+    let baseValid = this.isCheckpointValid(this.baseCheckpoint, list);
+    let tailValid = this.isCheckpointValid(this.tailCheckpoint, list);
+
+    // Zero-copy promotion: Tail -> Base once Tail is safely within the confirmed server lock frontier
+    if (
+      tailValid &&
+      !lockMissing &&
+      safeBaseUpperBound > activeStart &&
+      this.tailCheckpoint.index <= safeBaseUpperBound &&
+      (!baseValid || this.tailCheckpoint.index > this.baseCheckpoint.index)
+    ) {
+      const oldBaseCanvas = this.baseCheckpoint.canvas;
+      this.baseCheckpoint = this.tailCheckpoint;
+      this.tailCheckpoint = {
+        canvas: oldBaseCanvas,
+        index: 0,
+        anchorSignature: null,
+        lastClearIndex: -1
+      };
+      if (oldBaseCanvas) {
+        const tCtx = oldBaseCanvas.getContext('2d');
+        tCtx?.clearRect(0, 0, oldBaseCanvas.width, oldBaseCanvas.height);
+      }
+      baseValid = this.isCheckpointValid(this.baseCheckpoint, list);
+      tailValid = false;
+    }
+
+    // Never capture live ctx.canvas into checkpoints while any bucket in history is unconfirmed
+    if (maxConfirmedIdx !== N) {
+      return;
+    }
+
+    const baseAnchor = Math.max(
+      activeStart,
+      baseValid ? this.baseCheckpoint.index : activeStart
+    );
+
+    if (
+      !lockMissing &&
+      safeBaseUpperBound === N &&
+      safeBaseUpperBound > activeStart &&
+      this.countBucketsInRange(list, activeStart, N) > 0 &&
+      (!baseValid || this.baseCheckpoint.index < N)
+    ) {
+      this.captureCandidateSlot('base', N, list);
+      if (tailValid && this.tailCheckpoint.index <= N) {
+        this.invalidateCheckpoint('tail');
+      }
+      return;
+    }
+
+    if (N <= baseAnchor) {
+      return;
+    }
+
+    const bucketsSinceBase = this.countBucketsInRange(list, baseAnchor, N);
+    const tailUsableAboveBase = tailValid && this.tailCheckpoint.index > baseAnchor;
+
+    if (!tailUsableAboveBase) {
+      if (bucketsSinceBase >= 2 || (N - baseAnchor) >= 8) {
+        this.captureCandidateSlot('tail', N, list);
+      }
+      return;
+    }
+
+    if (this.tailCheckpoint.index < N) {
+      const bucketsBeforeTail = this.countBucketsInRange(list, baseAnchor, this.tailCheckpoint.index);
+      const bucketsAfterTail = this.countBucketsInRange(list, this.tailCheckpoint.index, N);
+      if (
+        (bucketsBeforeTail === 0 && bucketsAfterTail >= 2) ||
+        (bucketsBeforeTail === 0 && bucketsAfterTail === 0 && (N - this.tailCheckpoint.index) >= 8)
+      ) {
+        this.captureCandidateSlot('tail', N, list);
+      }
+    }
+  }
+
+  computeCompetitiveReplayPlan(commands: any[], endIndex: number): CompetitiveReplayCheckpointPlan {
+    const emptyPlan: CompetitiveReplayCheckpointPlan = {
+      candidateBaseIndex: -1,
+      candidateTailIndex: -1,
+      postReplayBaseIndex: -1,
+      postReplayTailIndex: -1
+    };
+    if (!this.isCompetitiveCheckpointEnabled()) return emptyPlan;
+
+    const bounds = this.deps.getCompetitiveCheckpointBounds?.(commands);
+    if (!bounds) return emptyPlan;
+
+    const { activeStart, maxConfirmedIdx, lockMissing, safeBaseUpperBound } = bounds;
+    const effectiveConfEnd = Math.min(endIndex, maxConfirmedIdx);
+    if (effectiveConfEnd <= activeStart) return emptyPlan;
+
+    const baseValid = this.isCheckpointValid(this.baseCheckpoint, commands);
+
+    let desiredBaseIndex = -1;
+    if (!lockMissing && safeBaseUpperBound > activeStart) {
+      const clampedBase = Math.min(safeBaseUpperBound, effectiveConfEnd);
+      if (
+        clampedBase > activeStart &&
+        this.countBucketsInRange(commands, activeStart, clampedBase) > 0
+      ) {
+        desiredBaseIndex = clampedBase;
+      }
+    }
+
+    let candidateBaseIndex = -1;
+    let postReplayBaseIndex = -1;
+    if (desiredBaseIndex > activeStart) {
+      const alreadyCoveredByBase = baseValid && this.baseCheckpoint.index >= desiredBaseIndex;
+      if (!alreadyCoveredByBase) {
+        if (desiredBaseIndex < endIndex) {
+          candidateBaseIndex = desiredBaseIndex;
+        } else if (desiredBaseIndex === endIndex) {
+          postReplayBaseIndex = endIndex;
+        }
+      }
+    }
+
+    const effectiveBaseAnchor = Math.max(
+      activeStart,
+      desiredBaseIndex > activeStart
+        ? desiredBaseIndex
+        : (baseValid ? this.baseCheckpoint.index : activeStart)
+    );
+
+    const unlockedBuckets: number[] = [];
+    for (let i = effectiveBaseAnchor; i < effectiveConfEnd; i++) {
+      if (isBucketCommand(commands[i])) {
+        unlockedBuckets.push(i);
+      }
+    }
+
+    let desiredTailIndex = -1;
+    const STRIDE = 8;
+    if (unlockedBuckets.length >= 2) {
+      const pivotPos = unlockedBuckets.length <= 3 ? 0 : unlockedBuckets.length - 3;
+      const postPivot = unlockedBuckets[pivotPos] + 1;
+      const lastB = unlockedBuckets[unlockedBuckets.length - 1];
+      const trailingCount = effectiveConfEnd - (lastB + 1);
+      if (trailingCount >= STRIDE) {
+        const k = Math.floor(trailingCount / STRIDE);
+        desiredTailIndex = lastB + 1 + k * STRIDE;
+      } else {
+        desiredTailIndex = postPivot;
+      }
+    } else if (unlockedBuckets.length === 1) {
+      const onlyB = unlockedBuckets[0];
+      const postSingle = onlyB + 1;
+      const trailingCount = effectiveConfEnd - postSingle;
+      if (trailingCount >= STRIDE) {
+        const k = Math.floor(trailingCount / STRIDE);
+        desiredTailIndex = postSingle + k * STRIDE;
+      } else if (postSingle <= effectiveConfEnd) {
+        desiredTailIndex = postSingle;
+      }
+    } else {
+      const span = effectiveConfEnd - effectiveBaseAnchor;
+      const numStrides = Math.floor(span / STRIDE);
+      if (numStrides >= 1) {
+        desiredTailIndex = effectiveBaseAnchor + numStrides * STRIDE;
+      }
+    }
+
+    if (desiredTailIndex <= effectiveBaseAnchor) {
+      desiredTailIndex = -1;
+    }
+
+    let candidateTailIndex = -1;
+    let postReplayTailIndex = -1;
+    if (desiredTailIndex > effectiveBaseAnchor && desiredTailIndex <= effectiveConfEnd) {
+      if (desiredTailIndex < endIndex) {
+        candidateTailIndex = desiredTailIndex;
+      } else if (desiredTailIndex === endIndex) {
+        postReplayTailIndex = endIndex;
+      }
+    }
+
+    return {
+      candidateBaseIndex,
+      candidateTailIndex,
+      postReplayBaseIndex,
+      postReplayTailIndex
+    };
+  }
+
   advanceCheckpointBucketPost(postIndex: number): void {
+    if (this.isCompetitiveCheckpointEnabled()) {
+      this.reconcileCompetitiveCheckpoints();
+      return;
+    }
     const config = this.deps.getConfig();
     const isFreeDrawExp = config.isFreeDraw && isBucketCheckpointExpEnabled();
     const isCompetitiveExp = this.isCompetitiveCheckpointEnabled();
@@ -490,6 +741,10 @@ export class CanvasCheckpointManager {
   }
 
   advanceCheckpointIncremental(): void {
+    if (this.isCompetitiveCheckpointEnabled()) {
+      this.reconcileCompetitiveCheckpoints();
+      return;
+    }
     const config = this.deps.getConfig();
     if (!config.isFreeDraw && !config.isExperimental) return;
     const list = this.deps.getCommands();
