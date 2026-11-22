@@ -439,8 +439,10 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
             >
               {/* Container grouping Avatar and Info (Name + Points) together */}
               <div
-                className={`flex items-center min-w-0 flex-1 overflow-visible ${
-                  !slot.isEmpty && newlyJoinedIds.has(slotKey) ? 'animate-avatar-pop' : ''
+                className={`flex items-center min-w-0 max-w-full overflow-visible ${
+                  !slot.isEmpty && ((Boolean(onAcknowledgeNewPlayer) && slot.isNew) || newlyJoinedIds.has(slotKey))
+                    ? 'animate-avatar-pop'
+                    : ''
                 }`}
               >
                 {/* Avatar with Gartic Trophy */}
@@ -481,7 +483,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                  </div>
                  
                  {/* Info */}
-                 <div className="flex-1 min-w-0 flex flex-col justify-center pr-1 text-left">
+                 <div className="min-w-0 flex flex-col justify-center pr-1 text-left">
                     <div className={`font-bold text-[13px] sm:text-[15.5px] truncate transition-colors duration-200 leading-tight ${slot.isEmpty ? 'text-white/40' : nameClass}`}>
                        {slot.name}
                     </div>
