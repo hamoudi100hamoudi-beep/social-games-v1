@@ -1,7 +1,7 @@
 # 🌐 خارطة طريق التدويل وتعدد اللغات (Localization Roadmap — `PHASE L10N`)
 
 **المستودع المرجعي:** `hamoudi100hamoudi-beep/social-games-v1`  
-**الحالة الحالية:** `PHASE L10N-0 COMPLETED` (`2026-11-22`) | `PHASE L10N-0.1 COMPLETED` (`2026-11-22`) | `L10N-1 — AWAITING MANUAL VERIFICATION` (`2026-11-22`)  
+**الحالة الحالية:** `PHASE L10N-0 COMPLETED` (`2026-11-22`) | `PHASE L10N-0.1 COMPLETED` (`2026-11-22`) | `L10N-1 — AWAITING MANUAL VERIFICATION` (`2026-11-22`) | `L10N-1.1 REVIEW APPLIED` (`2026-11-22`)  
 **الوثائق المرجعية المرتبطة:**  
 - دستور محرك الرسم والتراجع: [`AGENTS.md`](./AGENTS.md)  
 - خارطة الطريق المعمارية الموحدة: [`REFACTORING_ROADMAP.md`](./REFACTORING_ROADMAP.md)  
@@ -279,6 +279,25 @@
    - التحقق في متصفح عربي وآخر غير عربي عند اختيار `Auto`.
    - التحقق من تغيّر `<html lang="ar|en">` وعدم تغيّر `dir` أو ظهور أي طلب شبكة في تبويب Network.
 8. **الاعتماديات:** `L10N-0` و`L10N-0.1`.
+
+---
+
+### المرحلة `L10N-1.1` — مراجعة أمان `bun.lock` وتوقيت تهيئة `i18next` (`Dependency & Initialization Safety Review`)
+1. **الاسم والرقم:** `PHASE L10N-1.1 — Dependency & Initialization Safety Review` — **`[~] REVIEW APPLIED — L10N-1 REMAINS AWAITING MANUAL VERIFICATION` (`2026-11-22`)**
+2. **تدقيق وإصلاح `bun.lock`:**
+   - **سبب التضخم المرصود:** عند مقارنة `HEAD` (`e4c131d`) مع `HEAD~1` (`4f0e32d`) في GitHub، احتوى `bun.lock` على **48 حزمة محدثة مسبقاً** في بيئة الحاوية غير مرتبطة بـ `i18next` أو `react-i18next` (`@babel/*`, `rollup` و26 حزمة منصة `@rollup/rollup-*`, `autoprefixer`, `baseline-browser-mapping`, `browserslist`, `csstype`, `electron-to-chromium`, `engine.io`, `node-releases`, `object-inspect`, `playwright`, `playwright-core`, `postcss`, `source-map-js`, `tapable`, `update-browserslist-db`, `@tailwindcss/oxide-wasm32-wasi/@tybys/wasm-util`).
+   - **الإجراء المنفذ:** أعيدت جميع الـ 48 حزمة إلى إصدارات `HEAD~1` (`4f0e32d`) باستخدام `bun install --lockfile-only` ثم تثبيت القفل عبر `bun install --frozen-lockfile`.
+   - **النتيجة الصافية في `bun.lock` مقارنةً بـ `HEAD~1`:** إضافة **3 حزم فقط** (`i18next@27.2.4`, `react-i18next@18.0.3`, `html-parse-stringify@4.0.1` كاعتماد مباشر وحيد لـ `react-i18next`)، **0 حزم محذوفة**، و**0 تغييرات** في إصدارات الحزم الـ 48 الأخرى.
+3. **نتيجة تدقيق توقيت تهيئة `i18next`:**
+   - بفحص `node_modules/i18next/dist/esm/i18next.js` (أسطر `1949–2085`, `2205–2266`, `2347`) و`node_modules/react-i18next/dist/es/useTranslation.js` (أسطر `110–199`) و`utils.js` (أسطر `56–69`):
+     - وجود `resources` مضمّنة محلياً بدون `backend` وبدون `partialBundledLanguages` يجعل `i18n.init()` تنفذ `load() -> changeLanguage() -> loadResources() -> finish()` **بشكل متزامن بالكامل** قبل انتهاء استدعاء `init()`.
+     - تصبح `i18n.isInitialized === true` و`i18n.resolvedLanguage` جاهزتين وحزم الموارد محملة قبل استدعاء `createRoot(...).render(<App />)` في `src/main.tsx`.
+     - تعيد `hasLoadedNamespace` القيمة `true` فوراً وتكون `ready === true` في أول تصيير لـ `Lobby` دون إطلاق `Promise` لـ `Suspense` ودون عرض مفتاح الترجمة أو تحذير `USE_T_BEFORE_READY`.
+   - بناءً عليه: **لم تُجرَ أي تعديلات** على `src/i18n/index.ts` أو `src/i18n/useAppTranslation.ts` أو `src/main.tsx`.
+4. **نتائج الاختبارات الفعلية بعد إصلاح `bun.lock` (`2026-11-22`):**
+   - `bun install --frozen-lockfile`: نجاح (`24 packages installed` في `200.00ms` لمطابقة `node_modules` مع القفل النظيف).
+   - `npx tsc --noEmit`: نجاح تام بدون أخطاء.
+   - `npm run build` (`vite build`): نجاح تام خلال `11.41s` (`dist/assets/index-hT9t7BQx.js`: `1,212.22 kB │ gzip: 332.32 kB`).
 
 ---
 
