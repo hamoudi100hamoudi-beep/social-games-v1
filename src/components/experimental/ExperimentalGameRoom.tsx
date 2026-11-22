@@ -1438,7 +1438,7 @@ export default function ExperimentalGameRoom({
                      `}
         >
           <div 
-            className={`w-full max-w-full h-auto max-h-full aspect-[740/430] shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative ${morphMode ? "rounded-bl-[6px] sm:rounded-bl-[8px]" : ""}`}
+            className={`w-full max-w-full h-auto max-h-full ${!isDrawingMode ? "aspect-[680/396]" : "aspect-[740/430]"} shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative ${morphMode ? "rounded-bl-[6px] sm:rounded-bl-[8px]" : ""}`}
           >
             {/* Floating button for Free Draw: shown when player returned to room, or new player entering active room */}
             {isFreeDraw && !isDrawingMode && (hasEnteredFreeDraw || activeDrawers.length > 0 || hasDrawHistory) && (
