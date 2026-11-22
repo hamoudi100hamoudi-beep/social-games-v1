@@ -152,13 +152,21 @@ input[type="search"]::-webkit-search-results-decoration {
 }
 
 @keyframes avatar-scale-in {
-  0% { transform: scale(0); opacity: 0; }
-  65% { transform: scale(1.18); opacity: 1; }
-  85% { transform: scale(0.96); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+  0% { transform: translateY(5px) scale(0.96); opacity: 0; }
+  70% { transform: translateY(-1px) scale(1.015); opacity: 1; }
+  85% { transform: translateY(0) scale(0.995); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
 }
 .animate-avatar-pop {
-  animation: avatar-scale-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: avatar-scale-in 400ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-avatar-pop {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* 🔄 Game Idle Loop for Clean / Reset Canvas Icon (Stays stationary for a moment upon opening, then spins smoothly) */

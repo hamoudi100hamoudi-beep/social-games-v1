@@ -545,11 +545,11 @@ export default function ExperimentalGameRoom({
     eventGate.acknowledgeNewPlayer(playerId);
     if (currentPlayersRef.current) {
       currentPlayersRef.current = currentPlayersRef.current.map((p) =>
-        p.id === playerId ? { ...p, isNew: false } : p
+        (p.persistentId || p.id) === playerId ? { ...p, isNew: false } : p
       );
     }
     setCurrentPlayers((prev) =>
-      prev.map((p) => (p.id === playerId ? { ...p, isNew: false } : p))
+      prev.map((p) => ((p.persistentId || p.id) === playerId ? { ...p, isNew: false } : p))
     );
   }, [eventGate]);
 
@@ -817,7 +817,7 @@ export default function ExperimentalGameRoom({
         state.gameState?.status === "DRAWING" ||
         state.gameState?.status === "CHOOSING";
 
-      const newPlayersMap = new Map();
+      const newPlayersMap = new Map<string, boolean>();
       if (!eventGate.isLive()) {
         eventGate.hydrateGate(state.players);
         prevPlayersLengthRef.current = state.players.length;
@@ -832,10 +832,13 @@ export default function ExperimentalGameRoom({
         };
       } else {
         // Remove players who were in currentPlayersRef.current but are no longer in state.players
-        const currentActiveIds = new Set((state.players || []).map((p: any) => p.id));
+        const currentActiveIds = new Set(
+          (state.players || []).map((p: any) => p.persistentId || p.id).filter(Boolean)
+        );
         currentPlayersRef.current.forEach((prevP) => {
-          if (prevP && prevP.id && !prevP.isEmpty && !currentActiveIds.has(prevP.id)) {
-            eventGate.removePlayer(prevP.id);
+          const prevStableId = prevP?.persistentId || prevP?.id;
+          if (prevP && prevStableId && !prevP.isEmpty && !currentActiveIds.has(prevStableId)) {
+            eventGate.removePlayer(prevStableId);
           }
         });
 
@@ -870,25 +873,31 @@ export default function ExperimentalGameRoom({
 
         // Calculate isNew for each player before the state updater
         state.players.forEach((p) => {
-          newPlayersMap.set(p.id, eventGate.isNewPlayer(p.id));
+          const stableId = p.persistentId || p.id;
+          if (stableId) {
+            newPlayersMap.set(stableId, eventGate.isNewPlayer(stableId));
+          }
         });
       }
 
       const prevPlayers = currentPlayersRef.current;
-      const mapped = state.players.map((p) => ({
-        id: p.id,
-        name: p.name,
-        points: p.score || 0,
-        wins: p.wins || 0,
-        isCurrent:
-          isActiveRound &&
-          state.gameState?.currentDrawerId === (p.persistentId || p.id),
-        isOffline: p.isOffline || false,
-        avatar: p.avatar,
-        isEmpty: false,
-        persistentId: p.persistentId,
-        isNew: newPlayersMap.get(p.id) || false,
-      }));
+      const mapped = state.players.map((p) => {
+        const stableId = p.persistentId || p.id;
+        return {
+          id: p.id,
+          name: p.name,
+          points: p.score || 0,
+          wins: p.wins || 0,
+          isCurrent:
+            isActiveRound &&
+            state.gameState?.currentDrawerId === (p.persistentId || p.id),
+          isOffline: p.isOffline || false,
+          avatar: p.avatar,
+          isEmpty: false,
+          persistentId: p.persistentId,
+          isNew: (stableId ? newPlayersMap.get(stableId) : false) || false,
+        };
+      });
 
       mapped.sort((a, b) => {
         // If points are different, sort by points descending

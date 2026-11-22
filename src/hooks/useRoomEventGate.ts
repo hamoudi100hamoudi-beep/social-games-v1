@@ -1,5 +1,12 @@
 import { useRef, useCallback } from 'react';
 
+const getStablePlayerId = (
+  player: { persistentId?: string; id?: string } | null | undefined,
+): string => {
+  if (!player) return '';
+  return player.persistentId || player.id || '';
+};
+
 export function useRoomEventGate() {
   const isHydratedRef = useRef(false);
   const knownPlayersRef = useRef<Set<string>>(new Set());
@@ -8,32 +15,35 @@ export function useRoomEventGate() {
   const hydrateGate = useCallback((initialPlayers: any[]) => {
     if (!isHydratedRef.current) {
       initialPlayers.forEach(p => {
-        if (p && !p.isEmpty && p.id) {
-            knownPlayersRef.current.add(p.id);
+        const stableId = getStablePlayerId(p);
+        if (p && !p.isEmpty && stableId) {
+          knownPlayersRef.current.add(stableId);
         }
       });
       isHydratedRef.current = true;
     }
   }, []);
 
-  const isNewPlayer = useCallback((id: string) => {
-    if (!isHydratedRef.current) return false;
-    
-    if (!knownPlayersRef.current.has(id)) {
-      knownPlayersRef.current.add(id);
-      pendingNewPlayersRef.current.add(id);
+  const isNewPlayer = useCallback((stableId: string) => {
+    if (!isHydratedRef.current || !stableId) return false;
+
+    if (!knownPlayersRef.current.has(stableId)) {
+      knownPlayersRef.current.add(stableId);
+      pendingNewPlayersRef.current.add(stableId);
       return true;
     }
-    return pendingNewPlayersRef.current.has(id);
+    return pendingNewPlayersRef.current.has(stableId);
   }, []);
 
-  const acknowledgeNewPlayer = useCallback((id: string) => {
-    pendingNewPlayersRef.current.delete(id);
+  const acknowledgeNewPlayer = useCallback((stableId: string) => {
+    if (!stableId) return;
+    pendingNewPlayersRef.current.delete(stableId);
   }, []);
-  
-  const removePlayer = useCallback((id: string) => {
-      knownPlayersRef.current.delete(id);
-      pendingNewPlayersRef.current.delete(id);
+
+  const removePlayer = useCallback((stableId: string) => {
+    if (!stableId) return;
+    knownPlayersRef.current.delete(stableId);
+    pendingNewPlayersRef.current.delete(stableId);
   }, []);
 
   const isLive = useCallback(() => {

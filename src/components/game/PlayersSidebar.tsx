@@ -112,6 +112,9 @@ interface FloatingPoints {
   amount: number;
 }
 
+const getSlotIdentity = (slot: { persistentId?: string; id: string }) =>
+  slot.persistentId || slot.id;
+
 export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   slots,
   gameState,
@@ -130,6 +133,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
 
   const [newlyJoinedIds, setNewlyJoinedIds] = React.useState<Set<string>>(new Set());
   const prevPlayerIdsRef = React.useRef<Set<string> | null>(null);
+  const entranceTimersRef = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Stable wins tracking per player (persistentId || id) to celebrate ONLY real win increases
   const prevWinsRef = React.useRef<Map<string, number> | null>(null);
@@ -197,22 +201,26 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     }
   }, [slots]);
 
-  // Clean up all celebration timers on unmount
+  // Clean up all celebration and entrance timers on unmount
   React.useEffect(() => {
     return () => {
       celebrationTimersRef.current.forEach((t) => clearTimeout(t));
       celebrationTimersRef.current.clear();
+      entranceTimersRef.current.forEach((t) => clearTimeout(t));
+      entranceTimersRef.current.clear();
     };
   }, []);
 
   // Track player joins dynamically and trigger pop animation cleanly ONLY for real joins
   React.useEffect(() => {
-    const currentActiveIds = new Set(slots.filter((s) => !s.isEmpty).map((s) => s.id));
+    const currentActiveIds = new Set(
+      slots.filter((s) => !s.isEmpty).map((s) => getSlotIdentity(s))
+    );
 
     // First mount: establish baseline of existing players, but do NOT ignore players who arrived with isNew: true
     if (prevPlayerIdsRef.current === null) {
       prevPlayerIdsRef.current = new Set(
-        slots.filter((s) => !s.isEmpty && !s.isNew).map((s) => s.id)
+        slots.filter((s) => !s.isEmpty && !s.isNew).map((s) => getSlotIdentity(s))
       );
     }
 
@@ -220,10 +228,10 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     const freshNewIds: string[] = [];
     slots.forEach((s) => {
       if (!s.isEmpty) {
-        if (s.isNew || (prevPlayerIdsRef.current && prevPlayerIdsRef.current.size > 0 && !prevPlayerIdsRef.current.has(s.id))) {
-          if (!prevPlayerIdsRef.current?.has(s.id) || s.isNew) {
-            freshNewIds.push(s.id);
-          }
+        const key = getSlotIdentity(s);
+        const wasKnown = prevPlayerIdsRef.current?.has(key) ?? false;
+        if (s.isNew || (prevPlayerIdsRef.current && prevPlayerIdsRef.current.size > 0 && !wasKnown)) {
+          freshNewIds.push(key);
         }
       }
     });
@@ -231,6 +239,25 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     // Update set of known active players (sync with currently active IDs, preserve if array is empty)
     if (currentActiveIds.size > 0) {
       prevPlayerIdsRef.current = currentActiveIds;
+
+      // Clear active entrance timers for players who actually left the room
+      const departedAnimatedIds: string[] = [];
+      entranceTimersRef.current.forEach((timer, id) => {
+        if (!currentActiveIds.has(id)) {
+          clearTimeout(timer);
+          entranceTimersRef.current.delete(id);
+          departedAnimatedIds.push(id);
+        }
+      });
+      if (departedAnimatedIds.length > 0) {
+        setNewlyJoinedIds((prev) => {
+          const hasAny = departedAnimatedIds.some((id) => prev.has(id));
+          if (!hasAny) return prev;
+          const next = new Set(prev);
+          departedAnimatedIds.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
     }
 
     if (freshNewIds.length > 0) {
@@ -238,29 +265,33 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
         onAcknowledgeNewPlayer?.(id);
       });
 
-      const uniqueNew = freshNewIds.filter((id) => !newlyJoinedIds.has(id));
-      if (uniqueNew.length > 0) {
+      const toSchedule = freshNewIds.filter((id) => !entranceTimersRef.current.has(id));
+      if (toSchedule.length > 0) {
         setNewlyJoinedIds((prev) => {
           const next = new Set(prev);
-          uniqueNew.forEach((id) => next.add(id));
+          toSchedule.forEach((id) => next.add(id));
           return next;
         });
 
-        const timer = setTimeout(() => {
-          setNewlyJoinedIds((prev) => {
-            const next = new Set(prev);
-            uniqueNew.forEach((id) => next.delete(id));
-            return next;
-          });
-        }, 500);
+        toSchedule.forEach((id) => {
+          const timer = setTimeout(() => {
+            entranceTimersRef.current.delete(id);
+            setNewlyJoinedIds((prev) => {
+              if (!prev.has(id)) return prev;
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          }, 420);
 
-        return () => clearTimeout(timer);
+          entranceTimersRef.current.set(id, timer);
+        });
       }
     }
   }, [slots, onAcknowledgeNewPlayer]);
 
   const stableSlots = React.useMemo(() => {
-    return [...slots].sort((a, b) => a.id.localeCompare(b.id));
+    return [...slots].sort((a, b) => getSlotIdentity(a).localeCompare(getSlotIdentity(b)));
   }, [slots]);
 
   // Record previous ranks after layout to track movements
@@ -268,7 +299,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
     hasMountedRef.current = true;
     isPointsResetRef.current = false;
     slots.forEach((slot, index) => {
-      prevRanksRef.current[slot.id] = index;
+      prevRanksRef.current[getSlotIdentity(slot)] = index;
     });
   }, [slots]);
 
@@ -285,7 +316,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   React.useEffect(() => {
     slots.forEach((slot) => {
       if (slot.isEmpty) return;
-      const key = slot.id; // Unique slot visual ID
+      const key = getSlotIdentity(slot); // Stable canonical identity across reconnects
       const currentPts = slot.points;
       const prevPts = prevPointsRef.current[key];
 
@@ -343,7 +374,8 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
 
         {/* Real-time moving active and empty cards */}
         {stableSlots.map((slot) => {
-          const rankIndex = slots.findIndex((s) => s.id === slot.id);
+          const slotKey = getSlotIdentity(slot);
+          const rankIndex = slots.findIndex((s) => getSlotIdentity(s) === slotKey);
           const isDrawer = slot.isCurrent;
           const isCorrectGuesser =
             !slot.isEmpty &&
@@ -370,10 +402,10 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
              borderClass = 'border-[#94A3B8]'; // Slate 400 default
           }
 
-          const slotPopups = activePopups.filter((p) => p.playerId === slot.id);
+          const slotPopups = activePopups.filter((p) => p.playerId === slotKey);
 
           // Get previous rank for z-index calculation (upward transitions overlap downward transitions)
-          const prevRank = prevRanksRef.current[slot.id];
+          const prevRank = prevRanksRef.current[slotKey];
           let zIndex = 10;
           if (prevRank !== undefined) {
             if (rankIndex < prevRank) {
@@ -391,7 +423,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
 
           return (
             <div 
-              key={slot.id} 
+              key={slotKey} 
               style={{
                 top: `calc(var(--row-height) * ${rankIndex})`,
                 height: 'var(--row-height)',
@@ -408,7 +440,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
               {/* Container grouping Avatar and Info (Name + Points) together */}
               <div
                 className={`flex items-center min-w-0 flex-1 overflow-visible ${
-                  !slot.isEmpty && newlyJoinedIds.has(slot.id) ? 'animate-avatar-pop origin-left' : ''
+                  !slot.isEmpty && newlyJoinedIds.has(slotKey) ? 'animate-avatar-pop' : ''
                 }`}
               >
                 {/* Avatar with Gartic Trophy */}

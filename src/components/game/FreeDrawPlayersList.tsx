@@ -22,6 +22,9 @@ interface FreeDrawPlayersListProps {
   onAcknowledgeNewPlayer?: (playerId: string) => void;
 }
 
+const getSlotIdentity = (slot: { persistentId?: string; id: string }) =>
+  slot.persistentId || slot.id;
+
 export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
   slots,
   morphMode = false,
@@ -30,15 +33,26 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
 }) => {
   const [newlyJoinedIds, setNewlyJoinedIds] = React.useState<Set<string>>(new Set());
   const prevPlayerIdsRef = React.useRef<Set<string> | null>(null);
+  const entranceTimersRef = React.useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // Clean up all entrance timers on unmount
+  React.useEffect(() => {
+    return () => {
+      entranceTimersRef.current.forEach((t) => clearTimeout(t));
+      entranceTimersRef.current.clear();
+    };
+  }, []);
 
   // Track new player joins to trigger the pop-in entrance animation smoothly
   React.useEffect(() => {
-    const currentActiveIds = new Set(slots.filter((s) => !s.isEmpty).map((s) => s.id));
+    const currentActiveIds = new Set(
+      slots.filter((s) => !s.isEmpty).map((s) => getSlotIdentity(s))
+    );
 
     // First mount: establish baseline of existing players, but do NOT ignore players who arrived with isNew: true
     if (prevPlayerIdsRef.current === null) {
       prevPlayerIdsRef.current = new Set(
-        slots.filter((s) => !s.isEmpty && !s.isNew).map((s) => s.id)
+        slots.filter((s) => !s.isEmpty && !s.isNew).map((s) => getSlotIdentity(s))
       );
     }
 
@@ -46,10 +60,10 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
     const freshNewIds: string[] = [];
     slots.forEach((s) => {
       if (!s.isEmpty) {
-        if (s.isNew || (prevPlayerIdsRef.current && prevPlayerIdsRef.current.size > 0 && !prevPlayerIdsRef.current.has(s.id))) {
-          if (!prevPlayerIdsRef.current?.has(s.id) || s.isNew) {
-            freshNewIds.push(s.id);
-          }
+        const key = getSlotIdentity(s);
+        const wasKnown = prevPlayerIdsRef.current?.has(key) ?? false;
+        if (s.isNew || (prevPlayerIdsRef.current && prevPlayerIdsRef.current.size > 0 && !wasKnown)) {
+          freshNewIds.push(key);
         }
       }
     });
@@ -57,6 +71,25 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
     // Update set of known active players (sync with currently active IDs, preserve if array is empty)
     if (currentActiveIds.size > 0) {
       prevPlayerIdsRef.current = currentActiveIds;
+
+      // Clear active entrance timers for players who actually left the room
+      const departedAnimatedIds: string[] = [];
+      entranceTimersRef.current.forEach((timer, id) => {
+        if (!currentActiveIds.has(id)) {
+          clearTimeout(timer);
+          entranceTimersRef.current.delete(id);
+          departedAnimatedIds.push(id);
+        }
+      });
+      if (departedAnimatedIds.length > 0) {
+        setNewlyJoinedIds((prev) => {
+          const hasAny = departedAnimatedIds.some((id) => prev.has(id));
+          if (!hasAny) return prev;
+          const next = new Set(prev);
+          departedAnimatedIds.forEach((id) => next.delete(id));
+          return next;
+        });
+      }
     }
 
     if (freshNewIds.length > 0) {
@@ -64,30 +97,34 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
         onAcknowledgeNewPlayer?.(id);
       });
 
-      const uniqueNew = freshNewIds.filter((id) => !newlyJoinedIds.has(id));
-      if (uniqueNew.length > 0) {
+      const toSchedule = freshNewIds.filter((id) => !entranceTimersRef.current.has(id));
+      if (toSchedule.length > 0) {
         setNewlyJoinedIds((prev) => {
           const next = new Set(prev);
-          uniqueNew.forEach((id) => next.add(id));
+          toSchedule.forEach((id) => next.add(id));
           return next;
         });
 
-        const timer = setTimeout(() => {
-          setNewlyJoinedIds((prev) => {
-            const next = new Set(prev);
-            uniqueNew.forEach((id) => next.delete(id));
-            return next;
-          });
-        }, 500);
+        toSchedule.forEach((id) => {
+          const timer = setTimeout(() => {
+            entranceTimersRef.current.delete(id);
+            setNewlyJoinedIds((prev) => {
+              if (!prev.has(id)) return prev;
+              const next = new Set(prev);
+              next.delete(id);
+              return next;
+            });
+          }, 420);
 
-        return () => clearTimeout(timer);
+          entranceTimersRef.current.set(id, timer);
+        });
       }
     }
   }, [slots, onAcknowledgeNewPlayer]);
 
   // Keep DOM elements keyed stably so that CSS top transitions execute smoothly upon player join/leave
   const stableSlots = React.useMemo(() => {
-    return [...slots].sort((a, b) => a.id.localeCompare(b.id));
+    return [...slots].sort((a, b) => getSlotIdentity(a).localeCompare(getSlotIdentity(b)));
   }, [slots]);
 
   return (
@@ -129,13 +166,14 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
 
         {/* Real-time moving active and empty cards */}
         {stableSlots.map((slot) => {
-          const rankIndex = slots.findIndex((s) => s.id === slot.id);
+          const slotKey = getSlotIdentity(slot);
+          const rankIndex = slots.findIndex((s) => getSlotIdentity(s) === slotKey);
 
           const cardTransition = 'top 0.45s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.2s ease, border-color 0.2s ease';
 
           return (
             <div
-              key={slot.id}
+              key={slotKey}
               style={{
                 top: `calc(var(--row-height) * ${rankIndex})`,
                 height: 'var(--row-height)',
@@ -154,7 +192,7 @@ export const FreeDrawPlayersList: React.FC<FreeDrawPlayersListProps> = ({
               {/* Container grouping Avatar and Name together */}
               <div
                 className={`flex items-center min-w-0 flex-1 overflow-visible ${
-                  !slot.isEmpty && newlyJoinedIds.has(slot.id) ? 'animate-avatar-pop origin-left' : ''
+                  !slot.isEmpty && newlyJoinedIds.has(slotKey) ? 'animate-avatar-pop' : ''
                 }`}
               >
                 {/* Avatar */}
