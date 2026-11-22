@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, X, Check, AlertTriangle } from 'lucide-react';
+import { Plus, X, Check, AlertTriangle, Globe } from 'lucide-react';
 import { useSocket } from './SocketProvider';
 import { motion } from 'motion/react';
 import CinematicModal from './game/CinematicModal';
@@ -10,6 +10,7 @@ import RoomsBrowserScreen from './lobby/RoomsBrowserScreen';
 import { safeLocalStorage } from '../utils/storage';
 import GameTitle from './game/GameTitle';
 import { ROOM_PRESETS, getRoomConfig } from '../types/game';
+import { useAppTranslation } from '../i18n/useAppTranslation';
 
 
 interface LobbyProps {
@@ -65,6 +66,7 @@ let lastRoomsInfoFetchTime = 0;
 
 export default function Lobby({ onPlay }: LobbyProps) {
   const { socket } = useSocket();
+  const { t, languageMode, changeLanguageMode } = useAppTranslation('common');
   const [screen, setScreen] = useState<Screen>('home');
   const [nickname, setNickname] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -542,6 +544,42 @@ export default function Lobby({ onPlay }: LobbyProps) {
           >
             <span>ROOMS</span>
           </button>
+
+          {/* Language Selector (Start Screen Only) */}
+          {!isKeyboardOpen && (
+            <div
+              dir="ltr"
+              role="group"
+              aria-label={t('languageSelector.ariaLabel')}
+              className="inline-flex items-center gap-0.5 rounded-full bg-white/10 border border-white/15 px-1.5 py-1 mb-1 shrink-0"
+            >
+              <Globe className="w-3.5 h-3.5 text-white/75 mx-1 shrink-0" aria-hidden="true" />
+              {(
+                [
+                  { mode: 'auto', label: t('languageSelector.auto') },
+                  { mode: 'ar', label: t('languageSelector.ar') },
+                  { mode: 'en', label: t('languageSelector.en') },
+                ] as const
+              ).map((option) => {
+                const isActive = languageMode === option.mode;
+                return (
+                  <button
+                    key={option.mode}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => changeLanguageMode(option.mode)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-bold leading-none transition-all cursor-pointer active:scale-95 whitespace-nowrap ${
+                      isActive
+                        ? 'bg-[#38BDF8] text-white shadow-sm'
+                        : 'text-white/75 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

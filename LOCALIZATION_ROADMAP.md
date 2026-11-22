@@ -1,7 +1,7 @@
 # 🌐 خارطة طريق التدويل وتعدد اللغات (Localization Roadmap — `PHASE L10N`)
 
 **المستودع المرجعي:** `hamoudi100hamoudi-beep/social-games-v1`  
-**الحالة الحالية:** `PHASE L10N-0 COMPLETED — AUDIT & ROADMAP ESTABLISHED` (`2026-11-22`) | `PHASE L10N-0.1 ROADMAP ALIGNED` (`2026-11-22`)  
+**الحالة الحالية:** `PHASE L10N-0 COMPLETED` (`2026-11-22`) | `PHASE L10N-0.1 COMPLETED` (`2026-11-22`) | `L10N-1 — AWAITING MANUAL VERIFICATION` (`2026-11-22`)  
 **الوثائق المرجعية المرتبطة:**  
 - دستور محرك الرسم والتراجع: [`AGENTS.md`](./AGENTS.md)  
 - خارطة الطريق المعمارية الموحدة: [`REFACTORING_ROADMAP.md`](./REFACTORING_ROADMAP.md)  
@@ -246,25 +246,39 @@
 ---
 
 ### المرحلة `L10N-1` — نواة الترجمة ومنتقي اللغة (`Localization Foundation & Language Selector`)
-1. **الاسم والرقم:** `PHASE L10N-1 — Localization Foundation & Language Selector` — **`[ ] NEXT READY`**
+1. **الاسم والرقم:** `PHASE L10N-1 — Localization Foundation & Language Selector` — **`[~] L10N-1 — AWAITING MANUAL VERIFICATION` (`2026-11-22`)** *(نُفذ الكود واجتاز فحوص TypeScript والبناء؛ بانتظار الاختبار اليدوي واعتماد المالك قبل تعليمها `COMPLETED`)*.
 2. **الهدف:** تأسيس `i18next` و`react-i18next` بملفات `ar` و`en` المحلية، وأوضاع `auto` / `ar` / `en` عبر `safeLocalStorage`، وإضافة **منتقي اللغة فقط** إلى شاشة البداية (`Lobby.tsx`) وتحديث `lang` في مستند HTML بصورة آمنة، **دون ترجمة بقية اللوبي أو تطبيق `dir="rtl"` عالمياً دون عزل هندسة الغرفة والرسم**.
-3. **الملفات المسموحة:**
-   - `package.json` (وملف القفل الذي ينتجه/يحدّثه مدير الحزم الفعلي: علماً أن المستودع يحتوي حالياً على `bun.lock` ولا يحتوي على `package-lock.json`؛ في بيئة `npm` قد يُنشأ/يُحدّث `package-lock.json` تلقائياً بينما لا يُعدّل `bun.lock` يدوياً دون داعٍ).
-   - مجلد جديد: `src/i18n/*` (`types.ts`, `languageDetector.ts`, `index.ts`, `useAppTranslation.ts`, وملفات القواميس المحلية `locales/ar/*` و`locales/en/*`).
-   - `src/main.tsx` (استيراد التهيئة المبكرة لـ `i18n` فقط).
-   - `src/components/Lobby.tsx` (**حصرياً** لإدراج مبدّل/منتقي اللغة في شاشة البداية والعودة إلى `auto`).
-4. **الملفات المحظورة:** `server/*`, `src/components/lobby/*` (`RoomsBrowserScreen.tsx`, `RoomInfoModal.tsx`, `AvatarCarousel.tsx`), `src/components/game/*`, `src/components/experimental/*`, `src/types/game.ts`, `index.html`, `AGENTS.md` — ويُمنع ترجمة `NICKNAME` أو `ROOMS` أو نصوص اللوبي الأخرى أو تغيير اسم اللعبة وعنوان الصفحة التجاري **`DRAW.IO`** الذي يبقى بالإنجليزية دائماً.
-5. **الآليات المحمية:** عدم تفعيل `dir="rtl"` عالمياً على `<html>` أو `#root` بما يقلب شبكة الغرفة (`32%/68%`) أو لوحة الرسم أو `SmoothTimer`؛ إبقاء محرك الرسم و`SocketProvider` معزولين تماماً.
-6. **التعديلات الدقيقة:**
-   - تثبيت `i18next` و`react-i18next` محلياً.
-   - إنشاء بنية `src/i18n/` ودعم أوضاع `'auto' | 'ar' | 'en'` عبر `safeLocalStorage`، مع كشف لغة المتصفح (`navigator.languages?.[0] || navigator.language` -> `'ar'` إن بدأت بـ `ar` وإلا `'en'`).
-   - إضافة منتقي اللغة (`تلقائي Auto` / `العربية` / `English`) في شاشة البداية داخل `Lobby.tsx` فقط، بحيث يتجاوز الاختيار اليدوي وضع `auto` مع إمكانية الرجوع إلى `auto` في أي وقت.
-   - تحديث `document.documentElement.lang` بصورة آمنة، والحفاظ على عنوان الصفحة التجاري **`DRAW.IO`** باللغة الإنجليزية دائماً.
-   - تسجيل تحذيرات المفاتيح المفقودة في وضع التطوير (`import.meta.env.DEV`) وتفعيل التطابق الصارم للأنواع (`CustomTypeOptions`).
-7. **المخاطر:** توافق peer dependencies مع React `19.0.1`، تخطيط شاشة البداية الضيقة (`max-height < 600px` / عند فتح الكيبورد `isKeyboardOpen`) عند إضافة المنتقي، أو أخطاء عند تعطيل `localStorage` (محمي عبر `safeLocalStorage`).
-8. **معايير الخروج:** اجتياز `npx tsc --noEmit` و`npm run build`، قياس الأثر الفعلي لحجم الحزمة، عمل تبديل `auto` / `ar` / `en` وحفظه عبر التحديث في شاشة البداية، وبقاء بقية شاشات التطبيق كما هي دون ترجمة أو كسر اتجاه.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي لتبديل `auto` / `ar` / `en` في متصفحين بلغة عربية وإنجليزية وإعادة تحميل الصفحة.
-10. **الاعتماديات:** `L10N-0` و`L10N-0.1`.
+3. **الملفات المنشأة والمعدلة فعلياً:**
+   - **ملفات برمجية منشأة (`src/i18n/`):**
+     - `src/i18n/types.ts` (تعريف `LanguageMode`, `AppLanguage`, `DeepLocaleSchema`, وتوسيع `CustomTypeOptions` في `i18next`).
+     - `src/i18n/languageDetector.ts` (قراءة/حفظ `drawio_ui_lang_mode` عبر `safeLocalStorage`، كشف المتصفح `navigator.languages?.[0] || navigator.language`، `isRTLLanguage`، وتحديث `document.documentElement.lang` فقط دون `dir`).
+     - `src/i18n/index.ts` (تهيئة `i18next` محلياً وبصورة فورية بموارد مضمّنة بدون HTTP backend، وتحذير المفاتيح المفقودة في وضع التطوير عبر `import.meta.env?.DEV`).
+     - `src/i18n/useAppTranslation.ts` (واجهة React موحدة تُعيد `t`, `i18n`, `languageMode`, `currentLanguage`, `isRTL`, `changeLanguageMode`).
+     - `src/i18n/locales/en/common.ts` و`src/i18n/locales/en/index.ts`.
+     - `src/i18n/locales/ar/common.ts` و`src/i18n/locales/ar/index.ts` (مفاتيح منتقي اللغة فقط مع إلزام تطابق البنية والمفاتيح عبر TypeScript).
+   - **ملفات برمجية معدلة:**
+     - `src/main.tsx` (استيراد `./i18n` قبل إنشاء جذر React).
+     - `src/components/Lobby.tsx` (إضافة منتقي اللغة المدمج `Auto/تلقائي` | `العربية` | `English` في شاشة البداية فقط، وإخفاؤه عند فتح لوحة مفاتيح الهاتف `isKeyboardOpen` منعاً للتداخل، دون ترجمة أي نص آخر).
+   - **ملفات الاعتماديات والقفل والمكتبات المضافة:**
+     - `package.json` و`bun.lock` فقط (عبر `bun add i18next react-i18next`؛ دون حذف `bun.lock` ودون إنشاء `package-lock.json` ودون تعديل إصدارات React/Vite/TypeScript).
+     - المكتبات المضافة: `i18next@27.2.4` (`^27.2.4`)، `react-i18next@18.0.3` (`^18.0.3`).
+4. **الملفات المحظورة (تم احترامها بالكامل):** `server/*`, `src/components/lobby/*`, `src/components/game/*`, `src/components/experimental/*`, `src/types/game.ts`, `index.html`, `AGENTS.md`.
+5. **الآليات المحمية:** عدم تفعيل `dir="rtl"` عالمياً على `<html>` أو `#root`؛ إبقاء محرك الرسم و`SocketProvider` و`DRAW.IO` وبقية نصوص `Lobby.tsx` كما هي تماماً.
+6. **نتائج الفحص والبناء الفعلية (`2026-11-22`):**
+   - `npx tsc --noEmit`: نجاح تام بدون أخطاء.
+   - `npm run build` (`vite build`): نجاح تام خلال `12.06s` (تحويل `2238` وحدة).
+   - قياسات مخرجات البناء الفعلية:
+     - `dist/index.html`: `2.54 kB │ gzip: 0.72 kB`
+     - `dist/assets/index-DN_ggnG_.css`: `85.85 kB │ gzip: 15.24 kB`
+     - `dist/assets/eruda-Cb_OITk7.js`: `506.26 kB │ gzip: 160.87 kB`
+     - `dist/assets/index-hT9t7BQx.js`: `1,212.22 kB │ gzip: 332.32 kB`
+   - اختبار وحدات سريع عبر `tsx`: تحقق من كشف `ar-EG` في `auto`، والتجاوز اليدوي `en`/`ar`، والرجوع إلى `auto` مع `fr-FR`، ومزامنة `document.documentElement.lang` وبقاء `dir` فارغاً، وعمل `safeLocalStorage` عند تعطل `localStorage`، وعدم تنفيذ أي طلب شبكة `fetch`.
+7. **ما بقي للاختبار اليدوي من المالك (قبل إغلاق `L10N-1`):**
+   - فحص المظهر والتمركز على الهاتف الفعلي (خصوصاً الشاشات الصغيرة وعند فتح/إغلاق لوحة المفاتيح لحقل `NICKNAME`).
+   - التحقق في المتصفح من تبديل `Auto` / `العربية` / `English` وبقاء الاختيار بعد `Reload`.
+   - التحقق في متصفح عربي وآخر غير عربي عند اختيار `Auto`.
+   - التحقق من تغيّر `<html lang="ar|en">` وعدم تغيّر `dir` أو ظهور أي طلب شبكة في تبويب Network.
+8. **الاعتماديات:** `L10N-0` و`L10N-0.1`.
 
 ---
 

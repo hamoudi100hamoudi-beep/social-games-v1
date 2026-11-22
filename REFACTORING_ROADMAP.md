@@ -898,8 +898,8 @@
 
 ## 🌐 القسم J — مسار التدويل وتعدد اللغات (`PHASE L10N — LOCALIZATION_ROADMAP.md`)
 
-- **الحالة الحالية (`2026-11-22`):** `PHASE L10N-0 COMPLETED — AUDIT & ROADMAP ESTABLISHED` | `PHASE L10N-0.1 ROADMAP ALIGNED` (لم يبدأ تنفيذ الكود بعد؛ المرحلة القادمة الجاهزة هي **`L10N-1 — Localization Foundation & Language Selector`** فقط).
-- **المرجع التفصيلي المعتمد:** راجع [`LOCALIZATION_ROADMAP.md`](./LOCALIZATION_ROADMAP.md) للاطلاع على الجرد الشامل للنصوص، وقسم الحماية الإلزامي (`EXISTING TEXT-DIRECTION & CHAT SAFEGUARDS — MUST PRESERVE`)، وقرار مكتبة الترجمة (`i18next + react-i18next` محلياً بدون طلبات شبكة)، والمراحل المعتمدة الجديدة من **`L10N-0` إلى `L10N-8`**.
+- **الحالة الحالية (`2026-11-22`):** `PHASE L10N-0 COMPLETED` | `PHASE L10N-0.1 COMPLETED` | **`L10N-1 — AWAITING MANUAL VERIFICATION`** (تم تأسيس `src/i18n/` وإضافة منتقي اللغة في شاشة البداية بـ `Lobby.tsx` واجتياز `tsc --noEmit` و`vite build`؛ بانتظار التحقق اليدوي من المالك قبل الانتقال إلى `L10N-2`).
+- **المرجع التفصيلي المعتمد:** راجع [`LOCALIZATION_ROADMAP.md`](./LOCALIZATION_ROADMAP.md) للاطلاع على الجرد الشامل للنصوص، وقسم الحماية الإلزامي (`EXISTING TEXT-DIRECTION & CHAT SAFEGUARDS — MUST PRESERVE`)، والمراحل المعتمدة من **`L10N-0` إلى `L10N-8`**.
 
 
 
