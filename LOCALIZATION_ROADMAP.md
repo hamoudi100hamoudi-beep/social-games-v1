@@ -1,7 +1,7 @@
 # 🌐 خارطة طريق التدويل وتعدد اللغات (Localization Roadmap — `PHASE L10N`)
 
 **المستودع المرجعي:** `hamoudi100hamoudi-beep/social-games-v1`  
-**الحالة الحالية:** `PHASE L10N-0 COMPLETED — AUDIT & ROADMAP ESTABLISHED` (تاريخ التدقيق: `2026-11-22`)  
+**الحالة الحالية:** `PHASE L10N-0 COMPLETED — AUDIT & ROADMAP ESTABLISHED` (`2026-11-22`) | `PHASE L10N-0.1 ROADMAP ALIGNED` (`2026-11-22`)  
 **الوثائق المرجعية المرتبطة:**  
 - دستور محرك الرسم والتراجع: [`AGENTS.md`](./AGENTS.md)  
 - خارطة الطريق المعمارية الموحدة: [`REFACTORING_ROADMAP.md`](./REFACTORING_ROADMAP.md)  
@@ -11,7 +11,7 @@
 
 ## 1. الحوكمة والقيود غير القابلة للكسر (Binding Governance & Protected Systems)
 
-تخضع جميع مراحل **`PHASE L10N`** (`L10N-0` إلى `L10N-6`) للقوانين الصارمة التالية، ويُحظر تجاوزها في أي دفعة قادمة:
+تخضع جميع مراحل **`PHASE L10N`** (`L10N-0` إلى `L10N-8`) للقوانين الصارمة التالية، ويُحظر تجاوزها في أي دفعة قادمة:
 
 1. **حماية ثوابت [`AGENTS.md`](./AGENTS.md) ومحرك الرسم/التراجع:**
    - عدم تعديل حزم `draw_binary` الثنائية، أو شرط أداة الدلو الأولي (`type === 4 || type === 10 || type === 5`) في `server/rooms.ts` (`recordDrawCommand`)، أو قفل `isDrawingActive = false` عند `undo`، أو `redoStack` ذات الخطوة الواحدة، أو `CanvasCheckpointManager`، أو منع تسجيلات الأداء الساخنة.
@@ -21,7 +21,8 @@
    - **`UI-C Stage 1 & 2A`:** الحفاظ التام على مفتاح الهوية المستقرة `persistentId || id`، ومهلة تتبّع الدخول، وغلاف الأنيميشن `flex items-center min-w-0 max-w-full overflow-visible` في `PlayersSidebar.tsx` و`FreeDrawPlayersList.tsx`.
 3. **استقلالية الكلمات والتخمين عن لغة الواجهة (Shared Round Content Rule):**
    - تبقى مصفوفة الكلمات (`server/data/wordsDictionary.ts` — `ALL_WORDS`)، وخيارات الكلمات (`wordOptions`)، والكلمة المختارة (`currentWord`)، وتلميحات الحروف المقنّعة (`maskedWordArray`)، واتجاه الكلمة (`isRTL`)، ومحرك المطابقة التقريبية (`server/utils/arabicFuzzyMatch.ts`) **مشتركة على مستوى الغرفة/الجولة** دون أي ترجمة فردية لكل لاعب.
-4. **تنفيذ مرحلة واحدة فقط في كل دفعة:** لا يُدمج كود من مرحلتين معاً، ولا تبدأ أي مرحلة تالية إلا بعد اجتياز بوابات القبول (`npx tsc --noEmit` + `npm run build` + التحقق اليدوي من المالك).
+4. **تنفيذ مرحلة واحدة فقط في كل دفعة وعدم نقل الأقسام مبكراً:** لا يُدمج كود من مرحلتين معاً، ولا تُنقل ترجمة أي قسم إلى مرحلة سابقة لمجرد سهولة الوصول إليه، ولا تبدأ أي مرحلة تالية إلا بعد اختبار وإغلاق المرحلة السابقة واجتياز بوابات القبول (`npx tsc --noEmit` + `npm run build` + التحقق اليدوي من المالك).
+5. **الالتزام الصارم بنطاق الملفات المسموحة:** لا يُسمح لأي مرحلة بتعديل ملفات خارج قائمة **"الملفات المسموحة"** الخاصة بها دون تبرير تقني واضح ومسبق وتوثيق موافقة مالك المشروع صراحةً.
 
 ---
 
@@ -130,8 +131,8 @@
 ### الفئة (B): نصوص الواجهة النظامية الثابتة (تُترجم لكل لاعب)
 | الشاشة / المكون | الملف والأسطر | النصوص الحالية والحالة |
 | :--- | :--- | :--- |
-| **مستند HTML وبياناته** | `index.html:2, 6-9` | `lang="en"`, `<title>DRAW.IO Drawing Game</title>`, meta descriptions (`og:title`, `og:description`) — تتحدث ديناميكياً لـ `lang` و`dir` عند التشغيل. |
-| **اللوبي الرئيسي** | `Lobby.tsx:341, 437, 503, 516, 580, 590-592, 604, 615-617, 630, 654-659, 668, 682` | `NICKNAME`, `Enter your name...`, `هذه الميزة غير متوفرة بعد`, `عذراً، هذه الغرفة ممتلئة بالكامل!`, `OK`, نصوص ثنائية اللغة في `INACTIVE` / `DISCONNECTED` / `ERROR`, `اختر أفاتار`, `أضف إيموجي مخصص` — **بالإضافة إلى إضافة زر/منتقي اللغة (`Auto` / `العربية` / `English`) هنا في `L10N-2`**. |
+| **مستند HTML وبياناته** | `index.html:2, 6-9` | `lang="en"`, `<title>DRAW.IO Drawing Game</title>`, meta descriptions (`og:title`, `og:description`) — تتحدث قيمة `lang` والوصف بأمان حسب لغة المتصفح/الاختيار، مع **بقاء الاسم التجاري للصفحة `DRAW.IO` بالإنجليزية دائماً**. |
+| **اللوبي الرئيسي** | `Lobby.tsx:341, 437, 503, 516, 580, 590-592, 604, 615-617, 630, 654-659, 668, 682` | `NICKNAME`, `Enter your name...`, `هذه الميزة غير متوفرة بعد`, `عذراً، هذه الغرفة ممتلئة بالكامل!`, `OK`, نصوص ثنائية اللغة في `INACTIVE` / `DISCONNECTED` / `ERROR`, `اختر أفاتار`, `أضف إيموجي مخصص` — يُضاف **منتقي اللغة فقط (`Auto` / `العربية` / `English`) في `L10N-1`**، بينما تبقى ترجمة بقية نصوص اللوبي في **`L10N-6`**. |
 | **متصفح الغرف ومعلومات الغرفة** | `RoomsBrowserScreen.tsx:120`, `RoomInfoModal.tsx:36, 67, 71, 75, 77`, `types/game.ts:99-136` | `NEW ROOM`, `PLAY`, `Players`, `Theme`, `To Win`, `مفتوح`, `{toWin} pts` + ترجمة أسماء وعناوين الغرف المعيارية (`General`, `Free Draw`, `🧪 Experimental Draw`) والمواضيع (`General`, `Free Draw`) في طبقة العرض فقط. |
 | **مكونات النوافذ المشتركة** | `CinematicModal.tsx:167` | `aria-label="Close"`. |
 | **نوافذ التأكيد والتنبيهات** | `ExitConfirmModal.tsx:20,25,46`, `SkipConfirmModal.tsx:21,26,48,51`, `ReportConfirmModal.tsx:20,25,49`, `AfkWarningModal.tsx:25,47,54`, `PlayerProfileModal.tsx:56,75,94`, `RoomAlertModals.tsx:60,88-91,104,131-134,148,173-176,189,214-217,230,241-244,257,268-271` | أزرار `YES`/`NO`/`OK`/`موافق`/`BLOCK`/`UNBLOCK`/`VOTEKICK`/`REMOVE VOTE` وأوصاف المغادرة، التبليغ، التجاوز، الخمول، الحساب الشخصي، الطرد، الاسم المستخدم، امتلاء الغرفة، امتلاء الخادم، انتهاء مهلة الاتصال. |
@@ -188,8 +189,8 @@
 | :--- | :--- | :--- |
 | **التوافق مع React 19 + Vite** | متوافق مع React `19.0.1` (الإصدار الحديث `react-i18next` v15+ و`i18next` v24+/v25+) وتدعمه حزمة Vite مباشرة بدون إضافات. | متوافق 100% دون أي اعتماديات خارجية. |
 | **الحزم المحلية دون طلبات شبكة** | استيراد القواميس مباشرةً (`import ar from './locales/ar'`) داخل حزمة Vite -> **0 طلبات شبكة**. | 0 طلبات شبكة تلقائياً. |
-| **الأداء على أندرويد الضعيف** | تهيئة متزامنة فورية (~1–2ms عند الإقلاع)، بدون إعادة تحميل شبكي، وتغليف عبر hook خفيف لا يعيد تصيير مكونات الرسم المعزولة. | أسرع بهامش ميكروثانية غير محسوس بشرياً. |
-| **حجم الحزمة (Bundle Size)** | ~16–18 KB مضغوط gzip فقط (~0.5% زيادة تقريباً)، بلا تحميل إضافات backend أو browser-languagedetector الثقيلة. | ~1.5–2 KB مضغوط gzip. |
+| **الأداء على أندرويد الضعيف** | تهيئة متزامنة فورية (تقديرياً ~1–2ms عند الإقلاع؛ *تقدير نظري وليس قياساً فعلياً من بناء المشروع*)، بدون إعادة تحميل شبكي، وتغليف عبر hook خفيف لا يعيد تصيير مكونات الرسم المعزولة. | أسرع بهامش ميكروثانية غير محسوس بشرياً. |
+| **حجم الحزمة (Bundle Size)** | تقديرياً ~16–18 KB مضغوط gzip فقط (*تقدير مرجعي قياسي للحزمة وليس قياساً فعلياً من بناء هذا المشروع؛ سيُقاس الأثر الفعلي بعد البناء في `L10N-1` و`L10N-8`*)، بلا تحميل إضافات backend أو browser-languagedetector الثقيلة. | تقديرياً ~1.5–2 KB مضغوط gzip. |
 | **سهولة الصيانة والتوسع المستقبلي** | معمارية معيارية؛ إضافة لغة جديدة (فرنسية/تركية/إسبانية) لا تتعدى إنشاء مجلد لغة وتسجيله في `SUPPORTED_LANGUAGES`. | يتطلب كتابة وصيانة كود التداخل والجمع وقواعد كل لغة يدوياً. |
 | **كشف المفاتيح المفقودة (Missing Keys)** | فحص ثابت بـ TypeScript عبر `CustomTypeOptions` + `missingKeyHandler` في بيئة التطوير فقط. | فحص ثابت بـ TypeScript عبر `satisfies TranslationSchema`. |
 | **التداخل والمتغيرات (Interpolation)** | مدمج (`{{name}}`, `{{count}}`) مع دعم حماية السياق والاتجاه. | يتطلب كتابة دالة استبدال يدوية لكل حالة خاصة. |
@@ -197,11 +198,11 @@
 | **تقسيم الملفات (Namespaces)** | دعم أصيل للـ namespaces (`common`, `lobby`, `modals`, `room`, `drawing`, `events`). | تقسيم كائنات يدوي يفتقد عزل الـ namespace القياسي. |
 
 **القرار النهائي الموصى به:** اعتماد **`i18next` + `react-i18next`** مع استيراد القواميس **محلياً وثابتاً داخل الكود (`resources` مضمّنة في Vite)** ودون استخدام `i18next-http-backend` نهائياً، مع تغليفها في طبقة واجهة موحدة داخل `src/i18n/` وتفعيل التطابق الصارم للأنواع في TypeScript (`CustomTypeOptions`).  
-يُجنّب هذا الاختيار بناء محرك جمع وصياغة مخصص للغة العربية ذات الست صيغ، ويحفظ الأداء الفائق على أجهزة Android الضعيفة (0ms network latency)، ويضمن توسيعاً فورياً لأي لغة قادمة.
+يُجنّب هذا الاختيار بناء محرك جمع وصياغة مخصص للغة العربية ذات الست صيغ، ويحفظ الأداء على أجهزة Android الضعيفة (0ms تأخير شبكة)، ويضمن توسيعاً فورياً لأي لغة قادمة. *(ملحوظة توثيقية: أرقام حجم الحزمة وزمن التهيئة المذكورة أعلاه تقديرية استناداً إلى خصائص الحزمة القياسية وليست قياساً فعلياً من مخرجات Vite لهذا المستودع حتى الآن).*
 
 ### البنية المقترحة لمجلد `src/i18n/`
 - `src/i18n/types.ts` — أنواع `LanguageMode` (`'auto' | 'ar' | 'en'`) و`SupportedLanguage` (`'ar' | 'en'`) و`CustomTypeOptions`.
-- `src/i18n/languageDetector.ts` — قراءة/حفظ `safeLocalStorage`, كشف لغة المتصفح (`navigator.languages?.[0] || navigator.language` -> `'ar'` إذا بدأ بـ `ar` وإلا `'en'`), ودالة تحديث `document.documentElement.lang` و`dir`.
+- `src/i18n/languageDetector.ts` — قراءة/حفظ `safeLocalStorage`, كشف لغة المتصفح (`navigator.languages?.[0] || navigator.language` -> `'ar'` إذا بدأ بـ `ar` وإلا `'en'`), ودالة تحديث `document.documentElement.lang` (دون فرض `dir="rtl"` عالمياً على هندسة الغرفة والرسم).
 - `src/i18n/index.ts` — تهيئة `i18next` المتزامنة مع `initReactI18next`، تحذير المفاتيح المفقودة في `import.meta.env.DEV` فقط، وتصدير واجهة موحدة.
 - `src/i18n/useAppTranslation.ts` — hook خفيف يغلف `useTranslation` ويوفر `{ t, language, mode, setLanguageMode, isRTL }`.
 - `src/i18n/locales/en/*.json` (أو `.ts`) و`src/i18n/locales/ar/*.json` (أو `.ts`) مقسمة إلى namespaces: `common`, `lobby`, `modals`, `room`, `drawing`, `events`.
@@ -216,9 +217,9 @@
 2. **إعادة الاتصال (`reconnectPlayer`) وتزامن الحالة:**
    - يعيد الخادم ربط `senderId` وتُرسَل `room_state_update`, `draw_history_sync`, `draw_redo_sync`, `bucket_lock_sync`. حزم الرسم وبيانات `roundEndReason` هي أصلاً رموز لغة محايدة، وبمجرد ترقية رسائل `afk_warning` و`session_expired` و`join_room` لتُقرأ بالرموز فقط يبقى المسار متطابقاً عبر كل عمليات إعادة الاتصال.
 3. **الرسائل النصية القديمة (Backward Compatibility):**
-   - تطبيق قاعدة **Dual-Field Payloads** في `L10N-4`: يضيف الخادم الحقول المهيكلة (`eventCode`, `params`, `playerName`, `actorId`, `winnerName`, `score`, `hasWinners`) **مع الإبقاء على حقل `text` الاحتياطي**؛ ويقرأ العميل `eventCode` أولاً ثم يعود تلقائياً لـ `subType` والـ regex القديم عند غياب `eventCode`.
+   - تطبيق قاعدة **Dual-Field Payloads** في `L10N-4`: يضيف الخادم الحقول المهيكلة (`eventCode`, `params`, `playerName`, `actorId`, `winnerName`, `score`, `hasWinners`) **مع الإبقاء على حقل `text` الاحتياطي**؛ ويقرأ العميل في `L10N-5` حقل `eventCode` أولاً ثم يعود تلقائياً لـ `subType` والـ regex القديم عند غياب `eventCode`.
 4. **تكافؤ الغرف (`Normal` vs `Experimental` vs `Free Draw`):**
-   - تشترك `GameRoom.tsx` (للرسم الحر والوضع العادي) و`ExperimentalGameRoom.tsx` (للوضع التنافسي) في المكونات والخدمات نفسها (`MiniBoardOverlay`, `OverlayChatRoom`, `ExitConfirmModal`, `AfkWarningModal`, `PlayerProfileModal`, `RoomAlertModals`, `RoomConnectionStatusOverlay`, `ExperimentalDrawingBoard`, `ColorWheelModal`). يجب تحديث كلتيهما في نفس المرحلة (`L10N-5`) لضمان عدم بقاء أي نص يتيم في أحد الأوضاع.
+   - تشترك `GameRoom.tsx` (للرسم الحر والوضع العادي) و`ExperimentalGameRoom.tsx` (للوضع التنافسي) في المكونات والخدمات نفسها (`MiniBoardOverlay`, `OverlayChatRoom`, `ExitConfirmModal`, `AfkWarningModal`, `PlayerProfileModal`, `RoomAlertModals`, `RoomConnectionStatusOverlay`, `ExperimentalDrawingBoard`, `ColorWheelModal`). يجب تطبيق كل مرحلة على نسختي الغرف بالتكافؤ التام (النوافذ في `L10N-2`، اللوحة المصغرة في `L10N-3`، الدردشة والتخمينات في `L10N-5`، وأدوات الرسم والنصوص المتفرقة في `L10N-7`).
 5. **منع تكرار أو فقدان الأحداث:**
    - لا نضيف أي Socket.IO events جديدة ولا نغير أسماء الأحداث القائمة (`receive_message`, `receive_guess`, `join_room`, `afk_warning`, `session_expired`, `submit_vote_kick`). يتم التوسيع على الحقول الاختيارية داخل الحمولة القائمة فقط.
 6. **أثر الأداء وحجم الحزم في Socket.IO / MsgPack (`512 KiB maxHttpBufferSize`):**
@@ -228,15 +229,15 @@
 
 ---
 
-## 7. الخارطة التنفيذية المفصلة (`L10N-0` إلى `L10N-6`)
+## 7. الخارطة التنفيذية المفصلة (`L10N-0` إلى `L10N-8`)
 
 ### المرحلة `L10N-0` — التدقيق وإعداد خارطة الطريق
-1. **الاسم والرقم:** `PHASE L10N-0 — Localization Audit & Roadmap Establishment` — **`[x] COMPLETED` (`2026-11-22`)**
+1. **الاسم والرقم:** `PHASE L10N-0 — Audit & Roadmap` — **`[x] COMPLETED` (`2026-11-22`)** *(نُظّم التسلسل في `L10N-0.1` بتاريخ `2026-11-22` مع إبقاء سجل إكمال `L10N-0` كما هو)*.
 2. **الهدف:** جرد كافة النصوص، توثيق آليات حماية الاتجاه والدردشة، اختيار نظام الترجمة الأنسب، وتثبيت خارطة طريق غير ملتبسة.
 3. **الملفات المسموحة:** `LOCALIZATION_ROADMAP.md` (إنشاء)، `REFACTORING_ROADMAP.md` (ربط مرجعي مختصر فقط).
-4. **الملفات المحظورة:** جميع الملفات البرمجية (`src/`, `server/`, `public/`, `index.html`, `package.json`, ملفات القفل).
+4. **الملفات المحظورة:** جميع الملفات البرمجية (`src/`, `server/`, `public/`, `index.html`, `package.json`, `bun.lock`).
 5. **الآليات المحمية:** كامل قاعدة الكود الحالية بلا أي تغيير برمجي.
-6. **المهام:** الفحص القرائي الشامل وتوثيق الأقسام `1–8`.
+6. **المهام:** الفحص القرائي الشامل وتوثيق الأقسام `1–9`.
 7. **المخاطر:** صفر (مرحلة توثيق وقراءة فقط).
 8. **معايير الخروج:** اعتماد الوثيقة من المالك.
 9. **الاختبارات:** مراجعة الوثيقة ومطابقتها للكود الفعلي.
@@ -244,138 +245,214 @@
 
 ---
 
-### المرحلة `L10N-1` — تأسيس نواة الترجمة وهندسة اللغة (بدون تعديل واجهات اللعب)
-1. **الاسم والرقم:** `PHASE L10N-1 — i18n Core Foundation & Strict Key Typing` — **`[ ] NEXT READY`**
-2. **الهدف:** تثبيت حزمة الترجمة وتجهيز طبقة `src/i18n/` كاملةً بنظام اللغات الثلاث (`auto` / `ar` / `en`) وفحص الأنواع ومزامنة `<html lang/dir>` دون تغيير أي شاشة لعب أو رسالة خادم بعد.
-3. **الملفات المسموحة:** `package.json`, `package-lock.json`, مجلد جديد `src/i18n/*`, `src/main.tsx` (استيراد تهيئة i18n المبكرة فقط دون تغيير سلوك التطبيق).
-4. **الملفات المحظورة:** `server/*`, `src/components/*` (باستثناء عدم مس أي مكون في `L10N-1`), `src/types/game.ts`, `index.html`, `AGENTS.md`.
-5. **الآليات المحمية:** عدم فرض `dir` عالمي يكسر شبكة الغرف لاحقاً (توفير أداة مساعدة تحدّث `document.documentElement.lang` و`data-ui-dir` / `dir` بشكل منضبط، مع استقلالية تامة عن محرك الرسم و`SocketProvider`).
+### المرحلة `L10N-1` — نواة الترجمة ومنتقي اللغة (`Localization Foundation & Language Selector`)
+1. **الاسم والرقم:** `PHASE L10N-1 — Localization Foundation & Language Selector` — **`[ ] NEXT READY`**
+2. **الهدف:** تأسيس `i18next` و`react-i18next` بملفات `ar` و`en` المحلية، وأوضاع `auto` / `ar` / `en` عبر `safeLocalStorage`، وإضافة **منتقي اللغة فقط** إلى شاشة البداية (`Lobby.tsx`) وتحديث `lang` في مستند HTML بصورة آمنة، **دون ترجمة بقية اللوبي أو تطبيق `dir="rtl"` عالمياً دون عزل هندسة الغرفة والرسم**.
+3. **الملفات المسموحة:**
+   - `package.json` (وملف القفل الذي ينتجه/يحدّثه مدير الحزم الفعلي: علماً أن المستودع يحتوي حالياً على `bun.lock` ولا يحتوي على `package-lock.json`؛ في بيئة `npm` قد يُنشأ/يُحدّث `package-lock.json` تلقائياً بينما لا يُعدّل `bun.lock` يدوياً دون داعٍ).
+   - مجلد جديد: `src/i18n/*` (`types.ts`, `languageDetector.ts`, `index.ts`, `useAppTranslation.ts`, وملفات القواميس المحلية `locales/ar/*` و`locales/en/*`).
+   - `src/main.tsx` (استيراد التهيئة المبكرة لـ `i18n` فقط).
+   - `src/components/Lobby.tsx` (**حصرياً** لإدراج مبدّل/منتقي اللغة في شاشة البداية والعودة إلى `auto`).
+4. **الملفات المحظورة:** `server/*`, `src/components/lobby/*` (`RoomsBrowserScreen.tsx`, `RoomInfoModal.tsx`, `AvatarCarousel.tsx`), `src/components/game/*`, `src/components/experimental/*`, `src/types/game.ts`, `index.html`, `AGENTS.md` — ويُمنع ترجمة `NICKNAME` أو `ROOMS` أو نصوص اللوبي الأخرى أو تغيير اسم اللعبة وعنوان الصفحة التجاري **`DRAW.IO`** الذي يبقى بالإنجليزية دائماً.
+5. **الآليات المحمية:** عدم تفعيل `dir="rtl"` عالمياً على `<html>` أو `#root` بما يقلب شبكة الغرفة (`32%/68%`) أو لوحة الرسم أو `SmoothTimer`؛ إبقاء محرك الرسم و`SocketProvider` معزولين تماماً.
 6. **التعديلات الدقيقة:**
-   - تثبيت `i18next` و`react-i18next` (عبر `install_applet_package` أو `npm`).
-   - إنشاء `src/i18n/types.ts`, `src/i18n/languageDetector.ts` (باستخدام `safeLocalStorage`), `src/i18n/index.ts`, `src/i18n/useAppTranslation.ts`.
-   - إنشاء هياكل القواميس الأولية (`en` و`ar`) لـ namespaces: `common`, `lobby`, `modals`, `room`, `drawing`, `events` مع دالة تحذير المفاتيح المفقودة في التطوير (`import.meta.env.DEV`) وفحص TypeScript الصارم.
-   - مزامنة `<title>` و`meta[name="description"]` و`lang` برمجياً وفق اللغة الفعّالة.
-7. **المخاطر:** فشل peer dependencies مع React `19.0.1` أو زيادة حجم الحزمة الأولية أو تعارض SSR/Window عند غياب `localStorage` (محمي بـ `safeLocalStorage` وفحوص `typeof window`).
-8. **معايير الخروج:** اجتياز `npx tsc --noEmit` و`npm run build` بنسبة 100%، وبقاء اللعبة مطابقة بصرياً 100% دون أي أثر سلبي.
-9. **الاختبارات:** تحقق آلي (`npx tsc --noEmit`, `npm run build`) + تحقق يدوي سريع من المالك أن التطبيق يقلع بسلاسة دون أخطاء console.
-10. **الاعتماديات:** `L10N-0`.
+   - تثبيت `i18next` و`react-i18next` محلياً.
+   - إنشاء بنية `src/i18n/` ودعم أوضاع `'auto' | 'ar' | 'en'` عبر `safeLocalStorage`، مع كشف لغة المتصفح (`navigator.languages?.[0] || navigator.language` -> `'ar'` إن بدأت بـ `ar` وإلا `'en'`).
+   - إضافة منتقي اللغة (`تلقائي Auto` / `العربية` / `English`) في شاشة البداية داخل `Lobby.tsx` فقط، بحيث يتجاوز الاختيار اليدوي وضع `auto` مع إمكانية الرجوع إلى `auto` في أي وقت.
+   - تحديث `document.documentElement.lang` بصورة آمنة، والحفاظ على عنوان الصفحة التجاري **`DRAW.IO`** باللغة الإنجليزية دائماً.
+   - تسجيل تحذيرات المفاتيح المفقودة في وضع التطوير (`import.meta.env.DEV`) وتفعيل التطابق الصارم للأنواع (`CustomTypeOptions`).
+7. **المخاطر:** توافق peer dependencies مع React `19.0.1`، تخطيط شاشة البداية الضيقة (`max-height < 600px` / عند فتح الكيبورد `isKeyboardOpen`) عند إضافة المنتقي، أو أخطاء عند تعطيل `localStorage` (محمي عبر `safeLocalStorage`).
+8. **معايير الخروج:** اجتياز `npx tsc --noEmit` و`npm run build`، قياس الأثر الفعلي لحجم الحزمة، عمل تبديل `auto` / `ar` / `en` وحفظه عبر التحديث في شاشة البداية، وبقاء بقية شاشات التطبيق كما هي دون ترجمة أو كسر اتجاه.
+9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي لتبديل `auto` / `ar` / `en` في متصفحين بلغة عربية وإنجليزية وإعادة تحميل الصفحة.
+10. **الاعتماديات:** `L10N-0` و`L10N-0.1`.
 
 ---
 
-### المرحلة `L10N-2` — توطين اللوبي ومنتقي اللغة (`Lobby`, `RoomsBrowserScreen`, `RoomInfoModal`)
-1. **الاسم والرقم:** `PHASE L10N-2 — Lobby, Room Browser & Language Selector UI`
-2. **الهدف:** تفعيل منتقي اللغة (`Auto` / `العربية` / `English`) في شاشة البداية، وتوطين نصوص اللوبي ومتصفح الغرف ومعلومات الغرفة مع إبقاء `DRAW.IO` و`ROOMS` و`INFO` و`ERROR` و`INACTIVE` و`DISCONNECTED` بالإنجليزية.
-3. **الملفات المسموحة:** `src/components/Lobby.tsx`, `src/components/lobby/RoomsBrowserScreen.tsx`, `src/components/lobby/RoomInfoModal.tsx`, `src/components/lobby/AvatarCarousel.tsx` (إن لزم `aria-label`), وملفات `src/i18n/locales/*`.
-4. **الملفات المحظورة:** `server/*`, `src/components/game/*`, `src/components/experimental/*`, `src/types/game.ts` (منع كسر `getRoomConfig`!).
-5. **الآليات المحمية:** حقل `NICKNAME` (`dir="auto"` للاسم)، بطاقات الغرف (`#Test`, `#10P`, `#Lab`), سلوك iOS Keyboard focus bypass في `Lobby.tsx`, وبقاء شعارات `GameTitle` بالإنجليزية.
-6. **التعديلات الدقيقة:**
-   - إضافة مبدّل لغة مدمج أنيق في شاشة البداية (`Lobby.tsx`) يتيح الاختيار بين `تلقائي (Auto)` / `العربية` / `English` وحفظه عبر `useAppTranslation`.
-   - استبدال النصوص الثابتة وثنائية اللغة القديمة في `Lobby.tsx`, `RoomsBrowserScreen.tsx`, `RoomInfoModal.tsx` بمفاتيح `t(...)`، وتوفير ترجمة عرض فقط لـ `preset.name` / `theme` داخل الواجهة دون المساس بـ `roomId`.
-   - ضبط محاذاة وأيقونة زر العودة في `RoomsBrowserScreen` (`ChevronLeft` / `ChevronRight` وفق الاتجاه أو `dir` الحاوية).
-7. **المخاطر:** امتلاء البطاقات على الشاشات القصيرة (`max-height: 500px`) أو تغيّر طول التسميات في `RoomInfoModal` (العمود الثلاثي `grid-cols-3`).
-8. **معايير الخروج:** تبديل فوري بين `Auto`/`ar`/`en` في اللوبي، ثبات الاختيار بعد التحديث، وبقاء العناوين الكارتونية ثابتة.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي في متصفح عربي ومتصفح إنجليزي والتبديل اليدوي والعودة لـ `Auto`.
+### المرحلة `L10N-2` — توطين النوافذ المنبثقة فقط (`Popups & Modals`)
+1. **الاسم والرقم:** `PHASE L10N-2 — Popups & Modals`
+2. **الهدف:** مراجعة وتوطين جميع النوافذ المنبثقة المشتركة فقط: الاحتفاظ بالترجمات الموجودة والصحيحة، ترجمة النصوص الناقصة، تصحيح النصوص المختلطة (إزالة الازدواجية لتظهر بلغة اللاعب المختارة فقط)، وإبقاء العناوين الفنية (`GameTitle`) بالإنجليزية، دون لمس `MiniBoard` أو الدردشة أو التخمينات أو بقية اللوبي.
+3. **الملفات المسموحة:**
+   - `src/components/game/modals/ExitConfirmModal.tsx`
+   - `src/components/game/modals/SkipConfirmModal.tsx`
+   - `src/components/game/modals/ReportConfirmModal.tsx`
+   - `src/components/game/modals/AfkWarningModal.tsx`
+   - `src/components/game/modals/PlayerProfileModal.tsx`
+   - `src/components/game/modals/RoomAlertModals.tsx`
+   - `src/components/game/CinematicModal.tsx` (`aria-label="Close"`)
+   - `src/components/game/CustomEmojiModal.tsx`
+   - `src/components/game/ColorWheelModal.tsx`
+   - `src/components/game/RoomConnectionStatusOverlay.tsx`
+   - `src/i18n/locales/*` (تحت namespace `modals` / `common`)
+   *(ملاحظة فصل النطاق: النوافذ المضمنة داخل `Lobby.tsx` تُعالج في `L10N-6` ونوافذ `CLEAN`/`NAMES` المضمنة داخل `ExperimentalDrawingBoard.tsx` تُعالج في `L10N-7` منعاً لتداخل مراحل منفصلة).*
+4. **الملفات المحظورة:** `server/*`, `src/components/game/MiniBoardOverlay.tsx`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/experimental/ChoosingWordOverlay.tsx`, `src/components/experimental/ExperimentalWordOverlay.tsx`, `src/components/experimental/ExperimentalDrawingBoard.tsx`, `src/components/Lobby.tsx`, `src/components/lobby/*`, `src/components/GameRoom.tsx`, `src/components/experimental/ExperimentalGameRoom.tsx`.
+5. **الآليات المحمية:**
+   - بقاء عناوين `GameTitle` بالإنجليزية (`EXIT`, `REPORT`, `PROFILE`, `SKIP`, `INACTIVE`, `ERROR`, `KICKED`, `SLOW DOWN`, `SERVER FULL`, `TIMEOUT`, `DISCONNECTED`, `CUSTOM EMOJI`).
+   - إبقاء `dir="ltr"` على شريط الكثافة (`ColorWheelModal.tsx:554`) وحقل `#HEX` (`487`).
+   - إبقاء `dir="auto"` / `<bdi>` لاسم اللاعب في `PlayerProfileModal` واختيار الإيموجي.
+6. **التعديلات الدقيقة:** توحيد أزرار `YES`/`NO`/`OK`/`موافق`/`BLOCK`/`UNBLOCK`/`VOTEKICK`/`REMOVE VOTE` وأوصافها وصيغ الجمع في `AfkWarningModal` (ثانية/ثانيتان/ثوانٍ) وتلميحات `ColorWheelModal` وحالات `RoomConnectionStatusOverlay` بحيث تظهر بلغة اللاعب المختارة فقط، مع ضبط `dir={isRTL ? 'rtl' : 'ltr'}` داخل محتوى النوافذ فقط.
+7. **المخاطر:** التفاف النصوص الطويلة داخل `CinematicModal` أو `ColorWheelModal` على الشاشات القصيرة (`responsive-modal-scale`).
+8. **معايير الخروج:** 100% من نصوص النوافذ المنبثقة المشتركة نظيفة وخالية من الازدواجية في اللغتين، دون لمس `MiniBoard` أو الدردشة أو التخمينات.
+9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + فحص المالك اليدوي لكل نافذة منبثقة بالعربية والإنجليزية.
 10. **الاعتماديات:** `L10N-1`.
 
 ---
 
-### المرحلة `L10N-3` — توطين النوافذ المنبثقة المشتركة وشاشات حالة الاتصال ولوحات الجولة
-1. **الاسم والرقم:** `PHASE L10N-3 — Shared Modals, Connection Overlay & MiniBoard/WordChooser UI`
-2. **الهدف:** توطين جميع النوافذ المنبثقة (`ExitConfirmModal`, `SkipConfirmModal`, `ReportConfirmModal`, `AfkWarningModal`, `PlayerProfileModal`, `RoomAlertModals`, `CinematicModal`, `CustomEmojiModal`, `ColorWheelModal`), غلاف الاتصال (`RoomConnectionStatusOverlay`), `ErrorBoundary`, وشاشتي `ChoosingWordOverlay` و`MiniBoardOverlay`.
-3. **الملفات المسموحة:** `src/components/game/modals/*`, `src/components/game/CinematicModal.tsx`, `src/components/game/CustomEmojiModal.tsx`, `src/components/game/ColorWheelModal.tsx`, `src/components/game/RoomConnectionStatusOverlay.tsx`, `src/components/game/MiniBoardOverlay.tsx`, `src/components/experimental/ChoosingWordOverlay.tsx`, `src/ErrorBoundary.tsx`, و`src/i18n/locales/*`.
-4. **الملفات المحظورة:** `server/*`, `DrawingCanvasCore.tsx`, `ExperimentalDrawingBoard.tsx` (في `L10N-5`), `OverlayChatRoom.tsx`, `GameActivityFeed.tsx`, `ExperimentalWordOverlay.tsx`.
+### المرحلة `L10N-3` — اللوحة المصغرة وانتقالات الأدوار (`MiniBoard & Turn Transitions`)
+1. **الاسم والرقم:** `PHASE L10N-3 — MiniBoard & Turn Transitions`
+2. **الهدف:** توطين `MiniBoardOverlay` (الانتظار، الرسم الحر المبدئي، انتقال الأدوار، نهاية الجولة، المنصة `PODIUM`) و`ChoosingWordOverlay` (اختيار الكلمة)، وترجمة النصوص التوضيحية المرافقة للعناوين الفنية مع بقاء العناوين الفنية بالإنجليزية، والحفاظ على الكلمة المختارة والتلميحات المشتركة دون ترجمة مستقلة، ودون لمس الدردشة أو التخمينات.
+3. **الملفات المسموحة:**
+   - `src/components/game/MiniBoardOverlay.tsx`
+   - `src/components/experimental/ChoosingWordOverlay.tsx`
+   - `src/components/experimental/ExperimentalWordOverlay.tsx` (**فقط** لضبط العزل الاتجاهي الصريح `dir="ltr"` على حاوية صف الأحرف/التلميحات إن لزم عند العرض العربي — **دون ترجمة أي كلمة أو تغيير منطق `isRTL`**)
+   - `src/i18n/locales/*`
+4. **الملفات المحظورة:** `server/*`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/Lobby.tsx`, `src/components/GameRoom.tsx`, `src/components/experimental/ExperimentalGameRoom.tsx`, `src/components/experimental/ExperimentalDrawingBoard.tsx`.
 5. **الآليات المحمية:**
-   - **`UI-A Stage 2A`:** عدم المساس بمفاتيح `roundEndAnimationKey` / `activeAnimationKeyRef` أو إزالة أي `animationKey` أو ظلال في `MiniBoardOverlay.tsx`.
-   - **`ColorWheelModal`:** إبقاء شريط الكثافة (`554`) وحقل `#HEX` (`487`) `dir="ltr"` حرفياً.
-   - **العناوين المستثناة:** بقاء كل `GameTitle` headers في النوافذ وفي `MiniBoardOverlay` (`NEW TURN!`, `SKIPPED!`, `GAME OVER`, إلخ) بالإنجليزية مع ترجمة الأوصاف والأزرار فقط.
-   - **`ChoosingWordOverlay`:** إبقاء `dir="auto"` على الكلمتين المعروضتين دون أي ترجمة لهما.
-6. **التعديلات الدقيقة:** توحيد صيغ المفرد والجمع في `AfkWarningModal` (ثانية/ثانيتان/ثوانٍ)، `MiniBoardOverlay` (نقطة/نقاط)، إزالة الازدواجية القديمة (عربي + إنجليزي معاً) ليظهر النص بلغة اللاعب المختارة فقط، وضبط `dir={isRTL ? 'rtl' : 'ltr'}` في حاويات النوافذ النصية.
-7. **المخاطر:** عدم تطابق ارتفاع الأزرار أو النص داخل `MiniBoardOverlay` على الهواتف الصغيرة (`overflow-y-auto` يجب الحفاظ عليه).
-8. **معايير الخروج:** تغطية 100% لنصوص النوافذ والـ MiniBoard بالعربية والإنجليزية بنسق موحد ونظيف.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + فحص المالك يدوياً لكل نافذة ومرحلة نهاية الجولة والمنصة.
+   - **`UI-A Stage 2A`:** الحفاظ التام على `roundEndAnimationKey` / `activeAnimationKeyRef` وظلال السبرايت في `MiniBoardOverlay.tsx`.
+   - **Safeguard 6:** إبقاء `wordOptions`, `currentWord`, `maskedWordArray` مشتركة دون ترجمة، وإبقاء `dir="auto"` في `ChoosingWordOverlay.tsx`، واتجاه الحروف خاضعاً لـ `isRTL` الكلمة مع حماية حاويتها.
+   - بقاء عناوين `MiniBoardOverlay` الفنية (`FREE DRAW`, `WAITING`, `NEW TURN!`, `SKIPPED!`, `INACTIVE`, `CANCELED TURN`, `INTERVAL`, `MASTERPIECE!`, `GAME OVER`) بالإنجليزية.
+6. **التعديلات الدقيقة:** توطين النصوص التوضيحية وأزرار التفاعل مثل وصف الرسم الحر وزر `ابدأ الرسم` و`Waiting for players` و`It's the turn of` ورسائل `SKIPPED`/`INACTIVE`/`CANCELED`/`INTERVAL`/`MASTERPIECE`/`The answer was` و`بقية قائمة المتصدرين` و`pts` (مع صيغ الجمع) دون ازدواجية نصية.
+7. **المخاطر:** تجاوز ارتفاع النص داخل اللوحة المصغرة على شاشات الهاتف الصغيرة، أو تأثر `ChoosingWordOverlay` باتجاه الصفحة.
+8. **معايير الخروج:** عرض سليم لكل حالات اللوحة المصغرة وانتقالات الأدوار في العربية والإنجليزية مع بقاء الكلمات المشتركة والعناوين الفنية محمية.
+9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + فحص المالك اليدوي لكل مراحل الجولة (Waiting, Choosing, Drawing Word Overlay, Round End بأنواعه، Podium، وشاشة Free Draw الأولية).
 10. **الاعتماديات:** `L10N-2`.
 
 ---
 
-### المرحلة `L10N-4` — ترقية أحداث الخادم إلى رموز مهيكلة متوافقة خلفياً (Server Event Codes & Backward-Compatible Payloads)
-1. **الاسم والرقم:** `PHASE L10N-4 — Server Structured Event Codes & Safe Client Fallbacks`
-2. **الهدف:** تزويد الخادم برموز أحداث ومتغيرات مهيكلة (`eventCode` + `params` + `actorId` + رمز `room_full` / `join_failed`) لجميع الرسائل التفاعلية والتنبيهات مع الحفاظ الكامل على الحقول النصية القديمة (`text`) وقواعد البروتوكول الثنائي.
-3. **الملفات المسموحة:** `server/rooms.ts` (فقط دوال البث النصي في `broadcastMessage`/`broadcastGuess` وإجراءات الفحص `checkIdlePlayers`/`handleDisconnect`), `server/registerJoinRoomHandler.ts`, `server/registerLeaveRoomHandler.ts`, `server/registerSendMessageHandler.ts`, `server/registerVoteKickHandler.ts`, `src/types/game.ts` (إضافة واجهة optional message code فقط دون تغيير `getRoomConfig`), و`src/components/game/OverlayChatRoom.tsx` + `src/components/game/GameActivityFeed.tsx` + `src/components/GameRoom.tsx` + `src/components/experimental/ExperimentalGameRoom.tsx` (بقدر استقبال `eventCode`/`error` مع إبقاء التوافق الخلفي).
-4. **الملفات المحظورة:** `server/registerDrawBinaryHandler.ts`, `server/roomCanonicalStrokeEngine.ts`, `server/utils/binaryBufferHelpers.ts`, `server/utils/arabicFuzzyMatch.ts`, `server/data/wordsDictionary.ts`, وأي منطق في `recordDrawCommand` (`type === 4 || type === 10 || type === 5`) أو `undo` / `redo`.
-5. **الآليات المحمية:** **Safeguard 1 & 2 & 5 & 9:** ضمان ألا يختفي أي إشعار دخول/خروج/طرد في `OverlayChatRoom`، وعدم كسر regex أو fallback `GameActivityFeed`، وعدم كسر كشف `room_full` في الغرفتين.
+### المرحلة `L10N-4` — الأحداث النظامية المهيكلة والتوافق الخلفي (`Structured System Events & Backward Compatibility`)
+1. **الاسم والرقم:** `PHASE L10N-4 — Structured System Events & Backward Compatibility`
+2. **الهدف:** مرحلة تقنية مستقلة لتجهيز رسائل النظام في الخادم والأنواع المشتركة بإضافة `eventCode` و`params` و`actorId` (عند الحاجة) ورموز الأخطاء (`room_full`, `join_failed`) مع **الحفاظ على `text` القديم كـ `fallback`**، وضمان توافق الرسائل المخزنة وإعادة الاتصال، دون إنشاء أحداث Socket.IO جديدة غير ضرورية، ودون تغيير بروتوكول الرسم الثنائي أو محرك الرسم، **ودون ترجمة واجهة الدردشة في هذه المرحلة**.
+3. **الملفات المسموحة:**
+   - `server/rooms.ts` (فقط دوال البث النصي `broadcastMessage`/`broadcastGuess` وإجراءات `checkIdlePlayers`/`handleDisconnect` — **يُحظر مس `recordDrawCommand` أو بروتوكول الرسم/التراجع**)
+   - `server/registerJoinRoomHandler.ts`
+   - `server/registerLeaveRoomHandler.ts`
+   - `server/registerSendMessageHandler.ts`
+   - `server/registerVoteKickHandler.ts`
+   - `src/types/game.ts` (إضافة الحقول الاختيارية لرسائل الأحداث فقط دون المساس بـ `getRoomConfig` أو أسماء الغرف)
+   - `src/components/GameRoom.tsx` و`src/components/experimental/ExperimentalGameRoom.tsx` (تحديث معالج خطأ `join_room` ليقبل `res.error === 'room_full'` إلى جانب fallback فحص النصوص القديمة دون ترجمة أي عنصر واجهة)
+4. **الملفات المحظورة:** `server/registerDrawBinaryHandler.ts`, `server/roomCanonicalStrokeEngine.ts`, `server/utils/binaryBufferHelpers.ts`, `server/utils/arabicFuzzyMatch.ts`, `server/data/wordsDictionary.ts`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/game/DrawingCanvasCore.tsx`, `AGENTS.md`.
+5. **الآليات المحمية:** **Safeguard 1 & 2 & 5 & 9:** إبقاء حقل `text` الحالي سالماً في جميع البثوث حتى لا يتوقف مرشح `OverlayChatRoom` أو محللات `GameActivityFeed` أو اختبارات السيرفر الحالية قبل `L10N-5`، مع عدم المساس بـ `saveChatMessage`/`saveGuessMessage` (`40` رسالة) و`reconnectPlayer` في `server/rooms.ts`.
 6. **التعديلات الدقيقة:**
-   - إضافة حقول اختيارية موحدة في رسائل الدردشة والتخمينات: `eventCode`, `params` (مثل `{ name, score, word, voterName, targetName }`), و`actorId`، مع الإبقاء على `text` القياسي كـ fallback.
-   - توحيد أخطاء `join_room` (`L243`: `error: 'room_full'`, `L311`: `error: 'join_failed'` مع الإبقاء في العميل على قبول النص القديم + الرمز الجديد).
-   - ترقية مرشح `OverlayChatRoom` و`GameActivityFeed` لقراءة `eventCode` أولاً مع fallback تلقائي للمسار القديم.
-7. **المخاطر:** كسر اختبارات السيرفر الموجودة في `scripts/test_*.ts` إن تغير حقل `text` أو شكل الاستجابة؛ لذا يجب إبقاء `text` سليماً وإضافة الحقول الجديدة اختيارياً وتشغيل اختبارات الهوية والحمولات للتحقق.
-8. **معايير الخروج:** وصول جميع الرسائل في الغرف المختلطة دون فقدان أو تكرار أو أخطاء TypeScript.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + `npx tsx scripts/test_payload_validation_suite.ts` + `npx tsx scripts/test_leave_room_integrity.ts` + تجربة المالك لحسابين بلغتين مختلفتين داخل نفس الغرفة.
+   - إضافة `eventCode` و`params` (مثل `{ name, score, word, voterName, targetName }`) و`actorId` (في `turn_skipped`, `turn_lost`, إلخ) لكل بث نظامي في الدردشة والتخمينات (`player_joined`, `player_left`, `player_kicked`, `player_afk_kicked`, `player_disconnected_removed`, `votekick_alert`, `chat_word_leak_warning`, `turn_of`, `game_over`, `turn_canceled`, `all_guessed`, `round_timeout_won`, `nobody_hit`, `answer_reveal`, `turn_skipped`, `turn_lost`, `round_interval`, `guess_hit`, `guess_close`, `draw_reported`).
+   - إرسال `error: 'room_full'` و`error: 'join_failed'` من `registerJoinRoomHandler.ts` مع الإبقاء على مطابقة النصوص القديمة في كاشف الخطأ بالعميل مؤقتاً.
+7. **المخاطر:** تراجع في اختبارات السيرفر الآلية (`scripts/test_*.ts`) إن تغيرت البنية المتوقعة للحقول الحالية؛ لذا الإضافة تكون **لحقول اختيارية جديدة فقط**.
+8. **معايير الخروج:** جميع أحداث الخادم تحمل الحقول المهيكلة + `text` الاحتياطي، واجتياز اختبارات السيرفر والبناء 100% دون أي تغير مرئي في الدردشة.
+9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + `npx tsx scripts/test_payload_validation_suite.ts` + `npx tsx scripts/test_leave_room_integrity.ts` + `npx tsx scripts/test_session_identity_suite.ts` + فحص يدوي سريع أن اللعب والدردشة يعملان طبيعياً.
 10. **الاعتماديات:** `L10N-3`.
 
 ---
 
-### المرحلة `L10N-5` — توطين الغرف وأدوات الرسم والدردشة وسجل الأنشطة (Normal, Experimental & Free Draw)
-1. **الاسم والرقم:** `PHASE L10N-5 — Rooms, Chat/Activity Localization, Drawing Toolbars & BiDi Hardening`
-2. **الهدف:** ترجمة كل واجهات `GameRoom`, `ExperimentalGameRoom`, `PlayersSidebar`, `FreeDrawPlayersList`, `OverlayChatRoom`, `GameActivityFeed`, `ExperimentalHitOverlay`, `ExperimentalDrawingBoard`, `FlipaClipControls`, و`ExperimentalWordOverlay` (ضبط العزل الاتجاهي الصريح فقط) مع التزام تام بجميع الآليات المحمية.
-3. **الملفات المسموحة:** `src/components/GameRoom.tsx`, `src/components/experimental/ExperimentalGameRoom.tsx`, `src/components/experimental/ExperimentalDrawingBoard.tsx`, `src/components/experimental/ExperimentalWordOverlay.tsx` (تثبيت العزل الاتجاهي `dir="ltr"` فقط على صف الكلمة دون تغيير منطق `isRTL` أو الكلمات!), `src/components/experimental/ExperimentalHitOverlay.tsx`, `src/components/game/PlayersSidebar.tsx`, `src/components/game/FreeDrawPlayersList.tsx`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/game/FlipaClipControls.tsx`, و`src/i18n/locales/*`.
-4. **الملفات المحظورة:** `src/components/game/DrawingCanvasCore.tsx`, `src/utils/canvasFloodFill.ts`, `server/*`, `AGENTS.md`.
-5. **الآليات المحمية:** **جميع Safeguards 1–9:**
-   - إبقاء شبكة الغرفة `dir="ltr"` لمنع انقلاب `32%/68%` أو تقليص `SmoothTimer` (`transformOrigin: left center`) أو تصادم زر `X` مع زر الدردشة.
-   - الحفاظ على `UI-B Stage B2` (`aspect-[680/396]` للمتفرج) و`UI-C Stage 2A` (`flex items-center min-w-0 max-w-full` في قائمة اللاعبين).
-   - الحفاظ على `dir="auto"` + `unicodeBidi: 'plaintext'` في جميع رسائل الدردشة والتخمينات وحقول الإدخال (`#chat-textarea`, `#guess-input`)، و`<bdi>` في `votekick_alert`.
-   - الحفاظ على `dir="ltr"` في `ExperimentalDrawingBoard` (`420, 532, 582, 649`) و`FlipaClipControls`.
-6. **التعديلات الدقيقة:**
-   - ربط كل رسائل `OverlayChatRoom` و`GameActivityFeed` (بما فيها `eventCode` القادم من `L10N-4` والرسائل التوجيهية `Waiting for players`، و`Copy`) بمفاتيح الترجمة.
-   - ترجمة `Empty`, `pts`, `report` tooltip, نصوص حالات `#guess-input`, أزرار الرسم الحر (`ابدأ الرسم`/`انضم للرسم`/`العودة للرسم`), نافذتي تأكيد `CLEAN` و`NAMES` (وصف/أزرار بدون تغيير `CLEAN`/`NAMES`), وتلميحات أدوات الرسم.
-   - توطين `ExperimentalHitOverlay` (`reported!`, `hit!`) مع `<bdi>` لاسم اللاعب.
-7. **المخاطر:** تداخل نص `#guess-input` العربي مع أيقونة القلم اليسرى (`left-4` و`pl-11`), أو تغيّر طول شارات `pts` في `PlayersSidebar` أو `votekick_alert` على شاشات صغيرة، أو اختلال اتجاه الحروف في `ExperimentalWordOverlay` عند كون المستند `rtl`.
-8. **معايير الخروج:** تجربة متطابقة في الجودَة بالعربية والإنجليزية عبر الأوضاع الثلاثة (العادي، التنافسي، والرسم الحر) وفي الغرف المختلطة.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي بحسابين (عربي + إنجليزي) في نفس الغرفة التنافسية وفي الرسم الحر على الجوال وسطح المكتب.
+### المرحلة `L10N-5` — الدردشة والتخمينات وإشعارات الدردشة (`Chat, Guesses & Chat Notifications`)
+1. **الاسم والرقم:** `PHASE L10N-5 — Chat, Guesses & Chat Notifications`
+2. **الهدف:** توطين `OverlayChatRoom` و`GameActivityFeed` و`ExperimentalHitOverlay` وحالة حقل التخمين في الغرفتين، بما يشمل رسائل الانضمام والمغادرة والتصويت والطرد والتنبيهات والتحذيرات محلياً لكل لاعب عبر `eventCode`/`params`، مع عدم ترجمة الرسائل والتخمينات التي كتبها اللاعبون والحفاظ على كافة تحسينات BiDi وتكافؤ `GameRoom` و`ExperimentalGameRoom`.
+3. **الملفات المسموحة:**
+   - `src/components/game/OverlayChatRoom.tsx`
+   - `src/components/game/GameActivityFeed.tsx`
+   - `src/components/experimental/ExperimentalHitOverlay.tsx`
+   - `src/components/GameRoom.tsx` و`src/components/experimental/ExperimentalGameRoom.tsx` (**فقط** نصوص/placeholders حقل التخمين `#guess-input` وتمرير ما يلزم للدردشة/التخمينات بما يحفظ التوافق التام بينهما)
+   - `src/i18n/locales/*`
+4. **الملفات المحظورة:** `server/*`, `src/components/Lobby.tsx`, `src/components/lobby/*`, `src/components/experimental/ExperimentalDrawingBoard.tsx`, `src/components/game/FlipaClipControls.tsx`, `src/components/game/DrawingCanvasCore.tsx`, `AGENTS.md`.
+5. **الآليات المحمية:**
+   - **Safeguard 1 & 2 & 4 & 5:** ترقية مرشح `OverlayChatRoom` وإعادة صياغة المتكلم وحالات `GameActivityFeed` لقراءة `eventCode`/`params`/`actorId` أولاً ثم fallback للرسائل النصية القديمة؛ إبقاء `<bdi>` في `votekick_alert` و`ExperimentalHitOverlay`.
+   - **Safeguard 3:** الحفاظ الصارم على `dir="auto"` و`unicodeBidi: 'plaintext'` في فقاعات الدردشة والتخمينات و`#chat-textarea` و`#guess-input` وعدم ترجمة أي نص كتبه اللاعبون.
+   - **Safeguard 8:** الحفاظ على `dir="ltr"` على شبكة الغرفة وتخطيط `#guess-input` أو تكييف موضع أيقونة القلم بأمان دون تداخل مع النص العربي.
+6. **التعديلات الدقيقة:** ترجمة كافة مفاتيح `events` والـ feed (`Copy`, `Type your message here...`, `Waiting for players`, `Answer here...`, حالات الانتظار/التخطي/الرسم، إشعارات `hit!`/`reported!`/`is close!`/`You've found the answer`, تحذير الغش، إشعارات الانضمام والمغادرة والطرد و`AFK`).
+7. **المخاطر:** اختفاء رسالة نظامية قديمة إذا أُهمل مسار الـ fallback، أو انقلاب ترتيب جملة `votekick_alert` عند اختلاط أسماء عربية وإنجليزية، أو تداخل نص placeholder العربي مع أيقونة `#guess-input`.
+8. **معايير الخروج:** لاعب عربي ولاعب إنجليزي في نفس الغرفة يريان إشعارات الدردشة وسجل التخمينات بلغة كل منهما مع بقاء نصوص اللاعبين كما كُتبت تماماً.
+9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي بحسابين (عربي + إنجليزي) في نفس الغرفة التنافسية وفي الرسم الحر لتبادل رسائل عربية/إنجليزية ومختلطة واختبار الـ Votekick والغش والتخمينات وإعادة الاتصال.
 10. **الاعتماديات:** `L10N-4`.
 
 ---
 
-### المرحلة `L10N-6` — التدقيق النهائي وفحص اكتمال المفاتيح والإغلاق
-1. **الاسم والرقم:** `PHASE L10N-6 — Final Localization Audit, Missing-Key Verification & Closure`
-2. **الهدف:** التحقق الآلي واليدوي الشامل من عدم وجود أي نص يتيم غير مترجم، وتساوي جميع المفاتيح بين `ar` و`en`، وسلامة الأداء والاتجاه واللعب باللغات المختلطة.
-3. **الملفات المسموحة:** تصحيحات مفاتيح القاموس `src/i18n/locales/*` وأي إصلاحات طفيفة لم تُكتشف إلا في الفحص النهائي، وتحديث `LOCALIZATION_ROADMAP.md` لإغلاق المسار.
-4. **الملفات المحظورة:** محرك الرسم (`DrawingCanvasCore.tsx`), بروتوكول الرسم الثنائي (`server/registerDrawBinaryHandler.ts`), ومصفوفة الكلمات (`wordsDictionary.ts`).
-5. **الآليات المحمية:** كامل ثوابت `AGENTS.md` و`UI-A/B/C` وSafeguards 1–9.
-6. **التعديلات الدقيقة:** فحص تطابق مفاتيح JSON/TS بين اللغات، تدقيق لغوي للترجمات العربية والإنجليزية، التحقق من `index.html` meta، وتحديث حالة `PHASE L10N` إلى `COMPLETED`.
-7. **المخاطر:** بقايا نصوص hardcoded في مسار فرعي نادر (مثل انقطاع الاتصال المطوّل أو نافذة خطأ `auth_store_full`).
-8. **معايير الخروج:** صفر مفاتيح مفقودة، اجتياز `npx tsc --noEmit` و`npm run build`، وموافقة المالك النهائية بعد تجربة حية كاملة.
-9. **الاختبارات:** فحص تكافؤ مفاتيح القواميس، `npx tsc --noEmit`، `npm run build`، وتجربة المالك النهائية (Auto + AR + EN + Mixed Room + Reconnect).
+### المرحلة `L10N-6` — اللوبي ومتصفح الغرف (`Lobby & Room Browser`)
+1. **الاسم والرقم:** `PHASE L10N-6 — Lobby & Room Browser`
+2. **الهدف:** توطين النصوص المتبقية في `Lobby.tsx` (بما فيها نوافذ التنبيه الداخلية وشبكة الأفاتار و`NICKNAME` وplaceholder ورسائل `newRoomNotice`/`joinError`) و`RoomsBrowserScreen.tsx` و`RoomInfoModal.tsx`، مع الحفاظ على أسماء الغرف المخصصة والمعرفات التقنية كما هي، و**عدم إعادة بناء منتقي اللغة المضاف في `L10N-1`**.
+3. **الملفات المسموحة:**
+   - `src/components/Lobby.tsx` (النصوص المتبقية والنوافذ الداخلية فقط دون تعديل منطق أو بنية منتقي اللغة من `L10N-1`)
+   - `src/components/lobby/RoomsBrowserScreen.tsx`
+   - `src/components/lobby/RoomInfoModal.tsx`
+   - `src/components/lobby/AvatarCarousel.tsx` (فقط `aria-label` إن وُجدت حاجة)
+   - `src/i18n/locales/*`
+4. **الملفات المحظورة:** `server/*`, `src/types/game.ts` (`getRoomConfig` و`ROOM_PRESETS` التقنية), `src/components/game/*`, `src/components/experimental/*`, `AGENTS.md`.
+5. **الآليات المحمية:**
+   - بقاء `DRAW.IO`, `ROOMS`, `INFO`, `ERROR`, `INACTIVE`, `DISCONNECTED` كعناوين `GameTitle` بالإنجليزية دائماً.
+   - بقاء المعرفات التقنية (`General #Test`, `General #10P`, `Free Draw`, `Experimental Draw`, `#Custom`) دون تغيير منطق `getRoomConfig` (`Safeguard 9`).
+   - الحفاظ على `dir="auto"`/سلوك الإدخال في حقل الاسم المستعار وiOS Keyboard focus bypass في `Lobby.tsx`.
+6. **التعديلات الدقيقة:** ترجمة تسميات اللوبي ومتصفح الغرف ومودال معلومات الغرفة (`NEW ROOM`, `PLAY`, `Players`, `Theme`, `To Win`, `مفتوح`, `pts`, أسماء العرض المعيارية، ورسائل `هذه الميزة غير متوفرة بعد` / `عذراً، هذه الغرفة ممتلئة بالكامل!` عبر مفاتيح `i18n`).
+7. **المخاطر:** ضغط المساحة العمودية في شاشة اللوبي أو أعمدة `RoomInfoModal` الثلاثة (`grid-cols-3`) على الشاشات الصغيرة.
+8. **معايير الخروج:** اللوبي ومتصفح الغرف ومعلومات الغرفة مترجمة بالكامل دون كسر منتقي `L10N-1` أو أسماء الغرف المخصصة.
+9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي للوبي وقائمة الغرف ومودال المعلومات بالعربية والإنجليزية و`Auto` على الهاتف وسطح المكتب.
 10. **الاعتماديات:** `L10N-5`.
+
+---
+
+### المرحلة `L10N-7` — أدوات الرسم والواجهة المتبقية (`Drawing Tools & Remaining UI`)
+1. **الاسم والرقم:** `PHASE L10N-7 — Drawing Tools & Remaining UI`
+2. **الهدف:** توطين أدوات الرسم (`FlipaClipControls.tsx`, `ExperimentalDrawingBoard.tsx` شاملةً `title` و`aria-label` ونوافذ `CLEAN` و`NAMES`) والنصوص المتفرقة المتبقية (`PlayersSidebar.tsx`, `FreeDrawPlayersList.tsx`, تلميحات/أزرار `GameRoom.tsx` و`ExperimentalGameRoom.tsx` المتبقية، `beforeunload`، و`ErrorBoundary.tsx`) مع الحفاظ الصارم على اتجاه أدوات الرسم وإحداثياتها.
+3. **الملفات المسموحة:**
+   - `src/components/experimental/ExperimentalDrawingBoard.tsx`
+   - `src/components/game/FlipaClipControls.tsx`
+   - `src/components/game/PlayersSidebar.tsx`
+   - `src/components/game/FreeDrawPlayersList.tsx`
+   - `src/components/GameRoom.tsx` و`src/components/experimental/ExperimentalGameRoom.tsx` (الأزرار والتلميحات المتبقية: `الخروج من الغرفة`, `الدردشة`, `Report drawing`, `You reported this draw`, `ابدأ الرسم`/`انضم للرسم`/`العودة للرسم`, `Empty`, `beforeunload`)
+   - `src/ErrorBoundary.tsx`
+   - `src/i18n/locales/*`
+4. **الملفات المحظورة:** `src/components/game/DrawingCanvasCore.tsx`, `src/utils/canvasFloodFill.ts`, `src/utils/canvasCheckpointManager.ts`, `server/*`, `AGENTS.md`.
+5. **الآليات المحمية:**
+   - **Safeguard 7 & 8:** الإبقاء الصارم على `dir="ltr"` على `ExperimentalDrawingBoard` (`420, 532, 582, 649`) و`FlipaClipControls` وشبكة الغرفة و`SmoothTimer`.
+   - **`UI-B Stage B2` & `UI-C Stage 2A`:** عدم تغيير أبعاد `aspect-[680/396]` أو بنية `flex items-center min-w-0 max-w-full` في `PlayersSidebar.tsx` و`FreeDrawPlayersList.tsx`.
+   - بقاء `CLEAN` و`NAMES` كعناوين `GameTitle` بالإنجليزية.
+6. **التعديلات الدقيقة:** ترجمة `Empty`, `pts`, التلميحات والأوصاف والأزرار في `ExperimentalDrawingBoard` و`FlipaClipControls`، وأزرار الرسم الحر وتلميحات الغرفة ورسالة `ErrorBoundary`.
+7. **المخاطر:** اتساع شارة `pts` في `PlayersSidebar` على الشاشات الضيقة، أو أي انزياح عرضي في شريط أدوات الرسم (محمي بـ `dir="ltr"`).
+8. **معايير الخروج:** اكتمال توطين 100% من نصوص واجهة اللاعبين في جميع الأوضاع الثلاثة مع ثبات تام لهندسة الرسم وقائمة اللاعبين.
+9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي للرسم (قلم، دلو، ألوان، تكبير، مسح اللوحة، إظهار/إخفاء الأسماء في الرسم الحر، قائمة اللاعبين) بالعربية والإنجليزية.
+10. **الاعتماديات:** `L10N-6`.
+
+---
+
+### المرحلة `L10N-8` — التدقيق النهائي لضمان الجودة والإغلاق (`Final Localization QA`)
+1. **الاسم والرقم:** `PHASE L10N-8 — Final Localization QA`
+2. **الهدف:** تدقيق شامل لجميع النصوص، مطابقة 100% لمفاتيح `ar` و`en`، فحص الترجمات الناقصة، واختبار `Auto` و`AR` و`EN` وغرف اللغات المختلطة والاتجاهات، ثم الاعتماد النهائي وإغلاق المسار.
+3. **الملفات المسموحة:** ملفات القواميس `src/i18n/locales/*` (لتصحيح أي مفتاح ناقص أو صياغة لغوية)، وأي إصلاح نصي/اتجاهي طفيف يثبت احتياجه في المراجعة الأخيرة (مع توثيق أي ملف إضافي وموافقة المالك)، وتحديث `LOCALIZATION_ROADMAP.md` و`REFACTORING_ROADMAP.md` لإغلاق `PHASE L10N`.
+4. **الملفات المحظورة:** `src/components/game/DrawingCanvasCore.tsx`, `server/registerDrawBinaryHandler.ts`, `server/data/wordsDictionary.ts`, `server/utils/arabicFuzzyMatch.ts`, `AGENTS.md`.
+5. **الآليات المحمية:** كامل ثوابت `AGENTS.md` و`UI-A/B/C` وSafeguards 1–9.
+6. **التعديلات الدقيقة:** مقارنة شاملة لمفاتيح `ar` مقابل `en`، فحص وجود أي نصوص hardcoded متبقية، التحقق من حجم الحزمة الفعلي مقارنة بالتقدير الأولي، وتحديث الوثائق بالحالة النهائية `COMPLETED`.
+7. **المخاطر:** بقاء نص يتيم في مسار نادر أو عدم تطابق صيغة جمع عربية.
+8. **معايير الخروج:** صفر مفاتيح مفقودة، تطابق كامل بين `ar` و`en`، اجتياز `npx tsc --noEmit` و`npm run build`، وموافقة مالك المشروع النهائية بعد الاختبار الكامل.
+9. **الاختبارات:** فحص تكافؤ المفاتيح + `npx tsc --noEmit` + `npm run build` + اختبار المالك النهائي (`Auto`, `AR`, `EN`، لاعبين بلغتين مختلفتين داخل الغرفة الواحدة، النصوص المختلطة، إعادة الاتصال، الوضع التنافسي والرسم الحر).
+10. **الاعتماديات:** `L10N-7`.
 
 ---
 
 ## 8. نطاق وتفاصيل المرحلة القادمة المباشرة (`L10N-1 ONLY`)
 
-> تُعد **`L10N-1`** الدفعة التنفيذية الأولى والوحيدة عند انتقالنا للتنفيذ، ولا تتضمن أي تعديل على شاشات اللعبة أو السيرفر:
+> تُعد **`L10N-1`** الدفعة التنفيذية الأولى والوحيدة عند انتقالنا للتنفيذ، ولا تتضمن ترجمة بقية اللوبي أو تعديل الخادم أو الدردشة أو النوافذ:
 
 - **ما ستشمله `L10N-1` حصرياً:**
-  1. تثبيت حزم `i18next` و`react-i18next` في `package.json`.
+  1. تثبيت `i18next` و`react-i18next` في `package.json` (وملف القفل الذي يُحدّثه مدير الحزم؛ مع العلم أن المستودع حالياً يضم `bun.lock` دون `package-lock.json`).
   2. إنشاء بنية `src/i18n/`:
-     - `types.ts` (تعريف `LanguageMode = 'auto' | 'ar' | 'en'` و`SupportedLanguage = 'ar' | 'en'` ودعم namespaces).
-     - `languageDetector.ts` (كشف لغة المتصفح وحفظ/قراءة التفضيل بأمان عبر `safeLocalStorage` وحساب اللغة الفعلية وتحديث `<html lang>` و`<title>`/`meta` دون فرض قلب هندسة الرسم).
-     - `index.ts` (تهيئة `i18next` متزامنة بالاستيراد المحلي الكامل + `missingKeyHandler` في وضع التطوير فقط).
-     - `useAppTranslation.ts` (واجهة التفاعل الموحدة للمكونات).
-     - ملفات القواميس المنظمة `locales/en/*.ts` و`locales/ar/*.ts` (أو JSON) مع فحص النوع الصارم لمنع وجود مفتاح في لغة دون الأخرى.
-  3. ربط التهيئة المبكرة في `src/main.tsx` فقط دون لمس أي مكون واجهة أو سطر في `server/`.
-- **النتيجة المتوقعة من `L10N-1`:** بنية تحتية صلبة وجاهزة 100%، اجتياز `npx tsc --noEmit` و`npm run build`، مع بقاء واجهة التطبيق شغالة ومتطابقة تماماً قبل بدء `L10N-2`.
+     - `types.ts` (`LanguageMode = 'auto' | 'ar' | 'en'`, `SupportedLanguage = 'ar' | 'en'`, `CustomTypeOptions`).
+     - `languageDetector.ts` (قراءة/حفظ الاختيار بأمان عبر `safeLocalStorage`، كشف لغة المتصفح، وحساب اللغة الفعلية).
+     - `index.ts` (تهيئة `i18next` المتزامنة بالاستيراد المحلي الكامل للغتين `ar` و`en`، مع كاشف المفاتيح المفقودة في التطوير فقط).
+     - `useAppTranslation.ts` (hook التفاعل الموحد).
+     - ملفات القواميس المحلية المبدئية `locales/en/*` و`locales/ar/*` (متضمنةً مفاتيح منتقي اللغة وهياكل الـ namespaces).
+     - تحديث `document.documentElement.lang` بصورة آمنة، مع **إبقاء عنوان الصفحة التجاري `DRAW.IO` بالإنجليزية دائماً**، و**عدم فرض `dir="rtl"` عالمياً دون عزل هندسة الغرفة والرسم**.
+  3. ربط التهيئة المبكرة في `src/main.tsx`.
+  4. إضافة **منتقي اللغة (`Auto` / `العربية` / `English`) فقط** إلى شاشة البداية في `src/components/Lobby.tsx` دون ترجمة بقية محتوى اللوبي (`NICKNAME`, `ROOMS`, النوافذ، إلخ).
+- **النتيجة المتوقعة من `L10N-1`:** نواة ترجمة جاهزة ومحقونة مع منتقي لغة شغّال ومحفوظ عبر `safeLocalStorage`، واجتياز `npx tsc --noEmit` و`npm run build`، مع بقاء سائر الشاشات كما هي تماماً قبل بدء `L10N-2`.
 
 ---
 
 ## 9. قواعد تحديث خارطة الطريق الإلزامية (`Roadmap Update Rules`)
 
-يجب الالتزام بهذه القواعد التسع في كل دفعة قادمة من مسار `PHASE L10N`:
+يجب الالتزام بهذه القواعد العشر في كل دفعة قادمة من مسار `PHASE L10N`:
 
 1. **التأريخ والتوثيق الدقيق عند الإغلاق:** عند اكتمال أي مرحلة بنجاح، تُحدّث حالتها إلى `[x] COMPLETED` مع تاريخ الإنجاز الدقيق والمرجع المعتمد (Commit / Verification Reference).
 2. **حظر حذف المراحل:** لا تُحذف أي مرحلة من هذا الملف حتى بعد اكتمالها؛ تبقى جميع المراحل موثقة لتكوّن السجل الكامل للمشروع.
-3. **الإضافة المنضبطة للاكتشافات الجديدة:** إذا كُشفت تفاصيل أو نصوص أو إصلاحات جديدة أثناء التنفيذ، تُسجّل أو تُضاف كمرحلة فرعية واضحة دون كسر التسلسل المعتمد (`L10N-0` إلى `L10N-6`).
+3. **الإضافة المنضبطة للاكتشافات الجديدة:** إذا كُشفت تفاصيل أو نصوص أو إصلاحات جديدة أثناء التنفيذ، تُسجّل أو تُضاف كمرحلة فرعية واضحة دون كسر التسلسل المعتمد (`L10N-0` إلى `L10N-8`).
 4. **وضوح المراحل المتبقية:** يجب أن يُظهر الملف دائماً وبدقة ما اكتمل وما هو جارٍ وما هي المراحل المتبقية بالتحديد.
 5. **تحديث قسم آليات الحماية:** إذا تم اكتشاف آلية حماية إضافية لاتجاه النص (BiDi) أو للدردشة أو لمنطقة الرسم أثناء التنفيذ، يجب إضافتها فوراً إلى القسم `3` (`EXISTING TEXT-DIRECTION & CHAT SAFEGUARDS — MUST PRESERVE`).
 6. **بوابات التحقق البرمجي الإلزامية:** في كل مرحلة تعديل كود، يجب تنفيذ واجتياز `npx tsc --noEmit` و`npm run build` وتوثيق نتائجهما قبل الانتقال أو الاعتماد.
 7. **التحقق اليدوي من المالك قبل الإغلاق:** لا تُعلَم أي مرحلة مرئية أو تفاعلية كـ `COMPLETED` إلا بعد اختبار المالك يدوياً على المتصفح والهاتف وتأكيده سلامة التجربة.
-8. **حظر دمج المراحل:** تنفيذ مرحلة واحدة فقط في كل أمر/دفعة.
-9. **حماية ثوابت المستودع:** أي تغيير مستقبلي في خارطة التدويل يجب أن يثبت التزامه الصارم بـ [`AGENTS.md`](./AGENTS.md) و[`REFACTORING_ROADMAP.md`](./REFACTORING_ROADMAP.md).
+8. **حظر دمج المراحل:** تنفيذ مرحلة واحدة فقط في كل أمر/دفعة، وعدم نقل ترجمة أي قسم إلى مرحلة سابقة.
+9. **الانضباط الصارم بنطاق الملفات:** لا يُسمح لأي مرحلة بتعديل ملفات خارج قائمة ملفاتها المسموحة دون تبرير تقني واضح وتوثيق موافقة مالك المشروع.
+10. **حماية ثوابت المستودع:** أي تغيير مستقبلي في خارطة التدويل يجب أن يثبت التزامه الصارم بـ [`AGENTS.md`](./AGENTS.md) و[`REFACTORING_ROADMAP.md`](./REFACTORING_ROADMAP.md).
