@@ -898,8 +898,9 @@
 
 ## 🌐 القسم J — مسار التدويل وتعدد اللغات (`PHASE L10N — LOCALIZATION_ROADMAP.md`)
 
-- **الحالة الحالية (`2026-11-22`):** `PHASE L10N-0 COMPLETED` | `PHASE L10N-0.1 COMPLETED` | **`L10N-1 — AWAITING MANUAL VERIFICATION`** (تم تأسيس `src/i18n/` وإضافة منتقي اللغة في شاشة البداية بـ `Lobby.tsx` واجتياز `tsc --noEmit` و`vite build`؛ بانتظار التحقق اليدوي من المالك قبل الانتقال إلى `L10N-2`).
-- **المرجع التفصيلي المعتمد:** راجع [`LOCALIZATION_ROADMAP.md`](./LOCALIZATION_ROADMAP.md) للاطلاع على الجرد الشامل للنصوص، وقسم الحماية الإلزامي (`EXISTING TEXT-DIRECTION & CHAT SAFEGUARDS — MUST PRESERVE`)، والمراحل المعتمدة من **`L10N-0` إلى `L10N-8`**.
+- **الحالة الحالية (`2026-11-23`):** اكتملت المراحل **`L10N-0`** و**`L10N-0.1`** و**`L10N-1`** (مؤكدة يدوياً) و**`L10N-1.1`** و**`L10N-2`** (مؤكدة يدوياً) و**`L10N-2.1`** (مؤكدة يدوياً — Commit: `d176c37f3d56f364e971ec24cbd22f2a0c0ef64c`). المرحلة التالية هي **`L10N-3 — NEXT — NOT STARTED`** (`MiniBoard & Turn Transitions`).
+- **السجل التقني للنوافذ المنبثقة:** يُوثّق [`UI_MODAL_REGISTRY.md`](./UI_MODAL_REGISTRY.md) جرد النوافذ المنبثقة والطبقات التفاعلية في الواجهة كمرجع ملاحة وصيانة مستقل دون استبدال المكون التشغيلي المشترك `src/components/game/CinematicModal.tsx`.
+- **المرجع التفصيلي المعتمد:** يظل [`LOCALIZATION_ROADMAP.md`](./LOCALIZATION_ROADMAP.md) المتتبع الرسمي والمفصل لحالة مراحل التدويل وقسم الحماية الإلزامي (`EXISTING TEXT-DIRECTION & CHAT SAFEGUARDS — MUST PRESERVE`).
 
 
 

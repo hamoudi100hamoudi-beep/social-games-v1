@@ -1,9 +1,18 @@
 # 🌐 خارطة طريق التدويل وتعدد اللغات (Localization Roadmap — `PHASE L10N`)
 
-**المستودع المرجعي:** `hamoudi100hamoudi-beep/social-games-v1`  
-**الحالة الحالية:** `PHASE L10N-0 COMPLETED` (`2026-11-22`) | `PHASE L10N-0.1 COMPLETED` (`2026-11-22`) | `L10N-1 — AWAITING MANUAL VERIFICATION` (`2026-11-22`) | `L10N-1.1 REVIEW APPLIED` (`2026-11-22`)  
+**المستودع المرجعي:** `hamoudi100hamoudi-beep/social-games-v1` (آخر Commit تنفيذ موثق: `d176c37f3d56f364e971ec24cbd22f2a0c0ef64c`)  
+**الحالة الحالية (`2026-11-23`):**  
+- `L10N-0`: `COMPLETED` (`2026-11-22`)  
+- `L10N-0.1`: `COMPLETED` (`2026-11-22`)  
+- `L10N-1`: `COMPLETED — OWNER MANUALLY VERIFIED` (`2026-11-22` / معتمد `2026-11-23`)  
+- `L10N-1.1`: `COMPLETED — DEPENDENCY AND INITIALIZATION REVIEW APPLIED` (`2026-11-22`)  
+- `L10N-2`: `COMPLETED — POPUPS AND MODALS LOCALIZED AND OWNER VERIFIED` (`2026-11-23`)  
+- `L10N-2.1`: `COMPLETED — REMAINING POPUPS LOCALIZED, REGISTRY CREATED, AND OWNER VERIFIED` (`2026-11-23`)  
+- `L10N-3`: **`NEXT — NOT STARTED`**
+
 **الوثائق المرجعية المرتبطة:**  
 - دستور محرك الرسم والتراجع: [`AGENTS.md`](./AGENTS.md)  
+- سجل النوافذ المنبثقة والطبقات التفاعلية: [`UI_MODAL_REGISTRY.md`](./UI_MODAL_REGISTRY.md)  
 - خارطة الطريق المعمارية الموحدة: [`REFACTORING_ROADMAP.md`](./REFACTORING_ROADMAP.md)  
 - خارطة طريق الموثوقية والأمان: [`PRODUCTION_RELIABILITY_ROADMAP.md`](./PRODUCTION_RELIABILITY_ROADMAP.md)  
 
@@ -246,7 +255,7 @@
 ---
 
 ### المرحلة `L10N-1` — نواة الترجمة ومنتقي اللغة (`Localization Foundation & Language Selector`)
-1. **الاسم والرقم:** `PHASE L10N-1 — Localization Foundation & Language Selector` — **`[~] L10N-1 — AWAITING MANUAL VERIFICATION` (`2026-11-22`)** *(نُفذ الكود واجتاز فحوص TypeScript والبناء؛ بانتظار الاختبار اليدوي واعتماد المالك قبل تعليمها `COMPLETED`)*.
+1. **الاسم والرقم:** `PHASE L10N-1 — Localization Foundation & Language Selector` — **`[x] COMPLETED — OWNER MANUALLY VERIFIED`** *(نُفذ الكود بتاريخ `2026-11-22` واختبره المالك يدوياً في المتصفح: التبديل بين `Auto` / `العربية` / `English`، كشف لغة المتصفح، وحفظ الاختيار بعد إعادة تحميل الصفحة)*.
 2. **الهدف:** تأسيس `i18next` و`react-i18next` بملفات `ar` و`en` المحلية، وأوضاع `auto` / `ar` / `en` عبر `safeLocalStorage`، وإضافة **منتقي اللغة فقط** إلى شاشة البداية (`Lobby.tsx`) وتحديث `lang` في مستند HTML بصورة آمنة، **دون ترجمة بقية اللوبي أو تطبيق `dir="rtl"` عالمياً دون عزل هندسة الغرفة والرسم**.
 3. **الملفات المنشأة والمعدلة فعلياً:**
    - **ملفات برمجية منشأة (`src/i18n/`):**
@@ -283,7 +292,7 @@
 ---
 
 ### المرحلة `L10N-1.1` — مراجعة أمان `bun.lock` وتوقيت تهيئة `i18next` (`Dependency & Initialization Safety Review`)
-1. **الاسم والرقم:** `PHASE L10N-1.1 — Dependency & Initialization Safety Review` — **`[~] REVIEW APPLIED — L10N-1 REMAINS AWAITING MANUAL VERIFICATION` (`2026-11-22`)**
+1. **الاسم والرقم:** `PHASE L10N-1.1 — Dependency & Initialization Safety Review` — **`[x] COMPLETED — DEPENDENCY AND INITIALIZATION REVIEW APPLIED`** (`2026-11-22`)
 2. **تدقيق وإصلاح `bun.lock`:**
    - **سبب التضخم المرصود:** عند مقارنة `HEAD` (`e4c131d`) مع `HEAD~1` (`4f0e32d`) في GitHub، احتوى `bun.lock` على **48 حزمة محدثة مسبقاً** في بيئة الحاوية غير مرتبطة بـ `i18next` أو `react-i18next` (`@babel/*`, `rollup` و26 حزمة منصة `@rollup/rollup-*`, `autoprefixer`, `baseline-browser-mapping`, `browserslist`, `csstype`, `electron-to-chromium`, `engine.io`, `node-releases`, `object-inspect`, `playwright`, `playwright-core`, `postcss`, `source-map-js`, `tapable`, `update-browserslist-db`, `@tailwindcss/oxide-wasm32-wasi/@tybys/wasm-util`).
    - **الإجراء المنفذ:** أعيدت جميع الـ 48 حزمة إلى إصدارات `HEAD~1` (`4f0e32d`) باستخدام `bun install --lockfile-only` ثم تثبيت القفل عبر `bun install --frozen-lockfile`.
@@ -302,36 +311,56 @@
 ---
 
 ### المرحلة `L10N-2` — توطين النوافذ المنبثقة فقط (`Popups & Modals`)
-1. **الاسم والرقم:** `PHASE L10N-2 — Popups & Modals`
+1. **الاسم والرقم:** `PHASE L10N-2 — Popups & Modals` — **`[x] COMPLETED — POPUPS AND MODALS LOCALIZED AND OWNER VERIFIED`** (`2026-11-23`)
 2. **الهدف:** مراجعة وتوطين جميع النوافذ المنبثقة المشتركة فقط: الاحتفاظ بالترجمات الموجودة والصحيحة، ترجمة النصوص الناقصة، تصحيح النصوص المختلطة (إزالة الازدواجية لتظهر بلغة اللاعب المختارة فقط)، وإبقاء العناوين الفنية (`GameTitle`) بالإنجليزية، دون لمس `MiniBoard` أو الدردشة أو التخمينات أو بقية اللوبي.
-3. **الملفات المسموحة:**
+3. **الملفات المسموحة والمنفذة:**
    - `src/components/game/modals/ExitConfirmModal.tsx`
    - `src/components/game/modals/SkipConfirmModal.tsx`
    - `src/components/game/modals/ReportConfirmModal.tsx`
    - `src/components/game/modals/AfkWarningModal.tsx`
    - `src/components/game/modals/PlayerProfileModal.tsx`
    - `src/components/game/modals/RoomAlertModals.tsx`
-   - `src/components/game/CinematicModal.tsx` (`aria-label="Close"`)
+   - `src/components/game/CinematicModal.tsx` (`aria-label` لزر الإغلاق)
    - `src/components/game/CustomEmojiModal.tsx`
    - `src/components/game/ColorWheelModal.tsx`
    - `src/components/game/RoomConnectionStatusOverlay.tsx`
-   - `src/i18n/locales/*` (تحت namespace `modals` / `common`)
-   *(ملاحظة فصل النطاق: النوافذ المضمنة داخل `Lobby.tsx` تُعالج في `L10N-6` ونوافذ `CLEAN`/`NAMES` المضمنة داخل `ExperimentalDrawingBoard.tsx` تُعالج في `L10N-7` منعاً لتداخل مراحل منفصلة).*
-4. **الملفات المحظورة:** `server/*`, `src/components/game/MiniBoardOverlay.tsx`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/experimental/ChoosingWordOverlay.tsx`, `src/components/experimental/ExperimentalWordOverlay.tsx`, `src/components/experimental/ExperimentalDrawingBoard.tsx`, `src/components/Lobby.tsx`, `src/components/lobby/*`, `src/components/GameRoom.tsx`, `src/components/experimental/ExperimentalGameRoom.tsx`.
+   - `src/i18n/locales/{en,ar}/{common,modals,index}.ts`
+   *(ملاحظة فصل النطاق: النوافذ الأربع المضمنة داخل `Lobby.tsx` و`ExperimentalDrawingBoard.tsx` التي رُصدت لاحقاً أُنجزت في المرحلة التكميلية المباشرة `L10N-2.1` أدناه، بينما تبقى بقية نصوص `Lobby.tsx` في `L10N-6` وبقية أدوات `ExperimentalDrawingBoard.tsx` في `L10N-7`).*
+4. **الملفات المحظورة (تم احترامها بالكامل):** `server/*`, `src/components/game/MiniBoardOverlay.tsx`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/experimental/ChoosingWordOverlay.tsx`, `src/components/experimental/ExperimentalWordOverlay.tsx`, `src/components/GameRoom.tsx`, `src/components/experimental/ExperimentalGameRoom.tsx`.
 5. **الآليات المحمية:**
-   - بقاء عناوين `GameTitle` بالإنجليزية (`EXIT`, `REPORT`, `PROFILE`, `SKIP`, `INACTIVE`, `ERROR`, `KICKED`, `SLOW DOWN`, `SERVER FULL`, `TIMEOUT`, `DISCONNECTED`, `CUSTOM EMOJI`).
-   - إبقاء `dir="ltr"` على شريط الكثافة (`ColorWheelModal.tsx:554`) وحقل `#HEX` (`487`).
+   - بقاء عناوين `GameTitle` بالإنجليزية (`EXIT`, `REPORT`, `PROFILE`, `SKIP`, `INACTIVE`, `ERROR`, `KICKED`, `SLOW DOWN`, `SERVER FULL`, `TIMEOUT`, `CUSTOM EMOJI`).
+   - إبقاء `dir="ltr"` على شريط الكثافة وحقل `#HEX` في `ColorWheelModal.tsx`.
    - إبقاء `dir="auto"` / `<bdi>` لاسم اللاعب في `PlayerProfileModal` واختيار الإيموجي.
-6. **التعديلات الدقيقة:** توحيد أزرار `YES`/`NO`/`OK`/`موافق`/`BLOCK`/`UNBLOCK`/`VOTEKICK`/`REMOVE VOTE` وأوصافها وصيغ الجمع في `AfkWarningModal` (ثانية/ثانيتان/ثوانٍ) وتلميحات `ColorWheelModal` وحالات `RoomConnectionStatusOverlay` بحيث تظهر بلغة اللاعب المختارة فقط، مع ضبط `dir={isRTL ? 'rtl' : 'ltr'}` داخل محتوى النوافذ فقط.
-7. **المخاطر:** التفاف النصوص الطويلة داخل `CinematicModal` أو `ColorWheelModal` على الشاشات القصيرة (`responsive-modal-scale`).
-8. **معايير الخروج:** 100% من نصوص النوافذ المنبثقة المشتركة نظيفة وخالية من الازدواجية في اللغتين، دون لمس `MiniBoard` أو الدردشة أو التخمينات.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + فحص المالك اليدوي لكل نافذة منبثقة بالعربية والإنجليزية.
-10. **الاعتماديات:** `L10N-1`.
+6. **التنفيذ والاعتماد الفعلي:** توحيد أزرار `YES`/`NO`/`OK`/`BLOCK`/`UNBLOCK`/`VOTEKICK`/`REMOVE VOTE` وأوصافها وصيغ الجمع في `AfkWarningModal` وتلميحات `ColorWheelModal` وحالات `RoomConnectionStatusOverlay` بلغة اللاعب المختارة فقط، واجتياز `npx tsc --noEmit` و`npm run build` ومزامنة GitHub والتحقق اليدوي الكامل من المالك.
+7. **الاعتماديات:** `L10N-1` و`L10N-1.1`.
+
+---
+
+### المرحلة `L10N-2.1` — النوافذ المنبثقة المتبقية وسجل النوافذ (`Remaining Popups & UI Modal Registry`)
+1. **الاسم والرقم:** `PHASE L10N-2.1 — Remaining Popups & UI Modal Registry` — **`[x] COMPLETED — REMAINING POPUPS LOCALIZED, REGISTRY CREATED, AND OWNER VERIFIED`** (`2026-11-23` — Commit: `d176c37f3d56f364e971ec24cbd22f2a0c0ef64c`)
+2. **الهدف:** استكمال توطين النوافذ المنبثقة الأربع التي كانت خارج نطاق `L10N-2` قبل الانتقال إلى `L10N-3`، وإنشاء سجل تقني موحّد وصياني لجميع النوافذ المنبثقة والطبقات المشابهة في المشروع.
+3. **النوافذ الأربع الموطّنة والمؤكدة يدوياً:**
+   - **`CLEAN`** (تأكيد مسح اللوحة) في `src/components/experimental/ExperimentalDrawingBoard.tsx` (`modals:clean.question`, `common:actions.yes/no`، مع بقاء `.animate-clean-spin` واتجاه الكانفاس `dir="ltr"` دون تغيير).
+   - **`NAMES`** (تأكيد إظهار/إخفاء أسماء اللاعبين أثناء الرسم — وضع الرسم الحر فقط `{isFreeDraw && ...}`) في `src/components/experimental/ExperimentalDrawingBoard.tsx` (`modals:names.hideQuestion` / `showQuestion`, `common:actions.yes/no`).
+   - **إشعار الخمول في اللوبي `INACTIVE`** (ما بعد الطرد بسبب الخمول) في `src/components/Lobby.tsx` (`modals:lobbyAfk.message`, `common:actions.ok`).
+   - **إشعار فقدان الاتصال في اللوبي `DISCONNECTED`** (ما بعد الخروج/انتهاء الجلسة) في `src/components/Lobby.tsx` (`modals:lobbyDisconnected.message`, `common:actions.ok`).
+4. **الملفات المعدلة والمنشأة فعلياً:**
+   - `src/components/experimental/ExperimentalDrawingBoard.tsx`
+   - `src/components/Lobby.tsx`
+   - `src/i18n/locales/ar/modals.ts`
+   - `src/i18n/locales/en/modals.ts`
+   - `UI_MODAL_REGISTRY.md` (إنشاء وتوثيق السجل التقني الكامل للنوافذ).
+5. **الثوابت والحدود المعمارية المحفوظة:**
+   - بقاء عنوان `DISCONNECTED` البرتقالي/الذهبي (`titleType="exit"`، `#FFB300` / `#0F3957`) وعناوين `CLEAN`, `NAMES`, `INACTIVE` بالإنجليزية دون تغيير.
+   - بقاء مسار `RoomConnectionStatusOverlay` (إعادة الاتصال الحية داخل الغرفة) منفصلاً تماماً عن نافذة `DISCONNECTED` في اللوبي (إشعار ما بعد انتهاء الجلسة)، وبقاء `AfkWarningModal` (العد التنازلي قبل الطرد داخل الغرفة) منفصلاً عن نافذة `INACTIVE` في اللوبي.
+   - **`CinematicModal.tsx` مقابل `UI_MODAL_REGISTRY.md`:** يبقى `src/components/game/CinematicModal.tsx` المكون التشغيلي المشترك المصدر المرجعي للتنفيذ (Portal، الخلفية، `GameTitle`، الأزرار، وحركات Framer Motion)، بينما يظل `UI_MODAL_REGISTRY.md` سجلًا توثيقياً فقط لا يستبدل الكود ولا ينفّذ حركات؛ وتُحفظ الوثيقتان منفصلتين معاً.
+6. **نتائج التحقق:** اجتياز `npx tsc --noEmit` و`npm run build` وفحص مفاتيح القواميس في `enModals` و`arModals`، **وأكد المالك يدوياً أن ترجمات النوافذ الأربع تعمل بصورة صحيحة**.
+7. **الاعتماديات:** `L10N-2`.
 
 ---
 
 ### المرحلة `L10N-3` — اللوحة المصغرة وانتقالات الأدوار (`MiniBoard & Turn Transitions`)
-1. **الاسم والرقم:** `PHASE L10N-3 — MiniBoard & Turn Transitions`
+1. **الاسم والرقم:** `PHASE L10N-3 — MiniBoard & Turn Transitions` — **`[ ] NEXT — NOT STARTED`**
 2. **الهدف:** توطين `MiniBoardOverlay` (الانتظار، الرسم الحر المبدئي، انتقال الأدوار، نهاية الجولة، المنصة `PODIUM`) و`ChoosingWordOverlay` (اختيار الكلمة)، وترجمة النصوص التوضيحية المرافقة للعناوين الفنية مع بقاء العناوين الفنية بالإنجليزية، والحفاظ على الكلمة المختارة والتلميحات المشتركة دون ترجمة مستقلة، ودون لمس الدردشة أو التخمينات.
 3. **الملفات المسموحة:**
    - `src/components/game/MiniBoardOverlay.tsx`
@@ -347,7 +376,7 @@
 7. **المخاطر:** تجاوز ارتفاع النص داخل اللوحة المصغرة على شاشات الهاتف الصغيرة، أو تأثر `ChoosingWordOverlay` باتجاه الصفحة.
 8. **معايير الخروج:** عرض سليم لكل حالات اللوحة المصغرة وانتقالات الأدوار في العربية والإنجليزية مع بقاء الكلمات المشتركة والعناوين الفنية محمية.
 9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + فحص المالك اليدوي لكل مراحل الجولة (Waiting, Choosing, Drawing Word Overlay, Round End بأنواعه، Podium، وشاشة Free Draw الأولية).
-10. **الاعتماديات:** `L10N-2`.
+10. **الاعتماديات:** `L10N-2` و`L10N-2.1`.
 
 ---
 
@@ -456,36 +485,34 @@
 
 ---
 
-## 8. نطاق وتفاصيل المرحلة القادمة المباشرة (`L10N-1 ONLY`)
+## 8. نطاق وتفاصيل المرحلة القادمة المباشرة (`L10N-3 ONLY — NOT STARTED`)
 
-> تُعد **`L10N-1`** الدفعة التنفيذية الأولى والوحيدة عند انتقالنا للتنفيذ، ولا تتضمن ترجمة بقية اللوبي أو تعديل الخادم أو الدردشة أو النوافذ:
+> تُعد **`L10N-3`** الدفعة التنفيذية القادمة المباشرة والوحيدة عند انتقالنا إلى التنفيذ (لم تبدأ بعد)، وتختص حصراً باللوحة المصغرة وانتقالات الأدوار واختيار الكلمة، دون لمس الدردشة أو التخمينات أو اللوبي أو الخادم:
 
-- **ما ستشمله `L10N-1` حصرياً:**
-  1. تثبيت `i18next` و`react-i18next` في `package.json` (وملف القفل الذي يُحدّثه مدير الحزم؛ مع العلم أن المستودع حالياً يضم `bun.lock` دون `package-lock.json`).
-  2. إنشاء بنية `src/i18n/`:
-     - `types.ts` (`LanguageMode = 'auto' | 'ar' | 'en'`, `SupportedLanguage = 'ar' | 'en'`, `CustomTypeOptions`).
-     - `languageDetector.ts` (قراءة/حفظ الاختيار بأمان عبر `safeLocalStorage`، كشف لغة المتصفح، وحساب اللغة الفعلية).
-     - `index.ts` (تهيئة `i18next` المتزامنة بالاستيراد المحلي الكامل للغتين `ar` و`en`، مع كاشف المفاتيح المفقودة في التطوير فقط).
-     - `useAppTranslation.ts` (hook التفاعل الموحد).
-     - ملفات القواميس المحلية المبدئية `locales/en/*` و`locales/ar/*` (متضمنةً مفاتيح منتقي اللغة وهياكل الـ namespaces).
-     - تحديث `document.documentElement.lang` بصورة آمنة، مع **إبقاء عنوان الصفحة التجاري `DRAW.IO` بالإنجليزية دائماً**، و**عدم فرض `dir="rtl"` عالمياً دون عزل هندسة الغرفة والرسم**.
-  3. ربط التهيئة المبكرة في `src/main.tsx`.
-  4. إضافة **منتقي اللغة (`Auto` / `العربية` / `English`) فقط** إلى شاشة البداية في `src/components/Lobby.tsx` دون ترجمة بقية محتوى اللوبي (`NICKNAME`, `ROOMS`, النوافذ، إلخ).
-- **النتيجة المتوقعة من `L10N-1`:** نواة ترجمة جاهزة ومحقونة مع منتقي لغة شغّال ومحفوظ عبر `safeLocalStorage`، واجتياز `npx tsc --noEmit` و`npm run build`، مع بقاء سائر الشاشات كما هي تماماً قبل بدء `L10N-2`.
+- **ما ستشمله `L10N-3` حصرياً:**
+  1. توطين جميع النصوص التوضيحية والأزرار وتصنيفات المنصة داخل `src/components/game/MiniBoardOverlay.tsx` (شاشة بدء الرسم الحر وزر `ابدأ الرسم`، حالة `WAITING`، انتقال الدور `It's the turn of`، رسائل `SKIPPED` / `INACTIVE` / `CANCELED TURN` / `INTERVAL` / `MASTERPIECE` / `The answer was`، قائمة `بقية قائمة المتصدرين` و`pts`).
+  2. توطين النصوص التوضيحية وأزرار التفاعل داخل `src/components/experimental/ChoosingWordOverlay.tsx` (`IT'S YOUR TURN!`، `Choose a word to draw`، `DRAW`، `OR` — مع بقاء خيارات الكلمات `wordOptions` مشتركة وغير مترجمة ومحفوظة بـ `dir="auto"`).
+  3. مراجعة `src/components/experimental/ExperimentalWordOverlay.tsx` عند اللزوم فقط لحماية عزل حاوية صف الأحرف/التلميحات (`dir="ltr"` المعتمد على `isRTL` للكلمة وفق Safeguard 6) دون ترجمة أي كلمة أو تلميح.
+  4. إضافة مفاتيح القواميس المطلوبة في `src/i18n/locales/en/*` و`src/i18n/locales/ar/*` تحت الـ namespace المناسب (`room`).
+- **ما يُحظر تغييره في `L10N-3`:**
+  - عناوين `GameTitle` الفنية (`FREE DRAW`, `WAITING`, `NEW TURN!`, `SKIPPED!`, `INACTIVE`, `CANCELED TURN`, `INTERVAL`, `MASTERPIECE!`, `GAME OVER`) تبقى بالإنجليزية.
+  - آلية `roundEndAnimationKey` / `activeAnimationKeyRef` وحماية `UI-A Stage 2A` في `MiniBoardOverlay.tsx`.
+  - عدم لمس `server/*`، `OverlayChatRoom.tsx`، `GameActivityFeed.tsx`، `Lobby.tsx`، `GameRoom.tsx`، `ExperimentalGameRoom.tsx`، أو `ExperimentalDrawingBoard.tsx`.
+- **النتيجة المتوقعة عند إتمام `L10N-3` لاحقاً:** توطين كامل مراحل اللوحة المصغرة وانتقالات الأدوار واختيار الكلمة في العربية والإنجليزية مع اجتياز `npx tsc --noEmit` و`npm run build` والتحقق اليدوي من المالك.
 
 ---
 
-## 9. قواعد تحديث خارطة الطريق الإلزامية (`Roadmap Update Rules`)
+## 9. قواعد تحديث خارطة الطريق وحوكمة الوثائق الإلزامية (`Roadmap Update & Documentation Governance Rules`)
 
-يجب الالتزام بهذه القواعد العشر في كل دفعة قادمة من مسار `PHASE L10N`:
+يجب الالتزام بهذه القواعد الإلزامية في كل دفعة قادمة من مسار `PHASE L10N`:
 
-1. **التأريخ والتوثيق الدقيق عند الإغلاق:** عند اكتمال أي مرحلة بنجاح، تُحدّث حالتها إلى `[x] COMPLETED` مع تاريخ الإنجاز الدقيق والمرجع المعتمد (Commit / Verification Reference).
+1. **التأريخ والتوثيق الدقيق فور الإغلاق:** عند اكتمال أي مرحلة واعتمادها يدوياً من المالك، تُحدّث حالتها إلى `[x] COMPLETED` في هذه الخارطة فوراً مع تاريخ الإنجاز الدقيق والمرجع المعتمد (Commit / Verification Reference).
 2. **حظر حذف المراحل:** لا تُحذف أي مرحلة من هذا الملف حتى بعد اكتمالها؛ تبقى جميع المراحل موثقة لتكوّن السجل الكامل للمشروع.
 3. **الإضافة المنضبطة للاكتشافات الجديدة:** إذا كُشفت تفاصيل أو نصوص أو إصلاحات جديدة أثناء التنفيذ، تُسجّل أو تُضاف كمرحلة فرعية واضحة دون كسر التسلسل المعتمد (`L10N-0` إلى `L10N-8`).
-4. **وضوح المراحل المتبقية:** يجب أن يُظهر الملف دائماً وبدقة ما اكتمل وما هو جارٍ وما هي المراحل المتبقية بالتحديد.
-5. **تحديث قسم آليات الحماية:** إذا تم اكتشاف آلية حماية إضافية لاتجاه النص (BiDi) أو للدردشة أو لمنطقة الرسم أثناء التنفيذ، يجب إضافتها فوراً إلى القسم `3` (`EXISTING TEXT-DIRECTION & CHAT SAFEGUARDS — MUST PRESERVE`).
-6. **بوابات التحقق البرمجي الإلزامية:** في كل مرحلة تعديل كود، يجب تنفيذ واجتياز `npx tsc --noEmit` و`npm run build` وتوثيق نتائجهما قبل الانتقال أو الاعتماد.
-7. **التحقق اليدوي من المالك قبل الإغلاق:** لا تُعلَم أي مرحلة مرئية أو تفاعلية كـ `COMPLETED` إلا بعد اختبار المالك يدوياً على المتصفح والهاتف وتأكيده سلامة التجربة.
-8. **حظر دمج المراحل:** تنفيذ مرحلة واحدة فقط في كل أمر/دفعة، وعدم نقل ترجمة أي قسم إلى مرحلة سابقة.
-9. **الانضباط الصارم بنطاق الملفات:** لا يُسمح لأي مرحلة بتعديل ملفات خارج قائمة ملفاتها المسموحة دون تبرير تقني واضح وتوثيق موافقة مالك المشروع.
-10. **حماية ثوابت المستودع:** أي تغيير مستقبلي في خارطة التدويل يجب أن يثبت التزامه الصارم بـ [`AGENTS.md`](./AGENTS.md) و[`REFACTORING_ROADMAP.md`](./REFACTORING_ROADMAP.md).
+4. **وضوح المراحل المتبقية:** يجب أن يُظهر الملف دائماً وبدقة ما اكتمل وما هو قيد المراجعة وما هي المرحلة التالية والمراحل المتبقية بالتحديد.
+5. **الفصل بين سجل العمارة وخارطة التدويل:** يوثّق [`UI_MODAL_REGISTRY.md`](./UI_MODAL_REGISTRY.md) معمارية النوافذ المنبثقة والطبقات التفاعلية في الواجهة (ويُحدّث عند إضافة أو حذف أو تعديل بنية أي نافذة منبثقة)، بينما يظل `LOCALIZATION_ROADMAP.md` السجل المرجعي لتتبع مراحل التدويل.
+6. **تحديث قسم آليات الحماية ومطابقة الكود الفعلي:** يجب أن تظل جميع المسارات البرمجية ووصف السلوك والقيود في الوثائق مستندةً حرفياً إلى الكود الفعلي، مع إضافة أي آلية حماية إضافية لاتجاه النص (`BiDi`) أو الدردشة أو الرسم إلى القسم `3` فور اكتشافها.
+7. **بوابات التحقق البرمجي الإلزامية:** في كل مرحلة تعديل كود، يجب تنفيذ واجتياز `npx tsc --noEmit` و`npm run build` وتوثيق نتائجهما قبل الانتقال أو الاعتماد.
+8. **التحقق اليدوي من المالك قبل الإغلاق:** لا تُعلَم أي مرحلة مرئية أو تفاعلية كـ `COMPLETED` إلا بعد اختبار المالك يدوياً على المتصفح والهاتف وموافقته على سلامة التجربة.
+9. **تنفيذ مرحلة واحدة فقط وحظر دمج المراحل:** تُنفذ مرحلة واحدة فقط في كل دفعة برمجية، ولا تُنقل ترجمة أي قسم إلى مرحلة سابقة أو لاحقة.
+10. **الانضباط الصارم بنطاق الملفات وحماية الثوابت:** لا يُسمح لأي مرحلة بتعديل ملفات خارج قائمة ملفاتها المسموحة دون تبرير تقني واضح وتوثيق موافقة مالك المشروع، مع الالتزام الصارم بـ [`AGENTS.md`](./AGENTS.md) و[`REFACTORING_ROADMAP.md`](./REFACTORING_ROADMAP.md).
