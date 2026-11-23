@@ -20,6 +20,7 @@ import FlipaClipControls from '../game/FlipaClipControls';
 import ColorWheelModal from '../game/ColorWheelModal';
 import CinematicModal from '../game/CinematicModal';
 import { safeLocalStorage } from '../../utils/storage';
+import { useAppTranslation } from '../../i18n/useAppTranslation';
 
 /**
  * 🧪 DIAGNOSTIC TEST FLAG (Color Wheel):
@@ -121,6 +122,8 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
 }) => {
   const canvasCoreRef = useRef<DrawingCanvasCoreRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { t, isRTL } = useAppTranslation('modals');
+  const { t: tCommon } = useAppTranslation('common');
 
   // 🧪 Diagnostic flag logic: Color Wheel is active in Free Draw, or in Experimental mode when flag is true
   const isColorWheelEnabled = isFreeDraw || Boolean(isExperimental && EXPERIMENTAL_COLOR_WHEEL_TEST);
@@ -345,13 +348,13 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
         buttons={[
           {
             id: "clean-confirm-no-btn",
-            text: <span className="text-white font-black">NO</span>,
+            text: <span className="text-white font-black">{tCommon('actions.no')}</span>,
             onClick: () => setShowClearConfirm(false),
             variant: "primary",
           },
           {
             id: "clean-confirm-yes-btn",
-            text: <span className="text-white font-black">YES</span>,
+            text: <span className="text-white font-black">{tCommon('actions.yes')}</span>,
             onClick: confirmClear,
             variant: "danger",
           },
@@ -363,12 +366,13 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           </div>
         </div>
 
-        <h3 id="clean-confirm-desc" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
-          Do you want to clean the drawing?
+        <h3
+          id="clean-confirm-desc"
+          dir={isRTL ? 'rtl' : 'ltr'}
+          className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center"
+        >
+          {t('clean.question')}
         </h3>
-        <p id="clean-confirm-desc-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
-          هل تريد مسح اللوحة بالكامل؟
-        </p>
       </CinematicModal>
 
       {/* Floating Drawing Names Confirm Modal (Free Draw Only) */}
@@ -381,13 +385,13 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           buttons={[
             {
               id: "names-confirm-no-btn",
-              text: <span className="text-white font-black">NO</span>,
+              text: <span className="text-white font-black">{tCommon('actions.no')}</span>,
               onClick: () => setShowFloatingNamesConfirm(false),
               variant: "primary",
             },
             {
               id: "names-confirm-yes-btn",
-              text: <span className="text-white font-black">YES</span>,
+              text: <span className="text-white font-black">{tCommon('actions.yes')}</span>,
               onClick: confirmToggleFloatingNames,
               variant: showFloatingNames ? "danger" : "primary",
             },
@@ -407,12 +411,13 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
             </div>
           </div>
 
-          <h3 id="names-confirm-desc" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
-            {showFloatingNames ? "Do you want to hide player names?" : "Do you want to show player names?"}
+          <h3
+            id="names-confirm-desc"
+            dir={isRTL ? 'rtl' : 'ltr'}
+            className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center"
+          >
+            {showFloatingNames ? t('names.hideQuestion') : t('names.showQuestion')}
           </h3>
-          <p id="names-confirm-desc-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
-            {showFloatingNames ? "هل تريد إخفاء أسماء اللاعبين أثناء الرسم؟" : "هل تريد إظهار أسماء اللاعبين أثناء الرسم؟"}
-          </p>
         </CinematicModal>
       )}
 

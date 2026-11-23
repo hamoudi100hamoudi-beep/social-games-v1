@@ -67,6 +67,7 @@ let lastRoomsInfoFetchTime = 0;
 export default function Lobby({ onPlay }: LobbyProps) {
   const { socket } = useSocket();
   const { t, languageMode, changeLanguageMode } = useAppTranslation('common');
+  const { t: tModals, isRTL: isModalsRTL } = useAppTranslation('modals');
   const [screen, setScreen] = useState<Screen>('home');
   const [nickname, setNickname] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -615,7 +616,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
         buttons={[
           {
             id: "afk-warning-ok-btn",
-            text: "OK",
+            text: t('actions.ok'),
             onClick: () => setAfkWarning(false),
             variant: "secondary",
           },
@@ -623,11 +624,10 @@ export default function Lobby({ onPlay }: LobbyProps) {
       >
         <p
           id="afk-warning-text"
+          dir={isModalsRTL ? 'rtl' : 'ltr'}
           className="text-base sm:text-lg font-bold text-[#8C8AA7] leading-relaxed mb-4 px-2 text-center"
         >
-          تم قطع الاتصال بسبب الخمول
-          <br />
-          <span className="text-[13px] font-semibold opacity-70 block mt-1">(Disconnected due to inactivity)</span>
+          {tModals('lobbyAfk.message')}
         </p>
       </CinematicModal>
 
@@ -640,7 +640,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
         buttons={[
           {
             id: "conn-lost-warning-ok-btn",
-            text: "OK",
+            text: t('actions.ok'),
             onClick: () => setConnLostWarning(false),
             variant: "danger",
           },
@@ -648,11 +648,10 @@ export default function Lobby({ onPlay }: LobbyProps) {
       >
         <p
           id="conn-lost-warning-text"
+          dir={isModalsRTL ? 'rtl' : 'ltr'}
           className="text-base sm:text-lg font-bold text-[#8C8AA7] leading-relaxed mb-4 px-2 text-center"
         >
-          انقطع الاتصال ببيئة اللعب
-          <br />
-          <span className="text-[13px] font-semibold opacity-70 block mt-1">(Connection toast or session expired)</span>
+          {tModals('lobbyDisconnected.message')}
         </p>
       </CinematicModal>
 

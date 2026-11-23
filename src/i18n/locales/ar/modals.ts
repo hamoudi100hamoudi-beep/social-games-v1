@@ -81,4 +81,17 @@ export const arModals = {
     rejoining: 'جارٍ إعادة الانضمام إلى الغرفة...',
     returnToLobby: 'العودة إلى الردهة',
   },
+  clean: {
+    question: 'هل تريد مسح اللوحة بالكامل؟',
+  },
+  names: {
+    hideQuestion: 'هل تريد إخفاء أسماء اللاعبين أثناء الرسم؟',
+    showQuestion: 'هل تريد إظهار أسماء اللاعبين أثناء الرسم؟',
+  },
+  lobbyAfk: {
+    message: 'تم قطع الاتصال بسبب الخمول.',
+  },
+  lobbyDisconnected: {
+    message: 'انقطع الاتصال باللعبة أو انتهت صلاحية الجلسة.',
+  },
 } satisfies DeepPluralLocaleSchema<typeof enModals>;

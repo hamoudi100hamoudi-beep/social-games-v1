@@ -70,4 +70,17 @@ export const enModals = {
     rejoining: 'Rejoining the room...',
     returnToLobby: 'Return to Lobby',
   },
+  clean: {
+    question: 'Do you want to clean the drawing?',
+  },
+  names: {
+    hideQuestion: 'Do you want to hide player names while drawing?',
+    showQuestion: 'Do you want to show player names while drawing?',
+  },
+  lobbyAfk: {
+    message: 'Disconnected due to inactivity.',
+  },
+  lobbyDisconnected: {
+    message: 'Disconnected from the game or session expired.',
+  },
 } as const;
