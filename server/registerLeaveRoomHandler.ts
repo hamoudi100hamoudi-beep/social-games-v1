@@ -26,6 +26,7 @@ export function handleLeaveRoom(
     // 2. Authoritative roomId comes strictly from server state
     const actualRoomId = player.roomId;
     const playerName = player.name || 'لاعب';
+    const actorId = player.persistentId || player.id;
 
     // 3. Socket leaves strictly the authoritative room in Socket.IO
     if (typeof socket.leave === 'function') {
@@ -40,7 +41,10 @@ export function handleLeaveRoom(
       const leaveMsg = {
         id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
         text: `${playerName} غادر الغرفة`,
-        type: 'system'
+        type: 'system',
+        eventCode: 'player_left' as const,
+        params: { name: playerName },
+        ...(actorId ? { actorId } : {})
       };
       roomManager.saveChatMessage(actualRoomId, leaveMsg);
       if (io) {

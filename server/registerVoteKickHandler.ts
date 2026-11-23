@@ -171,7 +171,13 @@ export function handleSubmitVoteKick(
         text: `${player.name} voted to kick out ${targetPlayer.name}`,
         voterName: player.name,
         targetName: targetPlayer.name,
-        type: 'votekick_alert'
+        type: 'votekick_alert',
+        eventCode: 'votekick_alert' as const,
+        params: {
+          voterName: player.name,
+          targetName: targetPlayer.name
+        },
+        ...(selfId ? { actorId: selfId } : {})
       };
       roomManager.saveChatMessage(roomId, announceMsg);
       if (io) {
@@ -210,7 +216,10 @@ export function handleSubmitVoteKick(
       const kickedAnnounce = {
         id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
         text: `${kickedName} غادر الغرفة`,
-        type: 'system'
+        type: 'system',
+        eventCode: 'player_kicked' as const,
+        params: { name: kickedName },
+        ...(banId ? { actorId: banId } : {})
       };
       roomManager.saveChatMessage(roomId, kickedAnnounce);
       if (io) {

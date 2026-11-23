@@ -313,10 +313,14 @@ export class RoomManager {
       this.removePlayerFromRoom(room.id, p.id);
       this.players.delete(p.id);
 
+      const actorId = p.persistentId || p.id;
       this.broadcastMessage(room, {
         id: "sys-afk-" + Date.now().toString() + Math.random().toString(36).substr(2, 5),
         text: `تم طرد ${p.name} بسبب عدم النشاط (AFK)`,
         type: "system",
+        eventCode: "player_afk_kicked",
+        params: { name: p.name },
+        ...(actorId ? { actorId } : {}),
       });
     });
   }
@@ -527,6 +531,9 @@ export class RoomManager {
       type: "system",
       subType: "turn",
       color: "#38BDF8",
+      eventCode: "turn_of",
+      params: { name },
+      ...(nextDrawerId ? { actorId: nextDrawerId } : {}),
     });
 
     this.broadcastState(room);
@@ -549,12 +556,16 @@ export class RoomManager {
       (max, p) => (p.score > max.score ? p : max),
       room.players[0] || { name: "Unknown", score: 0 },
     );
+    const winnerActorId = 'id' in winner ? (winner.persistentId || winner.id) : undefined;
     this.broadcastGuess(room, {
       id: "sys-" + Date.now() + "-podium-winner",
       text: `Game over. The winner is ${winner.name} with ${winner.score} points`,
       type: "system",
       subType: "game_over",
       color: "#38BDF8",
+      eventCode: "game_over",
+      params: { winnerName: winner.name, score: winner.score },
+      ...(winnerActorId ? { actorId: winnerActorId } : {}),
     });
 
     this.broadcastState(room);
@@ -612,6 +623,7 @@ export class RoomManager {
         type: "system",
         subType: "canceled",
         color: "#EF4444",
+        eventCode: "turn_canceled",
       });
     } else if (reason === "all_guessed") {
       const elapsedSeconds = room.gameState.drawingStartTime
@@ -624,6 +636,7 @@ export class RoomManager {
         type: "system",
         subType: "all_guessed",
         color: "#00E540",
+        eventCode: "all_guessed",
       });
     } else if (reason === "timeout" || reason === "drawer_left") {
       const hasSucceeded = (room.gameState.correctGuessers || []).length > 0;
@@ -638,6 +651,7 @@ export class RoomManager {
         type: "system",
         subType: "answer_reveal",
         color: "#38BDF8",
+        eventCode: hasSucceeded ? "round_timeout_won" : "nobody_hit",
       });
       if (word && hasSucceeded) {
         this.broadcastGuess(room, {
@@ -647,6 +661,8 @@ export class RoomManager {
           subType: "answer_reveal",
           word: word,
           color: "#38BDF8",
+          eventCode: "answer_reveal",
+          params: { word },
         });
       }
     } else if (reason === "skipped") {
@@ -655,12 +671,18 @@ export class RoomManager {
         (p) => (p.persistentId || p.id) === room.gameState.currentDrawerId,
       );
       const name = drawer ? drawer.name : "الرسام";
+      const skippedActorId = drawer
+        ? drawer.persistentId || drawer.id
+        : room.gameState.currentDrawerId || undefined;
       this.broadcastGuess(room, {
         id: "sys-" + Date.now() + "-skip",
         text: `${name} skipped the turn`,
         type: "system",
         subType: "skipped",
         color: "#EF4444",
+        eventCode: "turn_skipped",
+        params: { name },
+        ...(skippedActorId ? { actorId: skippedActorId } : {}),
       });
       if (word && hasSucceeded) {
         this.broadcastGuess(room, {
@@ -670,6 +692,8 @@ export class RoomManager {
           subType: "answer_reveal",
           word: word,
           color: "#38BDF8",
+          eventCode: "answer_reveal",
+          params: { word },
         });
       }
     } else if (reason === "turn_lost") {
@@ -677,12 +701,18 @@ export class RoomManager {
         (p) => (p.persistentId || p.id) === room.gameState.currentDrawerId,
       );
       const name = drawer ? drawer.name : "الرسام";
+      const lostActorId = drawer
+        ? drawer.persistentId || drawer.id
+        : room.gameState.currentDrawerId || undefined;
       this.broadcastGuess(room, {
         id: "sys-" + Date.now() + "-lost",
         text: `${name} has lost the turn`,
         type: "system",
         subType: "lost_turn",
         color: "#EF4444",
+        eventCode: "turn_lost",
+        params: { name },
+        ...(lostActorId ? { actorId: lostActorId } : {}),
       });
     }
 
@@ -693,6 +723,7 @@ export class RoomManager {
       type: "system",
       subType: "interval",
       color: "#38BDF8",
+      eventCode: "round_interval",
     });
 
     this.broadcastState(room);
@@ -808,6 +839,9 @@ export class RoomManager {
         word: room.gameState.currentWord,
         sender: player.name,
         color: "#00E540", // vibrant green
+        eventCode: "guess_hit",
+        params: { name: player.name },
+        ...(pId ? { actorId: pId } : {}),
       });
 
       // Deduct time based on Gartic.io-style mechanics (10 seconds per correct guess, locking of remaining time below 20 seconds)
@@ -855,6 +889,9 @@ export class RoomManager {
             subType: "close",
             word: guess,
             senderId: socketId,
+            eventCode: "guess_close" as const,
+            params: { guess },
+            ...(pId ? { actorId: pId } : {}),
           };
           this.io.to(socketId).emit("receive_guess", privateMsg);
         }
@@ -991,6 +1028,9 @@ const words = word.split(" ").filter(w => w.length > 0);
       subType: "report",
       sender: player.name,
       color: "#EF4444",
+      eventCode: "draw_reported",
+      params: { name: player.name },
+      ...(pId ? { actorId: pId } : {}),
     });
 
     const activePlayersCount = room.players.filter((p) => !p.isOffline).length;
@@ -1985,6 +2025,7 @@ const words = word.split(" ").filter(w => w.length > 0);
                     this.authStore.removeCredential(pId);
                   }
 
+                  const actorId = checkPlayer.persistentId || checkPlayer.id;
                   this.broadcastMessage(currentRoom, {
                     id:
                       "sys-" +
@@ -1992,6 +2033,9 @@ const words = word.split(" ").filter(w => w.length > 0);
                       Math.random().toString(36).substr(2, 5),
                     text: `انقطع اتصال ${checkPlayer.name} وتمت إزالته من اللعبة`,
                     type: "system",
+                    eventCode: "player_disconnected_removed",
+                    params: { name: checkPlayer.name },
+                    ...(actorId ? { actorId } : {}),
                   });
                 }
               }

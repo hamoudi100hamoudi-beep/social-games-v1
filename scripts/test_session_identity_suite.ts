@@ -3,7 +3,7 @@ import { Server } from 'socket.io';
 import { io as ioClient } from 'socket.io-client';
 import { RoomManager, normalizeArabic } from '../server/rooms.js';
 import { SessionAuthStore } from '../server/sessionAuth.js';
-import { registerJoinRoomHandler, normalizeNickname } from '../server/registerJoinRoomHandler.js';
+import { registerJoinRoomHandler, handleJoinRoom, normalizeNickname } from '../server/registerJoinRoomHandler.js';
 import { registerDrawBinaryHandler, handleDrawBinary } from '../server/registerDrawBinaryHandler.js';
 import { registerSubmitGuessHandler, handleSubmitGuess } from '../server/registerSubmitGuessHandler.js';
 import { registerSelectWordHandler, handleSelectWord } from '../server/registerSelectWordHandler.js';
@@ -438,6 +438,16 @@ assert(eveJoinRes.success === true, 'NET-7.5: Rightful owner joins room with val
 assert(netRm.verifyPlayerSecret(netEvePid, netEveSecret) === true, 'NET-7.5: Credential remained valid and unaltered');
 const eveInRoom = netRm.getPlayerByPersistentId(netEvePid);
 assert(eveInRoom !== null, 'NET-7.5: Eve is now present in room');
+const eveJoinChatMsg = netRm.getRoom('General #Test')?.chatMessages?.find(
+  (m: any) => m?.eventCode === 'player_joined' && m?.actorId === netEvePid
+);
+assert(
+  eveJoinChatMsg?.text === 'EveReal انضم للغرفة' &&
+    eveJoinChatMsg?.type === 'system' &&
+    eveJoinChatMsg?.params?.name === 'EveReal' &&
+    eveJoinChatMsg?.actorId === netEvePid,
+  'NET-7.5: player_joined chat message preserves legacy fields and includes structured metadata'
+);
 
 // 7.6 Original socket and player score/state are NOT modified when spoofing/reconnect hijack fails
 if (eveInRoom) {
@@ -488,7 +498,30 @@ const fullJoinRes: any = await new Promise((res) => {
   }, res);
 });
 assert(fullJoinRes.error === 'عذراً، هذه الغرفة ممتلئة بالكامل!', 'NET-7.8: Join to full room is rejected with room full message');
+assert(fullJoinRes.errorCode === 'room_full', 'NET-7.8: Join to full room includes errorCode: room_full');
 assert(netRm.authStore.hasCredential(fullJoinerPid) === false, 'NET-7.8: Credential was NOT registered when join rejected due to full room');
+
+// 7.8b Unexpected exception in handleJoinRoom preserves legacy error text and includes errorCode: join_failed
+let joinFailedRes: any = null;
+handleJoinRoom(
+  { id: 'sock-join-fail-check', emit: () => {}, join: () => {} },
+  {
+    roomId: 'General #Test',
+    nickname: 'FailTester',
+    playerId: 'usr-join-fail-tester',
+    reconnectSecret: 'sec-join-fail-secret-123456'
+  },
+  (res) => { joinFailedRes = res; },
+  {
+    roomManager: {
+      isValidRoomId: () => {
+        throw new Error('forced_join_failure');
+      }
+    }
+  }
+);
+assert(joinFailedRes?.error === 'حدث خطأ أثناء الانضمام للغرفة', 'NET-7.8b: Catch path preserves legacy join_failed error message');
+assert(joinFailedRes?.errorCode === 'join_failed', 'NET-7.8b: Catch path includes errorCode: join_failed');
 
 // 7.9 Point 2 Test: Join request with MISSING playerId is rejected before player creation
 const missingPidRes: any = await new Promise((res) => {
@@ -2496,11 +2529,13 @@ console.log('\n--- Test Group 14: CHAT-GUESS-HARDEN-1 Hardening Tests ---');
   chatRoom.gameState.status = 'DRAWING';
   chatRoom.gameState.currentWord = 'تفاحة';
   let cheatWarningEmitted = false;
+  let cheatWarningPayload: any = null;
   const cheatSocket = {
     id: 'sock-chat-1',
     emit: (event: string, data: any) => {
       if (event === 'receive_message' && data && data.type === 'warning') {
         cheatWarningEmitted = true;
+        cheatWarningPayload = data;
       }
     }
   };
@@ -2513,6 +2548,14 @@ console.log('\n--- Test Group 14: CHAT-GUESS-HARDEN-1 Hardening Tests ---');
     normalizeArabic
   });
   assert((cheatWarningEmitted as boolean) === true, 'AUTH-14.5: Secret word leak in chat triggers warning emission');
+  assert(
+    cheatWarningPayload?.text === '🚫 لا يمكنك كتابة الإجابة في الدردشة أثناء الرسم!' &&
+      cheatWarningPayload?.type === 'warning' &&
+      cheatWarningPayload?.eventCode === 'chat_word_leak_warning' &&
+      cheatWarningPayload?.actorId === 'pid-chat-1' &&
+      cheatWarningPayload?.params === undefined,
+    'AUTH-14.5: Secret word leak warning preserves legacy fields and includes structured metadata'
+  );
   assert(chatRoom.chatMessages.length === beforeCheatCount, 'AUTH-14.5: Leaking message is not stored in room chatMessages');
 }
 

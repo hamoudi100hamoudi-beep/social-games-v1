@@ -212,6 +212,20 @@ async function runDeterministicUnitTests() {
         '2b. Normal first vote emits exactly 1 votekick_alert',
         `delta=${alertsAfter - alertsBefore}`
       );
+      const latestAlert = roomEmits
+        .filter((e) => e.event === 'receive_message' && e.payload?.type === 'votekick_alert')
+        .at(-1)?.payload;
+      check(
+        latestAlert?.text === 'Alice voted to kick out Bob' &&
+          latestAlert?.voterName === 'Alice' &&
+          latestAlert?.targetName === 'Bob' &&
+          latestAlert?.eventCode === 'votekick_alert' &&
+          latestAlert?.params?.voterName === 'Alice' &&
+          latestAlert?.params?.targetName === 'Bob' &&
+          latestAlert?.actorId === 'pid-a',
+        '2c. votekick_alert preserves legacy fields and includes structured metadata',
+        JSON.stringify(latestAlert)
+      );
     }
 
     // 3 & 12. Vote withdrawal + exact unvote broadcast count (no duplicate send to voter/target)
@@ -421,6 +435,17 @@ async function runDeterministicUnitTests() {
       check(
         alertsAfterDecisiveRevote === alertsBeforeDecisiveRevote,
         '9b. Decisive re-vote within 60s still suppresses redundant votekick_alert while executing ban'
+      );
+      const latestKickedMsg = roomEmits
+        .filter((e) => e.event === 'receive_message' && e.payload?.eventCode === 'player_kicked')
+        .at(-1)?.payload;
+      check(
+        latestKickedMsg?.text === 'Eve غادر الغرفة' &&
+          latestKickedMsg?.type === 'system' &&
+          latestKickedMsg?.params?.name === 'Eve' &&
+          latestKickedMsg?.actorId === 'pid-e',
+        '9c. Decisive vote eviction emits player_kicked metadata while preserving legacy system text',
+        JSON.stringify(latestKickedMsg)
       );
 
       // 11 (part 1). Banned/removed target's cooldown entries were cleaned up by removePlayerFromRoom
@@ -668,9 +693,13 @@ async function runLiveSocketIoTests() {
       decisiveAck?.success === true &&
         decisiveAck?.voted === true &&
         c3Alerts.length === 2 &&
-        c2Banned === true,
-      'Live independent voter triggers alert and reaches quorum ban cleanly',
-      `alerts=${c3Alerts.length}, c2Banned=${c2Banned}`
+        c2Banned === true &&
+        c3Alerts[0]?.eventCode === 'votekick_alert' &&
+        c3Alerts[0]?.params?.voterName === 'Player1' &&
+        c3Alerts[0]?.params?.targetName === 'Player2' &&
+        c3Alerts[0]?.actorId === 'live-p1',
+      'Live independent voter triggers alert and reaches quorum ban cleanly with structured metadata',
+      `alerts=${c3Alerts.length}, c2Banned=${c2Banned}, firstAlert=${JSON.stringify(c3Alerts[0])}`
     );
   } finally {
     for (const c of clients) {

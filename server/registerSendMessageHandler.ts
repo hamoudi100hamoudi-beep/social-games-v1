@@ -76,10 +76,13 @@ export function handleSendMessage(
        const targetNorm = normalizeArabic(target);
        
        if (guess && target && (guess.includes(target) || guessNorm.includes(targetNorm))) {
+          const actorId = player.persistentId || player.id;
           socket.emit('receive_message', {
             id: 'sys-cheat-' + Date.now(),
             text: '🚫 لا يمكنك كتابة الإجابة في الدردشة أثناء الرسم!',
-            type: 'warning'
+            type: 'warning',
+            eventCode: 'chat_word_leak_warning',
+            ...(actorId ? { actorId } : {})
           });
           return;
        }

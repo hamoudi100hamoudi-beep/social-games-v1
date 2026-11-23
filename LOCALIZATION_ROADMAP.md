@@ -9,7 +9,8 @@
 - `L10N-2`: `COMPLETED — POPUPS AND MODALS LOCALIZED AND OWNER VERIFIED` (`2026-11-23`)  
 - `L10N-2.1`: `COMPLETED — REMAINING POPUPS LOCALIZED, REGISTRY CREATED, AND OWNER VERIFIED` (`2026-11-23`)  
 - `L10N-3`: `COMPLETED — OWNER MANUALLY VERIFIED` (`2026-11-23` — Commit: `e2c66a6068eecb685f725f2742695b8f509eb8d1`)
-- `L10N-4`: **`NOT STARTED`** (المرحلة التالية بعد إغلاق `L10N-3`)
+- `L10N-4`: **`AWAITING MANUAL VERIFICATION`** (`2026-11-23` — Stage 2 implemented & automated checks passed; awaiting owner manual check before `L10N-5`)
+- `L10N-5`: **`NOT STARTED`**
 
 **الوثائق المرجعية المرتبطة:**  
 - دستور محرك الرسم والتراجع: [`AGENTS.md`](./AGENTS.md)  
@@ -391,25 +392,33 @@
 ---
 
 ### المرحلة `L10N-4` — الأحداث النظامية المهيكلة والتوافق الخلفي (`Structured System Events & Backward Compatibility`)
-1. **الاسم والرقم:** `PHASE L10N-4 — Structured System Events & Backward Compatibility`
-2. **الهدف:** مرحلة تقنية مستقلة لتجهيز رسائل النظام في الخادم والأنواع المشتركة بإضافة `eventCode` و`params` و`actorId` (عند الحاجة) ورموز الأخطاء (`room_full`, `join_failed`) مع **الحفاظ على `text` القديم كـ `fallback`**، وضمان توافق الرسائل المخزنة وإعادة الاتصال، دون إنشاء أحداث Socket.IO جديدة غير ضرورية، ودون تغيير بروتوكول الرسم الثنائي أو محرك الرسم، **ودون ترجمة واجهة الدردشة في هذه المرحلة**.
-3. **الملفات المسموحة:**
-   - `server/rooms.ts` (فقط دوال البث النصي `broadcastMessage`/`broadcastGuess` وإجراءات `checkIdlePlayers`/`handleDisconnect` — **يُحظر مس `recordDrawCommand` أو بروتوكول الرسم/التراجع**)
-   - `server/registerJoinRoomHandler.ts`
-   - `server/registerLeaveRoomHandler.ts`
-   - `server/registerSendMessageHandler.ts`
-   - `server/registerVoteKickHandler.ts`
-   - `src/types/game.ts` (إضافة الحقول الاختيارية لرسائل الأحداث فقط دون المساس بـ `getRoomConfig` أو أسماء الغرف)
-   - `src/components/GameRoom.tsx` و`src/components/experimental/ExperimentalGameRoom.tsx` (تحديث معالج خطأ `join_room` ليقبل `res.error === 'room_full'` إلى جانب fallback فحص النصوص القديمة دون ترجمة أي عنصر واجهة)
-4. **الملفات المحظورة:** `server/registerDrawBinaryHandler.ts`, `server/roomCanonicalStrokeEngine.ts`, `server/utils/binaryBufferHelpers.ts`, `server/utils/arabicFuzzyMatch.ts`, `server/data/wordsDictionary.ts`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/game/DrawingCanvasCore.tsx`, `AGENTS.md`.
-5. **الآليات المحمية:** **Safeguard 1 & 2 & 5 & 9:** إبقاء حقل `text` الحالي سالماً في جميع البثوث حتى لا يتوقف مرشح `OverlayChatRoom` أو محللات `GameActivityFeed` أو اختبارات السيرفر الحالية قبل `L10N-5`، مع عدم المساس بـ `saveChatMessage`/`saveGuessMessage` (`40` رسالة) و`reconnectPlayer` في `server/rooms.ts`.
-6. **التعديلات الدقيقة:**
-   - إضافة `eventCode` و`params` (مثل `{ name, score, word, voterName, targetName }`) و`actorId` (في `turn_skipped`, `turn_lost`, إلخ) لكل بث نظامي في الدردشة والتخمينات (`player_joined`, `player_left`, `player_kicked`, `player_afk_kicked`, `player_disconnected_removed`, `votekick_alert`, `chat_word_leak_warning`, `turn_of`, `game_over`, `turn_canceled`, `all_guessed`, `round_timeout_won`, `nobody_hit`, `answer_reveal`, `turn_skipped`, `turn_lost`, `round_interval`, `guess_hit`, `guess_close`, `draw_reported`).
-   - إرسال `error: 'room_full'` و`error: 'join_failed'` من `registerJoinRoomHandler.ts` مع الإبقاء على مطابقة النصوص القديمة في كاشف الخطأ بالعميل مؤقتاً.
-7. **المخاطر:** تراجع في اختبارات السيرفر الآلية (`scripts/test_*.ts`) إن تغيرت البنية المتوقعة للحقول الحالية؛ لذا الإضافة تكون **لحقول اختيارية جديدة فقط**.
-8. **معايير الخروج:** جميع أحداث الخادم تحمل الحقول المهيكلة + `text` الاحتياطي، واجتياز اختبارات السيرفر والبناء 100% دون أي تغير مرئي في الدردشة.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + `npx tsx scripts/test_payload_validation_suite.ts` + `npx tsx scripts/test_leave_room_integrity.ts` + `npx tsx scripts/test_session_identity_suite.ts` + فحص يدوي سريع أن اللعب والدردشة يعملان طبيعياً.
-10. **الاعتماديات:** `L10N-3`.
+1. **الاسم والرقم:** `PHASE L10N-4 — Structured System Events & Backward Compatibility` — **`[~] AWAITING MANUAL VERIFICATION`** (`2026-11-23`)
+2. **الهدف:** مرحلة تقنية مستقلة لتجهيز رسائل النظام في الخادم والأنواع المشتركة بإضافة `eventCode` و`params` و`actorId` (عند وجود فاعل ذي دلالة وباعتماد `persistentId || id` دون استبدال `senderId`) ورموز أخطاء الانضمام (`errorCode: 'room_full' | 'join_failed'`) مع **الحفاظ التام على `text` و`error` و`subType` و`type` القديمة كـ `fallback`**، وضمان توافق الرسائل المخزنة وإعادة الاتصال، دون إنشاء أحداث Socket.IO جديدة، ودون تغيير بروتوكول الرسم الثنائي أو محرك الرسم، **ودون ترجمة واجهة الدردشة أو التخمينات في هذه المرحلة**.
+3. **الملفات المعدلة فعلياً ضمن النطاق المسموح:**
+   - `src/types/game.ts` (تعريف `SystemEventCode`، `SystemEventParams`، `StructuredSystemEventMetadata`، `JoinRoomErrorCode = 'room_full' | 'join_failed'`، و`RoomMessagePayload` غير التقييدية لـ `chatMessages`/`guessMessages`، دون المساس بـ `getRoomConfig` أو `ROOM_PRESETS`)
+   - `server/rooms.ts` (إضافة الحقول المهيكلة مباشرة في مواضع البناء داخل `kickIdlePlayers`، `transitionToChoosing`، `transitionToPodium`، `transitionToRoundEnd`، `submitGuess`، `reportDrawing`، و`handleDisconnect` — **دون أي تعديل على `recordDrawCommand` أو `saveChatMessage`/`saveGuessMessage` أو `reconnectPlayer` أو بروتوكول الرسم/التراجع**)
+   - `server/registerJoinRoomHandler.ts` (إضافة `eventCode: 'player_joined'`, `params: { name: nickname }`, `actorId: authJoinRes.cleanPid` إلى `joinMsg`؛ وإضافة `errorCode: 'room_full'` و`errorCode: 'join_failed'` مع إبقاء نص `error` القديم كما هو حرفياً)
+   - `server/registerLeaveRoomHandler.ts` (إضافة `eventCode: 'player_left'`, `params: { name: playerName }`, `actorId`)
+   - `server/registerSendMessageHandler.ts` (إضافة `eventCode: 'chat_word_leak_warning'`, `actorId` بدون `params` في تحذير منع تسريب الإجابة الخاص)
+   - `server/registerVoteKickHandler.ts` (إضافة `eventCode: 'votekick_alert'`, `params: { voterName, targetName }`, `actorId: selfId`؛ وإضافة `eventCode: 'player_kicked'`, `params: { name: kickedName }`, `actorId: banId` مع إبقاء النصوص والحقول القديمة كاملة)
+   - `src/components/GameRoom.tsx` و`src/components/experimental/ExperimentalGameRoom.tsx` (تحديث شرط `join_room` ليقبل `res.errorCode === 'room_full'` مع إبقاء fallback فحص النصوص القديمة دون ترجمة أي عنصر واجهة)
+   - تحديثات تحقق مركّزة في الاختبارات: `scripts/test_session_identity_suite.ts`، `scripts/test_leave_room_integrity.ts`، `scripts/test_phase9a_slice5c3a.ts`
+4. **الملفات المحظورة (تم احترامها بالكامل):** `server/registerDrawBinaryHandler.ts`, `server/roomCanonicalStrokeEngine.ts`, `server/utils/binaryBufferHelpers.ts`, `server/utils/arabicFuzzyMatch.ts`, `server/data/wordsDictionary.ts`, `server/roomDrawingHistory.ts`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/experimental/ExperimentalHitOverlay.tsx`, `src/components/Lobby.tsx`, `src/components/game/DrawingCanvasCore.tsx`, `src/utils/canvasCheckpointManager.ts`, `AGENTS.md`, `UI_MODAL_REGISTRY.md`, `REFACTORING_ROADMAP.md`, `package.json`, `bun.lock`.
+5. **الآليات المحمية:** **Safeguard 1 & 2 & 5 & 9:** بقاء جميع حقول `text`, `error`, `type`, `subType`, `sender`, `senderId`, `word`, `voterName`, `targetName`, `color`، وقنوات `receive_message` / `receive_guess`، والحد المنزلق `40` رسالة، و`reconnectPlayer` دون أي تغيير سلوكي.
+6. **التعديلات المنفذة بدقة (20 رمز حدث + رمزا خطأ انضمام):**
+   - قناة الدردشة (`receive_message`): `player_joined`, `player_left`, `votekick_alert`, `player_kicked`, `chat_word_leak_warning`, `player_afk_kicked`, `player_disconnected_removed`.
+   - قناة التخمينات وسجل النشاط (`receive_guess`): `turn_of`, `game_over`, `turn_canceled`, `all_guessed`, `round_timeout_won`, `nobody_hit`, `answer_reveal`, `turn_skipped`, `turn_lost`, `round_interval`, `guess_hit`, `guess_close`, `draw_reported`.
+   - أخطاء `join_room`: `errorCode: 'room_full'` (مع إبقاء `'عذراً، هذه الغرفة ممتلئة بالكامل!'`) و`errorCode: 'join_failed'` (مع إبقاء `'حدث خطأ أثناء الانضمام للغرفة'`).
+7. **نتائج الاختبار والتحقق الآلي (`2026-11-23`):**
+   - `npx tsc --noEmit`: نجاح تام بدون أخطاء.
+   - `npm run build` (`vite build`): نجاح تام خلال `8.47s` (`2244` وحدة).
+   - `npx tsx scripts/test_payload_validation_suite.ts`: نجاح (`212 passed`).
+   - `npx tsx scripts/test_leave_room_integrity.ts`: نجاح (`79 passed`).
+   - `npx tsx scripts/test_session_identity_suite.ts`: نجاح (`631 passed`).
+   - `npx tsx scripts/test_phase9a_slice5c3a.ts`: نجاح (`29 passed, 0 failed`).
+   - `npx tsx scripts/test_phase9a_slice5c3b.ts`: نجاح (`53 passed, 0 failed`).
+8. **ما بقي للتحقق اليدوي قبل إغلاق `L10N-4`:** فحص يدوي سريع من المالك أن اللعب والدردشة وسجل التخمينات وإشعار امتلاء الغرفة تعمل بصورة طبيعية دون أي تغير مرئي غير مقصود قبل الانتقال إلى `L10N-5`.
+9. **الاعتماديات:** `L10N-3`.
 
 ---
 
@@ -495,16 +504,16 @@
 
 ---
 
-## 8. الحالة المباشرة للمرحلة الحالية (`L10N-3 — COMPLETED`, `L10N-4 — NEXT`)
+## 8. الحالة المباشرة للمرحلة الحالية (`L10N-4 — AWAITING MANUAL VERIFICATION`, `L10N-5 — NOT STARTED`)
 
-> أُغلقت **`L10N-3`** رسمياً بحالة **`COMPLETED — OWNER MANUALLY VERIFIED`** (`2026-11-23` — Commit: `e2c66a6068eecb685f725f2742695b8f509eb8d1`) بعد استكمال التحقق الآلي والتجربة اليدوية الشاملة من المالك بالعربية والإنجليزية:
+> نُفذت **`L10N-4`** (Stage 2) واجتازت جميع بوابات التحقق الآلي وهي الآن بحالة **`AWAITING MANUAL VERIFICATION`** (`2026-11-23`)، مع إبقاء **`L10N-5`** بحالة **`NOT STARTED`** لحين موافقة المالك:
 
-- **ملخص ما تم إنجازه واعتماده في `L10N-3`:**
-  1. توطين جميع النصوص التوضيحية والأزرار وتصنيفات المنصة داخل `src/components/game/MiniBoardOverlay.tsx` عبر نطاق `miniBoard` (مع `<bdi dir="auto">` و`<Trans>` وصيغ الجمع CLDR للنقاط).
-  2. توطين النصوص التوضيحية وأزرار التفاعل داخل `src/components/experimental/ChoosingWordOverlay.tsx` عبر نطاق `wordChoice` (مع بقاء `IT'S YOUR TURN!` بالإنجليزية وبقاء `wordOptions` مشتركة وغير مترجمة مع `dir="auto"`).
-  3. إضافة `dir="ltr"` على حاويتي صف الأحرف في `src/components/experimental/ExperimentalWordOverlay.tsx` لحماية `flexDirection: isRTL ? 'row-reverse' : 'row'` وفق Safeguard 6.
-  4. إنشاء وتسجيل ملفات `src/i18n/locales/en/{miniBoard,wordChoice}.ts` و`src/i18n/locales/ar/{miniBoard,wordChoice}.ts`.
-- **المرحلة التالية:** **`L10N-4 — Structured System Events & Backward Compatibility`** (تخضع أولاً للتدقيق المعماري القرائي Stage 1 قبل بدء أي تنفيذ برمجي في Stage 2).
+- **ملخص ما تم تنفيذه والتحقق منه آلياً في `L10N-4`:**
+  1. تعريف أنواع الأحداث المهيكلة `SystemEventCode` (20 حدثاً) و`SystemEventParams` و`StructuredSystemEventMetadata` و`JoinRoomErrorCode` و`RoomMessagePayload` في `src/types/game.ts`.
+  2. إرفاق `eventCode` و`params` و`actorId` (`persistentId || id` حيثما ينطبق، دون المساس بـ `senderId` أو أي حقل قديم) في جميع منتجي رسائل الدردشة وسجل التخمينات بالخادم (`server/rooms.ts` و`server/register*Handler.ts`).
+  3. إضافة `errorCode: 'room_full'` و`errorCode: 'join_failed'` في `server/registerJoinRoomHandler.ts` مع الإبقاء الحرفي على نصوص `error` القديمة، وتحديث فحص `room_full` في `GameRoom.tsx` و`ExperimentalGameRoom.tsx`.
+  4. اجتياز `npx tsc --noEmit` و`npm run build` وجميع اختبارات الخادم الخمسة (`212 + 79 + 631 + 29 + 53 = 1004` فحص نجاح، `0` فشل).
+- **المتبقي قبل بدء `L10N-5`:** التحقق اليدوي السريع من المالك بأن اللعب والدردشة ورسائل الجولة وامتلاء الغرفة تعمل بصورة طبيعية دون أي تغيير بصري.
 
 ---
 

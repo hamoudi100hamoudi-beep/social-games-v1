@@ -240,7 +240,7 @@ export function handleJoinRoom(
     const maxCapacity = existingRoom?.maxPlayers || (getRoomConfig ? getRoomConfig(roomId).maxPlayers : 5);
     const onlinePlayersCount = existingRoom ? existingRoom.players.filter((p: any) => !p.isOffline).length : 0;
     if (existingRoom && onlinePlayersCount >= maxCapacity) {
-      if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!' });
+      if (callback) callback({ error: 'عذراً، هذه الغرفة ممتلئة بالكامل!', errorCode: 'room_full' });
       return;
     }
 
@@ -298,7 +298,10 @@ export function handleJoinRoom(
     const joinMsg = {
       id: 'sys-' + Date.now().toString() + Math.random().toString(36).substr(2, 5),
       text: `${nickname} انضم للغرفة`,
-      type: 'system'
+      type: 'system',
+      eventCode: 'player_joined' as const,
+      params: { name: nickname },
+      ...(authJoinRes.cleanPid ? { actorId: authJoinRes.cleanPid } : {})
     };
     if (typeof roomManager.saveChatMessage === 'function') {
       roomManager.saveChatMessage(roomId, joinMsg);
@@ -308,7 +311,7 @@ export function handleJoinRoom(
     }
   } catch (e) {
     console.error(e);
-    if (callback) callback({ error: 'حدث خطأ أثناء الانضمام للغرفة' });
+    if (callback) callback({ error: 'حدث خطأ أثناء الانضمام للغرفة', errorCode: 'join_failed' });
   }
 }
 

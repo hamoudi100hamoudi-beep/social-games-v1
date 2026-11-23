@@ -188,6 +188,14 @@ async function runTests() {
   // Verify Room A received notification
   assert((emittedToA as boolean) === true, 'Test 2.9: Leave notification sent to Room A');
   assert(emittedLeaveMsg && emittedLeaveMsg.text.includes('Alice غادر الغرفة'), 'Test 2.10: Leave message contains correct player name');
+  assert(
+    emittedLeaveMsg &&
+      emittedLeaveMsg.type === 'system' &&
+      emittedLeaveMsg.eventCode === 'player_left' &&
+      emittedLeaveMsg.params?.name === 'Alice' &&
+      emittedLeaveMsg.actorId === alicePid,
+    'Test 2.10b: Leave message includes structured player_left metadata with persistent actorId'
+  );
 
   // -------------------------------------------------------------
   // Test 3: Unregistered or Out-of-Room Socket Safe No-op

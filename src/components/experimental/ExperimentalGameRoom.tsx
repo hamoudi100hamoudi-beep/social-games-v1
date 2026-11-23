@@ -714,9 +714,13 @@ export default function ExperimentalGameRoom({
             console.warn("[GameRoom] Rejoin blocked: Player is banned from room.");
             setIsBanned(true);
             setIsInitialLoadingRoom(false);
-          } else if (res && res.error) {
-            console.warn("[GameRoom] Join room failed with error:", res.error);
-            if (res.error.includes("ممتلئة") || res.error.includes("full") || res.error.includes("كامل")) {
+          } else if (res && (res.errorCode === "room_full" || res.error)) {
+            console.warn("[GameRoom] Join room failed with error:", res.error || res.errorCode);
+            if (
+              res.errorCode === "room_full" ||
+              (typeof res.error === "string" &&
+                (res.error.includes("ممتلئة") || res.error.includes("full") || res.error.includes("كامل")))
+            ) {
               setIsRoomFull(true);
             }
             setIsInitialLoadingRoom(false);

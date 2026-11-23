@@ -62,14 +62,56 @@ export interface Player {
   afkWarningSent?: boolean;
 }
 
+export type SystemEventCode =
+  | 'player_joined'
+  | 'player_left'
+  | 'votekick_alert'
+  | 'player_kicked'
+  | 'chat_word_leak_warning'
+  | 'player_afk_kicked'
+  | 'player_disconnected_removed'
+  | 'turn_of'
+  | 'game_over'
+  | 'turn_canceled'
+  | 'all_guessed'
+  | 'round_timeout_won'
+  | 'nobody_hit'
+  | 'answer_reveal'
+  | 'turn_skipped'
+  | 'turn_lost'
+  | 'round_interval'
+  | 'guess_hit'
+  | 'guess_close'
+  | 'draw_reported';
+
+export interface SystemEventParams {
+  name?: string;
+  word?: string;
+  guess?: string;
+  voterName?: string;
+  targetName?: string;
+  winnerName?: string;
+  score?: number;
+}
+
+export interface StructuredSystemEventMetadata {
+  eventCode?: SystemEventCode;
+  params?: SystemEventParams;
+  actorId?: string;
+}
+
+export type JoinRoomErrorCode = 'room_full' | 'join_failed';
+
+export type RoomMessagePayload = StructuredSystemEventMetadata & Record<string, any>;
+
 export interface Room {
   id: string;
   players: Player[];
   gameState: GameState;
   timer?: NodeJS.Timeout; // For backend interval reference
   usedWords: string[];
-  chatMessages?: any[];
-  guessMessages?: any[];
+  chatMessages?: RoomMessagePayload[];
+  guessMessages?: RoomMessagePayload[];
   turnStartScores?: Record<string, number>; // Backup of scores to roll back on report/cancellation
   bannedUsers?: string[];
   votekicks?: Record<string, string[]>;
