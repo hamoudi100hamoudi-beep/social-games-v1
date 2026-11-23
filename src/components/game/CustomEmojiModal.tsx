@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Plus, Sparkles, Check } from 'lucide-react';
 import GameTitle from './GameTitle';
+import { useAppTranslation } from '../../i18n/useAppTranslation';
 
 interface CustomEmojiModalProps {
   isOpen: boolean;
@@ -47,6 +48,8 @@ export default function CustomEmojiModal({
   onClose,
   onAddEmoji,
 }: CustomEmojiModalProps) {
+  const { t, isRTL } = useAppTranslation('modals');
+  const { t: tCommon } = useAppTranslation('common');
   const [inputText, setInputText] = useState('');
   const [detectedEmoji, setDetectedEmoji] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -76,7 +79,7 @@ export default function CustomEmojiModal({
   const handleConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!detectedEmoji) {
-      setErrorMsg('الرجاء إدخال إيموجي من كيبورد الهاتف 🎨');
+      setErrorMsg(t('customEmoji.invalidError'));
       return;
     }
     onAddEmoji(detectedEmoji);
@@ -103,12 +106,13 @@ export default function CustomEmojiModal({
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="relative w-[88%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[440px] h-auto max-h-[85dvh] overflow-y-auto no-scrollbar bg-white rounded-[28px] sm:rounded-[36px] p-5 sm:p-7 border-2 border-slate-200 z-10 flex flex-col justify-between items-center text-center"
-            dir="rtl"
+            dir={isRTL ? 'rtl' : 'ltr'}
           >
             {/* Close Button */}
             <button
               onClick={onClose}
               type="button"
+              aria-label={tCommon('actions.close')}
               className="absolute top-3 left-3 sm:top-4 sm:left-4 w-8 h-8 sm:w-10 sm:h-10 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center text-slate-500 active:scale-90 transition-transform cursor-pointer z-20"
             >
               <X size={18} className="sm:w-5 sm:h-5" strokeWidth={3} />
@@ -120,7 +124,7 @@ export default function CustomEmojiModal({
             </div>
 
             <p className="text-[#8C8AA7] font-bold text-xs sm:text-base mb-3 sm:mb-4">
-              أضف إيموجيك الخاص من كيبورد الهاتف 🎨
+              {t('customEmoji.subtitle')}
             </p>
 
             {/* Preview Box */}
@@ -137,7 +141,7 @@ export default function CustomEmojiModal({
               ) : (
                 <div className="flex flex-col items-center text-[#38BDF8]/60">
                   <Sparkles size={26} className="sm:w-8 sm:h-8 animate-pulse" />
-                  <span className="text-[10px] sm:text-xs font-black mt-1">اختر إيموجي</span>
+                  <span className="text-[10px] sm:text-xs font-black mt-1">{t('customEmoji.pickPrompt')}</span>
                 </div>
               )}
 
@@ -159,7 +163,7 @@ export default function CustomEmojiModal({
                   id="custom-emoji-input"
                   value={inputText}
                   onChange={handleInputChange}
-                  placeholder="اضغط هنا واستخدم كيبورد الإيموجي..."
+                  placeholder={t('customEmoji.placeholder')}
                   autoComplete="one-time-code"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -185,7 +189,7 @@ export default function CustomEmojiModal({
                 className="w-full h-11 sm:h-12 bg-[#38BDF8] hover:bg-[#0EA5E9] disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2 active:scale-95 transition-all shadow-md cursor-pointer shrink-0"
               >
                 <Plus size={18} strokeWidth={3.5} />
-                <span>إضافة للإيموجيات</span>
+                <span>{t('customEmoji.submitButton')}</span>
               </button>
             </form>
           </motion.div>

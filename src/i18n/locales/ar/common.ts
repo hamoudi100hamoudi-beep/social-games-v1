@@ -8,4 +8,10 @@ export const arCommon = {
     ar: 'العربية',
     en: 'English',
   },
+  actions: {
+    yes: 'نعم',
+    no: 'لا',
+    ok: 'موافق',
+    close: 'إغلاق',
+  },
 } satisfies DeepLocaleSchema<typeof enCommon>;

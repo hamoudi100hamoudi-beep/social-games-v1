@@ -1,6 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { WifiOff, LogOut } from "lucide-react";
+import { useAppTranslation } from "../../i18n/useAppTranslation";
 
 export interface RoomConnectionStatusOverlayProps {
   isVisible: boolean;
@@ -19,6 +20,8 @@ export const RoomConnectionStatusOverlay: React.FC<RoomConnectionStatusOverlayPr
   isProlongedDisconnect,
   onReturnToLobby,
 }) => {
+  const { t, isRTL } = useAppTranslation("modals");
+
   return (
     <AnimatePresence>
       {isVisible && (
@@ -29,7 +32,7 @@ export const RoomConnectionStatusOverlay: React.FC<RoomConnectionStatusOverlayPr
           exit={{ opacity: 0 }}
           transition={{ duration: 0.25, ease: "easeOut" }}
           className="fixed inset-0 z-[9000] bg-[#061220]/60 flex flex-col items-center justify-center p-4 select-none touch-none"
-          dir="rtl"
+          dir={isRTL ? "rtl" : "ltr"}
         >
           <div className="bg-[#121B2A] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl flex flex-col items-center text-center">
             {/* Animated Icon / Spinner */}
@@ -42,17 +45,17 @@ export const RoomConnectionStatusOverlay: React.FC<RoomConnectionStatusOverlayPr
             {/* Status Title */}
             <h3 className="text-xl sm:text-2xl font-black text-white mb-2 tracking-tight">
               {!isConnected
-                ? "انقطع الاتصال بالخادم"
-                : "عاد الاتصال"}
+                ? t("connection.disconnectedTitle")
+                : t("connection.reconnectedTitle")}
             </h3>
 
             {/* Status Subtitle */}
             <p className="text-sm sm:text-base text-slate-300 font-medium mb-6 leading-relaxed">
               {isProlongedDisconnect
-                ? "تعذر استعادة الاتصال حتى الآن. يرجى التحقق من اتصالك بالإنترنت."
+                ? t("connection.prolongedDisconnect")
                 : !isConnected
-                  ? "نحاول إعادة الاتصال تلقائيًا..."
-                  : "جارٍ إعادة الانضمام إلى الغرفة..."}
+                  ? t("connection.reconnecting")
+                  : t("connection.rejoining")}
             </p>
 
             {/* Prolonged Disconnect Action: Return to Lobby */}
@@ -62,8 +65,8 @@ export const RoomConnectionStatusOverlay: React.FC<RoomConnectionStatusOverlayPr
                 onClick={onReturnToLobby}
                 className="w-full py-3.5 px-5 font-black text-sm sm:text-base rounded-2xl transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2 bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/30 active:scale-95 shadow-lg"
               >
-                <LogOut className="w-5 h-5 ml-1" />
-                <span>العودة إلى الردهة</span>
+                <LogOut className="w-5 h-5" />
+                <span>{t("connection.returnToLobby")}</span>
               </button>
             )}
           </div>

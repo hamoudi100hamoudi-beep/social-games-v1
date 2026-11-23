@@ -1,6 +1,7 @@
 import React from "react";
 import { EyeOff, User as UserIcon } from "lucide-react";
 import CinematicModal from "../CinematicModal";
+import { useAppTranslation } from "../../../i18n/useAppTranslation";
 
 interface PlayerProfileModalProps {
   isOpen: boolean;
@@ -28,6 +29,8 @@ export default function PlayerProfileModal({
   onToggleBlock,
   onToggleVoteKick,
 }: PlayerProfileModalProps) {
+  const { t, isRTL } = useAppTranslation("modals");
+
   return (
     <CinematicModal
       isOpen={isOpen}
@@ -44,19 +47,27 @@ export default function PlayerProfileModal({
 
           {/* Player Name Card */}
           <div className="w-full">
-            <h3 id="profile-modal-name" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center truncate px-2">
-              {playerToRender.name}
+            <h3
+              id="profile-modal-name"
+              dir="auto"
+              className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center truncate px-2"
+            >
+              <bdi dir="auto">{playerToRender.name}</bdi>
             </h3>
           </div>
 
           {isSelf ? (
-            <div 
+            <div
+              dir={isRTL ? "rtl" : "ltr"}
               className="py-3 px-4 bg-white rounded-[18px] border border-[#4F46E5]/10 text-center text-[#4F46E5] font-extrabold text-sm"
             >
-              هذا هو حسابك الشخصي
+              {t("profile.selfAccount")}
             </div>
           ) : (
-            <div className="flex flex-col gap-2.5 sm:gap-3 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
+            <div
+              dir={isRTL ? "rtl" : "ltr"}
+              className="flex flex-col gap-2.5 sm:gap-3 w-full animate-in fade-in slide-in-from-bottom-2 duration-300"
+            >
               {/* Block / Unblock Action Button (Mute) */}
               <div>
                 <button
@@ -66,13 +77,13 @@ export default function PlayerProfileModal({
                     onClose();
                   }}
                   className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
-                    isBlocked 
+                    isBlocked
                       ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95"
                       : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95"
                   }`}
                 >
                   <EyeOff className="w-5 h-5" />
-                  {isBlocked ? "UNBLOCK" : "BLOCK"}
+                  {isBlocked ? t("profile.unblock") : t("profile.block")}
                 </button>
               </div>
 
@@ -85,13 +96,13 @@ export default function PlayerProfileModal({
                     onClose();
                   }}
                   className={`w-full py-3 sm:py-3.5 px-4 font-black text-sm sm:text-base rounded-[18px] sm:rounded-[20px] transition-all cursor-pointer flex items-center justify-center uppercase tracking-wide gap-2.5 select-none ${
-                    alreadyVoted 
+                    alreadyVoted
                       ? "bg-[#38BDF8] text-white hover:bg-[#0EA5E9] border-2 border-white/40 active:scale-95"
                       : "bg-[#FB923C] text-white hover:bg-[#EA580C] border-2 border-white/40 active:scale-95"
                   }`}
                 >
                   <UserIcon className="w-5 h-5" />
-                  {alreadyVoted ? "REMOVE VOTE" : "VOTEKICK"}
+                  {alreadyVoted ? t("profile.removeVote") : t("profile.votekick")}
                 </button>
               </div>
             </div>

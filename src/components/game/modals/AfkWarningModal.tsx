@@ -1,7 +1,9 @@
 import React from "react";
 import { Check } from "lucide-react";
+import { Trans } from "react-i18next";
 import CinematicModal from "../CinematicModal";
 import AfkWarningSprite from "../AfkWarningSprite";
+import { useAppTranslation } from "../../../i18n/useAppTranslation";
 
 interface AfkWarningModalProps {
   isOpen: boolean;
@@ -14,6 +16,9 @@ export default function AfkWarningModal({
   afkCountdown,
   onConfirmStay,
 }: AfkWarningModalProps) {
+  const { t, isRTL } = useAppTranslation("modals");
+  const { t: tCommon } = useAppTranslation("common");
+
   return (
     <CinematicModal
       isOpen={isOpen}
@@ -22,7 +27,7 @@ export default function AfkWarningModal({
       buttons={[
         {
           id: "afk-return-btn",
-          text: "موافق",
+          text: tCommon("actions.ok"),
           onClick: onConfirmStay,
           variant: "neutral",
           icon: <Check strokeWidth={4} size={18} />,
@@ -34,19 +39,19 @@ export default function AfkWarningModal({
         <AfkWarningSprite className="w-24 sm:w-34 aspect-[256/326]" />
       </div>
 
-      {/* Question & Subtext in the same line (RTL reading order) */}
-      <h3 
-        id="afk-title" 
-        dir="rtl"
+      {/* Question & Subtext in the same line (adaptive reading order) */}
+      <h3
+        id="afk-title"
+        dir={isRTL ? "rtl" : "ltr"}
         className="text-sm sm:text-base font-black text-[#2E2882] leading-snug mb-3 sm:mb-4 px-1 text-center"
       >
-        <span>هل ما زلت هنا؟ </span>
-        <span id="afk-description">اضغط موافق للاستمرار في اللعب</span>
+        <span>{t("afk.question")} </span>
+        <span id="afk-description">{t("afk.actionHint")}</span>
       </h3>
 
       {/* Compact Remainder Countdown Badge */}
-      <div 
-        dir="rtl"
+      <div
+        dir={isRTL ? "rtl" : "ltr"}
         className="bg-[#EF4444]/10 border border-[#EF4444]/20 rounded-full px-4 py-1.5 inline-flex items-center gap-2 mb-3 sm:mb-4 text-xs sm:text-sm font-black text-[#EF4444] select-none"
       >
         <span className="flex h-2 w-2 relative">
@@ -54,7 +59,15 @@ export default function AfkWarningModal({
           <span className="relative inline-flex rounded-full h-2 w-2 bg-[#EF4444]"></span>
         </span>
         <span>
-          سيتم فصل الاتصال بعد: <span className="font-extrabold font-mono text-xs sm:text-sm">{afkCountdown}</span> ثانية
+          <Trans
+            t={t}
+            i18nKey="afk.disconnectCountdown"
+            count={afkCountdown}
+            values={{ count: afkCountdown }}
+            components={{
+              val: <span className="font-extrabold font-mono text-xs sm:text-sm" />,
+            }}
+          />
         </span>
       </div>
     </CinematicModal>

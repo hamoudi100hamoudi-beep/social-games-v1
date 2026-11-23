@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, Plus, Trash2, Undo2 } from 'lucide-react';
 import ReinventedColorWheel from 'reinvented-color-wheel';
 import 'reinvented-color-wheel/css/reinvented-color-wheel.min.css';
+import { useAppTranslation } from '../../i18n/useAppTranslation';
 
 interface ColorWheelModalProps {
   isOpen: boolean;
@@ -30,6 +31,8 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
   onOpacityChange,
   onClose,
 }) => {
+  const { t, isRTL } = useAppTranslation('modals');
+  const { t: tCommon } = useAppTranslation('common');
   // Snapshot initial color when modal opens (for split comparison box)
   const [initialColor, setInitialColor] = useState(color);
   const prevIsOpenRef = useRef(isOpen);
@@ -491,7 +494,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
 
               {/* Middle: FlipaClip Split Comparison Box (revert vs live) */}
               <div
-                title="مقارنة اللون: انقر على النصف الأول لاسترجاع اللون السابق"
+                title={t('colorWheel.compareTooltip')}
                 className="relative flex items-center h-6 rounded-lg overflow-hidden border border-white/40 cursor-pointer"
               >
                 {/* Revert to Initial Color */}
@@ -503,7 +506,8 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                   }}
                   className="w-6 h-full relative group transition-transform active:scale-95"
                   style={{ backgroundColor: initialColor }}
-                  title="استرجاع اللون السابق"
+                  title={t('colorWheel.revertTooltip')}
+                  aria-label={t('colorWheel.revertTooltip')}
                 >
                   <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                     <Undo2 className="w-3 h-3 text-white" />
@@ -518,7 +522,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                   ref={liveColorBoxRef}
                   className="w-6 h-full"
                   style={{ backgroundColor: color }}
-                  title="اللون المختار حالياً"
+                  title={t('colorWheel.currentTooltip')}
                 />
               </div>
 
@@ -527,7 +531,8 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                 type="button"
                 onClick={onClose}
                 className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 flex items-center justify-center transition-colors text-white/80 hover:text-white shrink-0"
-                title="إغلاق"
+                title={tCommon('actions.close')}
+                aria-label={tCommon('actions.close')}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -554,7 +559,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                 <div className="w-full flex flex-col gap-0.5 px-3" dir="ltr">
                   <div className="flex justify-between items-center text-xs font-semibold text-white/80 px-0.5">
                     <span ref={opacityTextRef} className="font-mono text-[#D4AF37] font-black text-xs">{opacityPercent}%</span>
-                    <span dir="rtl" className="text-white/70 text-[10px]">الكثافة</span>
+                    <span dir={isRTL ? 'rtl' : 'ltr'} className="text-white/70 text-[10px]">{t('colorWheel.opacity')}</span>
                   </div>
 
                   {/* Interactive Slider Track (LTR: Left 10% -> Right 100%) */}
@@ -607,18 +612,18 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
               )}
 
               {/* Bottom Section: Save Color & Delete Icon Buttons + Saved Colors Swatches */}
-              <div className="w-full px-2.5 pb-1 flex flex-col gap-1" dir="rtl">
+              <div className="w-full px-2.5 pb-1 flex flex-col gap-1" dir={isRTL ? 'rtl' : 'ltr'}>
                 <div className="flex items-center gap-1.5">
                   {/* Plus Button: Add current color */}
                   <button
                     type="button"
                     onClick={handleSaveColor}
                     disabled={savedPalette.length >= 24}
-                    title="حفظ اللون الحالي في اللوحة"
+                    title={t('colorWheel.saveTooltip')}
                     className="h-6 px-2 rounded-lg bg-white/10 hover:bg-white/20 active:scale-95 disabled:opacity-40 disabled:pointer-events-none flex items-center gap-1 text-[11px] font-bold text-white transition-all border border-white/20 shrink-0"
                   >
                     <Plus className="w-3 h-3 text-[#D4AF37]" />
-                    <span>حفظ</span>
+                    <span>{t('colorWheel.save')}</span>
                   </button>
 
                   {/* Delete Button: Trash icon */}
@@ -626,15 +631,26 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                     type="button"
                     onClick={handleDeleteSelectedColor}
                     disabled={savedPalette.length === 0}
-                    title={currentTargetForDeletion ? `حذف اللون المحدد (${currentTargetForDeletion})` : "حذف اللون المحدد"}
+                    title={
+                      currentTargetForDeletion
+                        ? t('colorWheel.deleteSelectedTooltip', { color: currentTargetForDeletion })
+                        : t('colorWheel.deleteTooltip')
+                    }
+                    aria-label={
+                      currentTargetForDeletion
+                        ? t('colorWheel.deleteSelectedTooltip', { color: currentTargetForDeletion })
+                        : t('colorWheel.deleteTooltip')
+                    }
                     className="w-6 h-6 rounded-lg bg-red-500/20 hover:bg-red-500/30 active:scale-95 disabled:opacity-30 disabled:pointer-events-none flex items-center justify-center text-red-300 hover:text-red-200 transition-all border border-red-500/30 shrink-0"
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
 
                   {/* Swatches Label */}
-                  <span className="text-[10px] text-white/50 font-bold mr-auto">
-                    {savedPalette.length > 0 ? `${savedPalette.length}/24 لون` : 'الألوان المحفوظة'}
+                  <span className="text-[10px] text-white/50 font-bold ms-auto">
+                    {savedPalette.length > 0
+                      ? t('colorWheel.savedCount', { count: savedPalette.length, max: 24 })
+                      : t('colorWheel.savedColors')}
                   </span>
                 </div>
 
@@ -642,7 +658,7 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
                 <div className="w-full min-h-[34px] max-h-[70px] overflow-y-auto no-scrollbar bg-[#081B38]/90 border border-white/15 rounded-xl p-1.5 flex flex-wrap gap-1.5 items-center">
                   {savedPalette.length === 0 ? (
                     <div className="w-full py-1 text-center text-[11px] text-white/40 font-medium">
-                      اضغط على &ldquo;حفظ&rdquo; لإضافة ألوانك المفضلة هنا
+                      {t('colorWheel.emptyHint')}
                     </div>
                   ) : (
                     savedPalette.map((savedHex, idx) => {

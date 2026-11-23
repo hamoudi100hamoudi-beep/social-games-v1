@@ -1,6 +1,7 @@
 import React from "react";
 import CinematicModal from "../CinematicModal";
 import ExitSprite from "../ExitSprite";
+import { useAppTranslation } from "../../../i18n/useAppTranslation";
 
 interface ExitConfirmModalProps {
   isOpen: boolean;
@@ -15,6 +16,8 @@ export default function ExitConfirmModal({
   onConfirmExit,
   spriteClassName = "w-26 sm:w-36 h-auto drop-shadow-sm",
 }: ExitConfirmModalProps) {
+  const { t, isRTL } = useAppTranslation("modals");
+  const { t: tCommon } = useAppTranslation("common");
 
   return (
     <CinematicModal
@@ -25,13 +28,13 @@ export default function ExitConfirmModal({
       buttons={[
         {
           id: "exit-confirm-no-btn",
-          text: "NO",
+          text: tCommon("actions.no"),
           onClick: onClose,
           variant: "primary",
         },
         {
           id: "exit-confirm-yes-btn",
-          text: "YES",
+          text: tCommon("actions.yes"),
           onClick: onConfirmExit,
           variant: "danger",
         },
@@ -43,8 +46,12 @@ export default function ExitConfirmModal({
       </div>
 
       {/* Question */}
-      <h3 id="exit-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center">
-        Do you want to leave the game?
+      <h3
+        id="exit-confirm-title"
+        dir={isRTL ? "rtl" : "ltr"}
+        className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center"
+      >
+        {t("exit.question")}
       </h3>
     </CinematicModal>
   );

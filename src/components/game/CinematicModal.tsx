@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { X } from "lucide-react";
 import GameTitle from "./GameTitle";
+import { useAppTranslation } from "../../i18n/useAppTranslation";
 
 // 🎬 High-performance animation variants for low-end devices
 export const cinematicCardVariants: any = {
@@ -67,6 +68,7 @@ export default function CinematicModal({
   maxWidthClass,
   overlayClassName,
 }: CinematicModalProps) {
+  const { t } = useAppTranslation('common');
   // 🛡️ Prevent instant closure caused by click bubbling or pointer release from the gesture that opened the modal
   const openTimeRef = React.useRef(0);
   const backdropPointerDownRef = React.useRef(false);
@@ -164,7 +166,7 @@ export default function CinematicModal({
                 type="button"
                 onClick={onClose}
                 className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 text-[#8C8AA7] hover:text-[#5E5B7A] transition-all duration-150 active:scale-90 cursor-pointer z-20 p-1"
-                aria-label="Close"
+                aria-label={t('actions.close')}
               >
                 <X className="w-5 h-5 sm:w-6 sm:h-6 stroke-[3]" />
               </button>

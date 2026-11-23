@@ -1,6 +1,7 @@
 import React from "react";
 import { FastForward } from "lucide-react";
 import CinematicModal from "../CinematicModal";
+import { useAppTranslation } from "../../../i18n/useAppTranslation";
 
 interface SkipConfirmModalProps {
   isOpen: boolean;
@@ -13,6 +14,9 @@ export default function SkipConfirmModal({
   onClose,
   onConfirmSkip,
 }: SkipConfirmModalProps) {
+  const { t, isRTL } = useAppTranslation("modals");
+  const { t: tCommon } = useAppTranslation("common");
+
   return (
     <CinematicModal
       isOpen={isOpen}
@@ -22,13 +26,13 @@ export default function SkipConfirmModal({
       buttons={[
         {
           id: "skip-confirm-no-btn",
-          text: <span className="text-white font-black">NO</span>,
+          text: <span className="text-white font-black">{tCommon("actions.no")}</span>,
           onClick: onClose,
           variant: "primary",
         },
         {
           id: "skip-confirm-yes-btn",
-          text: <span className="text-white font-black">YES</span>,
+          text: <span className="text-white font-black">{tCommon("actions.yes")}</span>,
           onClick: onConfirmSkip,
           variant: "danger",
         },
@@ -47,12 +51,13 @@ export default function SkipConfirmModal({
         </div>
       </div>
 
-      <h3 id="skip-confirm-title" className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-1.5 sm:mb-2 text-center">
-        Do you want to skip your turn?
+      <h3
+        id="skip-confirm-title"
+        dir={isRTL ? "rtl" : "ltr"}
+        className="text-[18px] sm:text-[22px] font-black text-[#2E2882] leading-snug tracking-tight mb-3 sm:mb-4 text-center"
+      >
+        {t("skip.question")}
       </h3>
-      <p id="skip-confirm-title-ar" className="text-[#8C8AA7] text-sm sm:text-base font-bold text-center">
-        هل تريد تجاوز دورك في الرسم؟
-      </p>
     </CinematicModal>
   );
 }
