@@ -28,7 +28,7 @@ import { safeLocalStorage } from "../utils/storage";
 import { getPlayerIdentity } from "../utils/playerAuth";
 import { soundManager } from "../utils/soundManager";
 import { useRoomEventGate } from "../hooks/useRoomEventGate";
-import { getRoomConfig } from "../types/game";
+import { getRoomConfig, type StructuredSystemEventMetadata } from "../types/game";
 import { isMobileDebugActive } from "../utils/erudaManager";
 import { FreeDrawMobileDebug } from "./game/FreeDrawMobileDebug";
 
@@ -46,15 +46,17 @@ interface GameRoomProps {
   justJoined?: boolean;
 }
 
-interface Message {
+interface Message extends StructuredSystemEventMetadata {
   id: string;
   sender: string;
   senderId?: string;
   text: string;
   isSelf: boolean;
-  type: "message" | "system";
+  type: "message" | "system" | "votekick_alert" | "warning";
   avatar?: string;
   color?: string;
+  voterName?: string;
+  targetName?: string;
 }
 
 type PlayerSlot = {

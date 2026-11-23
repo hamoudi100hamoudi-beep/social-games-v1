@@ -1,5 +1,7 @@
 import React, { useState, useRef, useImperativeHandle, useEffect, useCallback } from "react";
 import { Check, AlertTriangle } from "lucide-react";
+import { Trans } from "react-i18next";
+import { useAppTranslation } from "../../i18n/useAppTranslation";
 
 export interface HitData {
   id: string;
@@ -40,6 +42,7 @@ const EXIT_DURATION_MS = 300; // duration of exit transition
 export const ExperimentalHitOverlay = React.memo(
   React.forwardRef<ExperimentalHitOverlayHandle, ExperimentalHitOverlayProps>(
     ({ isDrawingMode }, ref) => {
+      const { t, isRTL } = useAppTranslation("events");
       const [slots, setSlots] = useState<SlotState[]>([
         { id: "", name: "", isReport: false, phase: "idle", timestamp: 0 },
         { id: "", name: "", isReport: false, phase: "idle", timestamp: 0 },
@@ -217,6 +220,7 @@ export const ExperimentalHitOverlay = React.memo(
             {activeSlots.map((slot) => (
               <div
                 key={`${slot.originalIndex}-${slot.id}`}
+                dir={isRTL ? "rtl" : "ltr"}
                 className={`flex items-center justify-center gap-1.5 font-bold text-[15px] whitespace-nowrap bg-transparent will-change-transform ${
                   slot.phase === "exit" ? "exp-hit-exit" : "exp-hit-enter"
                 } ${slot.isReport ? "text-red-500" : "text-[#00E540]"}`}
@@ -226,10 +230,21 @@ export const ExperimentalHitOverlay = React.memo(
                 ) : (
                   <Check size={16} strokeWidth={4} className="shrink-0" />
                 )}
-                <span className="truncate max-w-[150px] sm:max-w-[200px] text-center" dir="ltr">
-                  {slot.name}
+                <span>
+                  <Trans
+                    t={t}
+                    i18nKey={slot.isReport ? "hitOverlay.reported" : "hitOverlay.hit"}
+                    values={{ name: slot.name }}
+                    components={{
+                      player: (
+                        <bdi
+                          dir="auto"
+                          className="truncate max-w-[150px] sm:max-w-[200px] inline-block align-bottom text-center"
+                        />
+                      ),
+                    }}
+                  />
                 </span>
-                <span>{slot.isReport ? "reported!" : "hit!"}</span>
               </div>
             ))}
           </div>

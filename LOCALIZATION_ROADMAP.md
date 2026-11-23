@@ -9,8 +9,9 @@
 - `L10N-2`: `COMPLETED — POPUPS AND MODALS LOCALIZED AND OWNER VERIFIED` (`2026-11-23`)  
 - `L10N-2.1`: `COMPLETED — REMAINING POPUPS LOCALIZED, REGISTRY CREATED, AND OWNER VERIFIED` (`2026-11-23`)  
 - `L10N-3`: `COMPLETED — OWNER MANUALLY VERIFIED` (`2026-11-23` — Commit: `e2c66a6068eecb685f725f2742695b8f509eb8d1`)
-- `L10N-4`: **`AWAITING MANUAL VERIFICATION`** (`2026-11-23` — Stage 2 implemented & automated checks passed; awaiting owner manual check before `L10N-5`)
-- `L10N-5`: **`NOT STARTED`**
+- `L10N-4`: `COMPLETED — OWNER MANUALLY VERIFIED` (`2026-11-23` — Pre-L10N-5 Ref: `f1d9f259c1968261865ee618d1eec10863b3c36b`)
+- `L10N-5`: **`AWAITING MANUAL VERIFICATION`** (`2026-11-23` — Stage 2 implemented & automated checks passed; awaiting owner manual check before `L10N-6`; commit reference pending owner sync)
+- `L10N-6`: **`NOT STARTED`**
 
 **الوثائق المرجعية المرتبطة:**  
 - دستور محرك الرسم والتراجع: [`AGENTS.md`](./AGENTS.md)  
@@ -392,7 +393,7 @@
 ---
 
 ### المرحلة `L10N-4` — الأحداث النظامية المهيكلة والتوافق الخلفي (`Structured System Events & Backward Compatibility`)
-1. **الاسم والرقم:** `PHASE L10N-4 — Structured System Events & Backward Compatibility` — **`[~] AWAITING MANUAL VERIFICATION`** (`2026-11-23`)
+1. **الاسم والرقم:** `PHASE L10N-4 — Structured System Events & Backward Compatibility` — **`[x] COMPLETED — OWNER MANUALLY VERIFIED`** (`2026-11-23` — Ref: `f1d9f259c1968261865ee618d1eec10863b3c36b`)
 2. **الهدف:** مرحلة تقنية مستقلة لتجهيز رسائل النظام في الخادم والأنواع المشتركة بإضافة `eventCode` و`params` و`actorId` (عند وجود فاعل ذي دلالة وباعتماد `persistentId || id` دون استبدال `senderId`) ورموز أخطاء الانضمام (`errorCode: 'room_full' | 'join_failed'`) مع **الحفاظ التام على `text` و`error` و`subType` و`type` القديمة كـ `fallback`**، وضمان توافق الرسائل المخزنة وإعادة الاتصال، دون إنشاء أحداث Socket.IO جديدة، ودون تغيير بروتوكول الرسم الثنائي أو محرك الرسم، **ودون ترجمة واجهة الدردشة أو التخمينات في هذه المرحلة**.
 3. **الملفات المعدلة فعلياً ضمن النطاق المسموح:**
    - `src/types/game.ts` (تعريف `SystemEventCode`، `SystemEventParams`، `StructuredSystemEventMetadata`، `JoinRoomErrorCode = 'room_full' | 'join_failed'`، و`RoomMessagePayload` غير التقييدية لـ `chatMessages`/`guessMessages`، دون المساس بـ `getRoomConfig` أو `ROOM_PRESETS`)
@@ -417,30 +418,34 @@
    - `npx tsx scripts/test_session_identity_suite.ts`: نجاح (`631 passed`).
    - `npx tsx scripts/test_phase9a_slice5c3a.ts`: نجاح (`29 passed, 0 failed`).
    - `npx tsx scripts/test_phase9a_slice5c3b.ts`: نجاح (`53 passed, 0 failed`).
-8. **ما بقي للتحقق اليدوي قبل إغلاق `L10N-4`:** فحص يدوي سريع من المالك أن اللعب والدردشة وسجل التخمينات وإشعار امتلاء الغرفة تعمل بصورة طبيعية دون أي تغير مرئي غير مقصود قبل الانتقال إلى `L10N-5`.
+8. **التحقق اليدوي من المالك (`COMPLETED — OWNER MANUALLY VERIFIED — 2026-11-23`):** تم التحقق اليدوي الكامل من المالك واعتماد عمل اللعب والدردشة وسجل التخمينات وإشعار امتلاء الغرفة بصورة طبيعية دون أي تغيير بصري غير مقصود قبل الانتقال إلى `L10N-5`.
 9. **الاعتماديات:** `L10N-3`.
 
 ---
 
 ### المرحلة `L10N-5` — الدردشة والتخمينات وإشعارات الدردشة (`Chat, Guesses & Chat Notifications`)
-1. **الاسم والرقم:** `PHASE L10N-5 — Chat, Guesses & Chat Notifications`
-2. **الهدف:** توطين `OverlayChatRoom` و`GameActivityFeed` و`ExperimentalHitOverlay` وحالة حقل التخمين في الغرفتين، بما يشمل رسائل الانضمام والمغادرة والتصويت والطرد والتنبيهات والتحذيرات محلياً لكل لاعب عبر `eventCode`/`params`، مع عدم ترجمة الرسائل والتخمينات التي كتبها اللاعبون والحفاظ على كافة تحسينات BiDi وتكافؤ `GameRoom` و`ExperimentalGameRoom`.
-3. **الملفات المسموحة:**
-   - `src/components/game/OverlayChatRoom.tsx`
-   - `src/components/game/GameActivityFeed.tsx`
-   - `src/components/experimental/ExperimentalHitOverlay.tsx`
-   - `src/components/GameRoom.tsx` و`src/components/experimental/ExperimentalGameRoom.tsx` (**فقط** نصوص/placeholders حقل التخمين `#guess-input` وتمرير ما يلزم للدردشة/التخمينات بما يحفظ التوافق التام بينهما)
-   - `src/i18n/locales/*`
-4. **الملفات المحظورة:** `server/*`, `src/components/Lobby.tsx`, `src/components/lobby/*`, `src/components/experimental/ExperimentalDrawingBoard.tsx`, `src/components/game/FlipaClipControls.tsx`, `src/components/game/DrawingCanvasCore.tsx`, `AGENTS.md`.
+1. **الاسم والرقم:** `PHASE L10N-5 — Chat, Guesses & Chat Notifications` — **`[~] AWAITING MANUAL VERIFICATION`** (`2026-11-23` — مرجع التنفيذ النهائي: بانتظار مزامنة المالك)
+2. **الهدف:** توطين `OverlayChatRoom` و`GameActivityFeed` و`ExperimentalHitOverlay` وحالات حقل التخمين في الغرفتين، بما يشمل رسائل الانضمام والمغادرة والتصويت والطرد والـ AFK وانقطاع الاتصال ومنع تسريب الإجابة محلياً لكل لاعب عبر `eventCode`/`params`/`actorId`، مع عدم ترجمة الرسائل والتخمينات التي كتبها اللاعبون والحفاظ على كافة تحسينات BiDi وتكافؤ `GameRoom` و`ExperimentalGameRoom`.
+3. **الملفات المنشأة والمعدلة فعلياً ضمن النطاق المسموح:**
+   - `src/i18n/locales/en/events.ts` (إنشاء — 40 مفتاحاً نصياً/جمعياً في نطاق `events`)
+   - `src/i18n/locales/ar/events.ts` (إنشاء — 44 مفتاحاً متضمناً صيغ الجمع الست CLDR `zero/one/two/few/many/other` عبر `DeepPluralLocaleSchema<typeof enEvents>`)
+   - `src/i18n/locales/en/index.ts` و`src/i18n/locales/ar/index.ts` (تسجيل نطاق `events` دون تعديل `src/i18n/index.ts` أو `src/i18n/types.ts`)
+   - `src/components/game/OverlayChatRoom.tsx` (توسيع `ChatMessage` بالبيانات المهيكلة، أولوية `eventCode`/`params` + fallback للرسائل القديمة، إظهار `player_disconnected_removed` ورسالة `player_kicked` المميزة، إصلاح `dir="rtl"` الصلب في `votekick_alert` ليتبع `isRTL`، إزالة الازدواجية في أيقونة تحذير الغش، عزل الأسماء بـ `<bdi dir="auto">`، وترجمة `Copy` و`placeholder` مع إبقاء `msg.text` و`dir="auto"` و`unicodeBidi: 'plaintext'`)
+   - `src/components/game/GameActivityFeed.tsx` (توسيع `GameActivityMessage`، التفريق الكامل عبر `eventCode` للأحداث الـ 13 بما فيها فصل `round_timeout_won` و`nobody_hit` و`answer_reveal` عن `subType: 'answer_reveal'`، استخدام `actorId` مقابل `persistentPlayerId || socketId` لاستقرار نسبة `turn_lost`/`turn_skipped` التاريخية مع fallback لـ `amIDrawer` فقط عند غياب `actorId`، إبقاء `senderId === socketId` في `guess_hit`، ترجمة `Waiting for players` و`game_over` بصيغ الجمع، وإبقاء التخمينات دون ترجمة)
+   - `src/components/experimental/ExperimentalHitOverlay.tsx` (توطين `hit!` و`reported!` عبر `<Trans>` و`<bdi dir="auto">` واتجاه `isRTL` على الصف دون تغيير الـ 3-slot FIFO pool أو المؤقتات أو CSS keyframes أو `React.memo`/`forwardRef`)
+   - `src/components/GameRoom.tsx` (توسيع نوع `Message` بالحقول المهيكلة وأنواع `votekick_alert`/`warning` فقط)
+   - `src/components/experimental/ExperimentalGameRoom.tsx` (توسيع `Message`، ضبط `guesses`/`guessesRef` كـ `GameActivityMessage[]`، تمرير `persistentPlayerId` إلى `GameActivityFeed`، دعم `eventCode` والاسم في `hitOverlayRef.current?.addHit`، توطين placeholders حقل `#guess-input` الـ 10 مع بقاء الرسم الحر فارغاً، وعكس موضع أيقونة القلم وحشوتها في العربية `right-4` / `pl-4 pr-11` دون المساس بنصوص `L10N-7`)
+4. **الملفات المحظورة (تم احترامها بالكامل):** `server/*`, `src/components/Lobby.tsx`, `src/components/lobby/*`, `src/components/experimental/ExperimentalDrawingBoard.tsx`, `src/components/game/FlipaClipControls.tsx`, `src/components/game/DrawingCanvasCore.tsx`, `src/i18n/index.ts`, `src/i18n/types.ts`, `AGENTS.md`, `package.json`, `bun.lock`.
 5. **الآليات المحمية:**
-   - **Safeguard 1 & 2 & 4 & 5:** ترقية مرشح `OverlayChatRoom` وإعادة صياغة المتكلم وحالات `GameActivityFeed` لقراءة `eventCode`/`params`/`actorId` أولاً ثم fallback للرسائل النصية القديمة؛ إبقاء `<bdi>` في `votekick_alert` و`ExperimentalHitOverlay`.
-   - **Safeguard 3:** الحفاظ الصارم على `dir="auto"` و`unicodeBidi: 'plaintext'` في فقاعات الدردشة والتخمينات و`#chat-textarea` و`#guess-input` وعدم ترجمة أي نص كتبه اللاعبون.
-   - **Safeguard 8:** الحفاظ على `dir="ltr"` على شبكة الغرفة وتخطيط `#guess-input` أو تكييف موضع أيقونة القلم بأمان دون تداخل مع النص العربي.
-6. **التعديلات الدقيقة:** ترجمة كافة مفاتيح `events` والـ feed (`Copy`, `Type your message here...`, `Waiting for players`, `Answer here...`, حالات الانتظار/التخطي/الرسم، إشعارات `hit!`/`reported!`/`is close!`/`You've found the answer`, تحذير الغش، إشعارات الانضمام والمغادرة والطرد و`AFK`).
-7. **المخاطر:** اختفاء رسالة نظامية قديمة إذا أُهمل مسار الـ fallback، أو انقلاب ترتيب جملة `votekick_alert` عند اختلاط أسماء عربية وإنجليزية، أو تداخل نص placeholder العربي مع أيقونة `#guess-input`.
-8. **معايير الخروج:** لاعب عربي ولاعب إنجليزي في نفس الغرفة يريان إشعارات الدردشة وسجل التخمينات بلغة كل منهما مع بقاء نصوص اللاعبين كما كُتبت تماماً.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي بحسابين (عربي + إنجليزي) في نفس الغرفة التنافسية وفي الرسم الحر لتبادل رسائل عربية/إنجليزية ومختلطة واختبار الـ Votekick والغش والتخمينات وإعادة الاتصال.
-10. **الاعتماديات:** `L10N-4`.
+   - **Safeguard 1 & 2 & 4 & 5:** الحفاظ على التوافق الخلفي الكامل عند غياب `eventCode`، وعزل الأسماء بـ `<bdi dir="auto">`، وعدم قلب حاويات التخطيط الخارجية لفقاعات الدردشة أو شبكة الغرفة `32% / 68%`.
+   - **Safeguard 3 & 8:** الحفاظ على `dir="auto"` و`unicodeBidi: 'plaintext'` لرسائل وتخمينات اللاعبين و`dir="auto"` لحقول الإدخال.
+6. **نتائج التحقق الآلي المنفذة (`2026-11-23`):**
+   - `npx tsc --noEmit`: نجاح تام بدون أخطاء.
+   - `npm run build` (`vite build`): نجاح تام خلال `8.47s` (`2246` وحدة؛ `dist/assets/index-BLgNIkAT.js`: `1,254.64 kB │ gzip: 343.23 kB`).
+   - التحقق من تكافؤ المفاتيح وصيغ الجمع العربية (`0, 1, 2, 5, 15, 100`) عبر `tsx`: تطابق كامل (`missingInAr: []`, `missingInEn: []`).
+   - جميع اختبارات الخادم الخمسة: `212 + 79 + 631 + 29 + 53 = 1004` فحص نجاح (`0 failed`).
+7. **ما بقي للتحقق اليدوي قبل إغلاق `L10N-5`:** اختبار المالك اليدوي بحسابين (عربي + إنجليزي) في نفس الغرفة التنافسية وفي الرسم الحر وفق قائمة التحقق المعتمدة.
+8. **الاعتماديات:** `L10N-4`.
 
 ---
 
@@ -504,16 +509,16 @@
 
 ---
 
-## 8. الحالة المباشرة للمرحلة الحالية (`L10N-4 — AWAITING MANUAL VERIFICATION`, `L10N-5 — NOT STARTED`)
+## 8. الحالة المباشرة للمرحلة الحالية (`L10N-4 — COMPLETED`, `L10N-5 — AWAITING MANUAL VERIFICATION`, `L10N-6 — NOT STARTED`)
 
-> نُفذت **`L10N-4`** (Stage 2) واجتازت جميع بوابات التحقق الآلي وهي الآن بحالة **`AWAITING MANUAL VERIFICATION`** (`2026-11-23`)، مع إبقاء **`L10N-5`** بحالة **`NOT STARTED`** لحين موافقة المالك:
+> أُغلقت **`L10N-4`** بعد التحقق اليدوي من المالك (`2026-11-23`)، ونُفذت **`L10N-5`** (Stage 2) واجتازت جميع بوابات التحقق الآلي وهي الآن بحالة **`AWAITING MANUAL VERIFICATION`** (`2026-11-23`)، مع إبقاء **`L10N-6`** بحالة **`NOT STARTED`** لحين موافقة المالك:
 
-- **ملخص ما تم تنفيذه والتحقق منه آلياً في `L10N-4`:**
-  1. تعريف أنواع الأحداث المهيكلة `SystemEventCode` (20 حدثاً) و`SystemEventParams` و`StructuredSystemEventMetadata` و`JoinRoomErrorCode` و`RoomMessagePayload` في `src/types/game.ts`.
-  2. إرفاق `eventCode` و`params` و`actorId` (`persistentId || id` حيثما ينطبق، دون المساس بـ `senderId` أو أي حقل قديم) في جميع منتجي رسائل الدردشة وسجل التخمينات بالخادم (`server/rooms.ts` و`server/register*Handler.ts`).
-  3. إضافة `errorCode: 'room_full'` و`errorCode: 'join_failed'` في `server/registerJoinRoomHandler.ts` مع الإبقاء الحرفي على نصوص `error` القديمة، وتحديث فحص `room_full` في `GameRoom.tsx` و`ExperimentalGameRoom.tsx`.
-  4. اجتياز `npx tsc --noEmit` و`npm run build` وجميع اختبارات الخادم الخمسة (`212 + 79 + 631 + 29 + 53 = 1004` فحص نجاح، `0` فشل).
-- **المتبقي قبل بدء `L10N-5`:** التحقق اليدوي السريع من المالك بأن اللعب والدردشة ورسائل الجولة وامتلاء الغرفة تعمل بصورة طبيعية دون أي تغيير بصري.
+- **ملخص ما تم تنفيذه والتحقق منه آلياً في `L10N-5`:**
+  1. إنشاء نطاق الترجمة `events` (`src/i18n/locales/{en,ar}/events.ts`) وتسجيله في `locales/{en,ar}/index.ts` بصيغ الجمع الست العربية لـ `activity.gameOver`.
+  2. توطين `OverlayChatRoom.tsx` و`GameActivityFeed.tsx` و`ExperimentalHitOverlay.tsx` وحقل التخمين `#guess-input` في `ExperimentalGameRoom.tsx` عبر `eventCode`/`params`/`actorId` مع التوافق الخلفي الكامل والـ `<bdi dir="auto">`.
+  3. إظهار `player_disconnected_removed` وتمييز `player_kicked`، واعتماد `actorId` التاريخي لـ `turn_lost`/`turn_skipped` عبر تمرير `persistentPlayerId`، وعكس أيقونة القلم وحشو `#guess-input` بأمان في العربية.
+  4. اجتياز `npx tsc --noEmit` و`npm run build` (`8.47s`, `2246` وحدة) وفحص تكافؤ المفاتيح والجمع العربي وجميع اختبارات الخادم الخمسة (`1004` فحص نجاح، `0` فشل).
+- **المتبقي قبل الانتقال إلى `L10N-6`:** التحقق اليدوي من المالك لتجربة الغرفة المختلطة (`AR + EN`) في الوضع التنافسي والرسم الحر وإغلاق `L10N-5`.
 
 ---
 

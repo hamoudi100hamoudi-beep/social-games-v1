@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, X, Copy } from 'lucide-react';
+import { Trans } from 'react-i18next';
+import { useAppTranslation } from '../../i18n/useAppTranslation';
+import type { StructuredSystemEventMetadata } from '../../types/game';
 
-export interface ChatMessage {
+export interface ChatMessage extends StructuredSystemEventMetadata {
   id: string;
   sender: string;
   senderId?: string;
@@ -34,18 +37,33 @@ export const getSenderColor = (name: string): string => {
   return colors[Math.abs(hash) % colors.length];
 };
 
+const extractLegacyActorName = (text: string, patterns: RegExp[]): string | undefined => {
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) {
+      const trimmed = match[1].trim();
+      if (trimmed) return trimmed;
+    }
+  }
+  return undefined;
+};
+
 interface ChatMessageItemProps {
   msg: ChatMessage;
   activeCopyId: string | null;
   onSetActiveCopy: (id: string | null) => void;
   mySocketId?: string | null;
+  t: ReturnType<typeof useAppTranslation>['t'];
+  isRTL: boolean;
 }
 
 const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   msg,
   activeCopyId,
   onSetActiveCopy,
-  mySocketId
+  mySocketId,
+  t,
+  isRTL
 }) => {
   const showCopy = activeCopyId === msg.id;
   const startY = useRef<number>(0);
@@ -100,59 +118,262 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
     onSetActiveCopy(null);
   };
 
-  if (msg.type === 'system') {
-    const text = msg.text || '';
-    const isJoin = text.includes('انضم للغرفة') || text.toLowerCase().includes('joined');
-    const isLeave = text.includes('غادر الغرفة') || text.toLowerCase().includes('left') || text.includes('خرج');
-    const isKick = text.includes('طرد') || text.toLowerCase().includes('kick') || text.toLowerCase().includes('banned');
+  const isVotekickEvent =
+    msg.eventCode === 'votekick_alert' || msg.type === 'votekick_alert';
+  const isWordLeakEvent = msg.eventCode === 'chat_word_leak_warning';
 
-    if (!isJoin && !isLeave && !isKick) {
-      return null;
-    }
-
-    const isTargetingSelf = msg.senderId === mySocketId;
-    let displayText = text;
-    if (isTargetingSelf && text.includes('lost the turn')) {
-        displayText = "You've lost your turn";
-    } else if (isTargetingSelf && text.includes('skipped the turn')) {
-        displayText = "You've skipped the turn";
-    }
+  if (isVotekickEvent || msg.type === 'warning' || isWordLeakEvent) {
+    const voterName = msg.params?.voterName || msg.voterName;
+    const targetName = msg.params?.targetName || msg.targetName;
+    const isLegacyWordLeak =
+      !msg.eventCode &&
+      msg.type === 'warning' &&
+      (msg.text.includes('لا يمكنك كتابة الإجابة') ||
+        msg.text.toLowerCase().includes('cannot type the answer in chat'));
 
     return (
       <div className="flex justify-center mb-2 animate-message-pop">
-        <div 
-          className="bg-primary-brand/10 text-primary-brand border border-primary-brand/20 px-4 py-2 rounded-full text-[15px] font-semibold shadow-sm flex items-center justify-center gap-1.5 animate-in fade-in duration-250"
-          dir="auto"
-          style={{ unicodeBidi: 'plaintext' }}
+        <div
+          className="bg-red-500/10 border border-[#FF4D4D]/20 px-4 py-2 rounded-full text-[15px] font-semibold shadow-sm flex items-center justify-center gap-1.5 animate-in fade-in zoom-in-95 duration-200"
+          dir={isRTL ? 'rtl' : 'ltr'}
         >
-          <span>ⓘ</span>
-          <span>{displayText}</span>
+          <span className="text-[#FF4D4D] shrink-0">⚠</span>
+          {isVotekickEvent && voterName && targetName ? (
+            <div className="flex flex-wrap items-center gap-1 justify-center text-center text-[#FF4D4D]">
+              <Trans
+                t={t}
+                i18nKey="chat.votekickAlert"
+                values={{ voterName, targetName }}
+                components={{
+                  voter: (
+                    <bdi
+                      dir="auto"
+                      className="text-[#FF4D4D] font-bold max-w-[120px] truncate inline-block align-bottom"
+                    />
+                  ),
+                  target: (
+                    <bdi
+                      dir="auto"
+                      className="text-[#FF4D4D] font-bold max-w-[120px] truncate inline-block align-bottom"
+                    />
+                  )
+                }}
+              />
+            </div>
+          ) : isWordLeakEvent || isLegacyWordLeak ? (
+            <span className="text-[#FF4D4D] text-center">
+              {t('chat.wordLeakWarning')}
+            </span>
+          ) : (
+            <span
+              className="text-[#FF4D4D]"
+              style={{ unicodeBidi: 'plaintext' }}
+              dir="auto"
+            >
+              {msg.text}
+            </span>
+          )}
         </div>
       </div>
     );
   }
 
-  if (msg.type === 'votekick_alert' || msg.type === 'warning') {
-    return (
+  if (msg.type === 'system') {
+    const text = msg.text || '';
+    const lowerText = text.toLowerCase();
+    const isTargetingSelf = Boolean(msg.senderId && mySocketId && msg.senderId === mySocketId);
+
+    const renderSystemPill = (content: React.ReactNode, localized: boolean) => (
       <div className="flex justify-center mb-2 animate-message-pop">
-        <div 
-          className="bg-red-500/10 border border-[#FF4D4D]/20 px-4 py-2 rounded-full text-[15px] font-semibold shadow-sm flex items-center justify-center gap-1.5 animate-in fade-in zoom-in-95 duration-200"
-          dir="rtl"
+        <div
+          className="bg-primary-brand/10 text-primary-brand border border-primary-brand/20 px-4 py-2 rounded-full text-[15px] font-semibold shadow-sm flex items-center justify-center gap-1.5 animate-in fade-in duration-250 text-center"
+          dir={localized ? (isRTL ? 'rtl' : 'ltr') : 'auto'}
+          style={localized ? undefined : { unicodeBidi: 'plaintext' }}
         >
-          <span className="text-[#FF4D4D]">⚠</span>
-          {msg.type === 'votekick_alert' && msg.voterName && msg.targetName ? (
-            <div className="flex flex-wrap items-center gap-1 justify-center text-center">
-              <span className="text-[#FF4D4D]">قام</span>
-              <bdi className="text-[#FF4D4D] font-bold max-w-[120px] truncate inline-block">{msg.voterName}</bdi>
-              <span className="text-[#FF4D4D]">بالتصويت لطرد</span>
-              <bdi className="text-[#FF4D4D] font-bold max-w-[120px] truncate inline-block">{msg.targetName}</bdi>
-            </div>
-          ) : (
-            <span className="text-[#FF4D4D]" style={{ unicodeBidi: 'plaintext' }} dir="auto">{msg.text}</span>
-          )}
+          <span className="shrink-0">ⓘ</span>
+          <span>{content}</span>
         </div>
       </div>
     );
+
+    if (msg.eventCode === 'player_joined') {
+      const name =
+        msg.params?.name ||
+        extractLegacyActorName(text, [/^(.+?)\s+انضم للغرفة$/, /^(.+?)\s+joined(?:\s+the\s+room)?$/i]);
+      if (name) {
+        return renderSystemPill(
+          <Trans
+            t={t}
+            i18nKey="chat.system.playerJoined"
+            values={{ name }}
+            components={{ player: <bdi dir="auto" /> }}
+          />,
+          true
+        );
+      }
+      return renderSystemPill(text, false);
+    }
+
+    if (msg.eventCode === 'player_left') {
+      const name =
+        msg.params?.name ||
+        extractLegacyActorName(text, [/^(.+?)\s+غادر الغرفة$/, /^(.+?)\s+left(?:\s+the\s+room)?$/i]);
+      if (name) {
+        return renderSystemPill(
+          <Trans
+            t={t}
+            i18nKey="chat.system.playerLeft"
+            values={{ name }}
+            components={{ player: <bdi dir="auto" /> }}
+          />,
+          true
+        );
+      }
+      return renderSystemPill(text, false);
+    }
+
+    if (msg.eventCode === 'player_kicked') {
+      const name =
+        msg.params?.name ||
+        extractLegacyActorName(text, [
+          /^(.+?)\s+غادر الغرفة$/,
+          /^(.+?)\s+(?:was\s+)?kicked(?:\s+from\s+the\s+room)?$/i,
+          /^تم طرد\s+(.+?)(?:\s+من الغرفة)?$/
+        ]);
+      if (name) {
+        return renderSystemPill(
+          <Trans
+            t={t}
+            i18nKey="chat.system.playerKicked"
+            values={{ name }}
+            components={{ player: <bdi dir="auto" /> }}
+          />,
+          true
+        );
+      }
+      return renderSystemPill(text, false);
+    }
+
+    if (msg.eventCode === 'player_afk_kicked') {
+      const name =
+        msg.params?.name ||
+        extractLegacyActorName(text, [
+          /^تم طرد\s+(.+?)\s+بسبب عدم النشاط/,
+          /^(.+?)\s+was kicked for inactivity/i
+        ]);
+      if (name) {
+        return renderSystemPill(
+          <Trans
+            t={t}
+            i18nKey="chat.system.playerAfkKicked"
+            values={{ name }}
+            components={{ player: <bdi dir="auto" /> }}
+          />,
+          true
+        );
+      }
+      return renderSystemPill(text, false);
+    }
+
+    if (msg.eventCode === 'player_disconnected_removed') {
+      const name =
+        msg.params?.name ||
+        extractLegacyActorName(text, [
+          /^انقطع اتصال\s+(.+?)\s+وتمت إزالته من اللعبة$/,
+          /^(.+?)\s+disconnected and was removed/i
+        ]);
+      if (name) {
+        return renderSystemPill(
+          <Trans
+            t={t}
+            i18nKey="chat.system.playerDisconnectedRemoved"
+            values={{ name }}
+            components={{ player: <bdi dir="auto" /> }}
+          />,
+          true
+        );
+      }
+      return renderSystemPill(text, false);
+    }
+
+    // Legacy fallback allowlist (when eventCode is absent or unrecognized)
+    const isJoin = text.includes('انضم للغرفة') || lowerText.includes('joined');
+    const isLeave = text.includes('غادر الغرفة') || lowerText.includes('left') || text.includes('خرج');
+    const isKick = text.includes('طرد') || lowerText.includes('kick') || lowerText.includes('banned');
+    const isDisconnectRemoved = text.includes('انقطع اتصال');
+
+    if (!isJoin && !isLeave && !isKick && !isDisconnectRemoved) {
+      return null;
+    }
+
+    if (isTargetingSelf && text.includes('lost the turn')) {
+      return renderSystemPill(t('chat.system.turnLostSelf'), true);
+    }
+    if (isTargetingSelf && text.includes('skipped the turn')) {
+      return renderSystemPill(t('chat.system.turnSkippedSelf'), true);
+    }
+
+    const legacyDisconnectedName = isDisconnectRemoved
+      ? extractLegacyActorName(text, [/^انقطع اتصال\s+(.+?)\s+وتمت إزالته من اللعبة$/])
+      : undefined;
+    if (legacyDisconnectedName) {
+      return renderSystemPill(
+        <Trans
+          t={t}
+          i18nKey="chat.system.playerDisconnectedRemoved"
+          values={{ name: legacyDisconnectedName }}
+          components={{ player: <bdi dir="auto" /> }}
+        />,
+        true
+      );
+    }
+
+    const legacyAfkName = isKick
+      ? extractLegacyActorName(text, [/^تم طرد\s+(.+?)\s+بسبب عدم النشاط/])
+      : undefined;
+    if (legacyAfkName) {
+      return renderSystemPill(
+        <Trans
+          t={t}
+          i18nKey="chat.system.playerAfkKicked"
+          values={{ name: legacyAfkName }}
+          components={{ player: <bdi dir="auto" /> }}
+        />,
+        true
+      );
+    }
+
+    const legacyJoinedName = isJoin
+      ? extractLegacyActorName(text, [/^(.+?)\s+انضم للغرفة$/, /^(.+?)\s+joined(?:\s+the\s+room)?$/i])
+      : undefined;
+    if (legacyJoinedName) {
+      return renderSystemPill(
+        <Trans
+          t={t}
+          i18nKey="chat.system.playerJoined"
+          values={{ name: legacyJoinedName }}
+          components={{ player: <bdi dir="auto" /> }}
+        />,
+        true
+      );
+    }
+
+    const legacyLeftName = isLeave
+      ? extractLegacyActorName(text, [/^(.+?)\s+غادر الغرفة$/, /^(.+?)\s+left(?:\s+the\s+room)?$/i])
+      : undefined;
+    if (legacyLeftName) {
+      return renderSystemPill(
+        <Trans
+          t={t}
+          i18nKey="chat.system.playerLeft"
+          values={{ name: legacyLeftName }}
+          components={{ player: <bdi dir="auto" /> }}
+        />,
+        true
+      );
+    }
+
+    return renderSystemPill(text, false);
   }
 
   if (msg.isSelf) {
@@ -168,7 +389,9 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
           onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
           style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
         >
-          <span className="text-[15px] text-primary-brand font-bold mb-1 mr-1">{msg.sender}</span>
+          <span className="text-[15px] text-primary-brand font-bold mb-1 mr-1">
+            <bdi dir="auto">{msg.sender}</bdi>
+          </span>
           <div 
             className="bg-primary-brand px-4 py-2.5 rounded-2xl rounded-tr-sm text-white text-[15px] font-medium shadow-md break-words border border-primary-brand-dark"
             dir="auto"
@@ -181,10 +404,11 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
               onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
               onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
+              dir={isRTL ? 'rtl' : 'ltr'}
               className="absolute -top-3 left-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
             >
               <Copy size={10} />
-              Copy
+              {t('chat.copy')}
             </button>
           )}
         </div>
@@ -210,7 +434,9 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
         style={{ WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
       >
-        <span className={`text-[15px] font-bold mb-1 ml-1 ${getSenderColor(msg.sender)}`}>{msg.sender}</span>
+        <span className={`text-[15px] font-bold mb-1 ml-1 ${getSenderColor(msg.sender)}`}>
+          <bdi dir="auto">{msg.sender}</bdi>
+        </span>
         <div 
           className="bg-[#24174D] px-4 py-2.5 rounded-2xl rounded-tl-sm text-white text-[15px] font-medium shadow-md break-words border border-white/10"
           dir="auto"
@@ -223,10 +449,11 @@ const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
             onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
             onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); copyToClipboard(e); }}
+            dir={isRTL ? 'rtl' : 'ltr'}
             className="absolute -top-3 right-0 bg-black/80 text-white text-[10px] px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10 animate-in fade-in border border-white/20"
           >
             <Copy size={10} /> 
-            Copy
+            {t('chat.copy')}
           </button>
         )}
       </div>
@@ -257,6 +484,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
   handleChatSubmit,
   iosKeyboardHeightCache
 }) => {
+  const { t, isRTL } = useAppTranslation('events');
   const [activeCopyId, setActiveCopyId] = useState<string | null>(null);
   const bgTouchStartTime = useRef<number>(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -325,6 +553,8 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                     activeCopyId={activeCopyId}
                     onSetActiveCopy={setActiveCopyId}
                     mySocketId={socketId}
+                    t={t}
+                    isRTL={isRTL}
                   />
                 ))}
                </div>
@@ -364,7 +594,7 @@ export const OverlayChatRoom: React.FC<OverlayChatRoomProps> = ({
                    }}
                    dir="auto"
                    rows={1}
-                   placeholder="Type your message here..."
+                   placeholder={t('chat.inputPlaceholder')}
                    className="flex-1 w-full min-w-0 min-h-[40px] max-h-[100px] rounded-xl border-2 border-white/10 bg-black/40 px-3 py-2 text-sm text-white font-bold placeholder-white/30 focus:border-primary-brand outline-none transition-all shadow-inner resize-none overflow-y-auto overscroll-contain touch-pan-y leading-tight select-text ios-input-focus"
                    style={{ height: '40px', WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                    onFocus={handleIOSFocusBypass}

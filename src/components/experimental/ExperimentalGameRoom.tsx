@@ -28,7 +28,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { PlayersSidebar } from "../game/PlayersSidebar";
 import { MiniBoardOverlay } from "../game/MiniBoardOverlay";
 import { OverlayChatRoom, ChatMessage } from "../game/OverlayChatRoom";
-import { GameActivityFeed } from "../game/GameActivityFeed";
+import { GameActivityFeed, GameActivityMessage } from "../game/GameActivityFeed";
 import { RoomConnectionStatusOverlay } from "../game/RoomConnectionStatusOverlay";
 import CinematicModal from "../game/CinematicModal";
 import SmoothTimer from "../game/SmoothTimer";
@@ -42,7 +42,8 @@ import { safeLocalStorage } from "../../utils/storage";
 import { getPlayerIdentity } from "../../utils/playerAuth";
 import { soundManager } from "../../utils/soundManager";
 import { useRoomEventGate } from "../../hooks/useRoomEventGate";
-import { getRoomConfig } from "../../types/game";
+import { getRoomConfig, type StructuredSystemEventMetadata } from "../../types/game";
+import { useAppTranslation } from "../../i18n/useAppTranslation";
 
 // 🧪 DIAGNOSTIC TEST: FULL DRAWING ISOLATION TEST
 // Isolates drawing completely from all non-essential Game Room UI, modals, sound, and animations.
@@ -57,15 +58,19 @@ interface GameRoomProps {
   justJoined?: boolean;
 }
 
-interface Message {
+interface Message extends StructuredSystemEventMetadata {
   id: string;
   sender: string;
   senderId?: string;
   text: string;
   isSelf: boolean;
-  type: "message" | "system";
+  type: "message" | "system" | "votekick_alert" | "warning";
+  subType?: string;
+  word?: string;
   avatar?: string;
   color?: string;
+  voterName?: string;
+  targetName?: string;
 }
 
 type PlayerSlot = {
@@ -133,6 +138,7 @@ export default function ExperimentalGameRoom({
   justJoined,
 }: GameRoomProps) {
   const { socket, isConnected, socketId } = useSocket();
+  const { t: tEvents, isRTL } = useAppTranslation("events");
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -245,13 +251,13 @@ export default function ExperimentalGameRoom({
   const [guessInput, setGuessInput] = useState("");
   const [chatInput, setChatInput] = useState("");
 
-  const [guesses, setGuesses] = useState<Message[]>([]);
+  const [guesses, setGuesses] = useState<GameActivityMessage[]>([]);
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [currentPlayers, setCurrentPlayers] = useState<PlayerSlot[]>([]);
 
   // 🛡️ High-Performance Synchronous Mirrors to buffer background updates during active drawing
   const chatMessagesRef = React.useRef<Message[]>([]);
-  const guessesRef = React.useRef<Message[]>([]);
+  const guessesRef = React.useRef<GameActivityMessage[]>([]);
   const currentPlayersRef = React.useRef<PlayerSlot[]>([]);
   const unreadCountRef = React.useRef<number>(0);
   const isChatOpenRef = React.useRef<boolean>(false);
@@ -1009,7 +1015,7 @@ export default function ExperimentalGameRoom({
       }
 
       // 2. Instant Drawer Feedback & Sounds (NEVER delayed)
-      if (msg.subType === "hit") {
+      if (msg.eventCode === "guess_hit" || msg.subType === "hit") {
         if (msg.senderId === socket.id) {
           if (guessInputRef.current) {
             guessInputRef.current.blur();
@@ -1026,11 +1032,18 @@ export default function ExperimentalGameRoom({
         }
 
         // 🛡️ Zero-re-render Hit Notification dispatched imperatively to isolated overlay
-        hitOverlayRef.current?.addHit({ id: msg.id || Date.now().toString(), name: msg.sender });
+        hitOverlayRef.current?.addHit({
+          id: msg.id || Date.now().toString(),
+          name: msg.params?.name ?? msg.sender,
+        });
       }
 
-      if (msg.subType === "report") {
-        hitOverlayRef.current?.addHit({ id: msg.id || Date.now().toString(), name: msg.sender, isReport: true });
+      if (msg.eventCode === "draw_reported" || msg.subType === "report") {
+        hitOverlayRef.current?.addHit({
+          id: msg.id || Date.now().toString(),
+          name: msg.params?.name ?? msg.sender,
+          isReport: true,
+        });
       }
     };
 
@@ -1720,6 +1733,7 @@ export default function ExperimentalGameRoom({
             <GameActivityFeed
               guesses={guesses}
               socketId={socketId}
+              persistentPlayerId={persistentPlayerId}
               amIDrawer={amIDrawer}
               isFreeDraw={isFreeDraw}
             />
@@ -1732,7 +1746,7 @@ export default function ExperimentalGameRoom({
               <form onSubmit={handleGuessSubmit} className="relative">
                 {!isInputFocused && !isFreeDraw && (
                   <div
-                    className={`absolute left-4 top-1/2 -translate-y-1/2 transition-opacity duration-200 pointer-events-none ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
+                    className={`absolute ${isRTL ? "right-4" : "left-4"} top-1/2 -translate-y-1/2 transition-opacity duration-200 pointer-events-none ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
                   >
                     <Pencil size={18} />
                   </div>
@@ -1780,24 +1794,24 @@ export default function ExperimentalGameRoom({
                     isFreeDraw
                       ? ""
                       : gameState.status === "WAITING"
-                        ? "Waiting..."
+                        ? tEvents("guessInput.waiting")
                         : gameState.status === "ROUND_END"
                           ? gameState.roundEndReason === "skipped"
-                            ? "Skipped"
+                            ? tEvents("guessInput.skipped")
                             : gameState.roundEndReason === "turn_lost"
-                              ? "Inactive"
-                              : "Interval"
+                              ? tEvents("guessInput.inactive")
+                              : tEvents("guessInput.interval")
                           : gameState.status === "PODIUM"
-                            ? "Game Over"
+                            ? tEvents("guessInput.gameOver")
                             : gameState.status === "CHOOSING"
-                              ? "Waiting for the drawing"
+                              ? tEvents("guessInput.choosing")
                               : amIDrawer
-                                ? "You are drawing!"
+                                ? tEvents("guessInput.drawing")
                                 : hasGuessedCorrectly
-                                  ? "You've found the answer!"
-                                  : "Answer here..."
+                                  ? tEvents("guessInput.foundAnswer")
+                                  : tEvents("guessInput.placeholder")
                   }
-                  className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused || isFreeDraw ? "pl-4" : "pl-11"} pr-4 py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled || isFreeDraw ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
+                  className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused || isFreeDraw ? "px-4" : isRTL ? "pl-4 pr-11" : "pl-11 pr-4"} py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled || isFreeDraw ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
                   style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                 />
               </form>
