@@ -1,6 +1,6 @@
 # 🌐 خارطة طريق التدويل وتعدد اللغات (Localization Roadmap — `PHASE L10N`)
 
-**المستودع المرجعي:** `hamoudi100hamoudi-beep/social-games-v1` (آخر Commit تنفيذ موثق: `d176c37f3d56f364e971ec24cbd22f2a0c0ef64c`)  
+**المستودع المرجعي:** `hamoudi100hamoudi-beep/social-games-v1` (آخر Commit تنفيذ موثق: `e2c66a6068eecb685f725f2742695b8f509eb8d1`)  
 **الحالة الحالية (`2026-11-23`):**  
 - `L10N-0`: `COMPLETED` (`2026-11-22`)  
 - `L10N-0.1`: `COMPLETED` (`2026-11-22`)  
@@ -8,8 +8,8 @@
 - `L10N-1.1`: `COMPLETED — DEPENDENCY AND INITIALIZATION REVIEW APPLIED` (`2026-11-22`)  
 - `L10N-2`: `COMPLETED — POPUPS AND MODALS LOCALIZED AND OWNER VERIFIED` (`2026-11-23`)  
 - `L10N-2.1`: `COMPLETED — REMAINING POPUPS LOCALIZED, REGISTRY CREATED, AND OWNER VERIFIED` (`2026-11-23`)  
-- `L10N-3`: **`AWAITING MANUAL VERIFICATION`** (`2026-11-23`)
-- `L10N-4`: **`NOT STARTED`** (تُفتح بعد إغلاق `L10N-3` يدوياً)
+- `L10N-3`: `COMPLETED — OWNER MANUALLY VERIFIED` (`2026-11-23` — Commit: `e2c66a6068eecb685f725f2742695b8f509eb8d1`)
+- `L10N-4`: **`NOT STARTED`** (المرحلة التالية بعد إغلاق `L10N-3`)
 
 **الوثائق المرجعية المرتبطة:**  
 - دستور محرك الرسم والتراجع: [`AGENTS.md`](./AGENTS.md)  
@@ -361,7 +361,7 @@
 ---
 
 ### المرحلة `L10N-3` — اللوحة المصغرة وانتقالات الأدوار (`MiniBoard & Turn Transitions`)
-1. **الاسم والرقم:** `PHASE L10N-3 — MiniBoard & Turn Transitions` — **`[ ] AWAITING MANUAL VERIFICATION`** (`2026-11-23` — نُفذ الكود واجتاز `npx tsc --noEmit` و`npm run build`، وبانتظار التحقق اليدوي من المالك قبل الإغلاق)
+1. **الاسم والرقم:** `PHASE L10N-3 — MiniBoard & Turn Transitions` — **`[x] COMPLETED — OWNER MANUALLY VERIFIED`** (`2026-11-23` — Commit: `e2c66a6068eecb685f725f2742695b8f509eb8d1`)
 2. **الهدف:** توطين `MiniBoardOverlay` (الانتظار، الرسم الحر المبدئي، انتقال الأدوار، نهاية الجولة، المنصة `PODIUM`) و`ChoosingWordOverlay` (اختيار الكلمة)، وترجمة النصوص التوضيحية المرافقة للعناوين الفنية مع بقاء العناوين الفنية بالإنجليزية، والحفاظ على الكلمة المختارة والتلميحات المشتركة دون ترجمة مستقلة، وعزل اتجاه صف الأحرف في `ExperimentalWordOverlay.tsx` بـ `dir="ltr"`، دون لمس الدردشة أو التخمينات.
 3. **الملفات المنفذة فعلياً ضمن النطاق المسموح:**
    - `src/components/game/MiniBoardOverlay.tsx` (توطين شاشات الرسم الحر والانتظار واختيار الدور ونهاية الجولة بجميع حالاتها والمنصة وصيغ الجمع CLDR للنقاط وتلميحات الميداليات مع `<bdi dir="auto">` و`<Trans>`)
@@ -380,11 +380,12 @@
    - `npx tsc --noEmit`: نجاح تام بدون أخطاء.
    - `npm run build` (`vite build`): نجاح تام خلال `9.76s` (`2244` وحدة؛ `dist/assets/index-CjNqk9nL.js`: `1,233.67 kB │ gzip: 339.80 kB`).
    - التحقق من صيغ الجمع وتكافؤ المفاتيح عبر `tsx`: تطابق كامل لمفاتيح `miniBoard` و`wordChoice` بين العربية والإنجليزية وتحقق من `0, 1, 2, 5, 15, 100` في كلتا اللغتين.
-7. **ما بقي للتحقق اليدوي من المالك قبل الإغلاق (`AWAITING MANUAL VERIFICATION`):**
-   - شاشة الانتظار (`WAITING`)، وشاشة الرسم الحر الأولية (`FREE DRAW`)، وشاشة اختيار الكلمة (`ChoosingWordOverlay`)، وشاشة الكلمة الفعلية والتلميحات (`ExperimentalWordOverlay`).
-   - جميع حالات `ROUND_END` (`skipped`, `turn_lost`, `canceled`, `interval`, `all_guessed`, `timeout` مع وجود فائزين وبدونه).
-   - المنصة (`PODIUM`) مع `1` و`2` و`3` وأكثر من `3` لاعبين.
-   - التحقق في اللغتين العربية والإنجليزية.
+7. **التحقق اليدوي من المالك (`COMPLETED — OWNER MANUALLY VERIFIED — 2026-11-23`):**
+   - تم التحقق اليدوي الكامل من المالك في اللغتين العربية والإنجليزية لكل من:
+     - شاشة الرسم الحر الأولية (`FREE DRAW`) وشاشة الانتظار (`WAITING`).
+     - شاشة اختيار الكلمة (`ChoosingWordOverlay`) وعرض الكلمة الفعلية والتلميحات المقنّعة (`ExperimentalWordOverlay`).
+     - جميع حالات `ROUND_END` (`skipped`, `turn_lost`, `canceled`, `interval`, `all_guessed`, و`timeout` مع وجود فائزين وبدونه).
+     - منصة التتويج (`PODIUM`) مع `1` و`2` و`3` وأكثر من `3` لاعبين.
 8. **الاعتماديات:** `L10N-2` و`L10N-2.1`.
 
 ---
@@ -494,16 +495,16 @@
 
 ---
 
-## 8. الحالة المباشرة للمرحلة الحالية (`L10N-3 — AWAITING MANUAL VERIFICATION`)
+## 8. الحالة المباشرة للمرحلة الحالية (`L10N-3 — COMPLETED`, `L10N-4 — NEXT`)
 
-> نُفذت **`L10N-3`** برمجياً واجتازت فحوصات `npx tsc --noEmit` و`npm run build` وهي الآن **بانتظار التحقق اليدوي من المالك (`AWAITING MANUAL VERIFICATION`)** قبل فتح `L10N-4`:
+> أُغلقت **`L10N-3`** رسمياً بحالة **`COMPLETED — OWNER MANUALLY VERIFIED`** (`2026-11-23` — Commit: `e2c66a6068eecb685f725f2742695b8f509eb8d1`) بعد استكمال التحقق الآلي والتجربة اليدوية الشاملة من المالك بالعربية والإنجليزية:
 
-- **ملخص ما تم إنجازه في `L10N-3`:**
+- **ملخص ما تم إنجازه واعتماده في `L10N-3`:**
   1. توطين جميع النصوص التوضيحية والأزرار وتصنيفات المنصة داخل `src/components/game/MiniBoardOverlay.tsx` عبر نطاق `miniBoard` (مع `<bdi dir="auto">` و`<Trans>` وصيغ الجمع CLDR للنقاط).
   2. توطين النصوص التوضيحية وأزرار التفاعل داخل `src/components/experimental/ChoosingWordOverlay.tsx` عبر نطاق `wordChoice` (مع بقاء `IT'S YOUR TURN!` بالإنجليزية وبقاء `wordOptions` مشتركة وغير مترجمة مع `dir="auto"`).
   3. إضافة `dir="ltr"` على حاويتي صف الأحرف في `src/components/experimental/ExperimentalWordOverlay.tsx` لحماية `flexDirection: isRTL ? 'row-reverse' : 'row'` وفق Safeguard 6.
   4. إنشاء وتسجيل ملفات `src/i18n/locales/en/{miniBoard,wordChoice}.ts` و`src/i18n/locales/ar/{miniBoard,wordChoice}.ts`.
-- **بوابة الانتقال إلى `L10N-4`:** تبقى `L10N-4` متوقفة (`NOT STARTED`) حتى يكتمل اختبار المالك اليدوي لكل حالات `MiniBoardOverlay` و`ChoosingWordOverlay` و`ExperimentalWordOverlay` في العربية والإنجليزية.
+- **المرحلة التالية:** **`L10N-4 — Structured System Events & Backward Compatibility`** (تخضع أولاً للتدقيق المعماري القرائي Stage 1 قبل بدء أي تنفيذ برمجي في Stage 2).
 
 ---
 
