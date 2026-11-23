@@ -8,7 +8,8 @@
 - `L10N-1.1`: `COMPLETED — DEPENDENCY AND INITIALIZATION REVIEW APPLIED` (`2026-11-22`)  
 - `L10N-2`: `COMPLETED — POPUPS AND MODALS LOCALIZED AND OWNER VERIFIED` (`2026-11-23`)  
 - `L10N-2.1`: `COMPLETED — REMAINING POPUPS LOCALIZED, REGISTRY CREATED, AND OWNER VERIFIED` (`2026-11-23`)  
-- `L10N-3`: **`NEXT — NOT STARTED`**
+- `L10N-3`: **`AWAITING MANUAL VERIFICATION`** (`2026-11-23`)
+- `L10N-4`: **`NOT STARTED`** (تُفتح بعد إغلاق `L10N-3` يدوياً)
 
 **الوثائق المرجعية المرتبطة:**  
 - دستور محرك الرسم والتراجع: [`AGENTS.md`](./AGENTS.md)  
@@ -360,23 +361,31 @@
 ---
 
 ### المرحلة `L10N-3` — اللوحة المصغرة وانتقالات الأدوار (`MiniBoard & Turn Transitions`)
-1. **الاسم والرقم:** `PHASE L10N-3 — MiniBoard & Turn Transitions` — **`[ ] NEXT — NOT STARTED`**
-2. **الهدف:** توطين `MiniBoardOverlay` (الانتظار، الرسم الحر المبدئي، انتقال الأدوار، نهاية الجولة، المنصة `PODIUM`) و`ChoosingWordOverlay` (اختيار الكلمة)، وترجمة النصوص التوضيحية المرافقة للعناوين الفنية مع بقاء العناوين الفنية بالإنجليزية، والحفاظ على الكلمة المختارة والتلميحات المشتركة دون ترجمة مستقلة، ودون لمس الدردشة أو التخمينات.
-3. **الملفات المسموحة:**
-   - `src/components/game/MiniBoardOverlay.tsx`
-   - `src/components/experimental/ChoosingWordOverlay.tsx`
-   - `src/components/experimental/ExperimentalWordOverlay.tsx` (**فقط** لضبط العزل الاتجاهي الصريح `dir="ltr"` على حاوية صف الأحرف/التلميحات إن لزم عند العرض العربي — **دون ترجمة أي كلمة أو تغيير منطق `isRTL`**)
-   - `src/i18n/locales/*`
-4. **الملفات المحظورة:** `server/*`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/Lobby.tsx`, `src/components/GameRoom.tsx`, `src/components/experimental/ExperimentalGameRoom.tsx`, `src/components/experimental/ExperimentalDrawingBoard.tsx`.
+1. **الاسم والرقم:** `PHASE L10N-3 — MiniBoard & Turn Transitions` — **`[ ] AWAITING MANUAL VERIFICATION`** (`2026-11-23` — نُفذ الكود واجتاز `npx tsc --noEmit` و`npm run build`، وبانتظار التحقق اليدوي من المالك قبل الإغلاق)
+2. **الهدف:** توطين `MiniBoardOverlay` (الانتظار، الرسم الحر المبدئي، انتقال الأدوار، نهاية الجولة، المنصة `PODIUM`) و`ChoosingWordOverlay` (اختيار الكلمة)، وترجمة النصوص التوضيحية المرافقة للعناوين الفنية مع بقاء العناوين الفنية بالإنجليزية، والحفاظ على الكلمة المختارة والتلميحات المشتركة دون ترجمة مستقلة، وعزل اتجاه صف الأحرف في `ExperimentalWordOverlay.tsx` بـ `dir="ltr"`، دون لمس الدردشة أو التخمينات.
+3. **الملفات المنفذة فعلياً ضمن النطاق المسموح:**
+   - `src/components/game/MiniBoardOverlay.tsx` (توطين شاشات الرسم الحر والانتظار واختيار الدور ونهاية الجولة بجميع حالاتها والمنصة وصيغ الجمع CLDR للنقاط وتلميحات الميداليات مع `<bdi dir="auto">` و`<Trans>`)
+   - `src/components/experimental/ChoosingWordOverlay.tsx` (توطين `prompt` و`drawButton` و`orDivider` مع إبقاء `IT'S YOUR TURN!` بالإنجليزية وإبقاء `wordOptions[0..1]` بدون ترجمة مع `dir="auto"` وثبات موضع أيقونة القلم)
+   - `src/components/experimental/ExperimentalWordOverlay.tsx` (إضافة `dir="ltr"` حصراً على حاويتي صف الأحرف للرسام والمخمن وفق Safeguard 6 دون أي تغيير في المنطق أو الأداء أو `React.memo`)
+   - `src/i18n/locales/en/miniBoard.ts` و`src/i18n/locales/ar/miniBoard.ts` (`miniBoard` namespace متضمناً صيغ الجمع الست للعربية `zero/one/two/few/many/other` وصيغ الإنجليزية `one/other`)
+   - `src/i18n/locales/en/wordChoice.ts` و`src/i18n/locales/ar/wordChoice.ts` (`wordChoice` namespace)
+   - `src/i18n/locales/en/index.ts` و`src/i18n/locales/ar/index.ts` (تسجيل النطاقين الجديدين)
+4. **الملفات المحظورة (تم احترامها بالكامل):** `server/*`, `src/components/game/OverlayChatRoom.tsx`, `src/components/game/GameActivityFeed.tsx`, `src/components/Lobby.tsx`, `src/components/GameRoom.tsx`, `src/components/experimental/ExperimentalGameRoom.tsx`, `src/components/experimental/ExperimentalDrawingBoard.tsx`, `src/components/game/DrawingCanvasCore.tsx`, `CinematicModal.tsx`, `UI_MODAL_REGISTRY.md`, `package.json`, `bun.lock`, جميع ملفات وأصول السبرايت.
 5. **الآليات المحمية:**
-   - **`UI-A Stage 2A`:** الحفاظ التام على `roundEndAnimationKey` / `activeAnimationKeyRef` وظلال السبرايت في `MiniBoardOverlay.tsx`.
-   - **Safeguard 6:** إبقاء `wordOptions`, `currentWord`, `maskedWordArray` مشتركة دون ترجمة، وإبقاء `dir="auto"` في `ChoosingWordOverlay.tsx`، واتجاه الحروف خاضعاً لـ `isRTL` الكلمة مع حماية حاويتها.
-   - بقاء عناوين `MiniBoardOverlay` الفنية (`FREE DRAW`, `WAITING`, `NEW TURN!`, `SKIPPED!`, `INACTIVE`, `CANCELED TURN`, `INTERVAL`, `MASTERPIECE!`, `GAME OVER`) بالإنجليزية.
-6. **التعديلات الدقيقة:** توطين النصوص التوضيحية وأزرار التفاعل مثل وصف الرسم الحر وزر `ابدأ الرسم` و`Waiting for players` و`It's the turn of` ورسائل `SKIPPED`/`INACTIVE`/`CANCELED`/`INTERVAL`/`MASTERPIECE`/`The answer was` و`بقية قائمة المتصدرين` و`pts` (مع صيغ الجمع) دون ازدواجية نصية.
-7. **المخاطر:** تجاوز ارتفاع النص داخل اللوحة المصغرة على شاشات الهاتف الصغيرة، أو تأثر `ChoosingWordOverlay` باتجاه الصفحة.
-8. **معايير الخروج:** عرض سليم لكل حالات اللوحة المصغرة وانتقالات الأدوار في العربية والإنجليزية مع بقاء الكلمات المشتركة والعناوين الفنية محمية.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + فحص المالك اليدوي لكل مراحل الجولة (Waiting, Choosing, Drawing Word Overlay, Round End بأنواعه، Podium، وشاشة Free Draw الأولية).
-10. **الاعتماديات:** `L10N-2` و`L10N-2.1`.
+   - **`UI-A Stage 2A`:** الحفاظ التام على `roundEndAnimationKey` / `prevRoundEndKeyRef` / `activeAnimationKeyRef` / `wasPodium` / `playPodiumAnimations` / `getAnimClass` وظلال السبرايت في `MiniBoardOverlay.tsx`.
+   - **Safeguard 6:** إبقاء `wordOptions`, `currentWord`, `maskedWordArray` مشتركة دون ترجمة، وإبقاء `dir="auto"` في `ChoosingWordOverlay.tsx`، وتثبيت `dir="ltr"` على حاويتي صف الأحرف في `ExperimentalWordOverlay.tsx` مع إبقاء `flexDirection: isRTL ? 'row-reverse' : 'row'`.
+   - بقاء عناوين `MiniBoardOverlay` الفنية (`FREE DRAW`, `WAITING`, `NEW TURN!`, `SKIPPED!`, `INACTIVE`, `CANCELED TURN`, `INTERVAL`, `MASTERPIECE!`, `GAME OVER`) وعنوان `IT'S YOUR TURN!` في `ChoosingWordOverlay` بالإنجليزية.
+   - بقاء ترتيب المنصة الفيزيائي ثابتاً (المركز الأول في الوسط والثاني والثالث في جانبيهما المعتادين دون عكس Flexbox).
+6. **نتائج التحقق الآلي المنفذة (`2026-11-23`):**
+   - `npx tsc --noEmit`: نجاح تام بدون أخطاء.
+   - `npm run build` (`vite build`): نجاح تام خلال `9.76s` (`2244` وحدة؛ `dist/assets/index-CjNqk9nL.js`: `1,233.67 kB │ gzip: 339.80 kB`).
+   - التحقق من صيغ الجمع وتكافؤ المفاتيح عبر `tsx`: تطابق كامل لمفاتيح `miniBoard` و`wordChoice` بين العربية والإنجليزية وتحقق من `0, 1, 2, 5, 15, 100` في كلتا اللغتين.
+7. **ما بقي للتحقق اليدوي من المالك قبل الإغلاق (`AWAITING MANUAL VERIFICATION`):**
+   - شاشة الانتظار (`WAITING`)، وشاشة الرسم الحر الأولية (`FREE DRAW`)، وشاشة اختيار الكلمة (`ChoosingWordOverlay`)، وشاشة الكلمة الفعلية والتلميحات (`ExperimentalWordOverlay`).
+   - جميع حالات `ROUND_END` (`skipped`, `turn_lost`, `canceled`, `interval`, `all_guessed`, `timeout` مع وجود فائزين وبدونه).
+   - المنصة (`PODIUM`) مع `1` و`2` و`3` وأكثر من `3` لاعبين.
+   - التحقق في اللغتين العربية والإنجليزية.
+8. **الاعتماديات:** `L10N-2` و`L10N-2.1`.
 
 ---
 
@@ -485,20 +494,16 @@
 
 ---
 
-## 8. نطاق وتفاصيل المرحلة القادمة المباشرة (`L10N-3 ONLY — NOT STARTED`)
+## 8. الحالة المباشرة للمرحلة الحالية (`L10N-3 — AWAITING MANUAL VERIFICATION`)
 
-> تُعد **`L10N-3`** الدفعة التنفيذية القادمة المباشرة والوحيدة عند انتقالنا إلى التنفيذ (لم تبدأ بعد)، وتختص حصراً باللوحة المصغرة وانتقالات الأدوار واختيار الكلمة، دون لمس الدردشة أو التخمينات أو اللوبي أو الخادم:
+> نُفذت **`L10N-3`** برمجياً واجتازت فحوصات `npx tsc --noEmit` و`npm run build` وهي الآن **بانتظار التحقق اليدوي من المالك (`AWAITING MANUAL VERIFICATION`)** قبل فتح `L10N-4`:
 
-- **ما ستشمله `L10N-3` حصرياً:**
-  1. توطين جميع النصوص التوضيحية والأزرار وتصنيفات المنصة داخل `src/components/game/MiniBoardOverlay.tsx` (شاشة بدء الرسم الحر وزر `ابدأ الرسم`، حالة `WAITING`، انتقال الدور `It's the turn of`، رسائل `SKIPPED` / `INACTIVE` / `CANCELED TURN` / `INTERVAL` / `MASTERPIECE` / `The answer was`، قائمة `بقية قائمة المتصدرين` و`pts`).
-  2. توطين النصوص التوضيحية وأزرار التفاعل داخل `src/components/experimental/ChoosingWordOverlay.tsx` (`IT'S YOUR TURN!`، `Choose a word to draw`، `DRAW`، `OR` — مع بقاء خيارات الكلمات `wordOptions` مشتركة وغير مترجمة ومحفوظة بـ `dir="auto"`).
-  3. مراجعة `src/components/experimental/ExperimentalWordOverlay.tsx` عند اللزوم فقط لحماية عزل حاوية صف الأحرف/التلميحات (`dir="ltr"` المعتمد على `isRTL` للكلمة وفق Safeguard 6) دون ترجمة أي كلمة أو تلميح.
-  4. إضافة مفاتيح القواميس المطلوبة في `src/i18n/locales/en/*` و`src/i18n/locales/ar/*` تحت الـ namespace المناسب (`room`).
-- **ما يُحظر تغييره في `L10N-3`:**
-  - عناوين `GameTitle` الفنية (`FREE DRAW`, `WAITING`, `NEW TURN!`, `SKIPPED!`, `INACTIVE`, `CANCELED TURN`, `INTERVAL`, `MASTERPIECE!`, `GAME OVER`) تبقى بالإنجليزية.
-  - آلية `roundEndAnimationKey` / `activeAnimationKeyRef` وحماية `UI-A Stage 2A` في `MiniBoardOverlay.tsx`.
-  - عدم لمس `server/*`، `OverlayChatRoom.tsx`، `GameActivityFeed.tsx`، `Lobby.tsx`، `GameRoom.tsx`، `ExperimentalGameRoom.tsx`، أو `ExperimentalDrawingBoard.tsx`.
-- **النتيجة المتوقعة عند إتمام `L10N-3` لاحقاً:** توطين كامل مراحل اللوحة المصغرة وانتقالات الأدوار واختيار الكلمة في العربية والإنجليزية مع اجتياز `npx tsc --noEmit` و`npm run build` والتحقق اليدوي من المالك.
+- **ملخص ما تم إنجازه في `L10N-3`:**
+  1. توطين جميع النصوص التوضيحية والأزرار وتصنيفات المنصة داخل `src/components/game/MiniBoardOverlay.tsx` عبر نطاق `miniBoard` (مع `<bdi dir="auto">` و`<Trans>` وصيغ الجمع CLDR للنقاط).
+  2. توطين النصوص التوضيحية وأزرار التفاعل داخل `src/components/experimental/ChoosingWordOverlay.tsx` عبر نطاق `wordChoice` (مع بقاء `IT'S YOUR TURN!` بالإنجليزية وبقاء `wordOptions` مشتركة وغير مترجمة مع `dir="auto"`).
+  3. إضافة `dir="ltr"` على حاويتي صف الأحرف في `src/components/experimental/ExperimentalWordOverlay.tsx` لحماية `flexDirection: isRTL ? 'row-reverse' : 'row'` وفق Safeguard 6.
+  4. إنشاء وتسجيل ملفات `src/i18n/locales/en/{miniBoard,wordChoice}.ts` و`src/i18n/locales/ar/{miniBoard,wordChoice}.ts`.
+- **بوابة الانتقال إلى `L10N-4`:** تبقى `L10N-4` متوقفة (`NOT STARTED`) حتى يكتمل اختبار المالك اليدوي لكل حالات `MiniBoardOverlay` و`ChoosingWordOverlay` و`ExperimentalWordOverlay` في العربية والإنجليزية.
 
 ---
 

@@ -1,5 +1,6 @@
 import React from "react";
 import { Pencil } from "lucide-react";
+import { useAppTranslation } from "../../i18n/useAppTranslation";
 
 interface ChoosingWordOverlayProps {
   wordOptions?: string[];
@@ -10,14 +11,19 @@ export function ChoosingWordOverlay({
   wordOptions,
   onSelectWord,
 }: ChoosingWordOverlayProps) {
+  const { t, isRTL } = useAppTranslation("wordChoice");
+
   return (
     <div className="fixed inset-0 z-[500] bg-black/70 flex items-center justify-center p-4 touch-none">
       <div className="text-center w-full max-w-md px-6 animate-in fade-in zoom-in-95 duration-300">
         <h2 className="text-[#FBBF24] text-3xl sm:text-4xl font-black mb-2 drop-shadow-md tracking-wide">
           IT'S YOUR TURN!
         </h2>
-        <p className="text-white/80 text-lg sm:text-xl mb-12">
-          Choose a word to draw
+        <p
+          dir={isRTL ? "rtl" : "ltr"}
+          className="text-white/80 text-lg sm:text-xl mb-12"
+        >
+          {t("prompt")}
         </p>
 
         {wordOptions && wordOptions.length >= 2 && (
@@ -34,14 +40,17 @@ export function ChoosingWordOverlay({
                 className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl"
               >
                 <Pencil fill="currentColor" size={24} />
-                DRAW
+                <span dir={isRTL ? "rtl" : "ltr"}>{t("drawButton")}</span>
               </button>
             </div>
 
             <div className="flex items-center w-full relative py-2">
               <div className="flex-1 border-t border-white/20 h-px"></div>
-              <span className="px-4 text-white/50 font-bold bg-transparent text-lg">
-                OR
+              <span
+                dir={isRTL ? "rtl" : "ltr"}
+                className="px-4 text-white/50 font-bold bg-transparent text-lg"
+              >
+                {t("orDivider")}
               </span>
               <div className="flex-1 border-t border-white/20 h-px"></div>
             </div>
@@ -58,7 +67,7 @@ export function ChoosingWordOverlay({
                 className="w-[85%] max-w-xs bg-accent-brand hover:bg-accent-brand-dark text-bg-dark-brand font-black py-4 rounded-full flex items-center justify-center gap-3 shadow-[0_4px_14px_0_rgba(251,191,36,0.39)] active:scale-95 transition-all text-xl"
               >
                 <Pencil fill="currentColor" size={24} />
-                DRAW
+                <span dir={isRTL ? "rtl" : "ltr"}>{t("drawButton")}</span>
               </button>
             </div>
           </div>

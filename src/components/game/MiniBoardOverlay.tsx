@@ -1,5 +1,6 @@
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { Trans } from "react-i18next";
 import { Clock, Pencil, User as UserIcon, AlertTriangle } from "lucide-react";
 import GameTitle from "./GameTitle";
 import WaitingSprite from "./WaitingSprite";
@@ -10,6 +11,7 @@ import TurnLostSprite from "./TurnLostSprite";
 import SkippedSprite from "./SkippedSprite";
 import PartialGuessedSprite from "./PartialGuessedSprite";
 import CanceledTurnSprite from "./CanceledTurnSprite";
+import { useAppTranslation } from "../../i18n/useAppTranslation";
 
 interface Player {
   id: string;
@@ -45,6 +47,8 @@ export function MiniBoardOverlay({
   hasDrawHistory = false,
   roundEndAnimationKey,
 }: MiniBoardOverlayProps) {
+  const { t, isRTL } = useAppTranslation("miniBoard");
+
   // We use this z-index to overlay inside the DrawingBoard
   const containerClass = "absolute inset-0 z-[40] flex flex-col items-center justify-between bg-white pointer-events-auto p-2 sm:p-4 select-none font-sans overflow-y-auto min-h-0";
 
@@ -117,21 +121,28 @@ export function MiniBoardOverlay({
             <div className="pb-0.5 sm:pb-1 flex flex-col items-center gap-2 sm:gap-2.5">
               {isFreeDraw ? (
                 <>
-                  <p className="text-[#64748B] text-xs sm:text-[13px] font-semibold tracking-tight text-center max-w-[280px] leading-relaxed">
-                    Draw whatever you want. No timer, no prompt.
+                  <p
+                    dir={isRTL ? "rtl" : "ltr"}
+                    className="text-[#64748B] text-xs sm:text-[13px] font-semibold tracking-tight text-center max-w-[280px] leading-relaxed"
+                  >
+                    {t("freeDraw.description")}
                   </p>
                   <button
                     type="button"
                     onClick={onStartFreeDraw}
+                    dir={isRTL ? "rtl" : "ltr"}
                     className="px-6 py-2.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-95 text-white font-black text-sm sm:text-base shadow-lg transition-all border-2 border-white/60 flex items-center gap-2 cursor-pointer mx-auto"
                   >
                     <Pencil size={18} />
-                    <span>ابدأ الرسم</span>
+                    <span>{t("freeDraw.startButton")}</span>
                   </button>
                 </>
               ) : (
-                <p className="text-[#728299] text-xs sm:text-sm font-bold tracking-wide">
-                  Waiting for players
+                <p
+                  dir={isRTL ? "rtl" : "ltr"}
+                  className="text-[#728299] text-xs sm:text-sm font-bold tracking-wide"
+                >
+                  {t("waiting.message")}
                 </p>
               )}
             </div>
@@ -167,12 +178,15 @@ export function MiniBoardOverlay({
               </div>
             </div>
 
-            <div className="pb-0.5 sm:pb-1">
+            <div className="pb-0.5 sm:pb-1" dir={isRTL ? "rtl" : "ltr"}>
               <p className="text-[#728299] text-xs sm:text-sm font-bold mb-0.5">
-                It's the turn of
+                {t("choosing.turnOf")}
               </p>
-              <h3 className="text-[#0B2E5C] font-black text-sm sm:text-xl tracking-wide">
-                {getCurrentDrawerName()}
+              <h3
+                dir="auto"
+                className="text-[#0B2E5C] font-black text-sm sm:text-xl tracking-wide"
+              >
+                <bdi dir="auto">{getCurrentDrawerName()}</bdi>
               </h3>
             </div>
           </div>
@@ -184,7 +198,7 @@ export function MiniBoardOverlay({
         (() => {
           const reason = gameState.roundEndReason;
           const word = gameState.roundEndWord || "";
-          const drawerName = getCurrentDrawerName() || "الرسام";
+          const drawerName = getCurrentDrawerName() || t("roundEnd.defaultDrawer");
           const hasSucceeded = (gameState.correctGuessers || []).length > 0;
 
           // 3.1. SKIPPED STATE
@@ -199,8 +213,22 @@ export function MiniBoardOverlay({
                     <SkippedSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" animationKey={activeAnimationKeyRef.current} />
                   </div>
                   <div className="pb-0.5 sm:pb-1">
-                    <h3 className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5" dir="auto">
-                      {amIDrawer ? "You've skipped the turn" : `${drawerName} skipped the turn`}
+                    <h3
+                      className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5"
+                      dir={isRTL ? "rtl" : "ltr"}
+                    >
+                      {amIDrawer ? (
+                        t("roundEnd.skippedSelf")
+                      ) : (
+                        <Trans
+                          t={t}
+                          i18nKey="roundEnd.skippedOther"
+                          values={{ drawerName }}
+                          components={{
+                            drawer: <bdi dir="auto" />,
+                          }}
+                        />
+                      )}
                     </h3>
                   </div>
                 </div>
@@ -220,8 +248,22 @@ export function MiniBoardOverlay({
                     <TurnLostSprite className="h-[110px] sm:h-[150px] max-w-[110px] sm:max-w-[150px]" animationKey={activeAnimationKeyRef.current} />
                   </div>
                   <div className="pb-0.5 sm:pb-1">
-                    <h3 className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5" dir="auto">
-                      {amIDrawer ? "You've lost your turn :(" : `${drawerName} has lost the turn`}
+                    <h3
+                      className="text-[#728299] font-bold text-xs sm:text-sm tracking-wide mb-0.5"
+                      dir={isRTL ? "rtl" : "ltr"}
+                    >
+                      {amIDrawer ? (
+                        t("roundEnd.turnLostSelf")
+                      ) : (
+                        <Trans
+                          t={t}
+                          i18nKey="roundEnd.turnLostOther"
+                          values={{ drawerName }}
+                          components={{
+                            drawer: <bdi dir="auto" />,
+                          }}
+                        />
+                      )}
                     </h3>
                   </div>
                 </div>
@@ -243,11 +285,11 @@ export function MiniBoardOverlay({
                   </div>
 
                   <div className="pb-0.5 sm:pb-1">
-                    <p className="text-[#728299] text-xs sm:text-sm font-bold mb-0.5" dir="auto">
-                      Users score has been canceled
-                    </p>
-                    <p className="text-[#728299]/70 text-[10px] sm:text-xs font-bold" dir="auto">
-                      لقد تم إلغاء نقاط الدور
+                    <p
+                      className="text-[#728299] text-xs sm:text-sm font-bold mb-0.5"
+                      dir={isRTL ? "rtl" : "ltr"}
+                    >
+                      {t("roundEnd.canceledScore")}
                     </p>
                   </div>
                 </div>
@@ -257,15 +299,15 @@ export function MiniBoardOverlay({
 
           // 3.4. INTERVAL / STANDARD ROUND END
           let titleText = "INTERVAL";
-          let subTitle = "Take a while to relax";
+          let subTitle = t("roundEnd.intervalSubtitle");
           let bottomText = "";
 
           if (reason === "all_guessed") {
             titleText = "MASTERPIECE!";
             subTitle = "";
-            bottomText = "Everybody hit the answer!";
+            bottomText = t("roundEnd.allGuessed");
           } else if (reason === "timeout" || reason === "drawer_left") {
-            bottomText = hasSucceeded ? "" : "Nobody hit the answer :(";
+            bottomText = hasSucceeded ? "" : t("roundEnd.nobodyGuessed");
           }
 
           return (
@@ -274,7 +316,10 @@ export function MiniBoardOverlay({
                 <div className="pt-0.5 sm:pt-1 mb-1">
                   <GameTitle text={titleText} type="miniboard" className="text-[17px] sm:text-[22px]" />
                   {subTitle && (
-                    <p className="text-[#728299] text-[11px] sm:text-xs font-bold mt-1" dir="auto">
+                    <p
+                      className="text-[#728299] text-[11px] sm:text-xs font-bold mt-1"
+                      dir={isRTL ? "rtl" : "ltr"}
+                    >
                       {subTitle}
                     </p>
                   )}
@@ -312,18 +357,24 @@ export function MiniBoardOverlay({
 
                 <div className="pb-0.5 sm:pb-1">
                   {bottomText && (
-                    <p className="text-[#728299] text-xs sm:text-sm font-bold mb-1" dir="auto">
+                    <p
+                      className="text-[#728299] text-xs sm:text-sm font-bold mb-1"
+                      dir={isRTL ? "rtl" : "ltr"}
+                    >
                       {bottomText}
                     </p>
                   )}
 
                   {word && hasSucceeded && reason !== "all_guessed" && (
                     <div className="text-center">
-                      <span className="text-[#728299] text-[11px] sm:text-xs font-bold block mb-0.5">
-                        The answer was:
+                      <span
+                        className="text-[#728299] text-[11px] sm:text-xs font-bold block mb-0.5"
+                        dir={isRTL ? "rtl" : "ltr"}
+                      >
+                        {t("roundEnd.theAnswerWas")}
                       </span>
                       <span className="text-[#0B2E5C] text-sm sm:text-xl font-black tracking-wide inline-block" dir="auto">
-                        {word}
+                        <bdi dir="auto">{word}</bdi>
                       </span>
                     </div>
                   )}
@@ -431,7 +482,7 @@ export function MiniBoardOverlay({
                             >
                               <img 
                                 src="/medal2.webp" 
-                                alt="2nd Place" 
+                                alt={t("podium.medalAlt.second")} 
                                 className="w-full h-full object-contain"
                                 referrerPolicy="no-referrer"
                               />
@@ -442,11 +493,14 @@ export function MiniBoardOverlay({
                           </div>
                         </div>
                         <div className={`text-center mt-2.5 sm:mt-3.5 mb-0.5 px-0.5 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '2.6s' }}>
-                          <span className="text-[#0A2540] font-black text-[12px] sm:text-[15px] truncate block w-full">
-                            {second.name}
+                          <span className="text-[#0A2540] font-black text-[12px] sm:text-[15px] truncate block w-full" dir="auto">
+                            <bdi dir="auto">{second.name}</bdi>
                           </span>
-                          <span className="text-slate-500 font-extrabold text-[9px] sm:text-[11px] block leading-none">
-                            {second.points} pts
+                          <span
+                            dir={isRTL ? "rtl" : "ltr"}
+                            className="text-slate-500 font-extrabold text-[9px] sm:text-[11px] block leading-none"
+                          >
+                            {t("podium.points", { count: second.points ?? 0 })}
                           </span>
                         </div>
                       </>
@@ -478,7 +532,7 @@ export function MiniBoardOverlay({
                             >
                               <img 
                                 src="/medal1.webp" 
-                                alt="1st Place" 
+                                alt={t("podium.medalAlt.first")} 
                                 className="w-full h-full object-contain"
                                 referrerPolicy="no-referrer"
                               />
@@ -489,11 +543,14 @@ export function MiniBoardOverlay({
                           </div>
                         </div>
                         <div className={`text-center mt-3 sm:mt-4 mb-0.5 px-0.5 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '1.2s' }}>
-                          <span className="text-[#0A2540] font-black text-[13px] sm:text-[18px] truncate block w-full">
-                            {first.name}
+                          <span className="text-[#0A2540] font-black text-[13px] sm:text-[18px] truncate block w-full" dir="auto">
+                            <bdi dir="auto">{first.name}</bdi>
                           </span>
-                          <span className="text-yellow-600 font-black text-[10px] sm:text-[12px] block leading-none">
-                            {first.points} pts
+                          <span
+                            dir={isRTL ? "rtl" : "ltr"}
+                            className="text-yellow-600 font-black text-[10px] sm:text-[12px] block leading-none"
+                          >
+                            {t("podium.points", { count: first.points ?? 0 })}
                           </span>
                         </div>
                       </>
@@ -517,7 +574,7 @@ export function MiniBoardOverlay({
                             >
                               <img 
                                 src="/medal3.webp" 
-                                alt="3rd Place" 
+                                alt={t("podium.medalAlt.third")} 
                                 className="w-full h-full object-contain"
                                 referrerPolicy="no-referrer"
                               />
@@ -528,11 +585,14 @@ export function MiniBoardOverlay({
                           </div>
                         </div>
                         <div className={`text-center mt-2.5 sm:mt-3.5 mb-0.5 px-0.5 w-full ${getAnimClass("animate-pop")}`} style={{ animationDelay: '3.8s' }}>
-                          <span className="text-[#0A2540] font-black text-[12px] sm:text-[15px] truncate block w-full">
-                            {third.name}
+                          <span className="text-[#0A2540] font-black text-[12px] sm:text-[15px] truncate block w-full" dir="auto">
+                            <bdi dir="auto">{third.name}</bdi>
                           </span>
-                          <span className="text-orange-600 font-extrabold text-[9px] sm:text-[11px] block leading-none">
-                            {third.points} pts
+                          <span
+                            dir={isRTL ? "rtl" : "ltr"}
+                            className="text-orange-600 font-extrabold text-[9px] sm:text-[11px] block leading-none"
+                          >
+                            {t("podium.points", { count: third.points ?? 0 })}
                           </span>
                         </div>
                       </>
@@ -546,18 +606,26 @@ export function MiniBoardOverlay({
               {/* Scrollable list for 4th Rank and below */}
               {restOfPlayers.length > 0 && (
                 <div className="w-full max-w-[340px] sm:max-w-md mx-auto mt-1 sm:mt-2 mb-1 px-2 bg-white/95 rounded-xl p-1.5 border border-slate-200 z-10 shrink-0">
-                  <p className="text-center text-[#0B2E5C] font-extrabold text-[10px] sm:text-xs uppercase tracking-wider mb-0.5">
-                    بقية قائمة المتصدرين
+                  <p
+                    dir={isRTL ? "rtl" : "ltr"}
+                    className="text-center text-[#0B2E5C] font-extrabold text-[10px] sm:text-xs uppercase tracking-wider mb-0.5"
+                  >
+                    {t("podium.restOfLeaderboard")}
                   </p>
                   <div className="flex flex-col gap-1 max-h-[60px] sm:max-h-[90px] overflow-y-auto pr-1">
                     {restOfPlayers.map((p, idx) => (
                       <div key={p.id} className="flex items-center justify-between text-slate-700 bg-white/40 p-1 sm:p-1.5 rounded-lg text-[10px] sm:text-xs font-bold border border-slate-100">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-slate-400"># {idx + 4}</span>
-                          <span>{p.avatar}</span>
-                          <span>{p.name}</span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-slate-400 shrink-0"># {idx + 4}</span>
+                          <span className="shrink-0">{p.avatar}</span>
+                          <span className="truncate" dir="auto"><bdi dir="auto">{p.name}</bdi></span>
                         </div>
-                        <span className="text-slate-500">{p.points} Pts</span>
+                        <span
+                          dir={isRTL ? "rtl" : "ltr"}
+                          className="text-slate-500 shrink-0"
+                        >
+                          {t("podium.points", { count: p.points ?? 0 })}
+                        </span>
                       </div>
                     ))}
                   </div>

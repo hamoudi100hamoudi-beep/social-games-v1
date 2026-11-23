@@ -81,7 +81,7 @@ const ExperimentalWordOverlayComponent: React.FC<ExperimentalWordOverlayProps> =
       style={CONTAINER_STYLE}
     >
       {isDrawer && currentWord ? (
-        <div className="flex items-center" style={wordRowStyle}>
+        <div dir="ltr" className="flex items-center" style={wordRowStyle}>
           {characters.map((char: string, i: number) => {
             if (char === ' ') {
               return (
@@ -114,7 +114,7 @@ const ExperimentalWordOverlayComponent: React.FC<ExperimentalWordOverlayProps> =
         </div>
       ) : (
         maskedWordArray && maskedWordArray.length > 0 ? (
-          <div className="flex items-center" style={wordRowStyle}>
+          <div dir="ltr" className="flex items-center" style={wordRowStyle}>
             {maskedWordArray.map((item: any, i: number) => {
               if (item.isSpace) {
                 return (
