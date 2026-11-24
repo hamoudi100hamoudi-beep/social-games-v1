@@ -135,6 +135,7 @@ const PODIUM_TITLE_WRAP_STYLE: React.CSSProperties = {
 
 const PODIUM_STAGE_STYLE: React.CSSProperties = {
   paddingTop: "clamp(16.5px, 8.2cqh, 34px)",
+  paddingBottom: "clamp(4px, 2.5cqh, 10px)",
 };
 
 const PODIUM_REST_LIST_STYLE: React.CSSProperties = {
@@ -148,39 +149,39 @@ const PODIUM_REST_HEADER_STYLE: React.CSSProperties = {
 const PODIUM_SIZES_COMPACT = {
   firstCrownWrap: { top: "calc(-1 * clamp(14.5px, 6.8cqh, 31px))" } as React.CSSProperties,
   firstCrownText: { fontSize: "clamp(14.5px, 6.8cqh, 31px)" } as React.CSSProperties,
-  firstAvatar: { width: "clamp(38px, 20.5cqh, 102px)", height: "clamp(38px, 20.5cqh, 102px)" } as React.CSSProperties,
-  firstEmoji: { fontSize: "clamp(20px, 11cqh, 53px)" } as React.CSSProperties,
+  firstAvatar: { width: "clamp(40px, 22cqh, 108px)", height: "clamp(40px, 22cqh, 108px)" } as React.CSSProperties,
+  firstEmoji: { fontSize: "clamp(21px, 11.5cqh, 56px)" } as React.CSSProperties,
   firstMedalWrap: { bottom: "calc(-1 * clamp(5.5px, 2.7cqh, 15px))" } as React.CSSProperties,
   firstMedal: { width: "clamp(20px, 10cqh, 48px)", height: "clamp(20px, 10cqh, 48px)" } as React.CSSProperties,
   firstTextWrap: { marginTop: "clamp(6.5px, 3cqh, 15px)" } as React.CSSProperties,
-  firstName: { fontSize: "clamp(11.5px, 5.5cqh, 20px)" } as React.CSSProperties,
-  firstPoints: { fontSize: "clamp(9.5px, 4.2cqh, 13.5px)" } as React.CSSProperties,
-  sideAvatar: { width: "clamp(31px, 16.5cqh, 84px)", height: "clamp(31px, 16.5cqh, 84px)" } as React.CSSProperties,
-  sideEmoji: { fontSize: "clamp(16.5px, 8.8cqh, 44px)" } as React.CSSProperties,
+  firstName: { fontSize: "clamp(12px, 5.9cqh, 21px)" } as React.CSSProperties,
+  firstPoints: { fontSize: "clamp(10px, 4.5cqh, 14.5px)" } as React.CSSProperties,
+  sideAvatar: { width: "clamp(33px, 17.7cqh, 90px)", height: "clamp(33px, 17.7cqh, 90px)" } as React.CSSProperties,
+  sideEmoji: { fontSize: "clamp(17.5px, 9.4cqh, 47px)" } as React.CSSProperties,
   sideMedalWrap: { bottom: "calc(-1 * clamp(4.5px, 2.2cqh, 13px))" } as React.CSSProperties,
   sideMedal: { width: "clamp(16.5px, 8.3cqh, 40px)", height: "clamp(16.5px, 8.3cqh, 40px)" } as React.CSSProperties,
   sideTextWrap: { marginTop: "clamp(5.5px, 2.6cqh, 13px)" } as React.CSSProperties,
-  sideName: { fontSize: "clamp(11px, 4.9cqh, 16.5px)" } as React.CSSProperties,
-  sidePoints: { fontSize: "clamp(9px, 3.9cqh, 12.5px)" } as React.CSSProperties,
+  sideName: { fontSize: "clamp(11.5px, 5.2cqh, 17.5px)" } as React.CSSProperties,
+  sidePoints: { fontSize: "clamp(9.5px, 4.2cqh, 13.5px)" } as React.CSSProperties,
 };
 
 const PODIUM_SIZES_STANDARD = {
   firstCrownWrap: { top: "calc(-1 * clamp(16.5px, 8.2cqh, 33px))" } as React.CSSProperties,
   firstCrownText: { fontSize: "clamp(16.5px, 8.2cqh, 31px)" } as React.CSSProperties,
-  firstAvatar: { width: "clamp(51px, 29.5cqh, 114px)", height: "clamp(51px, 29.5cqh, 114px)" } as React.CSSProperties,
-  firstEmoji: { fontSize: "clamp(26px, 15.5cqh, 64px)" } as React.CSSProperties,
+  firstAvatar: { width: "clamp(54px, 31.5cqh, 122px)", height: "clamp(54px, 31.5cqh, 122px)" } as React.CSSProperties,
+  firstEmoji: { fontSize: "clamp(28px, 16.5cqh, 68px)" } as React.CSSProperties,
   firstMedalWrap: { bottom: "calc(-1 * clamp(6.5px, 3.5cqh, 17px))" } as React.CSSProperties,
   firstMedal: { width: "clamp(24px, 13.2cqh, 57px)", height: "clamp(24px, 13.2cqh, 57px)" } as React.CSSProperties,
   firstTextWrap: { marginTop: "clamp(8.5px, 4.1cqh, 17.5px)" } as React.CSSProperties,
-  firstName: { fontSize: "clamp(13px, 6.4cqh, 20px)" } as React.CSSProperties,
-  firstPoints: { fontSize: "clamp(10.5px, 4.6cqh, 13.5px)" } as React.CSSProperties,
-  sideAvatar: { width: "clamp(42px, 23cqh, 97px)", height: "clamp(42px, 23cqh, 97px)" } as React.CSSProperties,
-  sideEmoji: { fontSize: "clamp(22px, 12cqh, 51px)" } as React.CSSProperties,
+  firstName: { fontSize: "clamp(13.8px, 6.8cqh, 21.5px)" } as React.CSSProperties,
+  firstPoints: { fontSize: "clamp(11px, 4.9cqh, 14.5px)" } as React.CSSProperties,
+  sideAvatar: { width: "clamp(44px, 24.5cqh, 104px)", height: "clamp(44px, 24.5cqh, 104px)" } as React.CSSProperties,
+  sideEmoji: { fontSize: "clamp(23.5px, 13cqh, 55px)" } as React.CSSProperties,
   sideMedalWrap: { bottom: "calc(-1 * clamp(5.5px, 2.9cqh, 15px))" } as React.CSSProperties,
   sideMedal: { width: "clamp(20px, 11cqh, 44px)", height: "clamp(20px, 11cqh, 44px)" } as React.CSSProperties,
   sideTextWrap: { marginTop: "clamp(6.5px, 3.5cqh, 15px)" } as React.CSSProperties,
-  sideName: { fontSize: "clamp(12px, 5.5cqh, 16.5px)" } as React.CSSProperties,
-  sidePoints: { fontSize: "clamp(9.5px, 4.2cqh, 12.5px)" } as React.CSSProperties,
+  sideName: { fontSize: "clamp(12.7px, 5.9cqh, 17.5px)" } as React.CSSProperties,
+  sidePoints: { fontSize: "clamp(10px, 4.5cqh, 13.5px)" } as React.CSSProperties,
 };
 
 export function MiniBoardOverlay({
@@ -592,8 +593,7 @@ export function MiniBoardOverlay({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 z-[50] [container-type:size] flex flex-col items-center bg-[#F3F4F6] p-1 sm:p-4 font-sans select-none overflow-y-auto min-h-0"
-              style={PODIUM_CONTAINER_STYLE}
+              className="absolute inset-0 z-[50] [container-type:size] flex flex-col items-center bg-[#F3F4F6] font-sans select-none overflow-y-auto min-h-0"
             >
               <style>{`
                 @keyframes medal-shine {
@@ -643,7 +643,10 @@ export function MiniBoardOverlay({
                 }
               `}</style>
               
-              <div className="flex flex-col items-center justify-between w-full h-full max-h-[420px] my-auto min-h-0">
+              <div
+                className="flex flex-col items-center justify-between w-full h-full max-h-[420px] p-1 sm:p-4 my-auto min-h-0"
+                style={PODIUM_CONTAINER_STYLE}
+              >
                 <motion.div 
                   initial={{ y: -150, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
@@ -655,16 +658,16 @@ export function MiniBoardOverlay({
                 </motion.div>
 
                 <div
-                  className="relative flex-1 min-h-0 w-full max-w-[340px] sm:max-w-[420px] mx-auto flex items-end justify-center gap-1 sm:gap-3 px-1 sm:px-4 z-20 pt-4 sm:pt-8"
+                  className="relative flex-1 min-h-0 w-full max-w-[340px] sm:max-w-[420px] mx-auto flex items-end justify-center gap-0.5 sm:gap-2 px-1 sm:px-4 z-20 pt-4 pb-1 sm:pt-8 sm:pb-2.5"
                   style={PODIUM_STAGE_STYLE}
                 >
                   {/* 2nd Place */}
-                  <div className="w-[31%] flex flex-col items-center justify-end relative max-h-full group z-20">
+                  <div className="w-[31%] min-w-0 flex flex-col items-center justify-end relative max-h-full group z-20">
                     {second ? (
                       <>
                         <div className={`relative mb-0.5 w-fit mx-auto ${getAnimClass("animate-podium-pop")}`} style={{ animationDelay: '2.4s' }}>
                           <div
-                            className={`${restOfPlayers.length > 0 ? "w-9 h-9 sm:w-20 sm:h-20" : "w-11 h-11 sm:w-24 sm:h-24"} rounded-full bg-[#E2E8F0] flex items-center justify-center text-xl sm:text-5xl border-[3px] sm:border-[4px] border-[#0A2540] overflow-hidden relative`}
+                            className={`${restOfPlayers.length > 0 ? "w-9 h-9 sm:w-[88px] sm:h-[88px] text-[18px] sm:text-[46px]" : "w-[46px] h-[46px] sm:w-[102px] sm:h-[102px] text-[23px] sm:text-[54px]"} rounded-full bg-[#E2E8F0] flex items-center justify-center border-[3px] sm:border-[4px] border-[#0A2540] overflow-hidden relative`}
                             style={sizes.sideAvatar}
                           >
                             <span className="select-none leading-none" style={sizes.sideEmoji}>{second.avatar}</span>
@@ -694,7 +697,7 @@ export function MiniBoardOverlay({
                           style={{ ...sizes.sideTextWrap, animationDelay: '2.6s' }}
                         >
                           <span
-                            className="text-[#0A2540] font-black text-[11px] sm:text-base truncate block w-full leading-tight"
+                            className="text-[#0A2540] font-black text-xs sm:text-[17px] truncate block w-full leading-tight"
                             dir="auto"
                             style={sizes.sideName}
                           >
@@ -702,7 +705,7 @@ export function MiniBoardOverlay({
                           </span>
                           <span
                             dir={isRTL ? "rtl" : "ltr"}
-                            className="text-slate-500 font-extrabold text-[9.5px] sm:text-xs block leading-none"
+                            className="text-slate-500 font-extrabold text-[10px] sm:text-[13px] block leading-none"
                             style={sizes.sidePoints}
                           >
                             {t("podium.points", { count: second.points ?? 0 })}
@@ -715,7 +718,7 @@ export function MiniBoardOverlay({
                   </div>
 
                   {/* 1st Place */}
-                  <div className="w-[38%] flex flex-col items-center justify-end relative max-h-full group z-30">
+                  <div className="w-[38%] min-w-0 flex flex-col items-center justify-end relative max-h-full group z-30">
                     {first ? (
                       <>
                         <div className={`relative mb-0.5 sm:mb-1 w-fit mx-auto ${getAnimClass("animate-podium-pop")}`} style={{ animationDelay: '1.0s' }}>
@@ -728,7 +731,7 @@ export function MiniBoardOverlay({
                           </div>
 
                           <div
-                            className={`${restOfPlayers.length > 0 ? "w-10 h-10 sm:w-24 sm:h-24" : "w-[52px] h-[52px] sm:w-28 sm:h-28"} rounded-full bg-[#FFD13B] flex items-center justify-center text-[22px] sm:text-[62px] border-[3px] sm:border-[5px] border-[#0A2540] overflow-hidden relative group-hover:scale-105 transition-transform duration-300`}
+                            className={`${restOfPlayers.length > 0 ? "w-[42px] h-[42px] sm:w-[104px] sm:h-[104px] text-[22px] sm:text-[56px]" : "w-14 h-14 sm:w-[120px] sm:h-[120px] text-[28px] sm:text-[66px]"} rounded-full bg-[#FFD13B] flex items-center justify-center border-[3px] sm:border-[5px] border-[#0A2540] overflow-hidden relative group-hover:scale-105 transition-transform duration-300`}
                             style={sizes.firstAvatar}
                           >
                             <span className="select-none leading-none" style={sizes.firstEmoji}>{first.avatar}</span>
@@ -758,7 +761,7 @@ export function MiniBoardOverlay({
                           style={{ ...sizes.firstTextWrap, animationDelay: '1.2s' }}
                         >
                           <span
-                            className="text-[#0A2540] font-black text-xs sm:text-[20px] truncate block w-full leading-tight"
+                            className="text-[#0A2540] font-black text-[13px] sm:text-[21px] truncate block w-full leading-tight"
                             dir="auto"
                             style={sizes.firstName}
                           >
@@ -766,7 +769,7 @@ export function MiniBoardOverlay({
                           </span>
                           <span
                             dir={isRTL ? "rtl" : "ltr"}
-                            className="text-yellow-600 font-black text-[10px] sm:text-[13px] block leading-none"
+                            className="text-yellow-600 font-black text-[10.5px] sm:text-[14px] block leading-none"
                             style={sizes.firstPoints}
                           >
                             {t("podium.points", { count: first.points ?? 0 })}
@@ -779,12 +782,12 @@ export function MiniBoardOverlay({
                   </div>
 
                   {/* 3rd Place */}
-                  <div className="w-[31%] flex flex-col items-center justify-end relative max-h-full group z-10">
+                  <div className="w-[31%] min-w-0 flex flex-col items-center justify-end relative max-h-full group z-10">
                     {third ? (
                       <>
                         <div className={`relative mb-0.5 w-fit mx-auto ${getAnimClass("animate-podium-pop")}`} style={{ animationDelay: '3.6s' }}>
                           <div
-                            className={`${restOfPlayers.length > 0 ? "w-9 h-9 sm:w-20 sm:h-20" : "w-11 h-11 sm:w-24 sm:h-24"} rounded-full bg-[#FFB074] flex items-center justify-center text-xl sm:text-5xl border-[3px] sm:border-[4px] border-[#0A2540] overflow-hidden relative`}
+                            className={`${restOfPlayers.length > 0 ? "w-9 h-9 sm:w-[88px] sm:h-[88px] text-[18px] sm:text-[46px]" : "w-[46px] h-[46px] sm:w-[102px] sm:h-[102px] text-[23px] sm:text-[54px]"} rounded-full bg-[#FFB074] flex items-center justify-center border-[3px] sm:border-[4px] border-[#0A2540] overflow-hidden relative`}
                             style={sizes.sideAvatar}
                           >
                             <span className="select-none leading-none" style={sizes.sideEmoji}>{third.avatar}</span>
@@ -814,7 +817,7 @@ export function MiniBoardOverlay({
                           style={{ ...sizes.sideTextWrap, animationDelay: '3.8s' }}
                         >
                           <span
-                            className="text-[#0A2540] font-black text-[11px] sm:text-base truncate block w-full leading-tight"
+                            className="text-[#0A2540] font-black text-xs sm:text-[17px] truncate block w-full leading-tight"
                             dir="auto"
                             style={sizes.sideName}
                           >
@@ -822,7 +825,7 @@ export function MiniBoardOverlay({
                           </span>
                           <span
                             dir={isRTL ? "rtl" : "ltr"}
-                            className="text-orange-600 font-extrabold text-[9.5px] sm:text-xs block leading-none"
+                            className="text-orange-600 font-extrabold text-[10px] sm:text-[13px] block leading-none"
                             style={sizes.sidePoints}
                           >
                             {t("podium.points", { count: third.points ?? 0 })}
