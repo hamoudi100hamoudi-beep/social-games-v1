@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react';
+import { useAppTranslation } from '../../i18n/useAppTranslation';
 
 interface AvatarCarouselProps {
   selectedEmoji: string;
@@ -15,18 +16,28 @@ export default function AvatarCarousel({
   onNextAvatar,
   onOpenGrid,
 }: AvatarCarouselProps) {
+  const { t } = useAppTranslation('lobby');
+
   return (
     <div className={`flex flex-col items-center w-full ${isKeyboardOpen ? 'gap-1.5' : 'gap-2'}`}>
       <div className="flex items-center justify-between w-full relative max-w-[280px] sm:max-w-[320px]">
         <button 
           type="button"
           onClick={onPrevAvatar}
+          aria-label={t('avatarCarousel.prevAria')}
+          title={t('avatarCarousel.prevAria')}
           className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-10 h-10' : 'w-11 h-11'}`}
         >
           <ChevronLeft strokeWidth={3.5} className="w-5 h-5" />
         </button>
         
-        <div className="relative group cursor-pointer" onClick={onOpenGrid}>
+        <button
+          type="button"
+          onClick={onOpenGrid}
+          aria-label={t('avatarCarousel.openGridAria')}
+          title={t('avatarCarousel.openGridAria')}
+          className="relative group cursor-pointer bg-transparent border-0 p-0 rounded-full focus-visible:outline-2 focus-visible:outline-[#38BDF8]"
+        >
           <div className={`rounded-full bg-white border-4 border-[#38BDF8] flex items-center justify-center shadow-md hover:scale-105 transition-transform select-none overflow-hidden ${
             isKeyboardOpen 
               ? "w-[85px] h-[85px]" 
@@ -45,11 +56,13 @@ export default function AvatarCarousel({
           <div className={`absolute -bottom-1 -right-1 bg-[#38BDF8] rounded-full border-2 border-white text-white shadow-md transition-all hover:scale-110 active:scale-95 ${isKeyboardOpen ? 'p-1.5' : 'p-2'}`}>
             <LayoutGrid size={isKeyboardOpen ? 14 : 16} strokeWidth={3} />
           </div>
-        </div>
+        </button>
         
         <button 
           type="button"
           onClick={onNextAvatar}
+          aria-label={t('avatarCarousel.nextAria')}
+          title={t('avatarCarousel.nextAria')}
           className={`bg-white hover:bg-slate-50 border border-[#2E2882]/10 rounded-full flex items-center justify-center transition-all active:scale-90 text-[#2E2882] shadow-sm cursor-pointer ${isKeyboardOpen ? 'w-10 h-10' : 'w-11 h-11'}`}
         >
           <ChevronRight strokeWidth={3.5} className="w-5 h-5" />

@@ -67,6 +67,7 @@ let lastRoomsInfoFetchTime = 0;
 export default function Lobby({ onPlay }: LobbyProps) {
   const { socket } = useSocket();
   const { t, languageMode, changeLanguageMode } = useAppTranslation('common');
+  const { t: tLobby, isRTL } = useAppTranslation('lobby');
   const { t: tModals, isRTL: isModalsRTL } = useAppTranslation('modals');
   const [screen, setScreen] = useState<Screen>('home');
   const [nickname, setNickname] = useState(() => {
@@ -341,7 +342,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
   const handleNewRoomClick = () => {
     if (newRoomNoticeTimer.current) clearTimeout(newRoomNoticeTimer.current);
-    setNewRoomNotice("هذه الميزة غير متوفرة بعد");
+    setNewRoomNotice(tLobby('rooms.newRoomUnavailable'));
     newRoomNoticeTimer.current = setTimeout(() => {
       setNewRoomNotice(null);
     }, 2500);
@@ -437,7 +438,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
       socket.emit('get_room_info', finalRoom, (data: any) => {
         const maxCapacity = data?.max || config.maxPlayers;
         if (data && data.count >= maxCapacity) {
-          setJoinError('عذراً، هذه الغرفة ممتلئة بالكامل!');
+          setJoinError(tModals('alerts.roomFull.message'));
           if (!selectedRoom) {
              setNicknameError(false);
           }
@@ -503,10 +504,16 @@ export default function Lobby({ onPlay }: LobbyProps) {
 
               
               <div className={`w-full max-w-[280px] sm:max-w-[320px] ${isKeyboardOpen ? 'space-y-1' : 'space-y-2'}`}>
-                <label className={`font-black text-[#8C8AA7] uppercase tracking-wide ${isKeyboardOpen ? 'text-[11px]' : 'text-xs'}`}>NICKNAME</label>
+                <label
+                  dir={isRTL ? 'rtl' : 'ltr'}
+                  className={`block text-start font-black text-[#8C8AA7] ${isRTL ? '' : 'uppercase tracking-wide'} ${isKeyboardOpen ? 'text-[11px]' : 'text-xs'}`}
+                >
+                  {tLobby('home.nicknameLabel')}
+                </label>
                 <textarea 
                   maxLength={10}
                   rows={1}
+                  dir="auto"
                   value={nickname}
                   onChange={(e) => { setNickname(e.target.value.replace(/\n/g, '')); setNicknameError(false); setJoinError(null); }}
                   onKeyDown={(e) => {
@@ -516,7 +523,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                     }
                   }}
                   onFocus={handleIOSFocusBypass}
-                  placeholder="Enter your name..."
+                  placeholder={tLobby('home.nicknamePlaceholder')}
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -543,7 +550,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                 : "h-12 [@media(min-height:600px)]:h-14 sm:h-16 text-base [@media(min-height:600px)]:text-lg sm:text-xl"
             }`}
           >
-            <span>ROOMS</span>
+            <span dir={isRTL ? 'rtl' : 'ltr'}>{tLobby('home.roomsButton')}</span>
           </button>
 
           {/* Language Selector (Start Screen Only) */}
@@ -664,7 +671,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
         buttons={[
           {
             id: "lobby-room-full-ok-btn",
-            text: "OK",
+            text: t('actions.ok'),
             onClick: () => setJoinError(null),
             variant: "danger",
           },
@@ -688,22 +695,28 @@ export default function Lobby({ onPlay }: LobbyProps) {
           </motion.div>
         </div>
 
-        <h3 id="lobby-room-full-desc" className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-2">
-          This room is full
+        <h3
+          id="lobby-room-full-desc"
+          dir={isModalsRTL ? 'rtl' : 'ltr'}
+          className="text-[20px] font-black text-[#2E2882] leading-snug tracking-tight mb-6"
+        >
+          {tModals('alerts.roomFull.message')}
         </h3>
-        <p id="lobby-room-full-desc-ar" className="text-[#8C8AA7] text-base font-bold mb-6">
-          هذه الغرفة ممتلئة بالكامل
-        </p>
       </CinematicModal>
 
       {/* Avatar Grid Overlay */}
       {showAvatarGrid && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 cursor-pointer" onClick={() => setShowAvatarGrid(false)} />
-          <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 border-2 border-slate-200 animate-in zoom-in-95 duration-200" dir="rtl">
+          <div className="relative w-full max-w-sm bg-white rounded-3xl p-5 border-2 border-slate-200 animate-in zoom-in-95 duration-200" dir={isRTL ? 'rtl' : 'ltr'}>
             <div className="flex justify-between items-center mb-4">
-              <span className="text-sm font-black text-[#38BDF8]">اختر أفاتار</span>
-              <button onClick={() => setShowAvatarGrid(false)} className="text-[#8C8AA7] hover:text-[#2E2882] bg-slate-100 p-1.5 rounded-full transition-colors active:scale-90">
+              <span className="text-sm font-black text-[#38BDF8]">{tLobby('avatarGrid.title')}</span>
+              <button
+                type="button"
+                onClick={() => setShowAvatarGrid(false)}
+                aria-label={t('actions.close')}
+                className="text-[#8C8AA7] hover:text-[#2E2882] bg-slate-100 p-1.5 rounded-full transition-colors active:scale-90"
+              >
                 <X size={18} strokeWidth={3} />
               </button>
             </div>
@@ -716,7 +729,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
                   setShowCustomEmojiModal(true);
                 }}
                 className="h-12 w-12 rounded-2xl bg-[#38BDF8]/10 hover:bg-[#38BDF8]/20 border-2 border-dashed border-[#38BDF8] flex items-center justify-center text-[#38BDF8] active:scale-95 transition-all cursor-pointer shadow-xs"
-                title="أضف إيموجي مخصص"
+                title={tLobby('avatarGrid.addCustomEmoji')}
+                aria-label={tLobby('avatarGrid.addCustomEmoji')}
               >
                 <Plus size={22} strokeWidth={3.5} />
               </button>
@@ -725,6 +739,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
                 <button
                   key={`${emoji}-${idx}`}
                   type="button"
+                  aria-label={tLobby('avatarGrid.selectAvatar', { emoji })}
                   onClick={() => { setSelectedEmoji(emoji); setShowAvatarGrid(false); }}
                   className={`text-3xl h-12 w-12 flex items-center justify-center hover:scale-125 transition-transform ${emoji === selectedEmoji ? 'bg-[#38BDF8]/15 rounded-2xl scale-110 border-2 border-[#38BDF8] font-black shadow-inner' : ''}`}
                 >

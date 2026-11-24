@@ -71,11 +71,11 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 text-amber-500 font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <Zap size={15} className="text-amber-500 fill-amber-500 shrink-0" />
-                  <span className="text-amber-500/90 font-normal">
+                  <span dir={uiDir} className="text-amber-500/90 font-normal text-left">
                     <Trans
                       t={t}
                       i18nKey="activity.guessClose"
@@ -95,14 +95,14 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <AlertTriangle
                     size={14}
                     className="text-[#EF4444] shrink-0 font-extrabold"
                   />
-                  <span className="text-[#EF4444] font-normal">
+                  <span dir={uiDir} className="text-[#EF4444] font-normal text-left">
                     <Trans
                       t={t}
                       i18nKey="activity.drawReported"
@@ -121,14 +121,14 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <AlertTriangle
                     size={14}
                     className="text-[#EF4444] shrink-0 font-extrabold"
                   />
-                  <span className="text-[#EF4444] font-normal">
+                  <span dir={uiDir} className="text-[#EF4444] font-normal text-left">
                     {t("activity.turnCanceled")}
                   </span>
                 </div>
@@ -146,7 +146,7 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <Check
@@ -154,7 +154,7 @@ export function GameActivityFeed({
                     className="stroke-[3.5] text-[#00E540] shrink-0"
                   />
                   {isSelfGuesser ? (
-                    <span className="font-normal text-[#00E540]">
+                    <span dir={uiDir} className="font-normal text-[#00E540] text-left">
                       <Trans
                         t={t}
                         i18nKey="activity.guessHitSelf"
@@ -165,7 +165,7 @@ export function GameActivityFeed({
                       />
                     </span>
                   ) : (
-                    <span className="font-normal text-[#00E540]">
+                    <span dir={uiDir} className="font-normal text-[#00E540] text-left">
                       <Trans
                         t={t}
                         i18nKey="activity.guessHitOther"
@@ -185,14 +185,14 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <Clock
                     size={14}
                     className="text-[#1AD2FF] shrink-0"
                   />
-                  <span className="font-normal text-[#1AD2FF]">
+                  <span dir={uiDir} className="font-normal text-[#1AD2FF] text-left">
                     {t("activity.roundInterval")}
                   </span>
                 </div>
@@ -206,7 +206,7 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={playerName ? uiDir : "auto"}
+                  dir="ltr"
                   className="flex items-center gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <Pencil
@@ -214,7 +214,7 @@ export function GameActivityFeed({
                     className="text-[#1AD2FF] shrink-0"
                   />
                   {playerName ? (
-                    <span className="text-[#1AD2FF]">
+                    <span dir={uiDir} className="text-[#1AD2FF] text-left">
                       <Trans
                         t={t}
                         i18nKey="activity.turnOf"
@@ -225,7 +225,7 @@ export function GameActivityFeed({
                       />
                     </span>
                   ) : (
-                    <span dir="auto" className="text-[#1AD2FF]" style={{ unicodeBidi: "plaintext" }}>
+                    <span dir="auto" className="text-[#1AD2FF] text-left" style={{ unicodeBidi: "plaintext" }}>
                       {text}
                     </span>
                   )}
@@ -245,7 +245,7 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={winnerName !== undefined && score !== undefined ? uiDir : "auto"}
+                  dir="ltr"
                   className="flex items-start gap-2 text-[#1AD2FF] font-normal text-sm sm:text-base py-1 animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <Info
@@ -253,7 +253,7 @@ export function GameActivityFeed({
                     className="text-[#1AD2FF] shrink-0 mt-0.5"
                   />
                   {winnerName && typeof score === "number" ? (
-                    <span className="font-normal">
+                    <span dir={uiDir} className="font-normal text-left">
                       <Trans
                         t={t}
                         i18nKey="activity.gameOver"
@@ -265,7 +265,7 @@ export function GameActivityFeed({
                       />
                     </span>
                   ) : (
-                    <span dir="auto" className="font-normal" style={{ unicodeBidi: "plaintext" }}>
+                    <span dir="auto" className="font-normal text-left" style={{ unicodeBidi: "plaintext" }}>
                       {text}
                     </span>
                   )}
@@ -278,14 +278,14 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 text-[#00E540] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <Check
                     size={14}
                     className="stroke-[3.5] text-[#00E540] shrink-0"
                   />
-                  <span className="font-normal">{t("activity.allGuessed")}</span>
+                  <span dir={uiDir} className="font-normal text-left">{t("activity.allGuessed")}</span>
                 </div>
               );
             }
@@ -311,7 +311,7 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={isDrawerSelf || actorName ? uiDir : "auto"}
+                  dir="ltr"
                   className="flex items-center gap-2 text-[#EF4444] font-normal text-sm sm:text-base py-0.5 animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <AlertTriangle
@@ -319,9 +319,9 @@ export function GameActivityFeed({
                     className="text-[#EF4444] shrink-0"
                   />
                   {isDrawerSelf ? (
-                    <span className="font-normal">{t("activity.turnLostSelf")}</span>
+                    <span dir={uiDir} className="font-normal text-left">{t("activity.turnLostSelf")}</span>
                   ) : actorName ? (
-                    <span className="font-normal">
+                    <span dir={uiDir} className="font-normal text-left">
                       <Trans
                         t={t}
                         i18nKey="activity.turnLostOther"
@@ -332,7 +332,7 @@ export function GameActivityFeed({
                       />
                     </span>
                   ) : (
-                    <span dir="auto" className="font-normal" style={{ unicodeBidi: "plaintext" }}>
+                    <span dir="auto" className="font-normal text-left" style={{ unicodeBidi: "plaintext" }}>
                       {text}
                     </span>
                   )}
@@ -359,14 +359,14 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={isDrawerSelf || actorName ? uiDir : "auto"}
+                  dir="ltr"
                   className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5 text-[#1AD2FF] animate-in fade-in slide-in-from-left-2 duration-200"
                 >
                   <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
                   {isDrawerSelf ? (
-                    <span className="font-normal">{t("activity.turnSkippedSelf")}</span>
+                    <span dir={uiDir} className="font-normal text-left">{t("activity.turnSkippedSelf")}</span>
                   ) : actorName ? (
-                    <span className="font-normal">
+                    <span dir={uiDir} className="font-normal text-left">
                       <Trans
                         t={t}
                         i18nKey="activity.turnSkippedOther"
@@ -377,7 +377,7 @@ export function GameActivityFeed({
                       />
                     </span>
                   ) : (
-                    <span dir="auto" className="font-normal" style={{ unicodeBidi: "plaintext" }}>
+                    <span dir="auto" className="font-normal text-left" style={{ unicodeBidi: "plaintext" }}>
                       {text}
                     </span>
                   )}
@@ -390,11 +390,11 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5 text-[#1AD2FF]"
                 >
                   <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
-                  <span>{t("activity.roundTimeoutWon")}</span>
+                  <span dir={uiDir} className="text-left">{t("activity.roundTimeoutWon")}</span>
                 </div>
               );
             }
@@ -403,11 +403,11 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5 text-[#1AD2FF]"
                 >
                   <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
-                  <span>{t("activity.nobodyHit")}</span>
+                  <span dir={uiDir} className="text-left">{t("activity.nobodyHit")}</span>
                 </div>
               );
             }
@@ -420,12 +420,12 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={revealedWord ? uiDir : "auto"}
+                  dir="ltr"
                   className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5 text-[#1AD2FF]"
                 >
                   <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
                   {revealedWord ? (
-                    <span>
+                    <span dir={uiDir} className="text-left">
                       <Trans
                         t={t}
                         i18nKey="activity.answerReveal"
@@ -436,7 +436,7 @@ export function GameActivityFeed({
                       />
                     </span>
                   ) : (
-                    <span dir="auto" style={{ unicodeBidi: "plaintext" }}>
+                    <span dir="auto" className="text-left" style={{ unicodeBidi: "plaintext" }}>
                       {text}
                     </span>
                   )}
@@ -450,11 +450,11 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5 text-[#1AD2FF]"
                 >
                   <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
-                  <span>{t("activity.nobodyHit")}</span>
+                  <span dir={uiDir} className="text-left">{t("activity.nobodyHit")}</span>
                 </div>
               );
             }
@@ -463,11 +463,11 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5 text-[#1AD2FF]"
                 >
                   <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
-                  <span>{t("activity.roundTimeoutWon")}</span>
+                  <span dir={uiDir} className="text-left">{t("activity.roundTimeoutWon")}</span>
                 </div>
               );
             }
@@ -480,11 +480,11 @@ export function GameActivityFeed({
               return (
                 <div
                   key={msg.id}
-                  dir={uiDir}
+                  dir="ltr"
                   className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5 text-[#1AD2FF]"
                 >
                   <Pencil size={12} className="shrink-0 text-[#1AD2FF]" />
-                  <span>
+                  <span dir={uiDir} className="text-left">
                     <Trans
                       t={t}
                       i18nKey="activity.answerReveal"
@@ -535,11 +535,12 @@ export function GameActivityFeed({
             return (
               <div
                 key={msg.id}
+                dir="ltr"
                 className="flex items-center gap-2 font-normal text-sm sm:text-base py-0.5"
                 style={{ color: textColor }}
               >
                 {iconNode}
-                <span dir="auto" style={{ unicodeBidi: "plaintext" }}>
+                <span dir="auto" className="text-left" style={{ unicodeBidi: "plaintext" }}>
                   {text}
                 </span>
               </div>
@@ -565,11 +566,11 @@ export function GameActivityFeed({
         })}
         {!isFreeDraw && (
           <div
-            dir={uiDir}
+            dir="ltr"
             className="flex items-center gap-1.5 text-primary-brand font-normal text-sm sm:text-base"
           >
             <Info size={14} className="shrink-0" />
-            <span>{t("activity.waitingForPlayers")}</span>
+            <span dir={uiDir} className="text-left">{t("activity.waitingForPlayers")}</span>
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 # 🌐 خارطة طريق التدويل وتعدد اللغات (Localization Roadmap — `PHASE L10N`)
 
-**المستودع المرجعي:** `hamoudi100hamoudi-beep/social-games-v1` (آخر Commit تنفيذ موثق: `e2c66a6068eecb685f725f2742695b8f509eb8d1`)  
-**الحالة الحالية (`2026-11-23`):**  
+**المستودع المرجعي:** `hamoudi100hamoudi-beep/social-games-v1` (آخر Commit تنفيذ موثق: `a78ac5cca480570d2cd97954625184311537120b`)  
+**الحالة الحالية (`2026-11-24`):**  
 - `L10N-0`: `COMPLETED` (`2026-11-22`)  
 - `L10N-0.1`: `COMPLETED` (`2026-11-22`)  
 - `L10N-1`: `COMPLETED — OWNER MANUALLY VERIFIED` (`2026-11-22` / معتمد `2026-11-23`)  
@@ -10,8 +10,9 @@
 - `L10N-2.1`: `COMPLETED — REMAINING POPUPS LOCALIZED, REGISTRY CREATED, AND OWNER VERIFIED` (`2026-11-23`)  
 - `L10N-3`: `COMPLETED — OWNER MANUALLY VERIFIED` (`2026-11-23` — Commit: `e2c66a6068eecb685f725f2742695b8f509eb8d1`)
 - `L10N-4`: `COMPLETED — OWNER MANUALLY VERIFIED` (`2026-11-23` — Pre-L10N-5 Ref: `f1d9f259c1968261865ee618d1eec10863b3c36b`)
-- `L10N-5`: **`AWAITING MANUAL VERIFICATION`** (`2026-11-23` — Stage 2 implemented & automated checks passed; awaiting owner manual check before `L10N-6`; commit reference pending owner sync)
-- `L10N-6`: **`NOT STARTED`**
+- `L10N-5`: `COMPLETED — OWNER MANUALLY VERIFIED` (`2026-11-24` — Commit: `a78ac5cca480570d2cd97954625184311537120b`)
+- `L10N-6`: **`AWAITING MANUAL VERIFICATION`** (`2026-11-24` — Stage 2 implemented & automated checks passed; awaiting owner manual check before `L10N-7`; commit reference pending owner sync)
+- `L10N-7`: **`NOT STARTED`**
 
 **الوثائق المرجعية المرتبطة:**  
 - دستور محرك الرسم والتراجع: [`AGENTS.md`](./AGENTS.md)  
@@ -423,9 +424,9 @@
 
 ---
 
-### المرحلة `L10N-5` — الدردشة والتخمينات وإشعارات الدردشة (`Chat, Guesses & Chat Notifications`)
-1. **الاسم والرقم:** `PHASE L10N-5 — Chat, Guesses & Chat Notifications` — **`[~] AWAITING MANUAL VERIFICATION`** (`2026-11-23` — مرجع التنفيذ النهائي: بانتظار مزامنة المالك)
-2. **الهدف:** توطين `OverlayChatRoom` و`GameActivityFeed` و`ExperimentalHitOverlay` وحالات حقل التخمين في الغرفتين، بما يشمل رسائل الانضمام والمغادرة والتصويت والطرد والـ AFK وانقطاع الاتصال ومنع تسريب الإجابة محلياً لكل لاعب عبر `eventCode`/`params`/`actorId`، مع عدم ترجمة الرسائل والتخمينات التي كتبها اللاعبون والحفاظ على كافة تحسينات BiDi وتكافؤ `GameRoom` و`ExperimentalGameRoom`.
+#### المرحلة `L10N-5` — الدردشة والتخمينات وإشعارات الدردشة (`Chat, Guesses & Chat Notifications`)
+1. **الاسم والرقم:** `PHASE L10N-5 — Chat, Guesses & Chat Notifications` — **`[x] COMPLETED — OWNER MANUALLY VERIFIED`** (`2026-11-24` — Commit: `a78ac5cca480570d2cd97954625184311537120b`)
+2. **الهدف:** توطين `OverlayChatRoom` و`GameActivityFeed` و`ExperimentalHitOverlay` وحقل التخمين في الغرفتين، بما يشمل رسائل الانضمام والمغادرة والتصويت والطرد والـ AFK وانقطاع الاتصال ومنع تسريب الإجابة محلياً لكل لاعب عبر `eventCode`/`params`/`actorId`، مع عدم ترجمة الرسائل والتخمينات التي كتبها اللاعبون والحفاظ على كافة تحسينات BiDi وتكافؤ `GameRoom` و`ExperimentalGameRoom`.
 3. **الملفات المنشأة والمعدلة فعلياً ضمن النطاق المسموح:**
    - `src/i18n/locales/en/events.ts` (إنشاء — 40 مفتاحاً نصياً/جمعياً في نطاق `events`)
    - `src/i18n/locales/ar/events.ts` (إنشاء — 44 مفتاحاً متضمناً صيغ الجمع الست CLDR `zero/one/two/few/many/other` عبر `DeepPluralLocaleSchema<typeof enEvents>`)
@@ -444,37 +445,38 @@
    - `npm run build` (`vite build`): نجاح تام خلال `8.47s` (`2246` وحدة؛ `dist/assets/index-BLgNIkAT.js`: `1,254.64 kB │ gzip: 343.23 kB`).
    - التحقق من تكافؤ المفاتيح وصيغ الجمع العربية (`0, 1, 2, 5, 15, 100`) عبر `tsx`: تطابق كامل (`missingInAr: []`, `missingInEn: []`).
    - جميع اختبارات الخادم الخمسة: `212 + 79 + 631 + 29 + 53 = 1004` فحص نجاح (`0 failed`).
-7. **ما بقي للتحقق اليدوي قبل إغلاق `L10N-5`:** اختبار المالك اليدوي بحسابين (عربي + إنجليزي) في نفس الغرفة التنافسية وفي الرسم الحر وفق قائمة التحقق المعتمدة.
+7. **التحقق اليدوي من المالك (`COMPLETED — OWNER MANUALLY VERIFIED — 2026-11-24`):** اختبر المالك اللعبة فعلياً بحسابين داخل نفس الغرفة (حساب بالعربية وآخر بالإنجليزية)، وعرض كل حساب لغته المختارة بصورة سليمة دون الحاجة لأي تعديل برمجي لإغلاق `L10N-5`.
 8. **الاعتماديات:** `L10N-4`.
 
 ---
 
 ### المرحلة `L10N-6` — اللوبي ومتصفح الغرف (`Lobby & Room Browser`)
-1. **الاسم والرقم:** `PHASE L10N-6 — Lobby & Room Browser`
-2. **الهدف:** توطين النصوص المتبقية في `Lobby.tsx` (بما فيها نوافذ التنبيه الداخلية وشبكة الأفاتار و`NICKNAME` وplaceholder ورسائل `newRoomNotice`/`joinError`) و`RoomsBrowserScreen.tsx` و`RoomInfoModal.tsx`، مع الحفاظ على أسماء الغرف المخصصة والمعرفات التقنية كما هي، و**عدم إعادة بناء منتقي اللغة المضاف في `L10N-1`**.
-3. **الملفات المسموحة:**
-   - `src/components/Lobby.tsx` (النصوص المتبقية والنوافذ الداخلية فقط دون تعديل منطق أو بنية منتقي اللغة من `L10N-1`)
-   - `src/components/lobby/RoomsBrowserScreen.tsx`
-   - `src/components/lobby/RoomInfoModal.tsx`
-   - `src/components/lobby/AvatarCarousel.tsx` (فقط `aria-label` إن وُجدت حاجة)
-   - `src/i18n/locales/*`
-4. **الملفات المحظورة:** `server/*`, `src/types/game.ts` (`getRoomConfig` و`ROOM_PRESETS` التقنية), `src/components/game/*`, `src/components/experimental/*`, `AGENTS.md`.
+1. **الاسم والرقم:** `PHASE L10N-6 — Lobby & Room Browser` — **`[~] AWAITING MANUAL VERIFICATION`** (`2026-11-24` — مرجع التنفيذ النهائي: بانتظار مزامنة المالك)
+2. **الهدف:** توطين النصوص المتبقية في `Lobby.tsx` (بما فيها تسمية ومؤقت الإدخال لـ `NICKNAME`، زر الشاشة الرئيسية `"الغرف"`، رسالة الميزة غير المتوفرة بعد، نافذة امتلاء الغرفة ورسالة خطأ الانضمام بإعادة استخدام `common:actions.ok` و`common:actions.close` و`modals:alerts.roomFull.message`، وشبكة اختيار الأفاتار) و`RoomsBrowserScreen.tsx` و`RoomInfoModal.tsx` و`AvatarCarousel.tsx`، مع الحفاظ الكامل على أسماء الغرف والمعرفات التقنية ومواضيعها بدون ترجمة، إضافةً إلى تعديل تخطيطي محدود في `GameActivityFeed.tsx` لإبقاء صفوف إشعارات النظام محاذية لليسار مثل تخمينات اللاعبين مع حفظ اتجاه النص الداخلي RTL/LTR.
+3. **الملفات المنشأة والمعدلة فعلياً ضمن النطاق المسموح:**
+   - `src/i18n/locales/en/lobby.ts` و`src/i18n/locales/ar/lobby.ts` (إنشاء نطاق `lobby` بصيغة ثابتة `{{count}} نقطة` في العربية دون صيغ جمع)
+   - `src/i18n/locales/en/index.ts` و`src/i18n/locales/ar/index.ts` (تسجيل نطاق `lobby`)
+   - `src/components/Lobby.tsx` (توطين `NICKNAME` و`Enter your name...` مع `dir="auto"`، زر الرئيسية `"الغرف"` دون لمس منتقي اللغة `L10N-1` أو عناوين `DRAW.IO`/`INACTIVE`/`DISCONNECTED`/`ERROR`، إزالة التكرار الثنائي اللغة في مودال امتلاء الغرفة وإعادة استخدام `modals:alerts.roomFull.message` و`common:actions.ok`، وتوطين نافذة الأفاتار واتجاهها وأزرارها وإعادة استخدام `common:actions.close`)
+   - `src/components/lobby/RoomsBrowserScreen.tsx` (توطين `NEW ROOM` و`aria-label` لزر الرجوع واتجاه إشعار `newRoomNotice` مع إبقاء `GameTitle` `"ROOMS"` وأسماء ووسوم الغرف كما هي)
+   - `src/components/lobby/RoomInfoModal.tsx` (توطين `PLAY` -> `العب`، `Players` -> `اللاعبون`، `Theme` -> `الموضوع`، `To Win` -> `للفوز`، `OPEN` -> `مفتوح`، وعرض النقاط `{{count}} pts` / `{{count}} نقطة` بصيغة ثابتة دون صيغ جمع، مع إبقاء `INFO` وأسماء الغرف و`General`/`Free Draw` دون ترجمة، وضبط `dir="auto"` و`dir={isRTL ? 'rtl' : 'ltr'}` وإزالة `uppercase tracking-wider` عن التسميات العربية)
+   - `src/components/lobby/AvatarCarousel.tsx` (توطين أوصاف `aria-label`/`title` لأزرار التبديل وفتح المعرض، وتحويل حاوية فتح المعرض إلى `<button type="button">` مع الحفاظ التام على المظهر والسلوك)
+   - `src/components/game/GameActivityFeed.tsx` (**تعديل تخطيطي محدود فقط:** تثبيت `dir="ltr"` على حاويات `flex` الخارجية لجميع إشعارات النظام والتنبيهات بحيث تبقى محاذية لليسار مثل صفوف تخمينات اللاعبين، مع نقل `dir={uiDir}` مع `text-left` إلى عناصر `<span>` الداخلية لحفظ قراءة العربية RTL والإنجليزية LTR دون المساس بترتيب الرسائل أو تصنيفها أو تخمينات اللاعبين ودون لمس `OverlayChatRoom.tsx`)
+4. **الملفات المحظورة (تم احترامها بالكامل):** `OverlayChatRoom.tsx`, `server/*`, `src/types/game.ts` (`getRoomConfig`, `ROOM_PRESETS`), `GameRoom.tsx`, `ExperimentalGameRoom.tsx`, `DrawingCanvasCore.tsx`, `ExperimentalDrawingBoard.tsx`, `PlayersSidebar.tsx`, `FreeDrawPlayersList.tsx`, `src/i18n/index.ts`, `src/i18n/types.ts`, `AGENTS.md`, `package.json`, `bun.lock`.
 5. **الآليات المحمية:**
-   - بقاء `DRAW.IO`, `ROOMS`, `INFO`, `ERROR`, `INACTIVE`, `DISCONNECTED` كعناوين `GameTitle` بالإنجليزية دائماً.
-   - بقاء المعرفات التقنية (`General #Test`, `General #10P`, `Free Draw`, `Experimental Draw`, `#Custom`) دون تغيير منطق `getRoomConfig` (`Safeguard 9`).
-   - الحفاظ على `dir="auto"`/سلوك الإدخال في حقل الاسم المستعار وiOS Keyboard focus bypass في `Lobby.tsx`.
-6. **التعديلات الدقيقة:** ترجمة تسميات اللوبي ومتصفح الغرف ومودال معلومات الغرفة (`NEW ROOM`, `PLAY`, `Players`, `Theme`, `To Win`, `مفتوح`, `pts`, أسماء العرض المعيارية، ورسائل `هذه الميزة غير متوفرة بعد` / `عذراً، هذه الغرفة ممتلئة بالكامل!` عبر مفاتيح `i18n`).
-7. **المخاطر:** ضغط المساحة العمودية في شاشة اللوبي أو أعمدة `RoomInfoModal` الثلاثة (`grid-cols-3`) على الشاشات الصغيرة.
-8. **معايير الخروج:** اللوبي ومتصفح الغرف ومعلومات الغرفة مترجمة بالكامل دون كسر منتقي `L10N-1` أو أسماء الغرف المخصصة.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي للوبي وقائمة الغرف ومودال المعلومات بالعربية والإنجليزية و`Auto` على الهاتف وسطح المكتب.
-10. **الاعتماديات:** `L10N-5`.
+   - بقاء `DRAW.IO`, `ROOMS` (`GameTitle`), `INFO`, `ERROR`, `INACTIVE`, `DISCONNECTED` بالإنجليزية دائماً.
+   - بقاء المعرفات والأسماء التقنية (`General`, `General #Test`, `General #10P`, `Free Draw`, `Experimental Draw`, `#Custom`, `#Test`, `#10P`, `#Lab`) ومواضيع الغرف (`General`, `Free Draw`) دون أي تغيير في العرض أو المنطق (`Safeguard 9`).
+   - الحفاظ على `dir="auto"` وسلوك الإدخال و`handleIOSFocusBypass` في `Lobby.tsx`، ومنتقي لغة `L10N-1`، وإبقاء صفوف تخمينات اللاعبين في `GameActivityFeed.tsx` كما هي تماماً.
+6. **ما بقي للتحقق اليدوي قبل إغلاق `L10N-6`:** اختبار المالك اليدوي للوبي ومتصفح الغرف ومودال المعلومات (بما فيه الشاشات الضيقة ~360px) والمحاذاة اليسرى لإشعارات `GameActivityFeed` في العربية والإنجليزية و`Auto`.
+7. **الاعتماديات:** `L10N-5`.
 
 ---
 
 ### المرحلة `L10N-7` — أدوات الرسم والواجهة المتبقية (`Drawing Tools & Remaining UI`)
-1. **الاسم والرقم:** `PHASE L10N-7 — Drawing Tools & Remaining UI`
+1. **الاسم والرقم:** `PHASE L10N-7 — Drawing Tools & Remaining UI` — **`NOT STARTED`**
 2. **الهدف:** توطين أدوات الرسم (`FlipaClipControls.tsx`, `ExperimentalDrawingBoard.tsx` شاملةً `title` و`aria-label` ونوافذ `CLEAN` و`NAMES`) والنصوص المتفرقة المتبقية (`PlayersSidebar.tsx`, `FreeDrawPlayersList.tsx`, تلميحات/أزرار `GameRoom.tsx` و`ExperimentalGameRoom.tsx` المتبقية، `beforeunload`، و`ErrorBoundary.tsx`) مع الحفاظ الصارم على اتجاه أدوات الرسم وإحداثياتها.
-3. **الملفات المسموحة:**
+3. **شرط المالك الإلزامي لنقاط اللاعبين في `PlayersSidebar.tsx`:**
+   - يجب أن يستخدم لاحق نقاط اللاعبين في العربية الكلمة الثابتة **`"نقطة"`** دائماً بصيغة **`<number> نقطة`** (مثل `0 نقطة`، `1 نقطة`، `2 نقطة`، `5 نقطة`، `100 نقطة`) **دون استخدام صيغ الجمع العربية (`نقطتان` / `نقاط`)**. *(لا يُنفذ هذا التغيير خلال `L10N-6`).*
+4. **الملفات المسموحة:**
    - `src/components/experimental/ExperimentalDrawingBoard.tsx`
    - `src/components/game/FlipaClipControls.tsx`
    - `src/components/game/PlayersSidebar.tsx`
@@ -482,16 +484,16 @@
    - `src/components/GameRoom.tsx` و`src/components/experimental/ExperimentalGameRoom.tsx` (الأزرار والتلميحات المتبقية: `الخروج من الغرفة`, `الدردشة`, `Report drawing`, `You reported this draw`, `ابدأ الرسم`/`انضم للرسم`/`العودة للرسم`, `Empty`, `beforeunload`)
    - `src/ErrorBoundary.tsx`
    - `src/i18n/locales/*`
-4. **الملفات المحظورة:** `src/components/game/DrawingCanvasCore.tsx`, `src/utils/canvasFloodFill.ts`, `src/utils/canvasCheckpointManager.ts`, `server/*`, `AGENTS.md`.
-5. **الآليات المحمية:**
+5. **الملفات المحظورة:** `src/components/game/DrawingCanvasCore.tsx`, `src/utils/canvasFloodFill.ts`, `src/utils/canvasCheckpointManager.ts`, `server/*`, `AGENTS.md`.
+6. **الآليات المحمية:**
    - **Safeguard 7 & 8:** الإبقاء الصارم على `dir="ltr"` على `ExperimentalDrawingBoard` (`420, 532, 582, 649`) و`FlipaClipControls` وشبكة الغرفة و`SmoothTimer`.
    - **`UI-B Stage B2` & `UI-C Stage 2A`:** عدم تغيير أبعاد `aspect-[680/396]` أو بنية `flex items-center min-w-0 max-w-full` في `PlayersSidebar.tsx` و`FreeDrawPlayersList.tsx`.
    - بقاء `CLEAN` و`NAMES` كعناوين `GameTitle` بالإنجليزية.
-6. **التعديلات الدقيقة:** ترجمة `Empty`, `pts`, التلميحات والأوصاف والأزرار في `ExperimentalDrawingBoard` و`FlipaClipControls`، وأزرار الرسم الحر وتلميحات الغرفة ورسالة `ErrorBoundary`.
-7. **المخاطر:** اتساع شارة `pts` في `PlayersSidebar` على الشاشات الضيقة، أو أي انزياح عرضي في شريط أدوات الرسم (محمي بـ `dir="ltr"`).
-8. **معايير الخروج:** اكتمال توطين 100% من نصوص واجهة اللاعبين في جميع الأوضاع الثلاثة مع ثبات تام لهندسة الرسم وقائمة اللاعبين.
-9. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي للرسم (قلم، دلو، ألوان، تكبير، مسح اللوحة، إظهار/إخفاء الأسماء في الرسم الحر، قائمة اللاعبين) بالعربية والإنجليزية.
-10. **الاعتماديات:** `L10N-6`.
+7. **التعديلات الدقيقة:** ترجمة `Empty`, `<number> نقطة` (الثابتة في العربية)، التلميحات والأوصاف والأزرار في `ExperimentalDrawingBoard` و`FlipaClipControls`، وأزرار الرسم الحر وتلميحات الغرفة ورسالة `ErrorBoundary`.
+8. **المخاطر:** اتساع شارة النقاط في `PlayersSidebar` على الشاشات الضيقة، أو أي انزياح عرضي في شريط أدوات الرسم (محمي بـ `dir="ltr"`).
+9. **معايير الخروج:** اكتمال توطين 100% من نصوص واجهة اللاعبين في جميع الأوضاع الثلاثة مع ثبات تام لهندسة الرسم وقائمة اللاعبين.
+10. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي للرسم (قلم، دلو، ألوان، تكبير، مسح اللوحة، إظهار/إخفاء الأسماء في الرسم الحر، قائمة اللاعبين) بالعربية والإنجليزية.
+11. **الاعتماديات:** `L10N-6`.
 
 ---
 
@@ -509,16 +511,15 @@
 
 ---
 
-## 8. الحالة المباشرة للمرحلة الحالية (`L10N-4 — COMPLETED`, `L10N-5 — AWAITING MANUAL VERIFICATION`, `L10N-6 — NOT STARTED`)
+## 8. الحالة المباشرة للمرحلة الحالية (`L10N-5 — COMPLETED`, `L10N-6 — AWAITING MANUAL VERIFICATION`, `L10N-7 — NOT STARTED`)
 
-> أُغلقت **`L10N-4`** بعد التحقق اليدوي من المالك (`2026-11-23`)، ونُفذت **`L10N-5`** (Stage 2) واجتازت جميع بوابات التحقق الآلي وهي الآن بحالة **`AWAITING MANUAL VERIFICATION`** (`2026-11-23`)، مع إبقاء **`L10N-6`** بحالة **`NOT STARTED`** لحين موافقة المالك:
+> أُغلقت **`L10N-5`** بعد التحقق اليدوي الناجح من المالك (`2026-11-24` — Commit: `a78ac5cca480570d2cd97954625184311537120b`)، ونُفذت **`L10N-6`** (Stage 2) وهي الآن بحالة **`AWAITING MANUAL VERIFICATION`** (`2026-11-24`)، مع إبقاء **`L10N-7`** بحالة **`NOT STARTED`** لحين موافقة المالك:
 
-- **ملخص ما تم تنفيذه والتحقق منه آلياً في `L10N-5`:**
-  1. إنشاء نطاق الترجمة `events` (`src/i18n/locales/{en,ar}/events.ts`) وتسجيله في `locales/{en,ar}/index.ts` بصيغ الجمع الست العربية لـ `activity.gameOver`.
-  2. توطين `OverlayChatRoom.tsx` و`GameActivityFeed.tsx` و`ExperimentalHitOverlay.tsx` وحقل التخمين `#guess-input` في `ExperimentalGameRoom.tsx` عبر `eventCode`/`params`/`actorId` مع التوافق الخلفي الكامل والـ `<bdi dir="auto">`.
-  3. إظهار `player_disconnected_removed` وتمييز `player_kicked`، واعتماد `actorId` التاريخي لـ `turn_lost`/`turn_skipped` عبر تمرير `persistentPlayerId`، وعكس أيقونة القلم وحشو `#guess-input` بأمان في العربية.
-  4. اجتياز `npx tsc --noEmit` و`npm run build` (`8.47s`, `2246` وحدة) وفحص تكافؤ المفاتيح والجمع العربي وجميع اختبارات الخادم الخمسة (`1004` فحص نجاح، `0` فشل).
-- **المتبقي قبل الانتقال إلى `L10N-6`:** التحقق اليدوي من المالك لتجربة الغرفة المختلطة (`AR + EN`) في الوضع التنافسي والرسم الحر وإغلاق `L10N-5`.
+- **ملخص ما تم تنفيذه في `L10N-6`:**
+  1. إنشاء نطاق الترجمة `lobby` (`src/i18n/locales/{en,ar}/lobby.ts`) وتسجيله في `locales/{en,ar}/index.ts` بصيغة ثابتة `{{count}} نقطة` في العربية دون صيغ جمع.
+  2. توطين `Lobby.tsx` و`RoomsBrowserScreen.tsx` و`RoomInfoModal.tsx` و`AvatarCarousel.tsx` مع إعادة استخدام `common:actions.ok` و`common:actions.close` و`modals:alerts.roomFull.message` وحماية جميع العناوين والأسماء والوسوم التقنية المحددة.
+  3. ضبط محاذاة صفوف إشعارات النظام والتنبيهات في `GameActivityFeed.tsx` على اليسار عبر `dir="ltr"` على حاويات `flex` الخارجية و`dir={uiDir}` + `text-left` على عناصر `<span>` الداخلية دون تعديل صفوف تخمينات اللاعبين ودون تعديل `OverlayChatRoom.tsx`.
+- **المتبقي قبل الانتقال إلى `L10N-7`:** التحقق اليدوي من المالك للوبي ومتصفح الغرف ومودال معلومات الغرفة والمحاذاة اليسرى لإشعارات `GameActivityFeed` بالعربية والإنجليزية و`Auto`.
 
 ---
 

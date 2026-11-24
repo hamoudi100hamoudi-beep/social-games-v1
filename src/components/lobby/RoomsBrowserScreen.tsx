@@ -2,6 +2,7 @@ import { Users, Plus, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import GameTitle from '../game/GameTitle';
 import { RoomConfig } from '../../types/game';
+import { useAppTranslation } from '../../i18n/useAppTranslation';
 
 export interface RoomsBrowserScreenProps {
   sortedPresets: RoomConfig[];
@@ -25,13 +26,17 @@ export default function RoomsBrowserScreen({
   onSelectRoom,
   onNewRoomClick,
 }: RoomsBrowserScreenProps) {
+  const { t, isRTL } = useAppTranslation('lobby');
+
   return (
     <div className="flex-1 flex flex-col items-center justify-start pt-1.5 px-3 pb-3 sm:pt-3 sm:px-5 sm:pb-5 z-10 w-full max-w-md mx-auto overflow-y-auto no-scrollbar">
       {/* Header Row (Back Button and "ROOMS" Title) */}
       <div className="w-full flex items-center justify-between mb-auto relative px-2 mt-1 shrink-0">
         {/* Back button */}
         <button 
+          type="button"
           onClick={onBackToHome}
+          aria-label={t('rooms.backAria')}
           className="w-10 h-10 bg-white hover:bg-slate-100 rounded-full flex items-center justify-center text-[#2E2882] active:scale-90 transition-transform shadow-md cursor-pointer border border-[#2E2882]/10 z-20"
         >
           <ChevronLeft size={20} strokeWidth={4} />
@@ -105,7 +110,7 @@ export default function RoomsBrowserScreen({
               exit={{ opacity: 0, y: 4, scale: 0.94 }}
               transition={{ duration: 0.18 }}
               className="absolute -top-9 left-1/2 -translate-x-1/2 z-50 bg-[#1E1B4B] text-white text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/20 flex items-center gap-1.5 pointer-events-none whitespace-nowrap"
-              dir="rtl"
+              dir={isRTL ? 'rtl' : 'ltr'}
             >
               <span>{newRoomNotice}</span>
             </motion.div>
@@ -113,11 +118,13 @@ export default function RoomsBrowserScreen({
         </AnimatePresence>
 
         <button 
+          type="button"
           onClick={onNewRoomClick}
+          dir={isRTL ? 'rtl' : 'ltr'}
           className="w-[85%] sm:w-[75%] max-w-[320px] mx-auto h-12 [@media(min-height:600px)]:h-14 sm:h-16 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white rounded-[24px] font-black text-base [@media(min-height:600px)]:text-lg sm:text-xl flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-lg"
         >
           <Plus size={22} strokeWidth={4} />
-          <span>NEW ROOM</span>
+          <span>{t('rooms.newRoom')}</span>
         </button>
       </div>
     </div>
