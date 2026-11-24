@@ -159,6 +159,16 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
   const hasResetForCurrentTurnRef = useRef(false);
 
   useEffect(() => {
+    const leftDrawingMode = prevReadOnlyRef.current === false && readOnly === true;
+    if (leftDrawingMode) {
+      setActiveMenu(null);
+      setShowClearConfirm(false);
+      setShowFloatingNamesConfirm(false);
+      setTool((currentTool) =>
+        currentTool === 'pipette' ? (previousTool.current || 'pencil') : currentTool
+      );
+    }
+
     if (isFreeDraw) {
       prevReadOnlyRef.current = readOnly;
       prevStatusRef.current = status;
@@ -465,6 +475,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           aria-hidden={readOnly}
         >
           <FlipaClipControls
+            readOnly={readOnly}
             tool={tool}
             color={color}
             currentWidth={currentWidth}

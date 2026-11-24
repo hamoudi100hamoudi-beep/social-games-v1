@@ -11,4 +11,7 @@ export const enCommon = {
     ok: 'OK',
     close: 'Close',
   },
+  units: {
+    points: '{{count}} pts',
+  },
 } as const;

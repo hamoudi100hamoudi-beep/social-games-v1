@@ -496,6 +496,30 @@ export default function ExperimentalGameRoom({
     isDrawingModeRef.current = isDrawingMode;
   }, [isDrawingMode]);
 
+  // Synchronize chat state and Exit X when entering isolated drawing mode
+  React.useEffect(() => {
+    if (FULL_DRAWING_ISOLATION_TEST && isDrawingMode && (isChatOpenRef.current || isChatOpen)) {
+      closeChat();
+      if (
+        typeof document !== "undefined" &&
+        document.activeElement instanceof HTMLElement &&
+        (document.activeElement.tagName === "TEXTAREA" || document.activeElement.tagName === "INPUT")
+      ) {
+        document.activeElement.blur();
+      }
+    }
+  }, [isDrawingMode]);
+
+  // Safely dismiss Skip/Report confirmation modals on drawing turn/role transitions without side effects
+  React.useEffect(() => {
+    if (!isDrawingMode || gameState?.status !== "DRAWING") {
+      setShowSkipConfirm(false);
+    }
+    if (isDrawingMode || amIDrawer || gameState?.status !== "DRAWING") {
+      setShowReportConfirm(false);
+    }
+  }, [isDrawingMode, gameState?.status, amIDrawer]);
+
   // 🛡️ When active drawing mode finishes, flush any buffered background data cleanly to React state
   React.useEffect(() => {
     if (!isDrawingMode) {

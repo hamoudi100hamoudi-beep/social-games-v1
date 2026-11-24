@@ -451,7 +451,7 @@
 ---
 
 ### المرحلة `L10N-6` — اللوبي ومتصفح الغرف (`Lobby & Room Browser`)
-1. **الاسم والرقم:** `PHASE L10N-6 — Lobby & Room Browser` — **`[~] AWAITING MANUAL VERIFICATION`** (`2026-11-24` — مرجع التنفيذ النهائي: بانتظار مزامنة المالك)
+1. **الاسم والرقم:** `PHASE L10N-6 — Lobby & Room Browser` — **`[x] COMPLETED — OWNER MANUALLY VERIFIED`** (`2026-11-24` — Commit: `a749950a390401175184ad3253aa02f0ee2de6cb`)
 2. **الهدف:** توطين النصوص المتبقية في `Lobby.tsx` (بما فيها تسمية ومؤقت الإدخال لـ `NICKNAME`، زر الشاشة الرئيسية `"الغرف"`، رسالة الميزة غير المتوفرة بعد، نافذة امتلاء الغرفة ورسالة خطأ الانضمام بإعادة استخدام `common:actions.ok` و`common:actions.close` و`modals:alerts.roomFull.message`، وشبكة اختيار الأفاتار) و`RoomsBrowserScreen.tsx` و`RoomInfoModal.tsx` و`AvatarCarousel.tsx`، مع الحفاظ الكامل على أسماء الغرف والمعرفات التقنية ومواضيعها بدون ترجمة، إضافةً إلى تعديل تخطيطي محدود في `GameActivityFeed.tsx` لإبقاء صفوف إشعارات النظام محاذية لليسار مثل تخمينات اللاعبين مع حفظ اتجاه النص الداخلي RTL/LTR.
 3. **الملفات المنشأة والمعدلة فعلياً ضمن النطاق المسموح:**
    - `src/i18n/locales/en/lobby.ts` و`src/i18n/locales/ar/lobby.ts` (إنشاء نطاق `lobby` بصيغة ثابتة `{{count}} نقطة` في العربية دون صيغ جمع)
@@ -466,34 +466,47 @@
    - بقاء `DRAW.IO`, `ROOMS` (`GameTitle`), `INFO`, `ERROR`, `INACTIVE`, `DISCONNECTED` بالإنجليزية دائماً.
    - بقاء المعرفات والأسماء التقنية (`General`, `General #Test`, `General #10P`, `Free Draw`, `Experimental Draw`, `#Custom`, `#Test`, `#10P`, `#Lab`) ومواضيع الغرف (`General`, `Free Draw`) دون أي تغيير في العرض أو المنطق (`Safeguard 9`).
    - الحفاظ على `dir="auto"` وسلوك الإدخال و`handleIOSFocusBypass` في `Lobby.tsx`، ومنتقي لغة `L10N-1`، وإبقاء صفوف تخمينات اللاعبين في `GameActivityFeed.tsx` كما هي تماماً.
-6. **ما بقي للتحقق اليدوي قبل إغلاق `L10N-6`:** اختبار المالك اليدوي للوبي ومتصفح الغرف ومودال المعلومات (بما فيه الشاشات الضيقة ~360px) والمحاذاة اليسرى لإشعارات `GameActivityFeed` في العربية والإنجليزية و`Auto`.
+6. **التحقق اليدوي من المالك (`COMPLETED — OWNER MANUALLY VERIFIED — 2026-11-24`):** اختبر المالك اللوبي ومتصفح الغرف ومودال المعلومات والمحاذاة اليسرى لإشعارات `GameActivityFeed` بعد المزامنة مع GitHub (Commit: `a749950a390401175184ad3253aa02f0ee2de6cb`) وأكد عمل الترجمة بنجاح، مع بقاء لاحق النقاط `pts` في `PlayersSidebar` وإصلاحات دورة حياة واجهة الرسم إلى `L10N-7`.
 7. **الاعتماديات:** `L10N-5`.
 
 ---
 
 ### المرحلة `L10N-7` — أدوات الرسم والواجهة المتبقية (`Drawing Tools & Remaining UI`)
-1. **الاسم والرقم:** `PHASE L10N-7 — Drawing Tools & Remaining UI` — **`NOT STARTED`**
+1. **الاسم والرقم:** `PHASE L10N-7 — Drawing Tools & Remaining UI` — **`[~] IN PROGRESS (Stage 2A Implemented — Remaining L10N-7 Tasks Pending)`**
 2. **الهدف:** توطين أدوات الرسم (`FlipaClipControls.tsx`, `ExperimentalDrawingBoard.tsx` شاملةً `title` و`aria-label` ونوافذ `CLEAN` و`NAMES`) والنصوص المتفرقة المتبقية (`PlayersSidebar.tsx`, `FreeDrawPlayersList.tsx`, تلميحات/أزرار `GameRoom.tsx` و`ExperimentalGameRoom.tsx` المتبقية، `beforeunload`، و`ErrorBoundary.tsx`) مع الحفاظ الصارم على اتجاه أدوات الرسم وإحداثياتها.
 3. **شرط المالك الإلزامي لنقاط اللاعبين في `PlayersSidebar.tsx`:**
-   - يجب أن يستخدم لاحق نقاط اللاعبين في العربية الكلمة الثابتة **`"نقطة"`** دائماً بصيغة **`<number> نقطة`** (مثل `0 نقطة`، `1 نقطة`، `2 نقطة`، `5 نقطة`، `100 نقطة`) **دون استخدام صيغ الجمع العربية (`نقطتان` / `نقاط`)**. *(لا يُنفذ هذا التغيير خلال `L10N-6`).*
-4. **الملفات المسموحة:**
+   - يجب أن يستخدم لاحق نقاط اللاعبين في العربية الكلمة الثابتة **`"نقطة"`** دائماً بصيغة **`<number> نقطة`** (مثل `0 نقطة`، `1 نقطة`، `2 نقطة`، `5 نقطة`، `100 نقطة`) **دون استخدام صيغ الجمع العربية (`نقطتان` / `نقاط`)**.
+4. **المرحلة الفرعية `L10N-7 Stage 2A — Player Points & Drawing UI Lifecycle`:** **`[~] IMPLEMENTED — AWAITING OWNER MANUAL VERIFICATION`** (`2026-11-24` — مرجع التنفيذ النهائي: بانتظار مزامنة المالك مع GitHub)
+   - **ما تم تنفيذه في `Stage 2A`:**
+     - توطين لاحق نقاط اللاعبين العام عبر `common:units.points` (`{{count}} pts` / `{{count}} نقطة` الثابتة دون صيغ جمع) في `src/i18n/locales/{en,ar}/common.ts` و`src/components/game/PlayersSidebar.tsx` مع الحفاظ التام على الترتيب الفيزيائي LTR (`[30] [نقطة]`) وإبقاء `FreeDrawPlayersList.tsx` بأسماء فقط.
+     - مزامنة حالة الدردشة وزر الخروج `X` عند دخول وضع الرسم المعزول (`FULL_DRAWING_ISOLATION_TEST && isDrawingMode`) في `src/components/experimental/ExperimentalGameRoom.tsx` باستدعاء `closeChat()` وفصل التركيز عن حقول الإدخال دون مسح رسائل الدردشة أو عداد غير المقروءة.
+     - الإغلاق التلقائي الآمن لنوافذ وقوائم الرسم المؤقتة عند انتهاء دور الرسم:
+       - `SkipConfirmModal` (وإغلاق `ReportConfirmModal` عند تحوّل الدور أو خروج الحالة عن `DRAWING` مع بقاء `ReportConfirmModal` متاحاً للمشاهدين أثناء `DRAWING`) في `ExperimentalGameRoom.tsx` دون استدعاء `handleSkipTurn()` أو إرسال `skip_turn`.
+       - إغلاق `activeMenu` و`CLEAN` (`showClearConfirm`) و`NAMES` (`showFloatingNamesConfirm`) وإرجاع `pipette` إلى `previousTool.current || 'pencil'` عند تحول `readOnly` من `false` إلى `true` في `ExperimentalDrawingBoard.tsx` (للرسم التنافسي والحر مع الحفاظ على التفضيلات المحفوظة وعدم لمس `DrawingCanvasCore.tsx`).
+       - تمرير `readOnly` إلى `FlipaClipControls.tsx` مع إبقائه مثبّتاً في DOM لتنظيف `isColorPickerOpen` ومستمعات المؤشر وطلبات `requestAnimationFrame` والقيم المعلقة و`dragState` عند التوقف عن الرسم.
+       - إلغاء عمل `RAF` والقيم المعلقة ومؤشرات السحب عند إغلاق `ColorWheelModal.tsx` خارجياً دون تمرير تحديثات متأخرة ودون مسح `savedPalette`.
+   - **المهام المتبقية من `L10N-7` (ما زالت `PENDING` للدفعة القادمة):**
+     - توطين التلميحات (`title`/`aria-label`) والأزرار المتبقية في `ExperimentalDrawingBoard.tsx` و`FlipaClipControls.tsx`.
+     - توطين تسمية `Empty` في `PlayersSidebar.tsx` و`FreeDrawPlayersList.tsx` (إن لزم)، وتلميحات/أزرار الغرفة المتبقية (`الخروج من الغرفة`, `الدردشة`, `Report drawing`, `You reported this draw`, `ابدأ الرسم`/`انضم للرسم`/`العودة للرسم`) في `GameRoom.tsx` و`ExperimentalGameRoom.tsx`، ورسالة `beforeunload`، و`src/ErrorBoundary.tsx`.
+5. **الملفات المسموحة للدفعة الحالية واللاحقة:**
    - `src/components/experimental/ExperimentalDrawingBoard.tsx`
    - `src/components/game/FlipaClipControls.tsx`
+   - `src/components/game/ColorWheelModal.tsx` (تعديل دورة حياة مصرح به في `Stage 2A`)
    - `src/components/game/PlayersSidebar.tsx`
-   - `src/components/game/FreeDrawPlayersList.tsx`
-   - `src/components/GameRoom.tsx` و`src/components/experimental/ExperimentalGameRoom.tsx` (الأزرار والتلميحات المتبقية: `الخروج من الغرفة`, `الدردشة`, `Report drawing`, `You reported this draw`, `ابدأ الرسم`/`انضم للرسم`/`العودة للرسم`, `Empty`, `beforeunload`)
-   - `src/ErrorBoundary.tsx`
+   - `src/components/game/FreeDrawPlayersList.tsx` (للمهام المتبقية فقط؛ محظور في `Stage 2A`)
+   - `src/components/GameRoom.tsx` (للمهام المتبقية فقط؛ محظور في `Stage 2A`) و`src/components/experimental/ExperimentalGameRoom.tsx`
+   - `src/ErrorBoundary.tsx` (للمهام المتبقية فقط)
    - `src/i18n/locales/*`
-5. **الملفات المحظورة:** `src/components/game/DrawingCanvasCore.tsx`, `src/utils/canvasFloodFill.ts`, `src/utils/canvasCheckpointManager.ts`, `server/*`, `AGENTS.md`.
-6. **الآليات المحمية:**
-   - **Safeguard 7 & 8:** الإبقاء الصارم على `dir="ltr"` على `ExperimentalDrawingBoard` (`420, 532, 582, 649`) و`FlipaClipControls` وشبكة الغرفة و`SmoothTimer`.
+6. **الملفات المحظورة:** `src/components/game/DrawingCanvasCore.tsx`, `src/utils/canvasFloodFill.ts`, `src/utils/canvasCheckpointManager.ts`, `src/components/experimental/IsolatedDrawingLayer.tsx`, `server/*`, `src/types/game.ts`, `AGENTS.md`.
+7. **الآليات المحمية:**
+   - **Safeguard 7 & 8:** الإبقاء الصارم على `dir="ltr"` على `ExperimentalDrawingBoard` و`FlipaClipControls` وشبكة الغرفة و`SmoothTimer`، وثبات `IsolatedDrawingLayer` و`key="isolated-shared-board"`.
    - **`UI-B Stage B2` & `UI-C Stage 2A`:** عدم تغيير أبعاد `aspect-[680/396]` أو بنية `flex items-center min-w-0 max-w-full` في `PlayersSidebar.tsx` و`FreeDrawPlayersList.tsx`.
-   - بقاء `CLEAN` و`NAMES` كعناوين `GameTitle` بالإنجليزية.
-7. **التعديلات الدقيقة:** ترجمة `Empty`, `<number> نقطة` (الثابتة في العربية)، التلميحات والأوصاف والأزرار في `ExperimentalDrawingBoard` و`FlipaClipControls`، وأزرار الرسم الحر وتلميحات الغرفة ورسالة `ErrorBoundary`.
-8. **المخاطر:** اتساع شارة النقاط في `PlayersSidebar` على الشاشات الضيقة، أو أي انزياح عرضي في شريط أدوات الرسم (محمي بـ `dir="ltr"`).
-9. **معايير الخروج:** اكتمال توطين 100% من نصوص واجهة اللاعبين في جميع الأوضاع الثلاثة مع ثبات تام لهندسة الرسم وقائمة اللاعبين.
-10. **الاختبارات:** `npx tsc --noEmit` + `npm run build` + اختبار المالك اليدوي للرسم (قلم، دلو، ألوان، تكبير، مسح اللوحة، إظهار/إخفاء الأسماء في الرسم الحر، قائمة اللاعبين) بالعربية والإنجليزية.
-11. **الاعتماديات:** `L10N-6`.
+   - بقاء `CLEAN` و`NAMES` و`SKIP` كعناوين `GameTitle` بالإنجليزية.
+8. **التعديلات الدقيقة المتبقية بعد `Stage 2A`:** ترجمة `Empty`, التلميحات والأوصاف والأزرار في `ExperimentalDrawingBoard` و`FlipaClipControls`، وأزرار الرسم الحر وتلميحات الغرفة ورسالة `beforeunload` و`ErrorBoundary`.
+9. **المخاطر:** اتساع شارة النقاط في `PlayersSidebar` على الشاشات الضيقة، أو أي انزياح عرضي في شريط أدوات الرسم (محمي بـ `dir="ltr"`).
+10. **معايير الخروج:** اكتمال توطين 100% من نصوص واجهة اللاعبين في جميع الأوضاع الثلاثة مع ثبات تام لهندسة الرسم وقائمة اللاعبين وموافقة المالك اليدوية.
+11. **الاختبارات:** `npx tsc --noEmit` + `npm run lint` + `npm run build` + فحص تكافؤ القواميس + اختبارات المالك اليدوية الكاملة.
+12. **الاعتماديات:** `L10N-6`.
 
 ---
 
@@ -511,15 +524,15 @@
 
 ---
 
-## 8. الحالة المباشرة للمرحلة الحالية (`L10N-5 — COMPLETED`, `L10N-6 — AWAITING MANUAL VERIFICATION`, `L10N-7 — NOT STARTED`)
+## 8. الحالة المباشرة للمرحلة الحالية (`L10N-6 — COMPLETED`, `L10N-7 Stage 2A — IMPLEMENTED / AWAITING MANUAL VERIFICATION`)
 
-> أُغلقت **`L10N-5`** بعد التحقق اليدوي الناجح من المالك (`2026-11-24` — Commit: `a78ac5cca480570d2cd97954625184311537120b`)، ونُفذت **`L10N-6`** (Stage 2) وهي الآن بحالة **`AWAITING MANUAL VERIFICATION`** (`2026-11-24`)، مع إبقاء **`L10N-7`** بحالة **`NOT STARTED`** لحين موافقة المالك:
+> أُغلقت **`L10N-6`** بعد التحقق اليدوي الناجح من المالك (`2026-11-24` — Commit: `a749950a390401175184ad3253aa02f0ee2de6cb`)، ونُفذت **`L10N-7 Stage 2A`** وهي الآن بحالة **`IMPLEMENTED — AWAITING OWNER MANUAL VERIFICATION`** (`2026-11-24` — مرجع التنفيذ النهائي بانتظار مزامنة المالك)، مع إبقاء بقية مهام **`L10N-7`** معلّقةً للمرحلة اللاحقة:
 
-- **ملخص ما تم تنفيذه في `L10N-6`:**
-  1. إنشاء نطاق الترجمة `lobby` (`src/i18n/locales/{en,ar}/lobby.ts`) وتسجيله في `locales/{en,ar}/index.ts` بصيغة ثابتة `{{count}} نقطة` في العربية دون صيغ جمع.
-  2. توطين `Lobby.tsx` و`RoomsBrowserScreen.tsx` و`RoomInfoModal.tsx` و`AvatarCarousel.tsx` مع إعادة استخدام `common:actions.ok` و`common:actions.close` و`modals:alerts.roomFull.message` وحماية جميع العناوين والأسماء والوسوم التقنية المحددة.
-  3. ضبط محاذاة صفوف إشعارات النظام والتنبيهات في `GameActivityFeed.tsx` على اليسار عبر `dir="ltr"` على حاويات `flex` الخارجية و`dir={uiDir}` + `text-left` على عناصر `<span>` الداخلية دون تعديل صفوف تخمينات اللاعبين ودون تعديل `OverlayChatRoom.tsx`.
-- **المتبقي قبل الانتقال إلى `L10N-7`:** التحقق اليدوي من المالك للوبي ومتصفح الغرف ومودال معلومات الغرفة والمحاذاة اليسرى لإشعارات `GameActivityFeed` بالعربية والإنجليزية و`Auto`.
+- **ملخص ما تم تنفيذه في `L10N-7 Stage 2A`:**
+  1. إضافة مفتاح `common:units.points` (`{{count}} pts` / `{{count}} نقطة` الثابتة دون صيغ جمع) وتطبيقه في `PlayersSidebar.tsx` مع الحفاظ على الترتيب الفيزيائي LTR وإبقاء `FreeDrawPlayersList.tsx` دون عرض نقاط.
+  2. إغلاق الدردشة تلقائياً عبر `closeChat()` عند دخول `isDrawingMode` تحت `FULL_DRAWING_ISOLATION_TEST` في `ExperimentalGameRoom.tsx` لضمان ظهور زر الخروج `X` ومزامنة `isChatOpenRef` وفصل لوحة المفاتيح.
+  3. الإغلاق التلقائي الآمن لنوافذ وقوائم الرسم المؤقتة عند انتهاء الدور (`SkipConfirmModal`, `ReportConfirmModal`, `activeMenu`, `CLEAN`, `NAMES`, أداة `pipette`, `FlipaClipControls`, و`ColorWheelModal`) مع تنظيف مستمعات المؤشر و`RAF` دون مسح اللوحة أو إرسال `skip_turn` أو المساس بالتفضيلات المحفوظة.
+- **المتبقي قبل إغلاق `L10N-7` بالكامل:** التحقق اليدوي من المالك لـ `Stage 2A`، ثم استكمال توطين التلميحات والأزرار المتبقية في `ExperimentalDrawingBoard.tsx` و`FlipaClipControls.tsx` و`PlayersSidebar.tsx` (`Empty`) و`GameRoom.tsx`/`ExperimentalGameRoom.tsx` و`beforeunload` و`ErrorBoundary.tsx`.
 
 ---
 

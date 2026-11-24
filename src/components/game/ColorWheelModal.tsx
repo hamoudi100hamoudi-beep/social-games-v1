@@ -175,6 +175,26 @@ export const ColorWheelModal: React.FC<ColorWheelModalProps> = ({
     return () => window.removeEventListener('resize', handleResize);
   }, [isOpen, color, getOptimalWheelDiameter, savedPalette]);
 
+  // Cancel unfinished drag/RAF work when modal closes externally without flushing late values
+  useEffect(() => {
+    if (isOpen) return;
+
+    isUserInteractingWithWheelRef.current = false;
+    isDraggingSliderRef.current = false;
+    cachedSliderBoundsRef.current = null;
+    pendingColorRef.current = null;
+    pendingOpacityRef.current = null;
+
+    if (rafColorIdRef.current) {
+      cancelAnimationFrame(rafColorIdRef.current);
+      rafColorIdRef.current = null;
+    }
+    if (rafOpacityIdRef.current) {
+      cancelAnimationFrame(rafOpacityIdRef.current);
+      rafOpacityIdRef.current = null;
+    }
+  }, [isOpen]);
+
   // Sync hex input and selected color when color prop updates
   useEffect(() => {
     setHexInput(color.toUpperCase());

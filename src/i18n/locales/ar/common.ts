@@ -14,4 +14,7 @@ export const arCommon = {
     ok: 'موافق',
     close: 'إغلاق',
   },
+  units: {
+    points: '{{count}} نقطة',
+  },
 } satisfies DeepLocaleSchema<typeof enCommon>;

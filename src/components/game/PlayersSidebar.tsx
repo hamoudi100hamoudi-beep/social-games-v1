@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserIcon, Check, Pencil, EyeOff } from 'lucide-react';
+import { useAppTranslation } from '../../i18n/useAppTranslation';
 
 const TrophyContainer: React.FC<{ wins: number; isCelebrating?: boolean }> = ({ wins, isCelebrating = false }) => {
   if (wins <= 0) return null;
@@ -125,6 +126,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
   amIDrawer = false,
   onAcknowledgeNewPlayer,
 }) => {
+  const { t: tCommon } = useAppTranslation('common');
   const [activePopups, setActivePopups] = React.useState<FloatingPoints[]>([]);
   const prevPointsRef = React.useRef<{ [key: string]: number | null }>({});
   const prevRanksRef = React.useRef<{ [key: string]: number }>({});
@@ -489,7 +491,7 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                     </div>
                     {!slot.isEmpty && !isFreeDraw && (
                       <div className={`text-[11px] sm:text-[13px] font-bold transition-colors duration-200 mt-0.5 leading-none ${ptsClass}`}>
-                        {slot.points} pts
+                        {tCommon('units.points', { count: slot.points ?? 0 })}
                       </div>
                     )}
                  </div>

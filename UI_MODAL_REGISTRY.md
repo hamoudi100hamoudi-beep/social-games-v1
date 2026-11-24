@@ -92,7 +92,7 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
   - Framed `FastForward` icon badge (`w-28 h-18 sm:w-32 sm:h-20`) with CSS loop animation
   - Confirmation question (`#skip-confirm-title`): `modals:skip.question`
   - Buttons: `#skip-confirm-no-btn` (`variant="primary"`, `common:actions.no`), `#skip-confirm-yes-btn` (`variant="danger"`, `common:actions.yes`)
-- **Close Behavior:** `X` button, guarded backdrop click, or `#skip-confirm-no-btn`.
+- **Close Behavior:** `X` button, guarded backdrop click, `#skip-confirm-no-btn`, or automatically dismissed by `ExperimentalGameRoom.tsx` whenever the player leaves active drawing mode (`!isDrawingMode`) or `gameState.status !== "DRAWING"` (resets `showSkipConfirm` only; never invokes `handleSkipTurn()` or emits `skip_turn`).
 - **Animation Owner:** `CinematicModal` (Framer Motion) + CSS `.animate-skip-escape` (`src/components/index.css`).
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`) + continuous `skip-escape-creature` CSS loop (`3.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite`).
 - **Layout & Direction Notes:** `#skip-confirm-title` sets `dir={isRTL ? "rtl" : "ltr"}` locally; inner animation frame stays `select-none`.
@@ -205,7 +205,7 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
   - Circular red-tinted badge (`w-16 h-16 sm:w-20 sm:h-20` inside `w-20 h-20 sm:w-26 sm:h-26`, `#EF4444`) with spinning `RefreshCcw` icon
   - Prompt (`#clean-confirm-desc`): `modals:clean.question`
   - Buttons: `#clean-confirm-no-btn` (`variant="primary"`, `common:actions.no`), `#clean-confirm-yes-btn` (`variant="danger"`, `common:actions.yes`)
-- **Close Behavior:** `X` button, guarded backdrop click, or `#clean-confirm-no-btn`.
+- **Close Behavior:** `X` button, guarded backdrop click, `#clean-confirm-no-btn`, or automatically dismissed by `ExperimentalDrawingBoard.tsx` when `readOnly` transitions `false -> true` (competitive or Free Draw; resets `showClearConfirm` only without invoking `confirmClear()` or clearing the canvas).
 - **Animation Owner:** `CinematicModal` (Framer Motion) + CSS `.animate-clean-spin` (`src/components/index.css`).
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`) + `clean-spin-loop` (`3s cubic-bezier(0.34, 1.3, 0.64, 1) infinite`, pauses briefly then rotates `-360deg`).
 - **Layout & Direction Notes:** Root board stays `dir="rtl"` and canvas container stays `dir="ltr"`; `#clean-confirm-desc` sets `dir={isRTL ? "rtl" : "ltr"}` locally inside the portal modal.
@@ -221,7 +221,7 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
   - Dynamic circular icon badge (`w-16 h-16 sm:w-20 sm:h-20`): red `#EF4444` + `EyeOff` when names are currently shown (asking to hide); blue `#3B82F6` + `Eye` when names are currently hidden (asking to show)
   - Conditional prompt (`#names-confirm-desc`): `modals:names.hideQuestion` or `modals:names.showQuestion`
   - Buttons: `#names-confirm-no-btn` (`variant="primary"`, `common:actions.no`), `#names-confirm-yes-btn` (`variant={showFloatingNames ? "danger" : "primary"}`, `common:actions.yes`)
-- **Close Behavior:** `X` button, guarded backdrop click, or `#names-confirm-no-btn`.
+- **Close Behavior:** `X` button, guarded backdrop click, `#names-confirm-no-btn`, or automatically dismissed by `ExperimentalDrawingBoard.tsx` when `readOnly` transitions `false -> true` in Free Draw (resets `showFloatingNamesConfirm` only without invoking `confirmToggleFloatingNames()` or mutating persisted `showFloatingNames`).
 - **Animation Owner:** `CinematicModal` (Framer Motion). Inner icon is static.
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`).
 - **Layout & Direction Notes:** Rendered only when `isFreeDraw` is `true`; `#names-confirm-desc` sets `dir={isRTL ? "rtl" : "ltr"}` locally.
@@ -329,7 +329,7 @@ These modals do **not** use `CinematicModal`; each implements its own backdrop, 
   - `ReinventedColorWheel` canvas/SV picker
   - Opacity track slider (`10%–100%`, label `modals:colorWheel.opacity`)
   - Saved colors bar: Save button (`modals:colorWheel.save`), Delete button (`modals:colorWheel.deleteTooltip` / `deleteSelectedTooltip`), count label (`modals:colorWheel.savedCount` with CLDR plurals / `savedColors`), swatch grid (`modals:colorWheel.emptyHint`)
-- **Close Behavior:** Closes via top-bar `X` button or transparent backdrop `onPointerDown` outside the card.
+- **Close Behavior:** Closes via top-bar `X` button, transparent backdrop `onPointerDown` outside the card, or automatically when `ExperimentalDrawingBoard` passes `readOnly={true}` into pre-mounted `FlipaClipControls` (`setIsColorPickerOpen(false)`). On `readOnly`, `FlipaClipControls` also detaches active drag listeners and cancels pending `requestAnimationFrame` work, and `ColorWheelModal` cancels pending wheel/slider `requestAnimationFrame` work and interaction refs when `isOpen` becomes `false` without flushing unfinished color, opacity, or width values.
 - **Animation Owner:** Framer Motion (`AnimatePresence` + `motion.div`).
 - **Verified Entrance / Exit Behavior:** Card slides & fades `initial={{ opacity: 0, y: 8 }}` -> `animate={{ opacity: 1, y: 0 }}` -> `exit={{ opacity: 0, y: 8 }}` with `transition={{ duration: 0.12, ease: 'easeOut' }}`.
 - **Layout & Direction Notes:** Deliberate mixed directionality: card top bar uses `dir="rtl"` (HEX right, compare center, close left); opacity slider track & readout stay `dir="ltr"` with `dir={isRTL ? 'rtl' : 'ltr'}` on the `Opacity` text label; saved-colors footer uses `dir={isRTL ? 'rtl' : 'ltr'}`.

@@ -13,6 +13,7 @@ interface FlipaClipControlsProps {
   onOpacityChange: (opacity: number) => void;
   isFreeDraw?: boolean;
   onColorChange?: (color: string) => void;
+  readOnly?: boolean;
 }
 
 interface DragState {
@@ -35,6 +36,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
   onOpacityChange,
   isFreeDraw = false,
   onColorChange,
+  readOnly = false,
 }) => {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false);
@@ -77,12 +79,37 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
     };
   }, []);
 
+  // Clean up temporary picker/drag interaction state when drawing stops (keep component mounted)
+  useEffect(() => {
+    if (!readOnly) return;
+
+    setIsColorPickerOpen(false);
+
+    if (activeCleanupRef.current) {
+      activeCleanupRef.current();
+      activeCleanupRef.current = null;
+    }
+    if (rafWidthIdRef.current) {
+      cancelAnimationFrame(rafWidthIdRef.current);
+      rafWidthIdRef.current = null;
+    }
+    if (rafOpacityIdRef.current) {
+      cancelAnimationFrame(rafOpacityIdRef.current);
+      rafOpacityIdRef.current = null;
+    }
+
+    pendingWidthRef.current = null;
+    pendingOpacityRef.current = null;
+    setDragState(null);
+  }, [readOnly]);
+
   // Max width according to tool
   const maxWidth = tool === 'eraser' ? 120 : 50;
   const minWidth = 1;
 
   // 1. Live Drag for Brush Size Circle
   const handleSizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (readOnly) return;
     e.preventDefault();
     e.stopPropagation();
 
@@ -183,6 +210,7 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
 
   // 2. Live Drag & Tap Handler for Opacity Square
   const handleOpacityPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (readOnly) return;
     e.preventDefault();
     e.stopPropagation();
 
