@@ -388,13 +388,12 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
           let bgClass = '';
           let borderClass = 'border-[#94A3B8]'; // Slate-400 default
           let nameClass = 'text-white';
-          let ptsClass = 'text-white';
+          let ptsClass = 'text-[#FBBF24]';
 
           if (isDrawer) {
              bgClass = 'bg-primary-brand/10'; // Brand sky blue bg
              borderClass = 'border-primary-brand'; // Brand sky blue border
              nameClass = 'text-primary-brand';
-             ptsClass = 'text-primary-brand';
           } else if (isCorrectGuesser) {
              bgClass = 'bg-[#00E540]/12'; // Vibrant Gartic green bg
              borderClass = 'border-[#00E540]'; 
@@ -478,9 +477,10 @@ export const PlayersSidebar: React.FC<PlayersSidebarProps> = ({
                       </div>
                    )}
                    {!slot.isEmpty && isDrawer && !isCorrectGuesser && (
-                      <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-primary-brand rounded-full border-2 border-bg-dark-brand flex items-center justify-center shadow-sm z-15">
-                          <Pencil size={10} strokeWidth={3} className="text-bg-dark-brand" />
-                      </div>
+                      <Pencil
+                        strokeWidth={2.5}
+                        className="absolute -bottom-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary-brand drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] pointer-events-none z-15"
+                      />
                     )}
                  </div>
                  
