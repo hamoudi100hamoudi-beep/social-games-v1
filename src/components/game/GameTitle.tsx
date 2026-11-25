@@ -66,8 +66,8 @@ export default function GameTitle({ text, type, className = "text-[34px]", arabi
     : undefined;
   const textStyle: React.CSSProperties = arabicDisplay
     ? {
-        fontFamily: "'Baloo Bhaijaan 2', 'Noto Sans Arabic', Tahoma, sans-serif",
-        fontWeight: 800,
+        fontFamily: "inherit",
+        fontWeight: 900,
         letterSpacing: "normal",
       }
     : {
