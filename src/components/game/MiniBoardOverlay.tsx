@@ -485,7 +485,7 @@ export function MiniBoardOverlay({
           let bottomText = "";
 
           if (reason === "all_guessed") {
-            titleText = "MASTERPIECE!";
+            titleText = "PERFECT!";
             subTitle = "";
             bottomText = t("roundEnd.allGuessed");
           } else if (reason === "timeout" || reason === "drawer_left") {
@@ -659,7 +659,7 @@ export function MiniBoardOverlay({
                   className="w-full flex justify-center shrink-0 mb-0.5 sm:mb-2 text-[15px] sm:text-[28px]"
                   style={PODIUM_TITLE_WRAP_STYLE}
                 >
-                  <GameTitle text="GAME OVER" type="miniboard" className="text-[1em]" />
+                  <GameTitle text="ROUND COMPLETE" type="miniboard" className="text-[1em]" />
                 </motion.div>
 
                 <div
