@@ -133,9 +133,14 @@ const PODIUM_TITLE_WRAP_STYLE: React.CSSProperties = {
   fontSize: "clamp(15px, 7.7cqh, 28px)",
 };
 
-const PODIUM_STAGE_STYLE: React.CSSProperties = {
+const PODIUM_STAGE_STYLE_STANDARD: React.CSSProperties = {
   paddingTop: "clamp(16.5px, 8.2cqh, 34px)",
-  paddingBottom: "clamp(4px, 2.5cqh, 10px)",
+  paddingBottom: "clamp(24px, calc(-10px + 22.8cqh), 80px)",
+};
+
+const PODIUM_STAGE_STYLE_COMPACT: React.CSSProperties = {
+  paddingTop: "clamp(16.5px, 8.2cqh, 34px)",
+  paddingBottom: "0px",
 };
 
 const PODIUM_REST_LIST_STYLE: React.CSSProperties = {
@@ -658,8 +663,8 @@ export function MiniBoardOverlay({
                 </motion.div>
 
                 <div
-                  className="relative flex-1 min-h-0 w-full max-w-[340px] sm:max-w-[420px] mx-auto flex items-end justify-center gap-0.5 sm:gap-2 px-1 sm:px-4 z-20 pt-4 pb-1 sm:pt-8 sm:pb-2.5"
-                  style={PODIUM_STAGE_STYLE}
+                  className={`relative ${restOfPlayers.length > 0 ? "flex-initial my-auto pb-0" : "flex-1 pb-8 sm:pb-20"} min-h-0 w-full max-w-[340px] sm:max-w-[420px] mx-auto flex items-end justify-center gap-0.5 sm:gap-2 px-1 sm:px-4 z-20 pt-4 sm:pt-8`}
+                  style={restOfPlayers.length > 0 ? PODIUM_STAGE_STYLE_COMPACT : PODIUM_STAGE_STYLE_STANDARD}
                 >
                   {/* 2nd Place */}
                   <div className="w-[31%] min-w-0 flex flex-col items-center justify-end relative max-h-full group z-20">
