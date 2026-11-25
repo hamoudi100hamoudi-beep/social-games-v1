@@ -4,9 +4,35 @@ export interface GameTitleProps {
   text: string;
   type: "exit" | "report" | "profile" | "skip" | "inactive" | "choose" | "miniboard";
   className?: string; // Tailwind text size class, e.g., "text-[34px]", "text-[42px]"
+  arabicDisplay?: boolean;
 }
 
-export default function GameTitle({ text, type, className = "text-[34px]" }: GameTitleProps) {
+const ARABIC_OUTLINE_RADIUS_EM = 0.075;
+const ARABIC_DEPTH_OFFSET_EM = 0.14;
+const ARABIC_SHADOW_DIRECTIONS = 24;
+
+function buildSmoothTextShadow(
+  radiusEm: number,
+  directions: number,
+  color: string,
+  extraOffsetsYEm: number[] = []
+): string {
+  const shadows: string[] = [];
+  const offsetsY = [0, ...extraOffsetsYEm];
+
+  for (const dy of offsetsY) {
+    for (let i = 0; i < directions; i++) {
+      const angle = (i * 2 * Math.PI) / directions;
+      const x = (Math.cos(angle) * radiusEm).toFixed(4);
+      const y = (dy + Math.sin(angle) * radiusEm).toFixed(4);
+      shadows.push(`${x}em ${y}em 0 ${color}`);
+    }
+  }
+
+  return shadows.join(", ");
+}
+
+export default function GameTitle({ text, type, className = "text-[34px]", arabicDisplay = false }: GameTitleProps) {
   // Centralized theme color pairing for game titles
   const getColors = () => {
     switch (type) {
@@ -29,28 +55,70 @@ export default function GameTitle({ text, type, className = "text-[34px]" }: Gam
   };
 
   const { color, stroke } = getColors();
+  const depthOffset = arabicDisplay ? `${ARABIC_DEPTH_OFFSET_EM}em` : "2.5px";
+  const arabicOutlineShadow = arabicDisplay
+    ? buildSmoothTextShadow(ARABIC_OUTLINE_RADIUS_EM, ARABIC_SHADOW_DIRECTIONS, stroke)
+    : undefined;
+  const arabicDepthShadow = arabicDisplay
+    ? buildSmoothTextShadow(ARABIC_OUTLINE_RADIUS_EM, ARABIC_SHADOW_DIRECTIONS, stroke, [
+        -(ARABIC_DEPTH_OFFSET_EM * 0.5),
+      ])
+    : undefined;
+  const textStyle: React.CSSProperties = arabicDisplay
+    ? {
+        fontFamily: "'Baloo Bhaijaan 2', 'Noto Sans Arabic', Tahoma, sans-serif",
+        fontWeight: 800,
+        letterSpacing: "normal",
+      }
+    : {
+        fontFamily: "'Fredoka', 'Inter', sans-serif",
+      };
+
+  const layer3OutlineStyle: React.CSSProperties = arabicDisplay
+    ? {
+        color: stroke,
+        textShadow: arabicDepthShadow,
+      }
+    : ({
+        color: stroke,
+        WebkitTextStroke: `3.5px ${stroke}`,
+        textStroke: `3.5px ${stroke}`,
+        paintOrder: "stroke fill",
+      } as React.CSSProperties);
+
+  const layer2OutlineStyle: React.CSSProperties = arabicDisplay
+    ? {
+        color: stroke,
+        textShadow: arabicOutlineShadow,
+      }
+    : ({
+        color: stroke,
+        WebkitTextStroke: `3.5px ${stroke}`,
+        textStroke: `3.5px ${stroke}`,
+        paintOrder: "stroke fill",
+      } as React.CSSProperties);
 
   return (
     <div 
-      className={`relative inline-block select-none font-black tracking-widest uppercase text-center leading-none ${className}`}
-      style={{ fontFamily: "'Fredoka', 'Inter', sans-serif" }}
+      dir={arabicDisplay ? "rtl" : undefined}
+      className={`relative inline-block select-none ${arabicDisplay ? "tracking-normal leading-[1.15]" : "font-black tracking-widest uppercase leading-none"} text-center ${className}`}
+      style={textStyle}
     >
       {/* 
         🎨 1. Layer 3: Background 3D Block Layer (الطبقة الخلفية ثلاثية الأبعاد)
-        Placed at the very bottom. Drawn using the stroke color for both fill and the thick 3.5px round outline.
-        Shifted downwards by 2.5px using transform to build a fully solid, gapless, and unified 3D base blocks.
+        Placed at the very bottom. Drawn using the stroke color for both fill and the thick round outline.
+        Shifted downwards using transform to build a fully solid, gapless, and unified 3D base block.
       */}
       <span
+        dir={arabicDisplay ? "rtl" : undefined}
         className="absolute top-0 left-0 w-full h-full block text-center"
         style={{
-          color: stroke,
-          WebkitTextStroke: `3.5px ${stroke}`,
-          textStroke: `3.5px ${stroke}`,
-          paintOrder: "stroke fill",
-          transform: "translate(0px, 2.5px)",
-          WebkitTransform: "translate(0px, 2.5px)",
+          ...textStyle,
+          ...layer3OutlineStyle,
+          transform: `translate(0px, ${depthOffset})`,
+          WebkitTransform: `translate(0px, ${depthOffset})`,
           pointerEvents: "none",
-        } as any}
+        }}
       >
         {text}
       </span>
@@ -58,16 +126,15 @@ export default function GameTitle({ text, type, className = "text-[34px]" }: Gam
       {/* 
         🎨 2. Layer 2: Middle Outline Layer (الطبقة الوسطى المحددة للحدود)
         Acts as the relative block layout anchor to define natural dimensions in the DOM flow.
-        Renders the perfect 3.5px round outer border outline in the normal, unshifted location.
+        Renders the outer border outline in the normal, unshifted location.
       */}
       <span
+        dir={arabicDisplay ? "rtl" : undefined}
         className="block"
         style={{
-          color: stroke,
-          WebkitTextStroke: `3.5px ${stroke}`,
-          textStroke: `3.5px ${stroke}`,
-          paintOrder: "stroke fill",
-        } as any}
+          ...textStyle,
+          ...layer2OutlineStyle,
+        }}
       >
         {text}
       </span>
@@ -77,8 +144,10 @@ export default function GameTitle({ text, type, className = "text-[34px]" }: Gam
         Sits at the very top of the stack, overlaying the smooth inner letters in pristine, high-contrast color.
       */}
       <span
+        dir={arabicDisplay ? "rtl" : undefined}
         className="absolute top-0 left-0 w-full h-full block text-center"
         style={{
+          ...textStyle,
           color: color,
           pointerEvents: "none",
         }}

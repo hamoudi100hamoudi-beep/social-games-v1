@@ -64,6 +64,21 @@ const cinematicItemVariants = {
 // Module-level timestamp to throttle room info requests across React component remounts and StrictMode cycles
 let lastRoomsInfoFetchTime = 0;
 
+function generateDefaultGuestNickname(): string {
+  let randomThreeDigits: number;
+  if (typeof globalThis !== 'undefined' && globalThis.crypto?.getRandomValues) {
+    const buffer = new Uint32Array(1);
+    const limit = Math.floor(0x100000000 / 900) * 900;
+    do {
+      globalThis.crypto.getRandomValues(buffer);
+    } while (buffer[0] >= limit);
+    randomThreeDigits = 100 + (buffer[0] % 900);
+  } else {
+    randomThreeDigits = 100 + Math.floor(Math.random() * 900);
+  }
+  return `Guest-${randomThreeDigits}`;
+}
+
 export default function Lobby({ onPlay }: LobbyProps) {
   const { socket } = useSocket();
   const { t, languageMode, changeLanguageMode } = useAppTranslation('common');
@@ -72,7 +87,13 @@ export default function Lobby({ onPlay }: LobbyProps) {
   const [screen, setScreen] = useState<Screen>('home');
   const [nickname, setNickname] = useState(() => {
     if (typeof window !== 'undefined') {
-      return safeLocalStorage.getItem('gartic_player_nickname') || '';
+      const savedNickname = safeLocalStorage.getItem('gartic_player_nickname');
+      if (savedNickname && savedNickname.trim().length > 0) {
+        return savedNickname;
+      }
+      const generatedNickname = generateDefaultGuestNickname();
+      safeLocalStorage.setItem('gartic_player_nickname', generatedNickname);
+      return generatedNickname;
     }
     return '';
   });

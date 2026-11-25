@@ -271,7 +271,12 @@ export function MiniBoardOverlay({
           <div className={cardClass} style={CARD_CONTAINER_STYLE}>
             {/* Top Title */}
             <div className="w-full shrink-0 pt-0.5 text-[15px] sm:text-[22px]" style={TITLE_WRAPPER_STYLE}>
-              <GameTitle text={isFreeDraw ? "FREE DRAW" : "WAITING"} type="miniboard" className="text-[1em]" />
+              <GameTitle
+                text={isFreeDraw ? (isRTL ? "الرسم الحر" : "FREE DRAW") : "WAITING"}
+                type="miniboard"
+                className="text-[1em]"
+                arabicDisplay={isFreeDraw && isRTL}
+              />
             </div>
 
             {/* Middle Frameless Animated Sprite */}
