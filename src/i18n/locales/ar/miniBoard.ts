@@ -2,6 +2,17 @@ import type { enMiniBoard } from '../en/miniBoard';
 import type { DeepPluralLocaleSchema } from '../../types';
 
 export const arMiniBoard = {
+  titles: {
+    freeDraw: 'الرسم الحر',
+    waiting: 'بانتظار اللاعبين',
+    newTurn: 'دور جديد!',
+    skipped: 'تم تخطي الدور!',
+    inactive: 'فاتك الدور!',
+    canceledTurn: 'تم إلغاء الدور!',
+    interval: 'استراحة!',
+    perfect: 'ممتاز!',
+    roundComplete: 'انتهت الجولة!',
+  },
   freeDraw: {
     description: 'ارسم ما تشاء بحرية. بدون مؤقت وبدون كلمة محددة.',
     startButton: 'ابدأ الرسم',

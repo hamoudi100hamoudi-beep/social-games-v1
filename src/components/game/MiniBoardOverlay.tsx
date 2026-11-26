@@ -272,10 +272,10 @@ export function MiniBoardOverlay({
             {/* Top Title */}
             <div className="w-full shrink-0 pt-0.5 text-[15px] sm:text-[22px]" style={TITLE_WRAPPER_STYLE}>
               <GameTitle
-                text={isFreeDraw ? (isRTL ? "الرسم الحر" : "FREE DRAW") : "WAITING"}
+                text={isFreeDraw ? t("titles.freeDraw") : t("titles.waiting")}
                 type="miniboard"
                 className="text-[1em]"
-                arabicDisplay={isFreeDraw && isRTL}
+                arabicDisplay={isRTL}
               />
             </div>
 
@@ -335,7 +335,7 @@ export function MiniBoardOverlay({
         >
           <div className={cardClass} style={CARD_CONTAINER_STYLE}>
             <div className="w-full shrink-0 pt-0.5 text-[16px] sm:text-[24px]" style={CHOOSING_TITLE_WRAP_STYLE}>
-              <GameTitle text="NEW TURN!" type="miniboard" className="text-[1em]" />
+              <GameTitle text={t("titles.newTurn")} type="miniboard" className="text-[1em]" arabicDisplay={isRTL} />
             </div>
 
             <div
@@ -391,7 +391,7 @@ export function MiniBoardOverlay({
               <motion.div key="round-end-skipped" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass} style={OVERLAY_CONTAINER_STYLE}>
                 <div className={cardClass} style={CARD_CONTAINER_STYLE}>
                   <div className="w-full shrink-0 pt-0.5 text-[16px] sm:text-[24px]" style={ROUND_END_TITLE_WRAP_STYLE}>
-                    <GameTitle text="SKIPPED!" type="miniboard" className="text-[1em]" />
+                    <GameTitle text={t("titles.skipped")} type="miniboard" className="text-[1em]" arabicDisplay={isRTL} />
                   </div>
                   <div className={roundEndSpriteSlotClass} style={ROUND_END_SPRITE_SLOT_STYLE}>
                     <SkippedSprite className="h-full w-auto max-w-full aspect-[374/559]" animationKey={activeAnimationKeyRef.current} />
@@ -427,7 +427,7 @@ export function MiniBoardOverlay({
               <motion.div key="round-end-lost" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass} style={OVERLAY_CONTAINER_STYLE}>
                 <div className={cardClass} style={CARD_CONTAINER_STYLE}>
                   <div className="w-full shrink-0 pt-0.5 text-[16px] sm:text-[24px]" style={ROUND_END_TITLE_WRAP_STYLE}>
-                    <GameTitle text="INACTIVE" type="miniboard" className="text-[1em]" />
+                    <GameTitle text={t("titles.inactive")} type="miniboard" className="text-[1em]" arabicDisplay={isRTL} />
                   </div>
                   <div className={roundEndSpriteSlotClass} style={ROUND_END_SPRITE_SLOT_STYLE}>
                     <TurnLostSprite className="h-full w-auto max-w-full aspect-[1295/1260]" animationKey={activeAnimationKeyRef.current} />
@@ -463,7 +463,7 @@ export function MiniBoardOverlay({
               <motion.div key="round-end-canceled" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={containerClass} style={OVERLAY_CONTAINER_STYLE}>
                 <div className={cardClass} style={CARD_CONTAINER_STYLE}>
                   <div className="w-full shrink-0 pt-0.5 text-[16px] sm:text-[24px]" style={ROUND_END_TITLE_WRAP_STYLE}>
-                    <GameTitle text="CANCELED TURN" type="miniboard" className="text-[1em]" />
+                    <GameTitle text={t("titles.canceledTurn")} type="miniboard" className="text-[1em]" arabicDisplay={isRTL} />
                   </div>
 
                   <div className={roundEndSpriteSlotClass} style={ROUND_END_SPRITE_SLOT_STYLE}>
@@ -485,12 +485,12 @@ export function MiniBoardOverlay({
           }
 
           // 3.4. INTERVAL / STANDARD ROUND END
-          let titleText = "INTERVAL";
+          let titleText = t("titles.interval");
           let subTitle = t("roundEnd.intervalSubtitle");
           let bottomText = "";
 
           if (reason === "all_guessed") {
-            titleText = "PERFECT!";
+            titleText = t("titles.perfect");
             subTitle = "";
             bottomText = t("roundEnd.allGuessed");
           } else if (reason === "timeout" || reason === "drawer_left") {
@@ -502,7 +502,7 @@ export function MiniBoardOverlay({
               <div className={cardClass} style={CARD_CONTAINER_STYLE}>
                 <div className="w-full shrink-0 pt-0.5">
                   <div className="text-[16px] sm:text-[24px]" style={ROUND_END_TITLE_WRAP_STYLE}>
-                    <GameTitle text={titleText} type="miniboard" className="text-[1em]" />
+                    <GameTitle text={titleText} type="miniboard" className="text-[1em]" arabicDisplay={isRTL} />
                   </div>
                   {subTitle && (
                     <p
@@ -664,7 +664,7 @@ export function MiniBoardOverlay({
                   className="w-full flex justify-center shrink-0 mb-0.5 sm:mb-2 text-[15px] sm:text-[28px]"
                   style={PODIUM_TITLE_WRAP_STYLE}
                 >
-                  <GameTitle text="ROUND COMPLETE" type="miniboard" className="text-[1em]" />
+                  <GameTitle text={t("titles.roundComplete")} type="miniboard" className="text-[1em]" arabicDisplay={isRTL} />
                 </motion.div>
 
                 <div

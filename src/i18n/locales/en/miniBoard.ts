@@ -1,4 +1,15 @@
 export const enMiniBoard = {
+  titles: {
+    freeDraw: 'FREE DRAW',
+    waiting: 'WAITING',
+    newTurn: 'NEW TURN!',
+    skipped: 'SKIPPED!',
+    inactive: 'INACTIVE',
+    canceledTurn: 'CANCELED TURN',
+    interval: 'INTERVAL',
+    perfect: 'PERFECT!',
+    roundComplete: 'ROUND COMPLETE',
+  },
   freeDraw: {
     description: 'Draw whatever you want. No timer, no prompt.',
     startButton: 'Start Drawing',
