@@ -37,15 +37,21 @@ export default function GameTitle({ text, type, className = "text-[34px]", arabi
   const getColors = () => {
     switch (type) {
       case "exit":
-        return { color: "#FFB300", stroke: "#0F3957" };
+        return arabicDisplay
+          ? { color: "#FFB300", stroke: "#0F3957" }
+          : { color: "#FFFFFF", stroke: "#FFB300" };
       case "report":
-        return { color: "#FB923C", stroke: "#0F3957" };
+        return arabicDisplay
+          ? { color: "#FB923C", stroke: "#0F3957" }
+          : { color: "#FFFFFF", stroke: "#FB923C" };
       case "profile":
         return { color: "#FFFFFF", stroke: "#4F46E5" };
       case "skip":
         return { color: "#FFFFFF", stroke: "#38BDF8" };
       case "inactive":
-        return { color: "#818CF8", stroke: "#2E2882" };
+        return arabicDisplay
+          ? { color: "#818CF8", stroke: "#2E2882" }
+          : { color: "#FFFFFF", stroke: "#818CF8" };
       case "choose":
       case "miniboard":
         return { color: "#FFFFFF", stroke: "#2E2882" };
