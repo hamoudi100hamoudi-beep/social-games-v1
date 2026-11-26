@@ -50,7 +50,7 @@ export interface CinematicModalButton {
 export interface CinematicModalProps {
   isOpen: boolean;
   onClose?: () => void;
-  titleType: "skip" | "exit" | "report" | "profile" | "inactive";
+  titleType: "skip" | "exit" | "disconnected" | "report" | "profile" | "inactive";
   titleText: string;
   arabicDisplay?: boolean;
   children?: React.ReactNode;
@@ -88,6 +88,7 @@ export default function CinematicModal({
       case "skip":
         return "cartoon-title-skip";
       case "exit":
+      case "disconnected":
         return "cartoon-title-exit";
       case "report":
         return "cartoon-title-report";
@@ -182,7 +183,7 @@ export default function CinematicModal({
               <GameTitle
                 text={titleText}
                 type={titleType}
-                className="text-[25px] sm:text-[32px]"
+                className={arabicDisplay ? "text-[27px] sm:text-[34px]" : "text-[25px] sm:text-[32px]"}
                 arabicDisplay={arabicDisplay}
               />
             </motion.div>

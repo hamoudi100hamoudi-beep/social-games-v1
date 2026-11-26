@@ -2,7 +2,7 @@ import React from "react";
 
 export interface GameTitleProps {
   text: string;
-  type: "exit" | "report" | "profile" | "skip" | "inactive" | "choose" | "miniboard";
+  type: "exit" | "disconnected" | "report" | "profile" | "skip" | "inactive" | "choose" | "miniboard";
   className?: string; // Tailwind text size class, e.g., "text-[34px]", "text-[42px]"
   arabicDisplay?: boolean;
 }
@@ -37,21 +37,17 @@ export default function GameTitle({ text, type, className = "text-[34px]", arabi
   const getColors = () => {
     switch (type) {
       case "exit":
-        return arabicDisplay
-          ? { color: "#FFB300", stroke: "#0F3957" }
-          : { color: "#FFFFFF", stroke: "#FFB300" };
+        return { color: "#FFFFFF", stroke: "#E87500" };
+      case "disconnected":
+        return { color: "#FFFFFF", stroke: "#FFB300" };
       case "report":
-        return arabicDisplay
-          ? { color: "#FB923C", stroke: "#0F3957" }
-          : { color: "#FFFFFF", stroke: "#FB923C" };
+        return { color: "#FFFFFF", stroke: "#E87500" };
       case "profile":
         return { color: "#FFFFFF", stroke: "#4F46E5" };
       case "skip":
         return { color: "#FFFFFF", stroke: "#38BDF8" };
       case "inactive":
-        return arabicDisplay
-          ? { color: "#818CF8", stroke: "#2E2882" }
-          : { color: "#FFFFFF", stroke: "#818CF8" };
+        return { color: "#FFFFFF", stroke: "#818CF8" };
       case "choose":
       case "miniboard":
         return { color: "#FFFFFF", stroke: "#2E2882" };

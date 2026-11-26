@@ -664,7 +664,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
       <CinematicModal
         isOpen={connLostWarning}
         onClose={() => setConnLostWarning(false)}
-        titleType="exit"
+        titleType="disconnected"
         titleText={tModals('titles.disconnected')}
         arabicDisplay={isModalsRTL}
         buttons={[
