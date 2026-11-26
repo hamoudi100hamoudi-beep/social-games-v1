@@ -1696,7 +1696,10 @@ export default function ExperimentalGameRoom({
                         ${morphMode ? "col-start-2 col-end-3 row-start-2 row-end-3" : "col-start-2 col-end-3 row-start-2 row-end-3"}
                        `}
           >
-          <div className="flex-1 flex flex-col bg-bg-dark-brand rounded-xl sm:rounded-2xl shadow-inner border border-white/5 overflow-hidden relative">
+          <div
+            className="flex-1 flex flex-col bg-bg-dark-brand rounded-xl sm:rounded-2xl shadow-inner border border-white/5 overflow-hidden relative"
+            style={{ marginBottom: isInputFocused ? "var(--keyboard-inset, 0px)" : "0px" }}
+          >
             {/* Actions Bar */}
             <div
               className={`shrink-0 bg-[#0A1A38] ${isInputFocused ? "hidden" : "block"}`}
@@ -1765,7 +1768,7 @@ export default function ExperimentalGameRoom({
             {/* Guess Input Area */}
             <div 
               className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 shrink-0 mt-auto bg-transparent"
-              style={{ paddingBottom: 'calc(0.5rem + var(--keyboard-inset, 0px))' }}
+              style={{ paddingBottom: '0.5rem' }}
             >
               <form onSubmit={handleGuessSubmit} className="relative">
                 {!isInputFocused && !isFreeDraw && (
