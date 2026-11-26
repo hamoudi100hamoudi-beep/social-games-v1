@@ -48,10 +48,11 @@ This registry is a **documentation-only technical navigation and maintenance cat
   - Card (`cinematicCardVariants`): `hidden: { opacity: 0, scale: 0.95 }` -> `visible: { opacity: 1, scale: 1, transition: { duration: 0.2, ease: "easeOut" } }` -> `exit: { scale: 0.95, opacity: 0, transition: { duration: 0.15, ease: "easeIn" } }`.
   - Header, body, and button tiers (`cinematicItemVariants`): `hidden: { opacity: 0, y: 5 }` -> `visible: { opacity: 1, y: 0, transition: { duration: 0.15, ease: "easeOut" } }`.
 - **Button Variants:** `primary` (`#38BDF8`), `secondary` (`#ECEBFC`), `danger` (`#FB923C`), `neutral` (`#818CF8`), or `custom` (`btn.className`).
+- **Arabic Title Opt-In:** Optional `arabicDisplay` prop (`false` by default) forwarded to `GameTitle` when rendering localized RTL popup headings.
 
 ### 1.2 `GameTitle`
 - **File Path:** `src/components/game/GameTitle.tsx`
-- **Purpose:** 3-layer stacked 3D cartoon header typography (`'Fredoka', 'Inter', sans-serif`) used by `CinematicModal`, `CustomEmojiModal`, `MiniBoardOverlay`, and `Lobby`.
+- **Purpose:** 3-layer stacked 3D cartoon header typography (`'Fredoka', 'Inter', sans-serif` for English; inherited `font-sans` stack at `fontWeight: 900`, `dir="rtl"`, and 24-direction circular `text-shadow` outline when `arabicDisplay` is `true`) used by `CinematicModal`, `CustomEmojiModal`, `MiniBoardOverlay`, and `Lobby`.
 - **Color Presets (`type`):**
   - `"exit"`: Fill `#FFB300` (warm golden/orange) / Stroke `#0F3957`
   - `"report"`: Fill `#FB923C` (orange) / Stroke `#0F3957`
@@ -71,7 +72,7 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **File Path:** `src/components/game/modals/ExitConfirmModal.tsx`
 - **Parent Component(s):** `GameRoom.tsx`, `ExperimentalGameRoom.tsx`
 - **Purpose & Trigger Condition:** Confirms whether the player wants to leave the active room; opened when clicking the room header/toolbar exit action (`showExitConfirm`).
-- **Title / `GameTitle` Text & Type:** `"EXIT"` / `type="exit"` (`#FFB300` / `#0F3957`)
+- **Title / `GameTitle` Text & Type:** `"EXIT"` (AR: `"الخروج"`) / `type="exit"` (`#FFB300` / `#0F3957`)
 - **Main Content & Action Controls:**
   - Animated `ExitSprite` illustration (`w-26 sm:w-36`)
   - Confirmation question (`#exit-confirm-title`): `modals:exit.question`
@@ -79,15 +80,15 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **Close Behavior:** `X` button, guarded backdrop click, or `#exit-confirm-no-btn`.
 - **Animation Owner:** `CinematicModal` (Framer Motion) + `ExitSprite` inner animation.
 - **Verified Entrance / Exit Behavior:** Framer Motion card `opacity: 0->1`, `scale: 0.95->1` (`0.2s easeOut`) and `scale: 1->0.95`, `opacity: 1->0` (`0.15s easeIn`).
-- **Layout & Direction Notes:** `#exit-confirm-title` sets `dir={isRTL ? "rtl" : "ltr"}` locally.
-- **Localization Source & Keys:** Localized in `src/i18n/locales/{en,ar}/modals.ts` (`modals:exit.question`) and `common.ts` (`common:actions.no`, `common:actions.yes`). Title `"EXIT"` is intentionally kept in English.
+- **Layout & Direction Notes:** `#exit-confirm-title` sets `dir={isRTL ? "rtl" : "ltr"}` locally; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `src/i18n/locales/{en,ar}/modals.ts` (`modals:titles.exit`, `modals:exit.question`) and `common.ts` (`common:actions.no`, `common:actions.yes`).
 
 ### 2.2 `SkipConfirmModal` (`SKIP`)
 - **Display Name / Identifier:** `SkipConfirmModal` (`SKIP`)
 - **File Path:** `src/components/game/modals/SkipConfirmModal.tsx`
 - **Parent Component(s):** `ExperimentalGameRoom.tsx`
 - **Purpose & Trigger Condition:** Confirms whether the active drawer wants to skip their drawing turn; opened from the skip turn action (`showSkipConfirm`).
-- **Title / `GameTitle` Text & Type:** `"SKIP"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle` Text & Type:** `"SKIP"` (AR: `"تخطّي"`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Main Content & Action Controls:**
   - Framed `FastForward` icon badge (`w-28 h-18 sm:w-32 sm:h-20`) with CSS loop animation
   - Confirmation question (`#skip-confirm-title`): `modals:skip.question`
@@ -95,15 +96,15 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **Close Behavior:** `X` button, guarded backdrop click, `#skip-confirm-no-btn`, or automatically dismissed by `ExperimentalGameRoom.tsx` whenever the player leaves active drawing mode (`!isDrawingMode`) or `gameState.status !== "DRAWING"` (resets `showSkipConfirm` only; never invokes `handleSkipTurn()` or emits `skip_turn`).
 - **Animation Owner:** `CinematicModal` (Framer Motion) + CSS `.animate-skip-escape` (`src/components/index.css`).
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`) + continuous `skip-escape-creature` CSS loop (`3.2s cubic-bezier(0.34, 1.25, 0.64, 1) infinite`).
-- **Layout & Direction Notes:** `#skip-confirm-title` sets `dir={isRTL ? "rtl" : "ltr"}` locally; inner animation frame stays `select-none`.
-- **Localization Source & Keys:** Localized in `modals.ts` (`modals:skip.question`) and `common.ts` (`common:actions.*`). Title `"SKIP"` is intentionally kept in English.
+- **Layout & Direction Notes:** `#skip-confirm-title` sets `dir={isRTL ? "rtl" : "ltr"}` locally; inner animation frame stays `select-none`; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.skip`, `modals:skip.question`) and `common.ts` (`common:actions.*`).
 
 ### 2.3 `ReportConfirmModal` (`REPORT`)
 - **Display Name / Identifier:** `ReportConfirmModal` (`REPORT`)
 - **File Path:** `src/components/game/modals/ReportConfirmModal.tsx`
 - **Parent Component(s):** `ExperimentalGameRoom.tsx`
 - **Purpose & Trigger Condition:** Confirms reporting the current drawing; opened when a guesser clicks the report button (`showReportConfirm`).
-- **Title / `GameTitle` Text & Type:** `"REPORT"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle` Text & Type:** `"REPORT"` (AR: `"إبلاغ"`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Main Content & Action Controls:**
   - Animated `AlertTriangle` (`w-16 h-16 sm:w-20 sm:h-20`, `#FB923C`)
   - Confirmation question (`#report-confirm-title`): `modals:report.question`
@@ -111,15 +112,15 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **Close Behavior:** `X` button, guarded backdrop click, or `#report-confirm-no-btn`.
 - **Animation Owner:** `CinematicModal` (Framer Motion) + inner `motion.div` periodic shake.
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`) + `AlertTriangle` periodic shake/pulse (`delay: 1.5s, duration: 0.6s, repeatDelay: 1.8s, repeat: Infinity`).
-- **Layout & Direction Notes:** `#report-confirm-title` sets `dir={isRTL ? "rtl" : "ltr"}` locally.
-- **Localization Source & Keys:** Localized in `modals.ts` (`modals:report.question`) and `common.ts` (`common:actions.*`). Title `"REPORT"` is intentionally kept in English.
+- **Layout & Direction Notes:** `#report-confirm-title` sets `dir={isRTL ? "rtl" : "ltr"}` locally; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.report`, `modals:report.question`) and `common.ts` (`common:actions.*`).
 
 ### 2.4 `AfkWarningModal` (In-Game Pre-Kick Warning — `INACTIVE`)
 - **Display Name / Identifier:** `AfkWarningModal` (`INACTIVE` — in-game live countdown)
 - **File Path:** `src/components/game/modals/AfkWarningModal.tsx`
 - **Parent Component(s):** `GameRoom.tsx`, `ExperimentalGameRoom.tsx`
 - **Purpose & Trigger Condition:** Live pre-kick inactivity warning inside an active room when the server emits an AFK warning countdown (`showAfkWarning`), giving the player a chance to confirm activity before being kicked. **Distinct from Lobby post-kick `INACTIVE` modal (2.9).**
-- **Title / `GameTitle` Text & Type:** `"INACTIVE"` / `type="inactive"` (`#818CF8` / `#2E2882`)
+- **Title / `GameTitle` Text & Type:** `"INACTIVE"` (AR: `"خمول!"`) / `type="inactive"` (`#818CF8` / `#2E2882`)
 - **Main Content & Action Controls:**
   - `AfkWarningSprite` illustration (`w-24 sm:w-34`)
   - Combined prompt (`#afk-title` + `#afk-description`): `modals:afk.question` + `modals:afk.actionHint`
@@ -128,15 +129,15 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **Close Behavior:** **Blocking action only** (`onClose` is NOT passed to `CinematicModal`, so no `X` button or backdrop close — user must click `#afk-return-btn` to emit stay-active confirmation).
 - **Animation Owner:** `CinematicModal` (Framer Motion) + `AfkWarningSprite` + Tailwind `animate-ping` status dot.
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`) + pulsing countdown indicator.
-- **Layout & Direction Notes:** Prompt and countdown badge apply `dir={isRTL ? "rtl" : "ltr"}` locally; CLDR plural forms (`_zero`, `_one`, `_two`, `_few`, `_many`, `_other`) handled via `<Trans>`.
-- **Localization Source & Keys:** Localized in `modals.ts` (`modals:afk.*`) and `common.ts` (`common:actions.ok`). Title `"INACTIVE"` is intentionally kept in English.
+- **Layout & Direction Notes:** Prompt and countdown badge apply `dir={isRTL ? "rtl" : "ltr"}` locally; `arabicDisplay={isRTL}` renders the Arabic title in RTL; CLDR plural forms (`_zero`, `_one`, `_two`, `_few`, `_many`, `_other`) handled via `<Trans>`.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.afkInactive`, `modals:afk.*`) and `common.ts` (`common:actions.ok`).
 
 ### 2.5 `PlayerProfileModal` (`PROFILE`)
 - **Display Name / Identifier:** `PlayerProfileModal` (`PROFILE`)
 - **File Path:** `src/components/game/modals/PlayerProfileModal.tsx`
 - **Parent Component(s):** `GameRoom.tsx`, `ExperimentalGameRoom.tsx`
 - **Purpose & Trigger Condition:** Displays another player's (or own) profile card when clicking a player slot (`selectedPlayerProfile`), allowing mute/block or votekick actions.
-- **Title / `GameTitle` Text & Type:** `"PROFILE"` / `type="profile"` (`#FFFFFF` / `#4F46E5`)
+- **Title / `GameTitle` Text & Type:** `"PROFILE"` (AR: `"الملف"`) / `type="profile"` (`#FFFFFF` / `#4F46E5`)
 - **Main Content & Action Controls:**
   - Circular avatar emoji preview (`w-24 h-24 sm:w-30 sm:h-30`, `👤` fallback)
   - Player name (`#profile-modal-name`) wrapped in `<bdi dir="auto">`
@@ -145,52 +146,52 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **Close Behavior:** `X` button, guarded backdrop click, or auto-closes immediately upon clicking block or votekick buttons.
 - **Animation Owner:** `CinematicModal` (Framer Motion) + Tailwind CSS utility `animate-in fade-in slide-in-from-bottom-2 duration-300` on action buttons container.
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`) + CSS slide-up fade (`300ms`) on action stack.
-- **Layout & Direction Notes:** Player name enforces bidirectional isolation with `dir="auto"` and `<bdi dir="auto">`; self-notice and action stack apply `dir={isRTL ? "rtl" : "ltr"}`.
-- **Localization Source & Keys:** Localized in `modals.ts` (`modals:profile.*`). Title `"PROFILE"` is intentionally kept in English.
+- **Layout & Direction Notes:** Player name enforces bidirectional isolation with `dir="auto"` and `<bdi dir="auto">`; self-notice and action stack apply `dir={isRTL ? "rtl" : "ltr"}`; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.profile`, `modals:profile.*`).
 
 ### 2.6 `RoomAlertModals` — Grouped Component Containing 6 Individual Alert Dialogs
 - **Grouped Component Path:** `src/components/game/modals/RoomAlertModals.tsx`
 - **Parent Component(s):** `GameRoom.tsx`, `ExperimentalGameRoom.tsx`
-- **Shared Structure:** Renders six discrete `CinematicModal` instances side-by-side (`RoomAlertModals` counts as **1 source component file containing 6 individual popup instances**). All alert `<h3 />` message nodes apply `dir={isRTL ? "rtl" : "ltr"}` locally; English `GameTitle` headers are intentionally preserved.
+- **Shared Structure:** Renders six discrete `CinematicModal` instances side-by-side (`RoomAlertModals` counts as **1 source component file containing 6 individual popup instances**). All alert `<h3 />` message nodes apply `dir={isRTL ? "rtl" : "ltr"}` locally; `GameTitle` headers are localized via `modals:titles.*` and pass `arabicDisplay={isRTL}` while keeping English `Fredoka` titles unchanged.
 
 #### 2.6.1 Votekick Cooldown Warning (`SLOW DOWN`)
 - **Trigger Condition:** `showCooldownWarning && shouldRenderCooldown`
-- **Title / `GameTitle`:** `"SLOW DOWN"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle`:** `"SLOW DOWN"` (AR: `"تمهل!"`, `modals:titles.slowDown`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Content & Controls:** Shaking red `AlertTriangle` (`w-20 h-20`), message `#cooldown-warning-title` (`modals:alerts.cooldown.message`), button `#cooldown-warning-ok-btn` (`variant="custom"`, teal `#1AAACC`, `common:actions.ok`)
 - **Close Behavior:** `X` button, guarded backdrop click, or `#cooldown-warning-ok-btn`.
 - **Animation Owner:** `CinematicModal` + `motion.div` periodic shake (`delay: 1.5s, duration: 0.6s, repeatDelay: 1.8s, repeat: Infinity`).
 
 #### 2.6.2 Voted Out / Kicked Alert (`KICKED`)
 - **Trigger Condition:** `isBanned`
-- **Title / `GameTitle`:** `"KICKED"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle`:** `"KICKED"` (AR: `"طُردت!"`, `modals:titles.kicked`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Content & Controls:** Shaking red `AlertTriangle` (`w-20 h-20`), message `#kicked-out-desc` (`modals:alerts.kicked.message`), button `#kicked-out-exit-btn` (`variant="danger"`, `common:actions.ok`)
 - **Close Behavior:** **Blocking (`onClose` omitted)** — player must press `#kicked-out-exit-btn` (`onLeaveFromBanned`).
 - **Animation Owner:** `CinematicModal` + `motion.div` periodic shake (`delay: 1.5s, duration: 0.6s, repeatDelay: 1.8s, repeat: Infinity`).
 
 #### 2.6.3 Nickname Taken Error (`ERROR`)
 - **Trigger Condition:** `isNicknameTaken`
-- **Title / `GameTitle`:** `"ERROR"` / `type="report"` (`#FB923C` / `#0F3957`), custom opaque backdrop `overlayClassName="bg-slate-950/100"`
+- **Title / `GameTitle`:** `"ERROR"` (AR: `"محجوز!"`, `modals:titles.nicknameTaken`) / `type="report"` (`#FB923C` / `#0F3957`), custom opaque backdrop `overlayClassName="bg-slate-950/100"`
 - **Content & Controls:** Shaking orange `AlertTriangle` (`w-20 h-20`), message `#nickname-taken-desc` (`modals:alerts.nicknameTaken.message`), button `#nickname-taken-exit-btn` (`variant="danger"`, `common:actions.ok`)
 - **Close Behavior:** `X` button, guarded backdrop click, or `#nickname-taken-exit-btn` (all call `onLeaveFromNicknameTaken`).
 - **Animation Owner:** `CinematicModal` + `motion.div` periodic shake (`delay: 1.5s, duration: 0.6s, repeatDelay: 1.8s, repeat: Infinity`).
 
 #### 2.6.4 In-Room Join Room-Full Error (`ERROR`)
 - **Trigger Condition:** `isRoomFull`
-- **Title / `GameTitle`:** `"ERROR"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle`:** `"ERROR"` (AR: `"ممتلئة!"`, `modals:titles.roomFull`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Content & Controls:** Shaking orange `AlertTriangle` (`w-20 h-20`), message `#room-full-desc` (`modals:alerts.roomFull.message`), button `#room-full-exit-btn` (`variant="danger"`, `common:actions.ok`)
 - **Close Behavior:** `X` button, guarded backdrop click, or `#room-full-exit-btn` (all call `onLeaveFromRoomFull`).
 - **Animation Owner:** `CinematicModal` + `motion.div` periodic shake (`delay: 1.5s, duration: 0.6s, repeatDelay: 1.8s, repeat: Infinity`).
 
 #### 2.6.5 Server Full / Auth Store Full Alert (`SERVER FULL`)
 - **Trigger Condition:** `isAuthStoreFull`
-- **Title / `GameTitle`:** `"SERVER FULL"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle`:** `"SERVER FULL"` (AR: `"مشغول!"`, `modals:titles.serverFull`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Content & Controls:** Static orange `AlertTriangle` (`w-20 h-20`, no shake), message `#auth-store-full-desc` (`modals:alerts.serverFull.message`), button `#auth-store-full-exit-btn` (`variant="danger"`, `common:actions.ok`)
 - **Close Behavior:** `X` button, guarded backdrop click, or `#auth-store-full-exit-btn` (all call `onLeaveFromAuthStoreFull`).
 - **Animation Owner:** `CinematicModal` only.
 
 #### 2.6.6 Join Room Timeout Alert (`TIMEOUT`)
 - **Trigger Condition:** `isJoinTimedOut`
-- **Title / `GameTitle`:** `"TIMEOUT"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle`:** `"TIMEOUT"` (AR: `"مهلة!"`, `modals:titles.timeout`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Content & Controls:** Static orange `AlertTriangle` (`w-20 h-20`, no shake), message `#join-timeout-desc` (`modals:alerts.joinTimeout.message`), button `#join-timeout-exit-btn` (`variant="danger"`, `common:actions.ok`)
 - **Close Behavior:** `X` button, guarded backdrop click, or `#join-timeout-exit-btn` (all call `onLeaveFromJoinTimeout`).
 - **Animation Owner:** `CinematicModal` only.
@@ -200,7 +201,7 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **File Path:** `src/components/experimental/ExperimentalDrawingBoard.tsx` (inline `CinematicModal`)
 - **Parent Component(s):** `ExperimentalDrawingBoard` (shared across Competitive Experimental & Free Draw rooms)
 - **Purpose & Trigger Condition:** Confirms clearing the entire drawing canvas before executing `canvasCoreRef.current?.clear()`; opened when the active drawer/artist taps the clear-canvas toolbar button (`requestClearCanvas` -> `showClearConfirm`).
-- **Title / `GameTitle` Text & Type:** `"CLEAN"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle` Text & Type:** `"CLEAN"` (AR: `"مسح"`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Main Content & Action Controls:**
   - Circular red-tinted badge (`w-16 h-16 sm:w-20 sm:h-20` inside `w-20 h-20 sm:w-26 sm:h-26`, `#EF4444`) with spinning `RefreshCcw` icon
   - Prompt (`#clean-confirm-desc`): `modals:clean.question`
@@ -208,15 +209,15 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **Close Behavior:** `X` button, guarded backdrop click, `#clean-confirm-no-btn`, or automatically dismissed by `ExperimentalDrawingBoard.tsx` when `readOnly` transitions `false -> true` (competitive or Free Draw; resets `showClearConfirm` only without invoking `confirmClear()` or clearing the canvas).
 - **Animation Owner:** `CinematicModal` (Framer Motion) + CSS `.animate-clean-spin` (`src/components/index.css`).
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`) + `clean-spin-loop` (`3s cubic-bezier(0.34, 1.3, 0.64, 1) infinite`, pauses briefly then rotates `-360deg`).
-- **Layout & Direction Notes:** Root board stays `dir="rtl"` and canvas container stays `dir="ltr"`; `#clean-confirm-desc` sets `dir={isRTL ? "rtl" : "ltr"}` locally inside the portal modal.
-- **Localization Source & Keys:** Localized in `modals.ts` (`modals:clean.question`) and `common.ts` (`common:actions.no`, `common:actions.yes`). Title `"CLEAN"` is intentionally kept in English.
+- **Layout & Direction Notes:** Root board stays `dir="rtl"` and canvas container stays `dir="ltr"`; `#clean-confirm-desc` sets `dir={isRTL ? "rtl" : "ltr"}` locally inside the portal modal; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.clean`, `modals:clean.question`) and `common.ts` (`common:actions.no`, `common:actions.yes`).
 
 ### 2.8 Floating Player Names Confirmation (`NAMES`)
 - **Display Name / Identifier:** Floating Player Names Confirmation (`NAMES`)
 - **File Path:** `src/components/experimental/ExperimentalDrawingBoard.tsx` (inline `CinematicModal` gated by `{isFreeDraw && ...}`)
 - **Parent Component(s):** `ExperimentalDrawingBoard` (**Free Draw mode only**)
 - **Purpose & Trigger Condition:** Confirms toggling the `showFloatingNames` preference (persisted in `safeLocalStorage` under `gartic_show_floating_names`, default `true`) controlling live floating artist name tags over strokes; triggered by the eye toggle button (`handleToggleFloatingNames` -> `showFloatingNamesConfirm`).
-- **Title / `GameTitle` Text & Type:** `"NAMES"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle` Text & Type:** `"NAMES"` (AR: `"الأسماء"`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Main Content & Action Controls:**
   - Dynamic circular icon badge (`w-16 h-16 sm:w-20 sm:h-20`): red `#EF4444` + `EyeOff` when names are currently shown (asking to hide); blue `#3B82F6` + `Eye` when names are currently hidden (asking to show)
   - Conditional prompt (`#names-confirm-desc`): `modals:names.hideQuestion` or `modals:names.showQuestion`
@@ -224,71 +225,71 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **Close Behavior:** `X` button, guarded backdrop click, `#names-confirm-no-btn`, or automatically dismissed by `ExperimentalDrawingBoard.tsx` when `readOnly` transitions `false -> true` in Free Draw (resets `showFloatingNamesConfirm` only without invoking `confirmToggleFloatingNames()` or mutating persisted `showFloatingNames`).
 - **Animation Owner:** `CinematicModal` (Framer Motion). Inner icon is static.
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`).
-- **Layout & Direction Notes:** Rendered only when `isFreeDraw` is `true`; `#names-confirm-desc` sets `dir={isRTL ? "rtl" : "ltr"}` locally.
-- **Localization Source & Keys:** Localized in `modals.ts` (`modals:names.hideQuestion`, `modals:names.showQuestion`) and `common.ts` (`common:actions.no`, `common:actions.yes`). Title `"NAMES"` is intentionally kept in English.
+- **Layout & Direction Notes:** Rendered only when `isFreeDraw` is `true`; `#names-confirm-desc` sets `dir={isRTL ? "rtl" : "ltr"}` locally; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.names`, `modals:names.hideQuestion`, `modals:names.showQuestion`) and `common.ts` (`common:actions.no`, `common:actions.yes`).
 
 ### 2.9 Lobby AFK Post-Kick Notification (`INACTIVE`)
 - **Display Name / Identifier:** Lobby AFK Post-Kick Notification (`INACTIVE`)
 - **File Path:** `src/components/Lobby.tsx` (inline `CinematicModal`)
 - **Parent Component(s):** `Lobby`
 - **Purpose & Trigger Condition:** Post-kick notification displayed on return to the Lobby after being disconnected/kicked for inactivity (`afkWarning` initialized on mount when `gartic_afk_kicked` timestamp is `< 180000` ms old; storage flags are cleared on mount). Hides the home card while visible (`!afkWarning && !connLostWarning`). **Distinct from in-game `AfkWarningModal` (2.4).**
-- **Title / `GameTitle` Text & Type:** `"INACTIVE"` / `type="inactive"` (`#818CF8` / `#2E2882`)
+- **Title / `GameTitle` Text & Type:** `"INACTIVE"` (AR: `"خمول!"`) / `type="inactive"` (`#818CF8` / `#2E2882`)
 - **Main Content & Action Controls:**
   - Message (`#afk-warning-text`): `modals:lobbyAfk.message`
   - Button: `#afk-warning-ok-btn` (`variant="secondary"`, `common:actions.ok`)
 - **Close Behavior:** `X` button, guarded backdrop click, or `#afk-warning-ok-btn`.
 - **Animation Owner:** `CinematicModal` (Framer Motion).
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`).
-- **Layout & Direction Notes:** `#afk-warning-text` applies `dir={isModalsRTL ? "rtl" : "ltr"}`.
-- **Localization Source & Keys:** Localized in `modals.ts` (`modals:lobbyAfk.message`) and `common.ts` (`common:actions.ok`). Title `"INACTIVE"` is intentionally kept in English.
+- **Layout & Direction Notes:** `#afk-warning-text` applies `dir={isModalsRTL ? "rtl" : "ltr"}`; `arabicDisplay={isModalsRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.lobbyInactive`, `modals:lobbyAfk.message`) and `common.ts` (`common:actions.ok`).
 
 ### 2.10 Lobby Connection-Lost Notification (`DISCONNECTED`)
 - **Display Name / Identifier:** Lobby Connection-Lost Notification (`DISCONNECTED`)
 - **File Path:** `src/components/Lobby.tsx` (inline `CinematicModal`)
 - **Parent Component(s):** `Lobby`
 - **Purpose & Trigger Condition:** Post-exit notification displayed on return to the Lobby after a room disconnect/join timeout or non-AFK session expiration (`connLostWarning` initialized on mount when `gartic_connection_lost` is `< 180000` ms old OR `!isAfk && !afkStored && reason === 'connection_lost' && !connLostStored`). Hides the home card while visible. **Distinct from `RoomConnectionStatusOverlay` (4.1).**
-- **Title / `GameTitle` Text & Type:** `"DISCONNECTED"` / `type="exit"` (**warm golden/orange** `#FFB300` / `#0F3957` — intentionally uses `"exit"` styling)
+- **Title / `GameTitle` Text & Type:** `"DISCONNECTED"` (AR: `"انقطاع!"`) / `type="exit"` (**warm golden/orange** `#FFB300` / `#0F3957` — intentionally uses `"exit"` styling)
 - **Main Content & Action Controls:**
   - Message (`#conn-lost-warning-text`): `modals:lobbyDisconnected.message`
   - Button: `#conn-lost-warning-ok-btn` (`variant="danger"`, `common:actions.ok`)
 - **Close Behavior:** `X` button, guarded backdrop click, or `#conn-lost-warning-ok-btn`.
 - **Animation Owner:** `CinematicModal` (Framer Motion).
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`).
-- **Layout & Direction Notes:** `#conn-lost-warning-text` applies `dir={isModalsRTL ? "rtl" : "ltr"}`.
-- **Localization Source & Keys:** Localized in `modals.ts` (`modals:lobbyDisconnected.message`) and `common.ts` (`common:actions.ok`). Title `"DISCONNECTED"` with `titleType="exit"` is intentionally kept unchanged.
+- **Layout & Direction Notes:** `#conn-lost-warning-text` applies `dir={isModalsRTL ? "rtl" : "ltr"}`; `arabicDisplay={isModalsRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.disconnected`, `modals:lobbyDisconnected.message`) and `common.ts` (`common:actions.ok`). `titleType="exit"` is intentionally kept unchanged.
 
 ### 2.11 Lobby Room-Full Error Modal (`ERROR`)
 - **Display Name / Identifier:** Lobby Room-Full Error Modal (`ERROR`)
 - **File Path:** `src/components/Lobby.tsx` (inline `CinematicModal`)
 - **Parent Component(s):** `Lobby`
 - **Purpose & Trigger Condition:** Displayed when `handlePlay()` checks room capacity via `get_room_info` and finds `data.count >= maxCapacity`, setting `joinError`.
-- **Title / `GameTitle` Text & Type:** `"ERROR"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle` Text & Type:** `"ERROR"` (AR: `"ممتلئة!"`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Main Content & Action Controls:**
   - Shaking orange `AlertTriangle` (`w-20 h-20`)
-  - Hardcoded bilingual texts (`#lobby-room-full-desc`: `"This room is full"`, `#lobby-room-full-desc-ar`: `"هذه الغرفة ممتلئة بالكامل"`)
-  - Button: `#lobby-room-full-ok-btn` (`variant="danger"`, `"OK"`)
+  - Message (`#lobby-room-full-desc`): `modals:alerts.roomFull.message`
+  - Button: `#lobby-room-full-ok-btn` (`variant="danger"`, `common:actions.ok`)
 - **Close Behavior:** `X` button, guarded backdrop click, or `#lobby-room-full-ok-btn`.
 - **Animation Owner:** `CinematicModal` (Framer Motion) + `motion.div` periodic `AlertTriangle` shake (`delay: 1.5s, duration: 0.6s, repeatDelay: 1.8s, repeat: Infinity`).
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`).
-- **Layout & Direction Notes:** Still uses stacked hardcoded EN + AR paragraphs.
-- **Localization Source & Status:** Not yet localized (scheduled for `L10N-6`; see `LOCALIZATION_ROADMAP.md`).
+- **Layout & Direction Notes:** `#lobby-room-full-desc` applies `dir={isModalsRTL ? 'rtl' : 'ltr'}`; `arabicDisplay={isModalsRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.roomFull`, `modals:alerts.roomFull.message`) and `common.ts` (`common:actions.ok`).
 
 ### 2.12 `RoomInfoModal` (`INFO`)
 - **Display Name / Identifier:** `RoomInfoModal` (`INFO`)
 - **File Path:** `src/components/lobby/RoomInfoModal.tsx`
 - **Parent Component(s):** `Lobby.tsx` (`selectedRoom`)
 - **Purpose & Trigger Condition:** Shows selected room metadata (player count/max, theme, winning points/open mode) and error banner before joining; opened when clicking a room card in `RoomsBrowserScreen` (`selectedRoom !== null`).
-- **Title / `GameTitle` Text & Type:** `"INFO"` / `type="report"` (`#FB923C` / `#0F3957`)
+- **Title / `GameTitle` Text & Type:** `"INFO"` (AR: `"معلومات"`) / `type="report"` (`#FB923C` / `#0F3957`)
 - **Main Content & Action Controls:**
   - Spinning `Settings` icon (`w-18 h-18 sm:w-20 sm:h-20` circle, `animate-spin-slow`)
   - Room display name (`roomDisplayName`) and optional `joinError` alert box
-  - 3-column stats grid (`grid-cols-3`, labels `Players`, `Theme`, `To Win` / `"مفتوح"` for Free Draw)
-  - Button: `#room-info-play-btn` (`variant="danger"`, `Play` icon, `"PLAY"`)
+  - 3-column stats grid (`grid-cols-3`, labels `lobby:roomInfo.players`, `lobby:roomInfo.theme`, `lobby:roomInfo.toWin` / `lobby:roomInfo.open`)
+  - Button: `#room-info-play-btn` (`variant="danger"`, `Play` icon, `lobby:roomInfo.play`)
 - **Close Behavior:** `X` button or guarded backdrop click (`onClose`).
 - **Animation Owner:** `CinematicModal` (Framer Motion) + Tailwind `animate-spin-slow` on `Settings` icon.
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`).
-- **Layout & Direction Notes:** Inherits `CinematicModal` dimensions without explicit `dir` attributes; contains hardcoded EN labels (`Players`, `Theme`, `To Win`, `PLAY`, `pts`) and AR (`مفتوح`).
-- **Localization Source & Status:** Not yet localized (scheduled for `L10N-6`; see `LOCALIZATION_ROADMAP.md`).
+- **Layout & Direction Notes:** Stats grid and labels apply `dir={isRTL ? 'rtl' : 'ltr'}`; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.info`) and `lobby.ts` (`lobby:roomInfo.*`).
 
 ---
 
@@ -301,7 +302,7 @@ These modals do **not** use `CinematicModal`; each implements its own backdrop, 
 - **File Path:** `src/components/game/CustomEmojiModal.tsx`
 - **Parent Component(s):** `Lobby.tsx` (`showCustomEmojiModal`)
 - **Purpose & Trigger Condition:** Allows players to type/pick any custom Unicode emoji from their keyboard (extracted via `Intl.Segmenter` / regex) and add it to `customEmojis`; opened from the `+` button inside Lobby's Avatar Grid Overlay.
-- **Title / `GameTitle` Text & Type:** `"CUSTOM EMOJI"` / `type="skip"` (`#FFFFFF` / `#38BDF8`)
+- **Title / `GameTitle` Text & Type:** `"CUSTOM EMOJI"` (AR: `"إيموجي"`) / `type="skip"` (`#FFFFFF` / `#38BDF8`)
 - **Dimensions & Responsive Layout:** `w-[88%] max-w-[380px] sm:max-w-[460px] min-h-[340px] sm:min-h-[440px] max-h-[85dvh] overflow-y-auto rounded-[28px] sm:rounded-[36px] p-5 sm:p-7` at `z-[110]`.
 - **Main Content & Action Controls:**
   - Subtitle (`modals:customEmoji.subtitle`)
@@ -314,8 +315,8 @@ These modals do **not** use `CinematicModal`; each implements its own backdrop, 
   - Backdrop: `opacity: 0 -> 1 -> 0` (default Motion transition).
   - Card: `opacity: 0, scale: 0.95` -> `opacity: 1, scale: 1` -> `opacity: 0, scale: 0.95` (`duration: 0.2, ease: [0.16, 1, 0.3, 1]`).
   - Preview emoji: `scale: 0.5, rotate: -10` -> `scale: 1, rotate: 0`.
-- **Layout & Direction Notes:** Card applies `dir={isRTL ? 'rtl' : 'ltr'}`.
-- **Localization Source & Keys:** Localized in `modals.ts` (`modals:customEmoji.*`) and `common.ts` (`common:actions.close`). Title `"CUSTOM EMOJI"` is intentionally kept in English.
+- **Layout & Direction Notes:** Card applies `dir={isRTL ? 'rtl' : 'ltr'}`; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
+- **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.customEmoji`, `modals:customEmoji.*`) and `common.ts` (`common:actions.close`).
 
 ### 3.2 `ColorWheelModal`
 - **Display Name / Identifier:** `ColorWheelModal`
@@ -440,20 +441,20 @@ These modals do **not** use `CinematicModal`; each implements its own backdrop, 
 - **File Path:** `src/components/game/MiniBoardOverlay.tsx`
 - **Parent Component(s):** `GameRoom.tsx`, `ExperimentalGameRoom.tsx` (scoped inside the drawing board canvas container)
 - **Purpose & Trigger Condition:** Canvas-scoped overlay (`absolute inset-0 z-[40]`, Podium stage `z-[50]`) covering the drawing canvas for non-drawing phases:
-  - Free Draw welcome screen (`"FREE DRAW"` + `"ابدأ الرسم"`)
-  - `WAITING` (waiting for players)
-  - `CHOOSING` (`"NEW TURN!"` while waiting for drawer)
-  - `ROUND_END` (turn outcome variants: `"SKIPPED!"`, `"INACTIVE"`, `"CANCELED TURN"`, `"INTERVAL"`, `"MASTERPIECE!"`)
-  - `PODIUM` (`"GAME OVER"` top-3 podium & winner reveal)
-- **Title / `GameTitle` Text & Type:** `GameTitle` `type="miniboard"` (`#FFFFFF` / `#2E2882`) for `"FREE DRAW"`, `"WAITING"`, `"NEW TURN!"`, `"SKIPPED!"`, `"INACTIVE"`, `"CANCELED TURN"`, `"INTERVAL"`, `"MASTERPIECE!"`, `"GAME OVER"`.
+  - Free Draw welcome screen (`"FREE DRAW"` / `"الرسم الحر"`)
+  - `WAITING` (`"WAITING"` / `"بانتظار اللاعبين"`)
+  - `CHOOSING` (`"NEW TURN!"` / `"دور جديد!"` while waiting for drawer)
+  - `ROUND_END` (turn outcome variants: `"SKIPPED!"` / `"تخطّي"`, `"INACTIVE"` / `"فاتك الدور!"`, `"CANCELED TURN"` / `"تم إلغاء الدور!"`, `"INTERVAL"` / `"استراحة!"`, `"PERFECT!"` / `"ممتاز!"`)
+  - `PODIUM` (`"ROUND COMPLETE"` / `"انتهت الجولة!"` top-3 podium & winner reveal)
+- **Title / `GameTitle` Text & Type:** `GameTitle` `type="miniboard"` (`#FFFFFF` / `#2E2882`, `arabicDisplay={isRTL}`) localized via `miniBoard:titles.*`.
 - **Dimensions & Responsive Layout:** Scoped to board container (`absolute inset-0 p-2 sm:p-4 overflow-y-auto`); inner card `w-full max-w-sm`; podium stage `max-w-[340px] sm:max-w-[420px] h-[160px] sm:h-[220px]`; 4th+ leaderboard `max-h-[60px] sm:max-h-[90px]`.
 - **Main Content & Action Controls:**
-  - Animated character sprites (`WaitingSprite`, `AllGuessedSprite`, `AllGuessedRareSprite`, `NoOneGuessed2Sprite`, `TurnLostSprite`, `SkippedSprite`, `PartialGuessedSprite`, `CanceledTurnSprite`), drawer/word summary, top-3 podium rankings, and `"ابدأ الرسم"` button (Free Draw only).
+  - Animated character sprites (`WaitingSprite`, `AllGuessedSprite`, `AllGuessedRareSprite`, `NoOneGuessed2Sprite`, `TurnLostSprite`, `SkippedSprite`, `PartialGuessedSprite`, `CanceledTurnSprite`), drawer/word summary, top-3 podium rankings, and `miniBoard:freeDraw.startButton` (Free Draw only).
 - **Close Behavior:** Controlled strictly by room `gameState.status` (or Free Draw entry/activity state); returns `null` during active Free Draw.
 - **Animation Owner:** Framer Motion (`AnimatePresence mode="wait"` + `motion.div` fade transitions, plus `GameTitle` drop-in `y: -150 -> 0, duration: 0.85s` on `PODIUM`) + inline CSS `<style>` keyframes in `MiniBoardOverlay.tsx` (`animate-podium-pop`, `animate-badge-pop`, `animate-crown-fall`, `animate-pop`, `animate-medal-shine`).
 - **Verified Entrance / Exit Behavior:** Phase screens cross-fade (`initial={{ opacity: 0 }}` -> `animate={{ opacity: 1 }}` -> `exit={{ opacity: 0 }}`), with late-joiner podium animations gated by `timeLeft >= 13` and `roundEndAnimationKey`.
-- **Layout & Direction Notes:** Contains Arabic/English turn & podium copy; dynamic drawer names and revealed answers use `dir="auto"`.
-- **Localization Source & Status:** Not yet localized (`GameTitle` texts stay English; descriptive captions, buttons, and podium labels are scheduled for **`L10N-3`** — see `LOCALIZATION_ROADMAP.md`).
+- **Layout & Direction Notes:** Localized via `miniBoard.ts` (`titles.*`, `freeDraw.*`, `waiting.*`, `choosing.*`, `roundEnd.*`, `podium.*`); dynamic drawer names and revealed answers use `dir="auto"`.
+- **Localization Source & Status:** Localized in `src/i18n/locales/{en,ar}/miniBoard.ts`.
 
 ---
 

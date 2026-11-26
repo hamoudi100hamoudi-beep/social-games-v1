@@ -26,6 +26,7 @@ export default function RoomInfoModal({
   onPlay,
 }: RoomInfoModalProps) {
   const { t, isRTL } = useAppTranslation('lobby');
+  const { t: tModals } = useAppTranslation('modals');
   const labelStyleClass = isRTL
     ? 'text-[#8C8AA7] text-xs sm:text-sm font-black mb-1'
     : 'text-[#8C8AA7] text-xs sm:text-sm font-black uppercase tracking-wider mb-1';
@@ -35,7 +36,8 @@ export default function RoomInfoModal({
       isOpen={isOpen}
       onClose={onClose}
       titleType="report"
-      titleText="INFO"
+      titleText={tModals('titles.info')}
+      arabicDisplay={isRTL}
       buttons={[
         {
           id: "room-info-play-btn",

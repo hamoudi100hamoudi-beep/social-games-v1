@@ -23,7 +23,8 @@ export default function ReportConfirmModal({
       isOpen={isOpen}
       onClose={onClose}
       titleType="report"
-      titleText="REPORT"
+      titleText={t("titles.report")}
+      arabicDisplay={isRTL}
       buttons={[
         {
           id: "report-confirm-no-btn",

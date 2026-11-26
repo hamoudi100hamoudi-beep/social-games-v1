@@ -1,4 +1,23 @@
 export const enModals = {
+  titles: {
+    exit: 'EXIT',
+    skip: 'SKIP',
+    report: 'REPORT',
+    profile: 'PROFILE',
+    clean: 'CLEAN',
+    names: 'NAMES',
+    slowDown: 'SLOW DOWN',
+    kicked: 'KICKED',
+    afkInactive: 'INACTIVE',
+    lobbyInactive: 'INACTIVE',
+    disconnected: 'DISCONNECTED',
+    timeout: 'TIMEOUT',
+    nicknameTaken: 'ERROR',
+    roomFull: 'ERROR',
+    serverFull: 'SERVER FULL',
+    info: 'INFO',
+    customEmoji: 'CUSTOM EMOJI',
+  },
   exit: {
     question: 'Do you want to leave the game?',
   },

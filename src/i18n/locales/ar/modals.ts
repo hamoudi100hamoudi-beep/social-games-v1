@@ -2,6 +2,25 @@ import type { enModals } from '../en/modals';
 import type { DeepPluralLocaleSchema } from '../../types';
 
 export const arModals = {
+  titles: {
+    exit: 'الخروج',
+    skip: 'تخطّي',
+    report: 'إبلاغ',
+    profile: 'الملف',
+    clean: 'مسح',
+    names: 'الأسماء',
+    slowDown: 'تمهل!',
+    kicked: 'طُردت!',
+    afkInactive: 'خمول!',
+    lobbyInactive: 'خمول!',
+    disconnected: 'انقطاع!',
+    timeout: 'مهلة!',
+    nicknameTaken: 'محجوز!',
+    roomFull: 'ممتلئة!',
+    serverFull: 'مشغول!',
+    info: 'معلومات',
+    customEmoji: 'إيموجي',
+  },
   exit: {
     question: 'هل تريد مغادرة اللعبة؟',
   },

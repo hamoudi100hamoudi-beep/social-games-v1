@@ -120,7 +120,7 @@ export default function CustomEmojiModal({
 
             {/* Title */}
             <div className="mb-1 mt-0.5 sm:mb-2">
-              <GameTitle text="CUSTOM EMOJI" type="skip" className="text-[22px] sm:text-[30px]" />
+              <GameTitle text={t('titles.customEmoji')} type="skip" className="text-[22px] sm:text-[30px]" arabicDisplay={isRTL} />
             </div>
 
             <p className="text-[#8C8AA7] font-bold text-xs sm:text-base mb-3 sm:mb-4">

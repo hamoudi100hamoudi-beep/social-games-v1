@@ -24,7 +24,8 @@ export default function ExitConfirmModal({
       isOpen={isOpen}
       onClose={onClose}
       titleType="exit"
-      titleText="EXIT"
+      titleText={t("titles.exit")}
+      arabicDisplay={isRTL}
       buttons={[
         {
           id: "exit-confirm-no-btn",

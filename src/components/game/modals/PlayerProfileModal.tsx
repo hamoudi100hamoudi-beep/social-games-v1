@@ -36,7 +36,8 @@ export default function PlayerProfileModal({
       isOpen={isOpen}
       onClose={onClose}
       titleType="profile"
-      titleText="PROFILE"
+      titleText={t("titles.profile")}
+      arabicDisplay={isRTL}
     >
       {playerToRender ? (
         <>

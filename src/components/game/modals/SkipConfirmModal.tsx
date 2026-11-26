@@ -22,7 +22,8 @@ export default function SkipConfirmModal({
       isOpen={isOpen}
       onClose={onClose}
       titleType="report"
-      titleText="SKIP"
+      titleText={t("titles.skip")}
+      arabicDisplay={isRTL}
       buttons={[
         {
           id: "skip-confirm-no-btn",

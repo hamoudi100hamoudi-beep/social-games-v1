@@ -640,7 +640,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
         isOpen={afkWarning}
         onClose={() => setAfkWarning(false)}
         titleType="inactive"
-        titleText="INACTIVE"
+        titleText={tModals('titles.lobbyInactive')}
+        arabicDisplay={isModalsRTL}
         buttons={[
           {
             id: "afk-warning-ok-btn",
@@ -664,7 +665,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
         isOpen={connLostWarning}
         onClose={() => setConnLostWarning(false)}
         titleType="exit"
-        titleText="DISCONNECTED"
+        titleText={tModals('titles.disconnected')}
+        arabicDisplay={isModalsRTL}
         buttons={[
           {
             id: "conn-lost-warning-ok-btn",
@@ -688,7 +690,8 @@ export default function Lobby({ onPlay }: LobbyProps) {
         isOpen={!!joinError}
         onClose={() => setJoinError(null)}
         titleType="report"
-        titleText="ERROR"
+        titleText={tModals('titles.roomFull')}
+        arabicDisplay={isModalsRTL}
         buttons={[
           {
             id: "lobby-room-full-ok-btn",

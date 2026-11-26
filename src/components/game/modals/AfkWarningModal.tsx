@@ -23,7 +23,8 @@ export default function AfkWarningModal({
     <CinematicModal
       isOpen={isOpen}
       titleType="inactive"
-      titleText="INACTIVE"
+      titleText={t("titles.afkInactive")}
+      arabicDisplay={isRTL}
       buttons={[
         {
           id: "afk-return-btn",

@@ -58,7 +58,8 @@ export default function RoomAlertModals({
           isOpen={showCooldownWarning}
           onClose={onCloseCooldownWarning}
           titleType="report"
-          titleText="SLOW DOWN"
+          titleText={t("titles.slowDown")}
+          arabicDisplay={isRTL}
           buttons={[
             {
               id: "cooldown-warning-ok-btn",
@@ -104,7 +105,8 @@ export default function RoomAlertModals({
       <CinematicModal
         isOpen={isBanned}
         titleType="report"
-        titleText="KICKED"
+        titleText={t("titles.kicked")}
+        arabicDisplay={isRTL}
         buttons={[
           {
             id: "kicked-out-exit-btn",
@@ -149,7 +151,8 @@ export default function RoomAlertModals({
         overlayClassName="bg-slate-950/100"
         onClose={onLeaveFromNicknameTaken}
         titleType="report"
-        titleText="ERROR"
+        titleText={t("titles.nicknameTaken")}
+        arabicDisplay={isRTL}
         buttons={[
           {
             id: "nickname-taken-exit-btn",
@@ -191,7 +194,8 @@ export default function RoomAlertModals({
         isOpen={isRoomFull}
         onClose={onLeaveFromRoomFull}
         titleType="report"
-        titleText="ERROR"
+        titleText={t("titles.roomFull")}
+        arabicDisplay={isRTL}
         buttons={[
           {
             id: "room-full-exit-btn",
@@ -233,7 +237,8 @@ export default function RoomAlertModals({
         isOpen={isAuthStoreFull}
         onClose={onLeaveFromAuthStoreFull}
         titleType="report"
-        titleText="SERVER FULL"
+        titleText={t("titles.serverFull")}
+        arabicDisplay={isRTL}
         buttons={[
           {
             id: "auth-store-full-exit-btn",
@@ -261,7 +266,8 @@ export default function RoomAlertModals({
         isOpen={isJoinTimedOut}
         onClose={onLeaveFromJoinTimeout}
         titleType="report"
-        titleText="TIMEOUT"
+        titleText={t("titles.timeout")}
+        arabicDisplay={isRTL}
         buttons={[
           {
             id: "join-timeout-exit-btn",

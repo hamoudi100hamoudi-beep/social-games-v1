@@ -6,7 +6,7 @@ export const arMiniBoard = {
     freeDraw: 'الرسم الحر',
     waiting: 'بانتظار اللاعبين',
     newTurn: 'دور جديد!',
-    skipped: 'تم تخطي الدور!',
+    skipped: 'تخطّي',
     inactive: 'فاتك الدور!',
     canceledTurn: 'تم إلغاء الدور!',
     interval: 'استراحة!',

@@ -354,7 +354,8 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
         isOpen={showClearConfirm}
         onClose={() => setShowClearConfirm(false)}
         titleType="report"
-        titleText="CLEAN"
+        titleText={t('titles.clean')}
+        arabicDisplay={isRTL}
         buttons={[
           {
             id: "clean-confirm-no-btn",
@@ -391,7 +392,8 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
           isOpen={showFloatingNamesConfirm}
           onClose={() => setShowFloatingNamesConfirm(false)}
           titleType="report"
-          titleText="NAMES"
+          titleText={t('titles.names')}
+          arabicDisplay={isRTL}
           buttons={[
             {
               id: "names-confirm-no-btn",

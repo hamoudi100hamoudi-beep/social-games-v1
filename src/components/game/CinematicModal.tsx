@@ -52,6 +52,7 @@ export interface CinematicModalProps {
   onClose?: () => void;
   titleType: "skip" | "exit" | "report" | "profile" | "inactive";
   titleText: string;
+  arabicDisplay?: boolean;
   children?: React.ReactNode;
   buttons?: CinematicModalButton[];
   maxWidthClass?: string;
@@ -63,6 +64,7 @@ export default function CinematicModal({
   onClose,
   titleType,
   titleText,
+  arabicDisplay = false,
   children,
   buttons,
   maxWidthClass,
@@ -181,6 +183,7 @@ export default function CinematicModal({
                 text={titleText}
                 type={titleType}
                 className="text-[25px] sm:text-[32px]"
+                arabicDisplay={arabicDisplay}
               />
             </motion.div>
 
