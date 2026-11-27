@@ -4,11 +4,11 @@ import type { DeepPluralLocaleSchema } from '../../types';
 export const arMiniBoard = {
   titles: {
     freeDraw: 'الرسم الحر',
-    waiting: 'بانتظار اللاعبين',
+    waiting: 'انتظار',
     newTurn: 'دور جديد!',
     skipped: 'تخطّي',
-    inactive: 'فاتك الدور!',
-    canceledTurn: 'تم إلغاء الدور!',
+    inactive: 'ضياع الدور!',
+    canceledTurn: 'إلغاء الدور!',
     interval: 'استراحة!',
     perfect: 'ممتاز!',
     roundComplete: 'انتهت الجولة!',

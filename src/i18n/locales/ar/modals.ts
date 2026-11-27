@@ -18,7 +18,7 @@ export const arModals = {
     nicknameTaken: 'محجوز!',
     roomFull: 'ممتلئة!',
     serverFull: 'مشغول!',
-    info: 'معلومات',
+    info: 'تفاصيل الغرفة',
     customEmoji: 'إيموجي',
   },
   exit: {

@@ -679,7 +679,7 @@ export default function Lobby({ onPlay }: LobbyProps) {
         <p
           id="conn-lost-warning-text"
           dir={isModalsRTL ? 'rtl' : 'ltr'}
-          className="text-base sm:text-lg font-bold text-[#8C8AA7] leading-relaxed mb-4 px-2 text-center"
+          className="text-[18px] sm:text-[20px] font-bold text-[#2E2882] leading-relaxed mb-4 px-2 text-center"
         >
           {tModals('lobbyDisconnected.message')}
         </p>

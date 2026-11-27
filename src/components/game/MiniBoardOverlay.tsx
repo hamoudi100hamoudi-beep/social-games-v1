@@ -312,7 +312,7 @@ export function MiniBoardOverlay({
               ) : (
                 <p
                   dir={isRTL ? "rtl" : "ltr"}
-                  className="text-[#728299] text-xs sm:text-sm font-bold tracking-wide leading-tight"
+                  className="text-[#2E2882] text-xs sm:text-sm font-bold tracking-wide leading-tight"
                   style={BODY_TEXT_STYLE}
                 >
                   {t("waiting.message")}
@@ -360,7 +360,7 @@ export function MiniBoardOverlay({
 
             <div className="w-full shrink-0 pb-0.5 px-1" dir={isRTL ? "rtl" : "ltr"}>
               <p
-                className="text-[#728299] text-xs sm:text-[15px] font-bold mb-0.5 leading-tight"
+                className="text-[#2E2882] text-xs sm:text-[15px] font-bold mb-0.5 leading-tight"
                 style={CHOOSING_LABEL_STYLE}
               >
                 {t("choosing.turnOf")}
@@ -398,7 +398,7 @@ export function MiniBoardOverlay({
                   </div>
                   <div className="w-full shrink-0 pb-0.5 px-1">
                     <h3
-                      className="text-[#728299] font-bold text-xs sm:text-[15px] tracking-wide leading-snug break-words"
+                      className="text-[#2E2882] font-bold text-xs sm:text-[15px] tracking-wide leading-snug break-words"
                       dir={isRTL ? "rtl" : "ltr"}
                       style={ROUND_END_BODY_STYLE}
                     >
@@ -434,7 +434,7 @@ export function MiniBoardOverlay({
                   </div>
                   <div className="w-full shrink-0 pb-0.5 px-1">
                     <h3
-                      className="text-[#728299] font-bold text-xs sm:text-[15px] tracking-wide leading-snug break-words"
+                      className="text-[#2E2882] font-bold text-xs sm:text-[15px] tracking-wide leading-snug break-words"
                       dir={isRTL ? "rtl" : "ltr"}
                       style={ROUND_END_BODY_STYLE}
                     >
@@ -472,7 +472,7 @@ export function MiniBoardOverlay({
 
                   <div className="w-full shrink-0 pb-0.5 px-1">
                     <p
-                      className="text-[#728299] text-xs sm:text-[15px] font-bold leading-snug break-words"
+                      className="text-[#2E2882] text-xs sm:text-[15px] font-bold leading-snug break-words"
                       dir={isRTL ? "rtl" : "ltr"}
                       style={ROUND_END_BODY_STYLE}
                     >
@@ -506,7 +506,7 @@ export function MiniBoardOverlay({
                   </div>
                   {subTitle && (
                     <p
-                      className="text-[#728299] text-xs sm:text-sm font-bold mt-0.5 leading-tight"
+                      className="text-[#2E2882] text-xs sm:text-sm font-bold mt-0.5 leading-tight"
                       dir={isRTL ? "rtl" : "ltr"}
                       style={ROUND_END_SUBTITLE_STYLE}
                     >
@@ -548,7 +548,7 @@ export function MiniBoardOverlay({
                 <div className="w-full shrink-0 pb-0.5 px-1">
                   {bottomText && (
                     <p
-                      className="text-[#728299] text-xs sm:text-[15px] font-bold leading-snug break-words"
+                      className="text-[#2E2882] text-xs sm:text-[15px] font-bold leading-snug break-words"
                       dir={isRTL ? "rtl" : "ltr"}
                       style={ROUND_END_BODY_STYLE}
                     >
@@ -559,7 +559,7 @@ export function MiniBoardOverlay({
                   {word && hasSucceeded && reason !== "all_guessed" && (
                     <div className="text-center">
                       <span
-                        className="text-[#728299] text-xs sm:text-sm font-bold block mb-0.5 leading-tight"
+                        className="text-[#2E2882] text-xs sm:text-sm font-bold block mb-0.5 leading-tight"
                         dir={isRTL ? "rtl" : "ltr"}
                         style={ROUND_END_ANSWER_LABEL_STYLE}
                       >

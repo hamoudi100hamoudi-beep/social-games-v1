@@ -1078,7 +1078,7 @@ export default function GameRoom({
         }}
       >
         {/* Global Exit Room Button */}
-        {!isChatOpen && (
+        {!isChatOpen && !isKeyboardOpen && (
           <button
             onClick={() => setShowExitConfirm(true)}
             className="absolute top-1 right-1 z-[120] text-gray-800 hover:text-gray-950 transition-colors bg-transparent outline-none"

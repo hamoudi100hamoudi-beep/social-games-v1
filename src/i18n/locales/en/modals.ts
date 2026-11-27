@@ -15,7 +15,7 @@ export const enModals = {
     nicknameTaken: 'ERROR',
     roomFull: 'ERROR',
     serverFull: 'SERVER FULL',
-    info: 'INFO',
+    info: 'ROOM DETAILS',
     customEmoji: 'CUSTOM EMOJI',
   },
   exit: {

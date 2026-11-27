@@ -39,7 +39,7 @@ export default function GameTitle({ text, type, className = "text-[34px]", arabi
       case "exit":
         return { color: "#FFFFFF", stroke: "#E87500" };
       case "disconnected":
-        return { color: "#FFFFFF", stroke: "#FFB300" };
+        return { color: "#FFFFFF", stroke: "#E87500" };
       case "report":
         return { color: "#FFFFFF", stroke: "#E87500" };
       case "profile":
