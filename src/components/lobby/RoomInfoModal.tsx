@@ -6,22 +6,26 @@ import { useAppTranslation } from '../../i18n/useAppTranslation';
 interface RoomInfoModalProps {
   isOpen: boolean;
   selectedRoom: string | null;
-  roomStats: Record<string, {
+  mode?: 'join' | 'view';
+  playerCount?: number;
+  roomStats?: Record<string, {
     count: number;
     max: number;
     winningScore: number;
     theme: string;
   }>;
-  joinError: string | null;
+  joinError?: string | null;
   onClose: () => void;
-  onPlay: () => void;
+  onPlay?: () => void;
 }
 
 export default function RoomInfoModal({
   isOpen,
   selectedRoom,
+  mode = 'join',
+  playerCount,
   roomStats,
-  joinError,
+  joinError = null,
   onClose,
   onPlay,
 }: RoomInfoModalProps) {
@@ -38,25 +42,30 @@ export default function RoomInfoModal({
       titleType="report"
       titleText={tModals('titles.info')}
       arabicDisplay={isRTL}
-      buttons={[
-        {
-          id: "room-info-play-btn",
-          text: (
-            <span dir={isRTL ? 'rtl' : 'ltr'} className="text-white font-black text-base sm:text-lg">
-              {t('roomInfo.play')}
-            </span>
-          ),
-          onClick: onPlay,
-          variant: "danger",
-          icon: <Play className="w-[22px] h-[22px]" fill="currentColor" strokeWidth={3} />,
-        },
-      ]}
+      buttons={
+        mode === 'view'
+          ? undefined
+          : [
+              {
+                id: "room-info-play-btn",
+                text: (
+                  <span dir={isRTL ? 'rtl' : 'ltr'} className="text-white font-black text-base sm:text-lg">
+                    {t('roomInfo.play')}
+                  </span>
+                ),
+                onClick: () => onPlay?.(),
+                variant: "danger",
+                icon: <Play className="w-[22px] h-[22px]" fill="currentColor" strokeWidth={3} />,
+              },
+            ]
+      }
     >
       {selectedRoom && (() => {
         const config = getRoomConfig(selectedRoom);
-        const currentCount = roomStats[selectedRoom]?.count ?? 0;
-        const max = roomStats[selectedRoom]?.max ?? config.maxPlayers;
-        const toWin = roomStats[selectedRoom]?.winningScore ?? config.winningScore;
+        const roomStat = roomStats?.[selectedRoom];
+        const currentCount = roomStat?.count ?? playerCount ?? 0;
+        const max = roomStat?.max ?? config.maxPlayers;
+        const toWin = roomStat?.winningScore ?? config.winningScore;
         const roomDisplayName = config.tag ? `${config.name} ${config.tag}` : (config.name || selectedRoom);
 
         return (
@@ -65,7 +74,7 @@ export default function RoomInfoModal({
               {roomDisplayName}
             </h3>
 
-            {joinError && (
+            {mode !== 'view' && joinError && (
               <div
                 dir={isRTL ? 'rtl' : 'ltr'}
                 className="mb-4 text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl text-center"

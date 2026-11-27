@@ -274,21 +274,26 @@ All entries in this section inherit `CinematicModal`'s portal mounting, `Animate
 - **Layout & Direction Notes:** `#lobby-room-full-desc` applies `dir={isModalsRTL ? 'rtl' : 'ltr'}`; `arabicDisplay={isModalsRTL}` renders the Arabic title in RTL.
 - **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.roomFull`, `modals:alerts.roomFull.message`) and `common.ts` (`common:actions.ok`).
 
-### 2.12 `RoomInfoModal` (`INFO`)
-- **Display Name / Identifier:** `RoomInfoModal` (`INFO`)
-- **File Path:** `src/components/lobby/RoomInfoModal.tsx`
-- **Parent Component(s):** `Lobby.tsx` (`selectedRoom`)
-- **Purpose & Trigger Condition:** Shows selected room metadata (player count/max, theme, winning points/open mode) and error banner before joining; opened when clicking a room card in `RoomsBrowserScreen` (`selectedRoom !== null`).
-- **Title / `GameTitle` Text & Type:** `"INFO"` (AR: `"معلومات"`) / `type="report"` (`#FB923C` / `#0F3957`)
+### 2.12 `RoomInfoModal` (`ROOM DETAILS`)
+- **Display Name / Identifier:** `RoomInfoModal` (`ROOM DETAILS`)
+- **File Path:** `src/components/lobby/RoomInfoModal.tsx` (**single shared component** reused across Lobby and both in-game room shells; no duplicate modal variant exists)
+- **Parent Component(s) & Triggers:**
+  - `Lobby.tsx` (`selectedRoom !== null`, default `mode="join"`): opened when clicking a room card in `RoomsBrowserScreen` before joining.
+  - `GameRoom.tsx` (`showRoomInfo`, `mode="view"`): opened when clicking the action-bar `Info` icon inside the Free Draw room.
+  - `ExperimentalGameRoom.tsx` (`showRoomInfo`, `mode="view"`): opened when clicking the action-bar `Info` icon inside the competitive/experimental room.
+- **Purpose:** Displays current room name (`roomDisplayName`), live player count/max (`playerCount` / `roomStats` using `currentPlayersRef.current` in-room for zero drawing-path re-renders), and winning points or Free Draw open mode (`lobby:roomInfo.open`).
+- **Mode Differences (`join` vs. `view`):**
+  - **`mode="join"` (`Lobby.tsx`):** Shows optional `joinError` alert banner and bottom action button `#room-info-play-btn` (`variant="danger"`, `22×22px` `Play` icon, `lobby:roomInfo.play`) to join the room.
+  - **`mode="view"` (`GameRoom.tsx`, `ExperimentalGameRoom.tsx`):** Omits `buttons` (`buttons={undefined}` passed to `CinematicModal`) so **no bottom button** (neither `"Close"` nor `"Play"`) is rendered, and opening/closing never triggers room leave or rejoin.
+- **Title / `GameTitle` Text & Type:** `"ROOM DETAILS"` (AR: `"تفاصيل الغرفة"`) / `type="report"` (`#FFFFFF` / `#E87500`)
 - **Main Content & Action Controls:**
-  - Spinning `Settings` icon (`w-18 h-18 sm:w-20 sm:h-20` circle, `animate-spin-slow`)
-  - Room display name (`roomDisplayName`) and optional `joinError` alert box
-  - 3-column stats grid (`grid-cols-3`, labels `lobby:roomInfo.players`, `lobby:roomInfo.theme`, `lobby:roomInfo.toWin` / `lobby:roomInfo.open`)
-  - Button: `#room-info-play-btn` (`variant="danger"`, `Play` icon, `lobby:roomInfo.play`)
-- **Close Behavior:** `X` button or guarded backdrop click (`onClose`).
-- **Animation Owner:** `CinematicModal` (Framer Motion) + Tailwind `animate-spin-slow` on `Settings` icon.
+  - Room display name (`roomDisplayName`) and (in `join` mode) optional `joinError` alert box
+  - Unified 2-column stats group (`grid-cols-2`, light rounded card `bg-white/60 border border-white/80`, equal column sizing/typography for `lobby:roomInfo.players` and `lobby:roomInfo.toWin` / `lobby:roomInfo.open`)
+  - Bottom button `#room-info-play-btn` in `mode="join"` only (`buttons={undefined}` in `mode="view"`)
+- **Close Behavior:** `X` button at top corner and guarded click outside the modal card on the dimmed backdrop (handled natively by `CinematicModal` via `onClose`; also handled by the in-room hardware Back button interceptor).
+- **Animation Owner:** `CinematicModal` (Framer Motion).
 - **Verified Entrance / Exit Behavior:** `CinematicModal` Motion entrance/exit (`0.2s` / `0.15s`).
-- **Layout & Direction Notes:** Stats grid and labels apply `dir={isRTL ? 'rtl' : 'ltr'}`; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
+- **Layout & Direction Notes:** Stats card, divider (`border-e`), and labels apply `dir={isRTL ? 'rtl' : 'ltr'}`; player count stays `dir="ltr"`; `arabicDisplay={isRTL}` renders the Arabic title in RTL.
 - **Localization Source & Keys:** Localized in `modals.ts` (`modals:titles.info`) and `lobby.ts` (`lobby:roomInfo.*`).
 
 ---

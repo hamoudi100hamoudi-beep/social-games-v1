@@ -24,6 +24,7 @@ import ExitConfirmModal from "./game/modals/ExitConfirmModal";
 import AfkWarningModal from "./game/modals/AfkWarningModal";
 import PlayerProfileModal from "./game/modals/PlayerProfileModal";
 import RoomAlertModals from "./game/modals/RoomAlertModals";
+import RoomInfoModal from "./lobby/RoomInfoModal";
 import { safeLocalStorage } from "../utils/storage";
 import { getPlayerIdentity } from "../utils/playerAuth";
 import { soundManager } from "../utils/soundManager";
@@ -846,6 +847,7 @@ export default function GameRoom({
 
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showRoomInfo, setShowRoomInfo] = useState(false);
 
   useEffect(() => {
     let currentMax = window.visualViewport?.height || window.innerHeight;
@@ -990,6 +992,7 @@ export default function GameRoom({
   const activeStatesRef = React.useRef({
     isChatOpen,
     selectedProfilePlayer,
+    showRoomInfo,
     showExitConfirm,
     showCooldownWarning
   });
@@ -998,12 +1001,14 @@ export default function GameRoom({
     activeStatesRef.current = {
       isChatOpen,
       selectedProfilePlayer,
+      showRoomInfo,
       showExitConfirm,
       showCooldownWarning
     };
   }, [
     isChatOpen,
     selectedProfilePlayer,
+    showRoomInfo,
     showExitConfirm,
     showCooldownWarning
   ]);
@@ -1030,6 +1035,8 @@ export default function GameRoom({
         if (textarea) textarea.blur();
       } else if (current.selectedProfilePlayer) {
         setSelectedProfilePlayer(null);
+      } else if (current.showRoomInfo) {
+        setShowRoomInfo(false);
       } else if (current.showCooldownWarning) {
         setShowCooldownWarning(false);
       } else if (current.showExitConfirm) {
@@ -1218,27 +1225,29 @@ export default function GameRoom({
                 <div className="flex gap-2 sm:gap-4 p-2 sm:p-3 justify-around">
                   <button 
                     onClick={toggleMute}
-                    className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all border border-white/10 relative overflow-hidden ${
-                      isMuted ? "bg-slate-400 hover:bg-slate-500" : "bg-yellow-400 hover:bg-yellow-500"
-                    }`}
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all border border-[#38BDF8]/35 bg-[#0E7490] hover:bg-[#0F8DAA] relative overflow-hidden"
                   >
                     {isMuted ? (
-                      <VolumeX size={16} className="text-white z-10" />
+                      <VolumeX size={18} className="text-white z-10" />
                     ) : (
-                      <Volume2 size={16} className="text-white z-10" />
+                      <Volume2 size={18} className="text-white z-10" />
                     )}
                     {isMuted && (
                       <div className="absolute inset-0 m-auto w-[2px] h-[70%] bg-white/70 -rotate-45 z-0 animate-in fade-in zoom-in duration-200"></div>
                     )}
                   </button>
-                  <button className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-white transition-all border border-white/10">
-                    <Info size={16} />
+                  <button
+                    type="button"
+                    onClick={() => setShowRoomInfo(true)}
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#0E7490] hover:bg-[#0F8DAA] active:scale-95 flex items-center justify-center text-white transition-all border border-[#38BDF8]/35 cursor-pointer"
+                  >
+                    <Info size={18} />
                   </button>
                   <button
                     onClick={openChat}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all border border-white/10 relative"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#0E7490] hover:bg-[#0F8DAA] active:scale-95 flex items-center justify-center text-white font-bold transition-all border border-[#38BDF8]/35 relative"
                   >
-                    <MessageSquare size={16} />
+                    <MessageSquare size={18} />
                     <UnreadBadge ref={unreadBadgeSideRef} initialCount={unreadCountRef.current} className="px-1 py-0.5" />
                   </button>
                 </div>
@@ -1333,6 +1342,17 @@ export default function GameRoom({
           />
         );
       })()}
+
+      {/* Room Details Modal (View Mode) */}
+      {(!isFreeDrawIsolated || showRoomInfo) && (
+        <RoomInfoModal
+          isOpen={showRoomInfo}
+          selectedRoom={room}
+          mode="view"
+          playerCount={currentPlayersRef.current.length > 0 ? currentPlayersRef.current.length : currentPlayers.length}
+          onClose={() => setShowRoomInfo(false)}
+        />
+      )}
 
       {/* Room Alert Modals */}
       <RoomAlertModals

@@ -38,6 +38,7 @@ import ReportConfirmModal from "../game/modals/ReportConfirmModal";
 import AfkWarningModal from "../game/modals/AfkWarningModal";
 import PlayerProfileModal from "../game/modals/PlayerProfileModal";
 import RoomAlertModals from "../game/modals/RoomAlertModals";
+import RoomInfoModal from "../lobby/RoomInfoModal";
 import { safeLocalStorage } from "../../utils/storage";
 import { getPlayerIdentity } from "../../utils/playerAuth";
 import { soundManager } from "../../utils/soundManager";
@@ -1136,6 +1137,7 @@ export default function ExperimentalGameRoom({
 
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showRoomInfo, setShowRoomInfo] = useState(false);
 
   useEffect(() => {
     let currentMax = window.visualViewport?.height || window.innerHeight;
@@ -1359,6 +1361,7 @@ export default function ExperimentalGameRoom({
     showReportConfirm,
     showSkipConfirm,
     selectedProfilePlayer,
+    showRoomInfo,
     showExitConfirm,
     showCooldownWarning
   });
@@ -1369,6 +1372,7 @@ export default function ExperimentalGameRoom({
       showReportConfirm,
       showSkipConfirm,
       selectedProfilePlayer,
+      showRoomInfo,
       showExitConfirm,
       showCooldownWarning
     };
@@ -1377,6 +1381,7 @@ export default function ExperimentalGameRoom({
     showReportConfirm,
     showSkipConfirm,
     selectedProfilePlayer,
+    showRoomInfo,
     showExitConfirm,
     showCooldownWarning
   ]);
@@ -1407,6 +1412,8 @@ export default function ExperimentalGameRoom({
         setShowSkipConfirm(false);
       } else if (current.selectedProfilePlayer) {
         setSelectedProfilePlayer(null);
+      } else if (current.showRoomInfo) {
+        setShowRoomInfo(false);
       } else if (current.showCooldownWarning) {
         setShowCooldownWarning(false);
       } else if (current.showExitConfirm) {
@@ -1712,40 +1719,40 @@ export default function ExperimentalGameRoom({
                       disabled={!canReport}
                       onClick={handleReport}
                       title={hasAlreadyReported ? "You reported this draw" : "Report drawing"}
-                      className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white transition-all shadow-md active:scale-95 cursor-pointer
-                        ${hasAlreadyReported 
-                          ? "bg-red-600 border border-red-500 opacity-90 cursor-not-allowed" 
-                          : canReport 
-                            ? "bg-orange-400 hover:bg-orange-500 cursor-pointer" 
-                            : "bg-slate-500/40 opacity-40 cursor-not-allowed"
+                      className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white transition-all shadow-md border
+                        ${canReport
+                          ? "bg-[#0E7490] hover:bg-[#0F8DAA] border-[#38BDF8]/35 active:scale-95 cursor-pointer"
+                          : "bg-[#233B5A] border-[#45617F] cursor-not-allowed"
                         }`}
                     >
-                      <AlertTriangle size={16} />
+                      <AlertTriangle size={18} />
                     </button>
                   )}
                   <button 
                     onClick={toggleMute}
-                    className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all shadow-md relative overflow-hidden ${
-                      isMuted ? "bg-slate-400 hover:bg-slate-500" : "bg-yellow-400 hover:bg-yellow-500"
-                    }`}
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all shadow-md border border-[#38BDF8]/35 bg-[#0E7490] hover:bg-[#0F8DAA] relative overflow-hidden"
                   >
                     {isMuted ? (
-                      <VolumeX size={16} className="text-white drop-shadow-md z-10" />
+                      <VolumeX size={18} className="text-white drop-shadow-md z-10" />
                     ) : (
-                      <Volume2 size={16} className="text-white drop-shadow-md z-10" />
+                      <Volume2 size={18} className="text-white drop-shadow-md z-10" />
                     )}
                     {isMuted && (
                       <div className="absolute inset-0 m-auto w-[2px] h-[70%] bg-white/70 -rotate-45 z-0 animate-in fade-in zoom-in duration-200"></div>
                     )}
                   </button>
-                  <button className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-white transition-all shadow-md">
-                    <Info size={16} />
+                  <button
+                    type="button"
+                    onClick={() => setShowRoomInfo(true)}
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#0E7490] hover:bg-[#0F8DAA] active:scale-95 flex items-center justify-center text-white transition-all shadow-md border border-[#38BDF8]/35 cursor-pointer"
+                  >
+                    <Info size={18} />
                   </button>
                   <button
                     onClick={openChat}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-yellow-400 hover:bg-yellow-500 active:scale-95 flex items-center justify-center text-bg-dark-brand font-bold transition-all shadow-md relative"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#0E7490] hover:bg-[#0F8DAA] active:scale-95 flex items-center justify-center text-white font-bold transition-all shadow-md border border-[#38BDF8]/35 relative"
                   >
-                    <MessageSquare size={16} />
+                    <MessageSquare size={18} />
                     {unreadCount > 0 && (
                       <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] sm:text-[11px] font-bold px-1 py-0.5 rounded-full shadow-md border-2 border-slate-200">
                         {unreadCount > 9 ? "+9" : unreadCount}
@@ -1961,6 +1968,17 @@ export default function ExperimentalGameRoom({
         onToggleBlock={handleToggleBlock}
         onToggleVoteKick={handleToggleVoteKick}
       />
+
+      {/* Room Details Modal (View Mode) */}
+      {(!FULL_DRAWING_ISOLATION_TEST || !isDrawingMode) && (
+        <RoomInfoModal
+          isOpen={showRoomInfo}
+          selectedRoom={room}
+          mode="view"
+          playerCount={currentPlayersRef.current.length > 0 ? currentPlayersRef.current.length : currentPlayers.length}
+          onClose={() => setShowRoomInfo(false)}
+        />
+      )}
 
       {/* Room Alert Modals */}
       <RoomAlertModals
