@@ -7,7 +7,7 @@
 import React, { useEffect, useRef, useState, useTransition } from 'react';
 import { 
   Pencil, Eraser, Undo2, Redo2, FileX, RefreshCcw, 
-  Lightbulb, UserMinus, Circle, Square, PaintBucket, Minus, Pipette, Maximize2, ZoomIn,
+  Lightbulb, FastForward, Circle, Square, PaintBucket, Minus, Pipette, Maximize2, ZoomIn,
   ArrowLeft, Eye, EyeOff
 } from 'lucide-react';
 import { ToolType } from '../../types/draw';
@@ -612,7 +612,6 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
             {/* 1. Swap eraser/pencil toggle button */}
             <ActionBtn 
               icon={<SwapIcon />} 
-              active={tool === 'eraser'} 
               onClick={() => {
                 if (tool === 'eraser') changeTool('pencil');
                 else if (tool === 'pencil') changeTool('eraser');
@@ -634,7 +633,6 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
                 tool === 'pipette' ? <Pipette /> :
                 <Pencil />
               } 
-              active={activeMenu === 'tools' || (tool !== 'eraser' && !activeMenu)} 
               onClick={() => setActiveMenu(m => m === 'tools' ? null : 'tools')} 
               className="!rounded-lg"
             />
@@ -655,7 +653,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
             {/* 4. Skip/Kick Button - Pre-mounted to eliminate layout shifts and DOM churn */}
             <div className={`shrink-0 ${onSkipTurn ? 'block' : 'hidden'}`}>
               <ActionBtn 
-                icon={<UserMinus />} 
+                icon={<FastForward />} 
                 onClick={onSkipTurn || (() => {})} 
                 className="!rounded-lg" 
               />
@@ -738,7 +736,7 @@ const SwapIcon = ({ size = 22, strokeWidth = 2.5, className }: any) => {
   );
 };
 
-function ActionBtn({ icon, active, onClick, className = '', playClickSound = true }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string, playClickSound?: boolean }) {
+function ActionBtn({ icon, onClick, className = '', playClickSound = true }: { icon: React.ReactNode, onClick: () => void, className?: string, playClickSound?: boolean }) {
   const lastPointerTimeRef = useRef(0);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -768,11 +766,7 @@ function ActionBtn({ icon, active, onClick, className = '', playClickSound = tru
       type="button"
       onPointerDown={handlePointerDown}
       onClick={handleClick}
-      className={`w-[45px] h-[45px] flex items-center justify-center rounded-lg transition-all focus:outline-none select-none touch-manipulation border bg-[#2563EB] text-white hover:bg-[#1D4ED8]
-        ${active 
-          ? 'border-white/85 ring-1 ring-white/40 scale-105' 
-          : 'border-[#60A5FA]/35 hover:scale-105 active:scale-95'
-        } ${className}`}
+      className={`w-[45px] h-[45px] flex items-center justify-center rounded-lg border border-[#60A5FA]/35 bg-[#3B82F6] text-white hover:bg-[#2563EB] active:bg-[#1D4ED8] active:scale-95 transition-[transform,background-color] duration-100 ease-out focus:outline-none select-none touch-manipulation ${className}`}
     >
       {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { size: 22, strokeWidth: 2.5 }) : icon}
     </button>

@@ -1225,7 +1225,7 @@ export default function GameRoom({
                 <div className="flex gap-2 sm:gap-4 p-2 sm:p-3 justify-around">
                   <button 
                     onClick={toggleMute}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all border border-[#60A5FA]/35 bg-[#2563EB] hover:bg-[#1D4ED8] relative overflow-hidden"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all border border-[#60A5FA]/35 bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#1D4ED8] relative overflow-hidden"
                   >
                     {isMuted ? (
                       <VolumeX size={18} className="text-white z-10" />
@@ -1239,13 +1239,13 @@ export default function GameRoom({
                   <button
                     type="button"
                     onClick={() => setShowRoomInfo(true)}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-95 flex items-center justify-center text-white transition-all border border-[#60A5FA]/35 cursor-pointer"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#1D4ED8] active:scale-95 flex items-center justify-center text-white transition-all border border-[#60A5FA]/35 cursor-pointer"
                   >
                     <Info size={18} />
                   </button>
                   <button
                     onClick={openChat}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-95 flex items-center justify-center text-white font-bold transition-all border border-[#60A5FA]/35 relative"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#3B82F6] hover:bg-[#2563EB] active:bg-[#1D4ED8] active:scale-95 flex items-center justify-center text-white font-bold transition-all border border-[#60A5FA]/35 relative"
                   >
                     <MessageSquare size={18} />
                     <UnreadBadge ref={unreadBadgeSideRef} initialCount={unreadCountRef.current} className="px-1 py-0.5" />
