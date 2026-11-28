@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ToolType } from '../../types/draw';
 import ColorWheelModal from './ColorWheelModal';
+import { soundManager } from '../../utils/soundManager';
 
 interface FlipaClipControlsProps {
   tool: ToolType;
@@ -294,15 +295,16 @@ export const FlipaClipControls: React.FC<FlipaClipControlsProps> = ({
       }
     };
 
-    const onWindowUp = () => {
+    const onWindowUp = (upEv?: PointerEvent) => {
       window.removeEventListener('pointermove', onWindowMove);
       window.removeEventListener('pointerup', onWindowUp);
       window.removeEventListener('pointercancel', onWindowUp);
       activeCleanupRef.current = null;
 
-      if (!isDragging && Date.now() - startTime < 350) {
+      if (upEv?.type !== 'pointercancel' && !isDragging && Date.now() - startTime < 350) {
         // Quick tap: toggle color picker modal
         if (isFreeDraw) {
+          soundManager.play('buttonClick');
           setIsColorPickerOpen(prev => !prev);
         }
       }

@@ -21,6 +21,7 @@ import ColorWheelModal from '../game/ColorWheelModal';
 import CinematicModal from '../game/CinematicModal';
 import { safeLocalStorage } from '../../utils/storage';
 import { useAppTranslation } from '../../i18n/useAppTranslation';
+import { soundManager } from '../../utils/soundManager';
 
 /**
  * 🧪 DIAGNOSTIC TEST FLAG (Color Wheel):
@@ -643,6 +644,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
               <ActionBtn 
                 icon={<Lightbulb />} 
                 onClick={onRequestHint || (() => {})} 
+                playClickSound={false}
                 className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-lg flex" 
               />
               <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4.5 h-4.5 flex items-center justify-center rounded-full border border-primary-brand">
@@ -736,13 +738,16 @@ const SwapIcon = ({ size = 22, strokeWidth = 2.5, className }: any) => {
   );
 };
 
-function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string }) {
+function ActionBtn({ icon, active, onClick, className = '', playClickSound = true }: { icon: React.ReactNode, active?: boolean, onClick: () => void, className?: string, playClickSound?: boolean }) {
   const lastPointerTimeRef = useRef(0);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
     lastPointerTimeRef.current = Date.now();
     e.stopPropagation();
+    if (playClickSound) {
+      soundManager.play('buttonClick');
+    }
     onClick();
   };
 
@@ -751,6 +756,9 @@ function ActionBtn({ icon, active, onClick, className = '' }: { icon: React.Reac
     if (Date.now() - lastPointerTimeRef.current < 400) {
       e.preventDefault();
       return;
+    }
+    if (playClickSound) {
+      soundManager.play('buttonClick');
     }
     onClick();
   };
@@ -779,6 +787,7 @@ function SubToolBtn({ icon, active, onClick, className = '', disabled = false, t
   const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (disabled) return;
     e.stopPropagation();
+    soundManager.play('buttonClick');
     onClick();
   };
 

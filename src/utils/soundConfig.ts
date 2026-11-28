@@ -43,8 +43,8 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
   correctGuessOther: {
     path: '/sounds/game/correct-other.wav',
     volume: 0.9,
-    delayMs:120,
-    cooldown: 200,
+    delayMs: 120,
+    cooldown: 0,
     enabled: true,
   },
   wordSelectionShow: {
@@ -58,7 +58,7 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
     path: '/sounds/game/hint.wav',
     volume: 1.0,
     delayMs: 80,
-    cooldown: 200,
+    cooldown: 0,
     enabled: true,
   },
   roundStart: {
@@ -86,7 +86,7 @@ export const SOUND_CONFIG: Record<SoundEvent, SoundSettings> = {
     path: '/sounds/ui/button.wav',
     volume: 0.25,
     delayMs: 0,
-    cooldown: 50,
+    cooldown: 0,
     enabled: true,
   },
 };

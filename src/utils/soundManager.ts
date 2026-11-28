@@ -101,16 +101,18 @@ class SoundManager {
     const settings = SOUND_CONFIG[name];
     if (!settings || !settings.enabled) return;
 
-    const now = Date.now();
-    const throttleTime = settings.cooldown || 50;
-    const lastPlay = this.lastPlayTimes.get(name) || 0;
+    const throttleTime = settings.cooldown ?? 50;
+    if (throttleTime > 0) {
+      const now = Date.now();
+      const lastPlay = this.lastPlayTimes.get(name) || 0;
 
-    // Prevent sounds from overlapping too closely and causing a loud "storm"
-    if (now - lastPlay < throttleTime) {
-      return;
+      // Prevent sounds from overlapping too closely and causing a loud "storm"
+      if (now - lastPlay < throttleTime) {
+        return;
+      }
+
+      this.lastPlayTimes.set(name, now);
     }
-
-    this.lastPlayTimes.set(name, now);
 
     const playAudio = () => {
       try {
