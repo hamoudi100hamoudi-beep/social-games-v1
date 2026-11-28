@@ -609,7 +609,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
 
         <div className="p-2 sm:p-2.5 pt-1.5 flex items-center justify-between gap-0">
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* 1. Yellow Swap eraser/pencil toggle button */}
+            {/* 1. Swap eraser/pencil toggle button */}
             <ActionBtn 
               icon={<SwapIcon />} 
               active={tool === 'eraser'} 
@@ -618,7 +618,7 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
                 else if (tool === 'pencil') changeTool('eraser');
                 else changeTool('pencil');
               }} 
-              className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-lg"
+              className="!rounded-lg"
             />
 
             {/* 2. Tool selector */}
@@ -636,28 +636,28 @@ export const ExperimentalDrawingBoard: React.FC<ExperimentalDrawingBoardProps> =
               } 
               active={activeMenu === 'tools' || (tool !== 'eraser' && !activeMenu)} 
               onClick={() => setActiveMenu(m => m === 'tools' ? null : 'tools')} 
-              className="!bg-white !text-primary-brand !border-transparent !rounded-lg"
+              className="!rounded-lg"
             />
 
-            {/* 3. Yellow hint bulb with Red Badge - Pre-mounted to eliminate layout shifts and DOM churn */}
+            {/* 3. Hint bulb with Red Badge - Pre-mounted to eliminate layout shifts and DOM churn */}
             <div className={`relative shrink-0 ${hintsRemaining > 0 && onRequestHint ? 'block' : 'hidden'}`}>
               <ActionBtn 
                 icon={<Lightbulb />} 
                 onClick={onRequestHint || (() => {})} 
                 playClickSound={false}
-                className="!bg-[#facc15] !text-slate-800 hover:!bg-[#eab308] !border-transparent !rounded-lg flex" 
+                className="!rounded-lg flex" 
               />
               <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold w-4.5 h-4.5 flex items-center justify-center rounded-full border border-primary-brand">
                 {hintsRemaining}
               </span>
             </div>
 
-            {/* 4. Orange Skip/Kick Button - Pre-mounted to eliminate layout shifts and DOM churn */}
+            {/* 4. Skip/Kick Button - Pre-mounted to eliminate layout shifts and DOM churn */}
             <div className={`shrink-0 ${onSkipTurn ? 'block' : 'hidden'}`}>
               <ActionBtn 
                 icon={<UserMinus />} 
                 onClick={onSkipTurn || (() => {})} 
-                className="!bg-[#FB923C] !text-white hover:!bg-[#EA580C] !border-transparent !rounded-lg" 
+                className="!rounded-lg" 
               />
             </div>
           </div>
@@ -768,10 +768,10 @@ function ActionBtn({ icon, active, onClick, className = '', playClickSound = tru
       type="button"
       onPointerDown={handlePointerDown}
       onClick={handleClick}
-      className={`w-[45px] h-[45px] flex items-center justify-center rounded-lg transition-all focus:outline-none select-none touch-manipulation
+      className={`w-[45px] h-[45px] flex items-center justify-center rounded-lg transition-all focus:outline-none select-none touch-manipulation border bg-[#2563EB] text-white hover:bg-[#1D4ED8]
         ${active 
-          ? 'bg-white text-primary-brand scale-105' 
-          : 'bg-accent-brand text-bg-dark-brand hover:bg-white hover:scale-105 active:scale-95'
+          ? 'border-white/85 ring-1 ring-white/40 scale-105' 
+          : 'border-[#60A5FA]/35 hover:scale-105 active:scale-95'
         } ${className}`}
     >
       {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement<any>, { size: 22, strokeWidth: 2.5 }) : icon}

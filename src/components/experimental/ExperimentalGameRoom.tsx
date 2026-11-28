@@ -1721,7 +1721,7 @@ export default function ExperimentalGameRoom({
                       title={hasAlreadyReported ? "You reported this draw" : "Report drawing"}
                       className={`w-8 h-8 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-white transition-all shadow-md border
                         ${canReport
-                          ? "bg-[#0E7490] hover:bg-[#0F8DAA] border-[#38BDF8]/35 active:scale-95 cursor-pointer"
+                          ? "bg-[#2563EB] hover:bg-[#1D4ED8] border-[#60A5FA]/35 active:scale-95 cursor-pointer"
                           : "bg-[#233B5A] border-[#45617F] cursor-not-allowed"
                         }`}
                     >
@@ -1730,7 +1730,7 @@ export default function ExperimentalGameRoom({
                   )}
                   <button 
                     onClick={toggleMute}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all shadow-md border border-[#38BDF8]/35 bg-[#0E7490] hover:bg-[#0F8DAA] relative overflow-hidden"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl active:scale-95 flex items-center justify-center text-white transition-all shadow-md border border-[#60A5FA]/35 bg-[#2563EB] hover:bg-[#1D4ED8] relative overflow-hidden"
                   >
                     {isMuted ? (
                       <VolumeX size={18} className="text-white drop-shadow-md z-10" />
@@ -1744,13 +1744,13 @@ export default function ExperimentalGameRoom({
                   <button
                     type="button"
                     onClick={() => setShowRoomInfo(true)}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#0E7490] hover:bg-[#0F8DAA] active:scale-95 flex items-center justify-center text-white transition-all shadow-md border border-[#38BDF8]/35 cursor-pointer"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-95 flex items-center justify-center text-white transition-all shadow-md border border-[#60A5FA]/35 cursor-pointer"
                   >
                     <Info size={18} />
                   </button>
                   <button
                     onClick={openChat}
-                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#0E7490] hover:bg-[#0F8DAA] active:scale-95 flex items-center justify-center text-white font-bold transition-all shadow-md border border-[#38BDF8]/35 relative"
+                    className="w-8 h-8 sm:w-12 sm:h-12 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] active:scale-95 flex items-center justify-center text-white font-bold transition-all shadow-md border border-[#60A5FA]/35 relative"
                   >
                     <MessageSquare size={18} />
                     {unreadCount > 0 && (
