@@ -32,6 +32,7 @@ import { useRoomEventGate } from "../hooks/useRoomEventGate";
 import { getRoomConfig, type StructuredSystemEventMetadata } from "../types/game";
 import { isMobileDebugActive } from "../utils/erudaManager";
 import { FreeDrawMobileDebug } from "./game/FreeDrawMobileDebug";
+import { useAppTranslation } from "../i18n/useAppTranslation";
 
 
 // 🧪 DIAGNOSTIC TEST: FREE DRAW ISOLATION TEST
@@ -117,6 +118,7 @@ export default function GameRoom({
   justJoined,
 }: GameRoomProps) {
   const { socket, isConnected, socketId } = useSocket();
+  const { t: tMiniBoard, isRTL } = useAppTranslation("miniBoard");
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -1122,18 +1124,6 @@ export default function GameRoom({
           <div 
             className={`w-full max-w-full h-auto max-h-full ${isFreeDraw && !isDrawingMode ? "aspect-[680/396]" : "aspect-[740/430]"} shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative ${morphMode ? "rounded-bl-[6px] sm:rounded-bl-[8px]" : ""}`}
           >
-            {/* Floating button for Free Draw: shown when player returned to room, or new player entering active room */}
-            {isFreeDraw && !isDrawingMode && (hasEnteredFreeDraw || activeDrawers.length > 0 || hasDrawHistory) && (
-              <button
-                type="button"
-                onClick={handleStartFreeDraw}
-                className="absolute top-2 left-2 z-[60] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer pointer-events-auto border border-white/40"
-              >
-                <Pencil size={14} className="stroke-[2.5]" />
-                <span>{hasEnteredFreeDraw ? "العودة للرسم" : (activeDrawers.length > 0 || hasDrawHistory ? "انضم للرسم" : "ابدأ الرسم")}</span>
-              </button>
-            )}
-
             {/* Unified Adaptive Drawing Canvas Container */}
             <div
               className={
@@ -1253,6 +1243,29 @@ export default function GameRoom({
                 </div>
               </div>
             </div>
+
+            {isFreeDraw && !isDrawingMode && (hasEnteredFreeDraw || activeDrawers.length > 0 || hasDrawHistory) && (
+              <div
+                className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 shrink-0 mt-auto bg-transparent"
+                style={{ paddingBottom: '0.5rem' }}
+              >
+                <button
+                  type="button"
+                  onClick={handleStartFreeDraw}
+                  dir={isRTL ? "rtl" : "ltr"}
+                  className="w-full h-12 px-4 rounded-[24px] bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-sm sm:text-base flex items-center justify-center gap-1.5 sm:gap-2 transition-[transform,background-color] duration-100 ease-out active:scale-95 cursor-pointer border border-white/40"
+                >
+                  <Pencil className="w-3.5 h-3.5 sm:w-[18px] sm:h-[18px] shrink-0" />
+                  <span className="truncate">
+                    {hasEnteredFreeDraw
+                      ? tMiniBoard("freeDraw.returnButton")
+                      : activeDrawers.length > 0 || hasDrawHistory
+                        ? tMiniBoard("freeDraw.joinButton")
+                        : tMiniBoard("freeDraw.startButton")}
+                  </span>
+                </button>
+              </div>
+            )}
 
           </div>
         </div>

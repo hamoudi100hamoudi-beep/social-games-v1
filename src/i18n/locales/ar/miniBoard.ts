@@ -16,6 +16,8 @@ export const arMiniBoard = {
   freeDraw: {
     description: 'ارسم ما تشاء بحرية. بدون مؤقت وبدون كلمة محددة.',
     startButton: 'ابدأ الرسم',
+    joinButton: 'انضم للرسم',
+    returnButton: 'العودة للرسم',
   },
   waiting: {
     message: 'في انتظار اللاعبين',

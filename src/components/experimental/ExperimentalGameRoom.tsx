@@ -140,6 +140,7 @@ export default function ExperimentalGameRoom({
 }: GameRoomProps) {
   const { socket, isConnected, socketId } = useSocket();
   const { t: tEvents, isRTL } = useAppTranslation("events");
+  const { t: tMiniBoard } = useAppTranslation("miniBoard");
   const [isCanvasSyncing, setIsCanvasSyncing] = useState(true);
   const [isInitialLoadingRoom, setIsInitialLoadingRoom] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -1497,18 +1498,6 @@ export default function ExperimentalGameRoom({
           <div 
             className={`w-full max-w-full h-auto max-h-full ${!isDrawingMode ? "aspect-[680/396]" : "aspect-[740/430]"} shrink-0 bg-white flex flex-col items-center justify-center overflow-hidden relative ${morphMode ? "rounded-bl-[6px] sm:rounded-bl-[8px]" : ""}`}
           >
-            {/* Floating button for Free Draw: shown when player returned to room, or new player entering active room */}
-            {isFreeDraw && !isDrawingMode && (hasEnteredFreeDraw || activeDrawers.length > 0 || hasDrawHistory) && (
-              <button
-                type="button"
-                onClick={handleStartFreeDraw}
-                className="absolute top-2 left-2 z-[60] flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs sm:text-sm shadow-md transition-all active:scale-95 cursor-pointer pointer-events-auto border border-white/40"
-              >
-                <Pencil size={14} className="stroke-[2.5]" />
-                <span>{hasEnteredFreeDraw ? "العودة للرسم" : (activeDrawers.length > 0 || hasDrawHistory ? "انضم للرسم" : "ابدأ الرسم")}</span>
-              </button>
-            )}
-
             {/* Hint/Word Overlay for spectator view (normal rooms only) */}
             {!isDrawingMode && !isFreeDraw && (
               <ExperimentalWordOverlay
@@ -1777,7 +1766,24 @@ export default function ExperimentalGameRoom({
               className="px-2 pb-2 pt-1 sm:px-3 sm:pb-3 shrink-0 mt-auto bg-transparent"
               style={{ paddingBottom: '0.5rem' }}
             >
-              <form onSubmit={handleGuessSubmit} className="relative">
+              {isFreeDraw && !isDrawingMode && (hasEnteredFreeDraw || activeDrawers.length > 0 || hasDrawHistory) ? (
+                <button
+                  type="button"
+                  onClick={handleStartFreeDraw}
+                  dir={isRTL ? "rtl" : "ltr"}
+                  className="w-full h-12 px-4 rounded-[24px] bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-sm sm:text-base flex items-center justify-center gap-1.5 sm:gap-2 transition-[transform,background-color] duration-100 ease-out active:scale-95 cursor-pointer border border-white/40"
+                >
+                  <Pencil className="w-3.5 h-3.5 sm:w-[18px] sm:h-[18px] shrink-0" />
+                  <span className="truncate">
+                    {hasEnteredFreeDraw
+                      ? tMiniBoard("freeDraw.returnButton")
+                      : activeDrawers.length > 0 || hasDrawHistory
+                        ? tMiniBoard("freeDraw.joinButton")
+                        : tMiniBoard("freeDraw.startButton")}
+                  </span>
+                </button>
+              ) : (
+                <form onSubmit={handleGuessSubmit} className="relative">
                 {!isInputFocused && !isFreeDraw && (
                   <div
                     className={`absolute ${isRTL ? "right-4" : "left-4"} top-1/2 -translate-y-1/2 transition-opacity duration-200 pointer-events-none ${isInputDisabled ? "text-white/15" : "text-white/50"}`}
@@ -1848,7 +1854,8 @@ export default function ExperimentalGameRoom({
                   className={`w-full h-12 border-2 border-transparent rounded-[24px] ${isInputFocused || isFreeDraw ? "px-4" : isRTL ? "pl-4 pr-11" : "pl-11 pr-4"} py-[13px] overflow-x-auto whitespace-nowrap text-white font-bold text-sm sm:text-base outline-none transition-all duration-200 shadow-sm ios-input-focus ${isInputDisabled || isFreeDraw ? "bg-[#0A162B] text-white/30 cursor-not-allowed placeholder:text-white/20" : "bg-[#09152B] focus:bg-[#0A1A35] focus:border-primary-brand/40 placeholder:text-white/45"}`}
                   style={{ WebkitTouchCallout: 'default', WebkitUserSelect: 'text', userSelect: 'text' }}
                 />
-              </form>
+                </form>
+              )}
             </div>
           </div>
         </div>

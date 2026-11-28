@@ -13,6 +13,8 @@ export const enMiniBoard = {
   freeDraw: {
     description: 'Draw whatever you want. No timer, no prompt.',
     startButton: 'Start Drawing',
+    joinButton: 'Join Drawing',
+    returnButton: 'Return to Drawing',
   },
   waiting: {
     message: 'Waiting for players',
